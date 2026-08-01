@@ -1,0 +1,12 @@
+{
+  "name": "sabah-bulteni-worker",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "poll": "node poll.mjs"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.4.1"
+  }
+}

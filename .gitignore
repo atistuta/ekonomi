@@ -1,0 +1,17 @@
+# Vercel
+.vercel
+
+# Dependencies (worker + frontend install their own; not needed in git)
+node_modules/
+
+# Accidental / temp dumps
+C:UsersAsusDesktopday-starter.tmp_isy.html
+*.tmp_isy.html
+
+# Local Claude settings
+.claude/settings.local.json
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

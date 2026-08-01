@@ -1,0 +1,44 @@
+name: KAP Poller
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # her 15 dakikada bir
+  workflow_dispatch:        # manuel tetikleme
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        working-directory: worker
+        run: npm install --no-audit --no-fund
+
+      - name: Run poll (haber)
+        working-directory: worker
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: node poll.mjs
+
+      - name: Run movers (fiyat sıçraması)
+        working-directory: worker
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: node movers.mjs
+
+      - name: Commit state
+        run: |
+          git config user.name "kap-poller"
+          git config user.email "kap-poller@users.noreply.github.com"
+          git add worker/.seen.json worker/.movers.json || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update poller state [skip ci]"
+            git push
+          fi

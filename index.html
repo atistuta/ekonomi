@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0b1220" />
+  <title>Sabah Bülteni</title>
+  <link rel="preconnect" href="https://day-starter.vercel.app" crossorigin />
+  <link rel="preconnect" href="https://finans.truncgil.com" crossorigin />
+  <link rel="preconnect" href="https://query1.finance.yahoo.com" crossorigin />
+  <link rel="dns-prefetch" href="https://news.google.com" />
+  <link rel="stylesheet" href="styles.css?v=55" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <div id="fileBanner" class="banner banner-warn" hidden>
+    <b>⚠️ Bu sayfa <code>file://</code> ile açıldı.</b>
+    Tarayıcı CORS yüzünden hiçbir API'ye erişemiyor — kartlar boş kalır.
+    Çözüm: klasörde sağ tık → "Sabah Bülteni'ni başlat" (serve.ps1) veya PowerShell'de
+    <code>cd C:\Users\Asus\Desktop\day-starter; python -m http.server 8000</code>
+    sonra <a href="http://localhost:8000">http://localhost:8000</a> aç.
+  </div>
+
+  <div id="diagBar" class="diag" hidden>
+    <span class="diag-item" data-key="rates">⏳ Döviz/Altın</span>
+    <span class="diag-item" data-key="rss">⏳ Haber API</span>
+    <span class="diag-item" data-key="kap">⏳ KAP</span>
+    <span class="diag-item" data-key="yahoo">⏳ Yahoo</span>
+    <button id="diagClose" class="mini-btn">Gizle</button>
+  </div>
+
+  <header class="ticker-bar" id="tickerBar">
+    <div class="ticker-item" data-key="gram">
+      <span class="label">Gram Altın</span>
+      <span class="value" id="val-gram">—</span>
+    </div>
+    <div class="ticker-item" data-key="usd">
+      <span class="label">USD/TRY</span>
+      <span class="value" id="val-usd">—</span>
+    </div>
+    <div class="ticker-item" data-key="eur">
+      <span class="label">EUR/TRY</span>
+      <span class="value" id="val-eur">—</span>
+    </div>
+    <div class="ticker-item" data-key="gbp">
+      <span class="label">GBP/TRY</span>
+      <span class="value" id="val-gbp">—</span>
+    </div>
+    <div class="ticker-item" data-key="btc">
+      <span class="label">BTC/USD</span>
+      <span class="value" id="val-btc">—</span>
+    </div>
+    <div class="ticker-item" data-key="eth">
+      <span class="label">ETH/USD</span>
+      <span class="value" id="val-eth">—</span>
+    </div>
+    <button id="notifBtn" class="refresh" title="Bildirim ayarları">🔔</button>
+    <button id="refreshBtn" class="refresh" title="Yenile">↻</button>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="portfolio">Portföy</button>
+    <button class="tab" data-tab="today">⭐ Bugün</button>
+    <button class="tab" data-tab="pulse">⚡ Nabız</button>
+    <button class="tab" data-tab="opps">🔥 Fırsatlar</button>
+    <button class="tab" data-tab="radar">🌍 Radar</button>
+    <button class="tab" data-tab="macro">📊 Makro</button>
+    <button class="tab" data-tab="lists">Listeler</button>
+    <button class="tab" data-tab="news">Hisse Gelişmeleri</button>
+    <button class="tab" data-tab="calendar">Takvim</button>
+    <button class="tab" data-tab="general">Gündem</button>
+    <button class="tab" data-tab="technical">Teknik Analiz</button>
+    <button class="tab" data-tab="fundamental">Temel Analiz</button>
+    <button class="tab" data-tab="search">Arama</button>
+    <span class="updated" id="lastUpdated"></span>
+  </nav>
+
+  <main>
+    <section id="tab-portfolio" class="tab-content active">
+      <div class="subnav">
+        <button class="chip active" data-pf="TR">Türkiye</button>
+        <button class="chip" data-pf="US">Amerika</button>
+        <button class="chip" data-pf="METALS">Madenler</button>
+      </div>
+      <div id="portfolioControls" class="watch-controls" data-market="BIST">
+        <input id="pfInput" type="text" maxlength="8" placeholder="Hisse/ETF kodu (ör. THYAO, AAPL, QQQ)" />
+        <input id="pfName" type="text" maxlength="40" placeholder="Şirket adı — haber araması için (opsiyonel)" />
+        <button id="pfAdd" class="primary-btn">Portföye Ekle</button>
+        <span id="pfAddStatus" class="sync-status"></span>
+      </div>
+      <div id="pfChangeBar" class="pf-change-bar" hidden></div>
+      <div id="portfolioGridTR" class="grid"></div>
+      <div id="portfolioGridUS" class="grid" hidden></div>
+      <div id="portfolioGridMETALS" class="grid" hidden></div>
+    </section>
+
+    <section id="tab-opps" class="tab-content">
+      <div class="subnav" id="oppsMarketChips">
+        <button class="chip active" data-opps-mkt="ALL">Tümü</button>
+        <button class="chip" data-opps-mkt="BIST">BIST</button>
+        <button class="chip" data-opps-mkt="US">ABD</button>
+      </div>
+      <div class="opps-controls">
+        <span class="opps-hint">İzleme evrenini (portföy + listeler + arama) teknik skora göre sıralar. Yüksek skor = trend + momentum fırsatı.</span>
+        <button id="oppsRefresh" class="ghost-btn" title="Yeniden tara">↻ Tara</button>
+      </div>
+      <div id="oppsStatus" class="opps-status"></div>
+      <div id="oppsList" class="opps-list"></div>
+      <p class="hint ta-disclaimer">Sıralama teknik göstergelere dayanır (orta-uzun vade). Temel/haber/sektör katmanları sonraki fazlarda eklenecek. Yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-radar" class="tab-content">
+      <div class="radar-intro">
+        <h2 class="radar-title">🌍 Dünya Gündemi Radarı</h2>
+        <p class="radar-sub">Savaşlar, Hürmüz, Trump, Musk, Fed, enerji… küresel gündemi tarar; her olayın <b>hangi sektörü</b> öne çıkardığını ve <b>izleme evreninde</b> hangi hisselerin bu temayla teknik/haber fırsatı oluşturduğunu zincir olarak gösterir.</p>
+      </div>
+      <div class="opps-controls">
+        <span class="opps-hint">Küresel haber akışını temalara göre gruplar; ısı yüksekse tema aktif sayılır.</span>
+        <button id="radarRefresh" class="ghost-btn" title="Gündemi tazele">↻ Tara</button>
+      </div>
+      <div id="radarStatus" class="opps-status"></div>
+      <div id="radarList" class="radar-list"></div>
+      <p class="hint ta-disclaimer">Gündem taraması kamuya açık haber başlıklarına dayanır; olay→sektör→hisse zinciri otomatik bir yorumdur, kesinlik içermez. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-macro" class="tab-content">
+      <div class="radar-intro">
+        <h2 class="radar-title">📊 Makro-Sektör Rotasyonu</h2>
+        <p class="radar-sub">Faiz yönü, enflasyon/emtia baskısı, piyasa genişliği ve jeopolitik riski okuyup <b>konjonktür fazını</b> (erken / orta / geç / durgunluk) tahmin eder; o fazda <b>öne çıkan sektörleri</b> ve evrendeki en güçlü hisseleri gösterir.</p>
+      </div>
+      <div class="opps-controls">
+        <span class="opps-hint">Makro sinyaller kamuya açık haber yoğunluğundan ve evrenin teknik genişliğinden türetilir.</span>
+        <button id="macroRefresh" class="ghost-btn" title="Yeniden hesapla">↻ Hesapla</button>
+      </div>
+      <div id="macroStatus" class="opps-status"></div>
+      <div id="macroBody" class="macro-body"></div>
+      <p class="hint ta-disclaimer">Konjonktür tahmini basitleştirilmiş, şeffaf bir modeldir (kesin makro veri değil). Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-today" class="tab-content">
+      <div class="radar-intro">
+        <h2 class="radar-title">⭐ Bugünün Önerileri</h2>
+        <p class="radar-sub">Teknik momentum + haber nabzı + doğru sektör (makro faz) + küresel gündem rüzgârını tek skorda birleştirir. <b>Ucuz bölge + güçlü teknik + düşük haber riski + doğru sektör = 🔥 Güçlü Fırsat.</b></p>
+      </div>
+      <div class="opps-controls">
+        <span class="opps-hint">Faz 1-4'ün birleşimi. Her satırdaki rozetler önerinin nedenini gösterir.</span>
+        <button id="todayRefresh" class="ghost-btn" title="Yeniden hesapla">↻ Hesapla</button>
+      </div>
+      <div id="todayHead" class="today-head"></div>
+      <div id="todayStatus" class="opps-status"></div>
+      <div id="todayList" class="today-list"></div>
+      <p class="hint ta-disclaimer">Birleşik skor teknik, haber, sektör ve gündem katmanlarının otomatik bir yorumudur; kesinlik içermez. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-pulse" class="tab-content">
+      <div class="radar-intro">
+        <h2 class="radar-title">⚡ Nabız — Ani Hareket Yakalayıcı</h2>
+        <p class="radar-sub">İzleme listen + portföyünü <b>gün içi (5 dk)</b> veriyle canlı tarar; <b>ani yükseliş/düşüşü</b> yakalar ve <b>nedenini</b> (sıcak küresel gündem teması + hisse haberi) açıklar. Ani harekette tarayıcı bildirimi gönderir.</p>
+      </div>
+      <div class="opps-controls">
+        <span class="opps-hint">Uygulama <b>kapalıyken</b> de haber alman için sunucu tarafı (ntfy) her ~15 dk fiyat sıçraması tarar — telefonuna <b>ntfy</b> uygulamasından abone ol.</span>
+        <button id="pulseRefresh" class="ghost-btn" title="Şimdi tara">↻ Tara</button>
+      </div>
+      <div id="pulseHead" class="pulse-head"></div>
+      <div id="pulseStatus" class="opps-status"></div>
+      <div id="pulseList" class="pulse-list"></div>
+      <p class="hint ta-disclaimer">Fiyat verisi ~15 dk gecikmeli olabilir; "ani hareket" eşikleri sabit kurallardır. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-lists" class="tab-content">
+      <div class="lists-controls">
+        <input id="newListName" type="text" maxlength="30" placeholder="Yeni liste adı (ör. Bankalar, Takip)" />
+        <button id="newListBtn" class="primary-btn">Liste Oluştur</button>
+      </div>
+      <div id="listsContainer"></div>
+    </section>
+
+    <section id="tab-news" class="tab-content">
+      <div class="subnav" id="newsFilterChips">
+        <button class="chip active" data-news-filter="ALL">Tümü</button>
+        <!-- ticker chips JS tarafından eklenir -->
+      </div>
+      <div class="subnav">
+        <button class="chip active" data-news-type="ALL">Hepsi</button>
+        <button class="chip" data-news-type="NEWS">Haber</button>
+        <button class="chip" data-news-type="KAP">KAP</button>
+      </div>
+      <div id="newsFeed" class="feed"></div>
+    </section>
+
+    <section id="tab-calendar" class="tab-content">
+      <div class="subnav">
+        <button class="chip active" data-cal="earnings">Bilanço</button>
+        <button class="chip" data-cal="dividends">Temettü</button>
+      </div>
+      <div id="calendarEarnings" class="cal-section">
+        <h2 class="section-title">Bilanço Duyuruları (KAP / Alt. Kaynak)</h2>
+        <div id="earningsList" class="feed"></div>
+      </div>
+      <div id="calendarDividends" class="cal-section" hidden>
+        <h2 class="section-title">Bu Yıl Açıklanan Temettüler</h2>
+        <div class="cal-block">
+          <h3>BIST</h3>
+          <div id="dividendsBIST" class="feed"></div>
+        </div>
+        <div class="cal-block">
+          <h3>ABD ETF</h3>
+          <div id="dividendsUS" class="feed"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-general" class="tab-content">
+      <div class="subnav">
+        <button class="chip active" data-region="ALL">Tümü</button>
+        <button class="chip" data-region="TR">Türkiye</button>
+        <button class="chip" data-region="WORLD">Dünya</button>
+      </div>
+      <div id="generalFeed" class="feed"></div>
+    </section>
+
+    <section id="tab-technical" class="tab-content">
+      <div class="ta-controls">
+        <select id="taSymbol" class="ta-select"></select>
+        <select id="taVade" class="ta-select" title="Skorlama vadesi">
+          <option value="gunici">Gün içi</option>
+          <option value="kisa">Kısa vade</option>
+          <option value="orta" selected>Orta-uzun vade</option>
+          <option value="uzun">Uzun vade</option>
+        </select>
+        <select id="taRange" class="ta-select" title="Grafik aralığı">
+          <option value="3mo">3 Ay</option>
+          <option value="6mo" selected>6 Ay</option>
+          <option value="1y">1 Yıl</option>
+          <option value="2y">2 Yıl</option>
+        </select>
+        <button id="taRefresh" class="ghost-btn" title="Yenile">↻</button>
+        <button id="taBacktestBtn" class="ghost-btn" title="Skorun geçmişteki isabetini ölç">🔬 Doğruluk testi</button>
+      </div>
+      <div class="ta-controls ta-search-row">
+        <input id="taSearch" class="ta-select ta-search-input" type="text" maxlength="10"
+               placeholder="Kod ara (ör. THYAO, AAPL, QQQ) — listeye eklemeden analiz aç" />
+        <select id="taSearchMarket" class="ta-select" title="Piyasa">
+          <option value="BIST">BIST</option>
+          <option value="US">ABD</option>
+        </select>
+        <button id="taSearchBtn" class="primary-btn">Analizi Aç</button>
+      </div>
+      <div id="taScorePanel" class="ta-score-wrap"></div>
+      <div id="taBacktestPanel" class="ta-score-wrap"></div>
+      <div id="taLegend" class="ta-legend"></div>
+      <div id="taChartWrap" class="ta-chart-wrap">
+        <div id="taChart"></div>
+        <div id="taChartMsg" class="loading">Sembol seç…</div>
+      </div>
+      <div id="taIndicators" class="ta-grid"></div>
+      <p class="hint ta-disclaimer">Teknik göstergeler geçmiş fiyat verisine dayanır, gelecek garantisi vermez. Yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-fundamental" class="tab-content">
+      <div class="ta-controls">
+        <select id="faSymbol" class="ta-select"></select>
+        <button id="faRefresh" class="ghost-btn" title="Yenile">↻</button>
+      </div>
+      <div id="faContent"><div class="loading">Sembol seç…</div></div>
+    </section>
+
+    <section id="tab-search" class="tab-content">
+      <div class="search-controls">
+        <input id="searchInput" type="text" maxlength="10" placeholder="Hisse/ETF kodu ara (ör. THYAO, AAPL, NVDA)" />
+        <select id="searchMarket">
+          <option value="BIST">BIST</option>
+          <option value="US">ABD</option>
+        </select>
+        <button id="searchBtn" class="primary-btn">Ara</button>
+      </div>
+      <div id="searchResult"></div>
+    </section>
+  </main>
+
+  <!-- Ticker detay modali -->
+  <div id="detailModal" class="modal" hidden>
+    <div class="modal-card detail-card">
+      <button id="detailClose" class="modal-close" aria-label="Kapat">×</button>
+      <div id="detailContent">
+        <div class="loading">Yükleniyor…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bildirim ayarları modali -->
+  <div id="notifModal" class="modal" hidden>
+    <div class="modal-card">
+      <h3>Push Bildirimleri</h3>
+      <p>Portföyünle ilgili yeni KAP duyuruları geldiğinde telefonuna bildirim almak için:</p>
+      <ol>
+        <li>Telefonuna <b>ntfy</b> uygulamasını indir
+          (<a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank">Android</a>
+          / <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank">iOS</a>).
+        </li>
+        <li>Uygulamada şu konuya abone ol:
+          <div class="topic-box"><code id="topicName"></code>
+            <button id="copyTopic" class="mini-btn">Kopyala</button>
+          </div>
+        </li>
+        <li>Web URL: <code id="topicUrl"></code></li>
+        <li>Bildirimleri göndermek için GitHub Actions worker'ı kurmalısın — bkz. <code>worker/README.md</code>.</li>
+      </ol>
+      <p class="hint">Tarayıcı açıkken ayrıca anlık (in-page) bildirim de gelir.</p>
+      <button id="enableBrowserNotif" class="primary-btn">Tarayıcı bildirimlerini aç</button>
+      <button id="closeNotif" class="ghost-btn">Kapat</button>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>Veri: truncgil, KAP, Google News, Yahoo Finance. Yatırım tavsiyesi değildir.</span>
+  </footer>
+
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="config.js?v=55"></script>
+  <script src="app.js?v=55"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "bist": ["DOAS", "BIMAS", "HLGYO", "TUPRS", "ENJSA"],
+  "us": [
+    { "symbol": "SOXX", "query": "SOXX semiconductor ETF" },
+    { "symbol": "UFO",  "query": "UFO Procure Space ETF" },
+    { "symbol": "VGT",  "query": "VGT Vanguard Technology" },
+    { "symbol": "QCLN", "query": "QCLN clean energy ETF" },
+    { "symbol": "VXUS", "query": "VXUS Vanguard Total International" },
+    { "symbol": "ARKG", "query": "ARKG ARK Genomic ETF" }
+  ],
+  "watch": [
+    { "symbol": "ASELS", "market": "BIST" },
+    { "symbol": "KCHOL", "market": "BIST" },
+    { "symbol": "NVDA",  "market": "US" }
+  ]
+}
