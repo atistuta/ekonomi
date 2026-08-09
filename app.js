@@ -5312,8 +5312,10 @@
     if (!wrap) return;
     const items = loadCompare();
 
+    // Ekleme paneli tablonun ÜSTÜNde dursun (aşağıda kaybolmasın)
+    let head = '<div id="comparePicker" class="compare-picker"></div>';
     // İskelet: sol metrik kolonu + hisse sütunları + "+" ekle kolonu
-    let head = '<div class="compare-table"><div class="compare-col compare-metric-col"><div class="compare-cell compare-corner">Metrik</div>';
+    head += '<div class="compare-table"><div class="compare-col compare-metric-col"><div class="compare-cell compare-corner">Metrik</div>';
     COMPARE_ROWS.forEach((r) => {
       head += `<div class="compare-cell compare-mlabel"${r.hint ? ` title="${r.hint}"` : ''}>${r.label}</div>`;
     });
@@ -5330,7 +5332,6 @@
     // Ekle kolonu
     head += '<div class="compare-col compare-add-col"><button id="compareAddBtn" class="compare-add-btn" title="Hisse ekle">＋</button></div>';
     head += '</div>';
-    head += '<div id="comparePicker" class="compare-picker"></div>';
     if (!items.length) {
       wrap.innerHTML = '<div class="compare-empty">Kıyaslamak için <b>＋</b> ile hisse ekle. Listelerinden seçebilir ya da kod yazabilirsin.</div>' + head;
     } else {
