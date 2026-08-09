@@ -5306,68 +5306,140 @@
     }));
   }
 
-  async function renderCompare() {
+  // Grid'i mevcut compareMem verisiyle senkron çiz (satırlar hizalı — CSS grid)
+  function paintCompare() {
     const wrap = document.getElementById('compareWrap');
-    const status = document.getElementById('compareStatus');
     if (!wrap) return;
     const items = loadCompare();
+    const esc = (s) => String(s).replace(/"/g, '&quot;');
 
-    // Ekleme paneli tablonun ÜSTÜNde dursun (aşağıda kaybolmasın)
-    let head = '<div id="comparePicker" class="compare-picker"></div>';
-    // İskelet: sol metrik kolonu + hisse sütunları + "+" ekle kolonu
-    head += '<div class="compare-table"><div class="compare-col compare-metric-col"><div class="compare-cell compare-corner">Metrik</div>';
-    COMPARE_ROWS.forEach((r) => {
-      head += `<div class="compare-cell compare-mlabel"${r.hint ? ` title="${r.hint}"` : ''}>${r.label}</div>`;
-    });
-    head += '</div>';
+    // Üstte: araç çubuğu (＋ ekle) + açılır seçici panel
+    let html = '<div class="compare-toolbar"><button id="compareAddBtn" class="compare-add-btn2" title="Hisse ekle">＋ Hisse ekle</button></div>';
+    html += '<div id="comparePicker" class="compare-picker"></div>';
 
-    // Sütun başlıkları (yükleme öncesi)
-    items.forEach((it) => {
-      head += `<div class="compare-col" data-col="${it.market}:${it.symbol}"><div class="compare-cell compare-head">`
-        + `<button class="cmp-remove" data-sym="${it.symbol}" data-mkt="${it.market}" title="Kaldır">×</button>`
-        + `<span class="cmp-sym">${it.symbol}</span><span class="cmp-mkt">${it.market === 'BIST' ? 'BIST' : 'ABD'}</span></div>`;
-      COMPARE_ROWS.forEach(() => { head += '<div class="compare-cell">…</div>'; });
-      head += '</div>';
-    });
-    // Ekle kolonu
-    head += '<div class="compare-col compare-add-col"><button id="compareAddBtn" class="compare-add-btn" title="Hisse ekle">＋</button></div>';
-    head += '</div>';
     if (!items.length) {
-      wrap.innerHTML = '<div class="compare-empty">Kıyaslamak için <b>＋</b> ile hisse ekle. Listelerinden seçebilir ya da kod yazabilirsin.</div>' + head;
+      wrap.innerHTML = html + '<div class="compare-empty">Kıyaslamak için <b>＋ Hisse ekle</b>. Listelerinden seçebilir ya da kod yazabilirsin.</div>';
     } else {
-      wrap.innerHTML = head;
+      const metrics = items.map((it) => { const m = compareMem.get(it.market + ':' + it.symbol); return (m && m.ok) ? m : null; });
+      const cols = `170px repeat(${items.length}, 148px)`;
+      let g = `<div class="compare-grid" style="grid-template-columns:${cols}">`;
+      // Başlık satırı
+      g += '<div class="compare-cell compare-corner cmp-c0">Metrik</div>';
+      items.forEach((it) => {
+        g += `<div class="compare-cell compare-head">`
+          + `<button class="cmp-remove" data-sym="${it.symbol}" data-mkt="${it.market}" title="Kaldır">×</button>`
+          + `<div class="cmp-head-top"><span class="cmp-sym">${it.symbol}</span><span class="cmp-mkt">${it.market === 'BIST' ? 'BIST' : 'ABD'}</span></div>`
+          + `<button class="cmp-tolist" data-sym="${it.symbol}" data-mkt="${it.market}" data-q="${esc(it.query || it.symbol)}" title="Listeye ekle">☆ Listeye ekle</button>`
+          + `</div>`;
+      });
+      // Metrik satırları
+      COMPARE_ROWS.forEach((row) => {
+        const ext = rowExtrema(row, metrics);
+        g += `<div class="compare-cell compare-mlabel cmp-c0"${row.hint ? ` title="${esc(row.hint)}"` : ''}>${row.label}</div>`;
+        items.forEach((it, ci) => {
+          const cls = ext.best === ci ? ' cmp-best' : (ext.worst === ci ? ' cmp-worst' : '');
+          const val = metrics[ci] ? fmtCell(row, metrics[ci]) : '…';
+          g += `<div class="compare-cell${cls}">${val}</div>`;
+        });
+      });
+      g += '</div>';
+      wrap.innerHTML = html + g;
     }
 
-    // Kontrol bağla
+    // Kontrolleri bağla
     const addBtn = document.getElementById('compareAddBtn');
     if (addBtn) addBtn.addEventListener('click', () => { comparePickerOpen = !comparePickerOpen; renderComparePicker(); });
     wrap.querySelectorAll('.cmp-remove').forEach((b) => b.addEventListener('click', () => {
       compareRemove(b.dataset.sym, b.dataset.mkt); renderCompare();
     }));
+    wrap.querySelectorAll('.cmp-tolist').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openListMenu(b, b.dataset.sym, b.dataset.mkt, b.dataset.q);
+    }));
     renderComparePicker();
+  }
 
+  async function renderCompare() {
+    const status = document.getElementById('compareStatus');
+    const items = loadCompare();
+    paintCompare(); // önce iskelet/mevcut veri
     if (!items.length) { if (status) status.textContent = ''; return; }
     if (status) status.textContent = 'Temel veriler alınıyor…';
-    const corrected = await fetchCompareBatch(items);
-    if (corrected) { renderCompare(); return; } // piyasa düzeltildi → doğru etiketlerle yeniden çiz
-
-    // Değerleri doldur + satır bazlı en iyi/en kötü vurgula
-    const metrics = items.map((it) => { const m = compareMem.get(it.market + ':' + it.symbol); return (m && m.ok) ? m : null; });
-    COMPARE_ROWS.forEach((row, ri) => {
-      const ext = rowExtrema(row, metrics);
-      items.forEach((it, ci) => {
-        const col = wrap.querySelector(`.compare-col[data-col="${it.market}:${it.symbol}"]`);
-        if (!col) return;
-        const cell = col.querySelectorAll('.compare-cell')[ri + 1]; // +1 başlık hücresi
-        if (!cell) return;
-        cell.textContent = fmtCell(row, metrics[ci]);
-        cell.classList.remove('cmp-best', 'cmp-worst');
-        if (ext.best === ci) cell.classList.add('cmp-best');
-        else if (ext.worst === ci) cell.classList.add('cmp-worst');
-      });
-    });
+    await fetchCompareBatch(items); // eksikleri getir + piyasayı gerekiyorsa düzelt
+    paintCompare(); // değerlerle yeniden çiz (loadCompare düzeltilmiş piyasayı okur)
+    const cur = loadCompare();
+    const metrics = cur.map((it) => { const m = compareMem.get(it.market + ':' + it.symbol); return (m && m.ok) ? m : null; });
     const okN = metrics.filter(Boolean).length;
-    if (status) status.textContent = `${items.length} hisse · ${okN} veri geldi` + (okN < items.length ? ` · ${items.length - okN} için temel veri bulunamadı` : '');
+    if (status) status.textContent = `${cur.length} hisse · ${okN} veri geldi` + (okN < cur.length ? ` · ${cur.length - okN} için temel veri bulunamadı` : '');
+  }
+
+  // Kıyaslanan hisseyi listeye ekle / yeni liste oluştur — küçük açılır menü
+  function closeListMenu() {
+    const ex = document.getElementById('cmpListMenu');
+    if (ex) ex.remove();
+    document.removeEventListener('click', onDocClickListMenu, true);
+  }
+  function onDocClickListMenu(e) {
+    const menu = document.getElementById('cmpListMenu');
+    if (menu && !menu.contains(e.target)) closeListMenu();
+  }
+  function openListMenu(anchor, sym, mkt, q) {
+    if (document.getElementById('cmpListMenu')) { closeListMenu(); return; }
+    const menu = document.createElement('div');
+    menu.id = 'cmpListMenu';
+    menu.className = 'cmp-listmenu';
+    const flashLm = (t) => { const m = document.getElementById('cmpLmMsg'); if (m) m.textContent = t; };
+    const build = () => {
+      const lists = loadLists();
+      let h = `<div class="cmp-lm-title">${sym} · listeye ekle</div><div class="cmp-lm-lists">`;
+      if (!lists.length) h += '<div class="cmp-lm-empty">Henüz liste yok. Aşağıdan oluştur.</div>';
+      lists.forEach((l) => {
+        const inIt = l.items.some((i) => i.symbol === sym && i.market === mkt);
+        h += `<button class="cmp-lm-item${inIt ? ' in' : ''}" data-id="${l.id}">`
+          + `<span class="cmp-lm-check">${inIt ? '✓' : '+'}</span><span class="cmp-lm-name">${l.name}</span></button>`;
+      });
+      h += '</div><div class="cmp-lm-new"><input id="cmpLmNew" type="text" maxlength="24" placeholder="Yeni liste adı" />'
+        + '<button id="cmpLmCreate">Oluştur & ekle</button></div><div id="cmpLmMsg" class="cmp-lm-msg"></div>';
+      menu.innerHTML = h;
+      // liste satırları → aç/kapat (toggle)
+      menu.querySelectorAll('.cmp-lm-item').forEach((b) => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = b.dataset.id;
+        const l = loadLists().find((x) => x.id === id);
+        const inIt = l && l.items.some((i) => i.symbol === sym && i.market === mkt);
+        let note;
+        if (inIt) { listRemoveSymbol(id, sym, mkt); note = 'Listeden çıkarıldı'; }
+        else { const r = listAddSymbol(id, sym, mkt, q); note = r.ok ? 'Listeye eklendi' : r.err; }
+        build(); flashLm(note);
+      }));
+      const create = menu.querySelector('#cmpLmCreate');
+      const input = menu.querySelector('#cmpLmNew');
+      const doCreate = (e) => {
+        if (e) e.stopPropagation();
+        const nm = (input.value || '').trim();
+        if (!nm) { flashLm('Liste adı gir'); input.focus(); return; }
+        const id = createList(nm);
+        const r = listAddSymbol(id, sym, mkt, q);
+        const note = r.ok ? `"${nm}" oluşturuldu & eklendi` : r.err;
+        build(); flashLm(note);
+      };
+      create.addEventListener('click', doCreate);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doCreate(e); });
+      input.addEventListener('click', (e) => e.stopPropagation());
+    };
+    build();
+    document.body.appendChild(menu);
+    // Konumla (butonun altına; ekran kenarını taşırsa hizala)
+    const r = anchor.getBoundingClientRect();
+    const mw = menu.offsetWidth || 220;
+    let left = r.left;
+    if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+    if (left < 8) left = 8;
+    let top = r.bottom + 6;
+    if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 6);
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    setTimeout(() => document.addEventListener('click', onDocClickListMenu, true), 0);
   }
 
   function initCompare() {
