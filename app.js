@@ -5198,23 +5198,50 @@
     return { best: best.i, worst: worst.i };
   }
 
-  async function fetchCompareBatch(items) {
-    // Yalnız önbellekte olmayanları çek. Tek /api/yfin çağrısında toplu (max 12).
-    const need = items.filter((it) => !compareMem.has(it.market + ':' + it.symbol));
-    if (!need.length) return;
-    const ysyms = need.map((it) => yahooSym(it.symbol, it.market));
+  async function yfinQuery(ysyms) {
+    if (!ysyms.length) return {};
     try {
       const r = await fetch(YFIN_BASE + '?symbols=' + encodeURIComponent(ysyms.join(',')), { cache: 'no-store' });
       const j = await r.json();
       const byY = {};
       (j.results || []).forEach((res) => { byY[res.symbol] = res; });
-      need.forEach((it) => {
-        const res = byY[yahooSym(it.symbol, it.market)];
-        compareMem.set(it.market + ':' + it.symbol, (res && res.ok) ? res : { ok: false });
+      return byY;
+    } catch (_) { return {}; }
+  }
+  const otherMarket = (m) => m === 'BIST' ? 'US' : 'BIST';
+
+  // Tek /api/yfin çağrısında toplu çeker. Veri gelmezse piyasayı YANLIŞ seçmiş olabilir
+  // (ör. BIST kodunu "ABD" bırakmış) → ters piyasayı otomatik dener ve düzeltir.
+  // Düzeltme yaptıysa true döner (çağıran yeniden render eder).
+  async function fetchCompareBatch(items) {
+    const need = items.filter((it) => !compareMem.has(it.market + ':' + it.symbol));
+    if (!need.length) return false;
+    const first = await yfinQuery(need.map((it) => yahooSym(it.symbol, it.market)));
+    const retry = [];
+    need.forEach((it) => {
+      const res = first[yahooSym(it.symbol, it.market)];
+      if (res && res.ok) compareMem.set(it.market + ':' + it.symbol, res);
+      else retry.push(it);
+    });
+    let corrected = false;
+    if (retry.length) {
+      const second = await yfinQuery(retry.map((it) => yahooSym(it.symbol, otherMarket(it.market))));
+      const stored = loadCompare();
+      retry.forEach((it) => {
+        const om = otherMarket(it.market);
+        const res = second[yahooSym(it.symbol, om)];
+        if (res && res.ok) {
+          compareMem.set(it.market + ':' + it.symbol, res); // mevcut render veriyi görsün
+          compareMem.set(om + ':' + it.symbol, res);
+          const t = stored.find((x) => x.symbol === it.symbol && x.market === it.market);
+          if (t && !stored.some((x) => x.symbol === it.symbol && x.market === om)) { t.market = om; corrected = true; }
+        } else {
+          compareMem.set(it.market + ':' + it.symbol, { ok: false });
+        }
       });
-    } catch (_) {
-      need.forEach((it) => compareMem.set(it.market + ':' + it.symbol, { ok: false }));
+      if (corrected) saveCompare(stored);
     }
+    return corrected;
   }
 
   function compareAdd(symbol, market, query) {
@@ -5241,7 +5268,7 @@
     const lists = loadLists();
     let html = '<div class="cmp-pick-manual">'
       + '<input id="cmpManualCode" type="text" maxlength="10" placeholder="Kod (ör. NVDA, ASELS)" />'
-      + '<select id="cmpManualMkt"><option value="US">ABD</option><option value="BIST">BIST</option></select>'
+      + '<select id="cmpManualMkt"><option value="BIST">BIST</option><option value="US">ABD</option></select>'
       + '<button id="cmpManualAdd" class="primary-btn">Ekle</button>'
       + '<span id="cmpPickMsg" class="cmp-pick-msg"></span></div>';
     html += '<div class="cmp-pick-lists">';
@@ -5320,7 +5347,8 @@
 
     if (!items.length) { if (status) status.textContent = ''; return; }
     if (status) status.textContent = 'Temel veriler alınıyor…';
-    await fetchCompareBatch(items);
+    const corrected = await fetchCompareBatch(items);
+    if (corrected) { renderCompare(); return; } // piyasa düzeltildi → doğru etiketlerle yeniden çiz
 
     // Değerleri doldur + satır bazlı en iyi/en kötü vurgula
     const metrics = items.map((it) => { const m = compareMem.get(it.market + ':' + it.symbol); return (m && m.ok) ? m : null; });
