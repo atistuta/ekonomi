@@ -5123,6 +5123,229 @@
     pulseBusy = false;
   }
 
+  // ===== Karşılaştır sekmesi (yan yana hisse kıyaslama) =====
+  const COMPARE_LS_KEY = 'sb:compare';
+  const compareMem = new Map();          // "MARKET:SYMBOL" -> metrics obj (veya {ok:false})
+  let compareInited = false;
+  let comparePickerOpen = false;
+
+  const YFIN_BASE = (window.MY_PROXY || '').replace(/\/api\/proxy.*$/, '') + '/api/yfin' || '/api/yfin';
+  const yahooSym = (symbol, market) => market === 'BIST' ? symbol + '.IS' : symbol;
+
+  function loadCompare() {
+    try { const r = JSON.parse(localStorage.getItem(COMPARE_LS_KEY)); if (Array.isArray(r)) return r; } catch (_) {}
+    return [];
+  }
+  function saveCompare(items) { try { localStorage.setItem(COMPARE_LS_KEY, JSON.stringify(items)); } catch (_) {} }
+
+  // Kıyas metrikleri (satırlar). dir: 'low' = düşük iyi, 'high' = yüksek iyi, null = vurgulama yok.
+  const COMPARE_ROWS = [
+    { key: 'sector',        label: 'Sektör',              type: 'text' },
+    { key: 'price',         label: 'Fiyat',               type: 'price' },
+    { key: 'marketCap',     label: 'Piyasa Değeri',       type: 'mcap' },
+    { key: 'trailingPE',    label: 'F/K',                 type: 'ratio', dir: 'low',  hint: 'Fiyat / Kazanç (son 12 ay). Düşük = daha ucuz.' },
+    { key: 'forwardPE',     label: 'İleri F/K',           type: 'ratio', dir: 'low',  hint: 'Gelecek yıl beklenen kazanca göre F/K.' },
+    { key: 'peg',           label: 'PEG',                 type: 'ratio2',dir: 'low',  hint: 'F/K ÷ büyüme. ~1 altı büyümeye göre ucuz sayılır.' },
+    { key: 'priceToBook',   label: 'PD/DD',               type: 'ratio', dir: 'low',  hint: 'Piyasa Değeri / Defter Değeri.' },
+    { key: 'priceToSales',  label: 'F/S (Fiyat/Satış)',   type: 'ratio', dir: 'low',  hint: 'Kâr etmeyen/erken şirketlerde F/K yerine kullanılır.' },
+    { key: 'evEbitda',      label: 'FD/FAVÖK',            type: 'ratio', dir: 'low',  hint: 'Borcu da içerir; sermaye-yoğun sektörlerde daha adil.' },
+    { key: 'profitMargin',  label: 'Net Kâr Marjı',       type: 'pct',   dir: 'high', hint: 'Net kâr / satış. Yüksek = daha kârlı.' },
+    { key: 'returnOnEquity',label: 'Özsermaye Kârlılığı', type: 'pct',   dir: 'high', hint: 'ROE — özsermayenin ne kadar kâra döndüğü.' },
+    { key: 'revenueGrowth', label: 'Gelir Büyümesi (yıllık)', type: 'pct', dir: 'high', hint: 'Değerlemeyi en çok etkileyen tek etken çoğu zaman büyümedir.' },
+    { key: 'debtToEquity',  label: 'Borç/Özsermaye',      type: 'd2e',   dir: 'low',  hint: 'Finansal risk; düşük = daha az borçlu.' },
+    { key: 'dividendYield', label: 'Temettü Verimi',      type: 'pct',   dir: 'high', hint: 'Yıllık temettü / fiyat.' },
+  ];
+
+  const curSymFor = (c) => c === 'USD' ? '$' : c === 'TRY' ? '₺' : (c ? c + ' ' : '');
+  function fmtMcap(v, cur) {
+    if (v == null) return '—';
+    const s = curSymFor(cur);
+    if (v >= 1e12) return s + (v / 1e12).toFixed(2) + ' T';
+    if (v >= 1e9)  return s + (v / 1e9).toFixed(1) + ' Mr';
+    if (v >= 1e6)  return s + (v / 1e6).toFixed(0) + ' Mn';
+    return s + v.toLocaleString('tr-TR');
+  }
+  function fmtCell(row, m) {
+    const v = m ? m[row.key] : null;
+    if (v == null || (typeof v === 'number' && isNaN(v))) return '—';
+    switch (row.type) {
+      case 'text':   return v;
+      case 'price':  return curSymFor(m.currency) + Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+      case 'mcap':   return fmtMcap(v, m.currency);
+      case 'ratio':  return Number(v).toFixed(1);
+      case 'ratio2': return Number(v).toFixed(2);
+      case 'pct':    return (v * 100).toFixed(1) + '%';
+      case 'd2e':    return (v / 100).toFixed(2) + 'x';
+      default:       return String(v);
+    }
+  }
+  // Bir satır için en iyi/en kötü sütunu bul (yalnız geçerli pozitif değerler; F/K vb. negatif = zarar, hariç).
+  function rowExtrema(row, metrics) {
+    if (!row.dir) return {};
+    const vals = [];
+    metrics.forEach((m, i) => {
+      let v = m ? m[row.key] : null;
+      if (v == null || isNaN(v)) return;
+      if ((row.type === 'ratio' || row.type === 'ratio2') && v <= 0) return; // negatif F/K anlamsız
+      vals.push({ i, v });
+    });
+    if (vals.length < 2) return {};
+    let best = vals[0], worst = vals[0];
+    for (const x of vals) {
+      if (row.dir === 'low')  { if (x.v < best.v) best = x; if (x.v > worst.v) worst = x; }
+      else                    { if (x.v > best.v) best = x; if (x.v < worst.v) worst = x; }
+    }
+    return { best: best.i, worst: worst.i };
+  }
+
+  async function fetchCompareBatch(items) {
+    // Yalnız önbellekte olmayanları çek. Tek /api/yfin çağrısında toplu (max 12).
+    const need = items.filter((it) => !compareMem.has(it.market + ':' + it.symbol));
+    if (!need.length) return;
+    const ysyms = need.map((it) => yahooSym(it.symbol, it.market));
+    try {
+      const r = await fetch(YFIN_BASE + '?symbols=' + encodeURIComponent(ysyms.join(',')), { cache: 'no-store' });
+      const j = await r.json();
+      const byY = {};
+      (j.results || []).forEach((res) => { byY[res.symbol] = res; });
+      need.forEach((it) => {
+        const res = byY[yahooSym(it.symbol, it.market)];
+        compareMem.set(it.market + ':' + it.symbol, (res && res.ok) ? res : { ok: false });
+      });
+    } catch (_) {
+      need.forEach((it) => compareMem.set(it.market + ':' + it.symbol, { ok: false }));
+    }
+  }
+
+  function compareAdd(symbol, market, query) {
+    symbol = (symbol || '').trim().toUpperCase();
+    if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(symbol)) return { ok: false, err: 'Geçersiz kod.' };
+    const items = loadCompare();
+    if (items.some((i) => i.symbol === symbol && i.market === market)) return { ok: false, err: 'Zaten ekli.' };
+    if (items.length >= 6) return { ok: false, err: 'En fazla 6 hisse.' };
+    items.push({ symbol, market, query: query || symbol });
+    saveCompare(items);
+    return { ok: true };
+  }
+  function compareRemove(symbol, market) {
+    saveCompare(loadCompare().filter((i) => !(i.symbol === symbol && i.market === market)));
+  }
+
+  function renderComparePicker() {
+    const panel = document.getElementById('comparePicker');
+    if (!panel) return;
+    if (!comparePickerOpen) { panel.innerHTML = ''; panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+    const current = loadCompare();
+    const has = (s, m) => current.some((i) => i.symbol === s && i.market === m);
+    const lists = loadLists();
+    let html = '<div class="cmp-pick-manual">'
+      + '<input id="cmpManualCode" type="text" maxlength="10" placeholder="Kod (ör. NVDA, ASELS)" />'
+      + '<select id="cmpManualMkt"><option value="US">ABD</option><option value="BIST">BIST</option></select>'
+      + '<button id="cmpManualAdd" class="primary-btn">Ekle</button>'
+      + '<span id="cmpPickMsg" class="cmp-pick-msg"></span></div>';
+    html += '<div class="cmp-pick-lists">';
+    if (!lists.length || lists.every((l) => !l.items.length)) {
+      html += '<span class="opps-hint">Listelerinde hisse yok. Yukarıdan kod girerek ekleyebilirsin.</span>';
+    } else {
+      lists.forEach((l) => {
+        if (!l.items.length) return;
+        html += `<div class="cmp-pick-group"><div class="cmp-pick-gname">${l.name}</div><div class="cmp-pick-chips">`;
+        l.items.forEach((it) => {
+          const added = has(it.symbol, it.market);
+          html += `<button class="cmp-pick-chip${added ? ' added' : ''}" data-sym="${it.symbol}" data-mkt="${it.market}" data-q="${(it.query || it.symbol).replace(/"/g, '&quot;')}"${added ? ' disabled' : ''}>${it.symbol}<span class="cmp-mkt">${it.market === 'BIST' ? 'BIST' : 'ABD'}</span></button>`;
+        });
+        html += '</div></div>';
+      });
+    }
+    html += '</div>';
+    panel.innerHTML = html;
+
+    const msg = panel.querySelector('#cmpPickMsg');
+    const flash = (t, ok) => { if (msg) { msg.textContent = t; msg.className = 'cmp-pick-msg ' + (ok ? 'ok' : 'err'); } };
+    panel.querySelector('#cmpManualAdd').addEventListener('click', () => {
+      const code = panel.querySelector('#cmpManualCode').value;
+      const mkt = panel.querySelector('#cmpManualMkt').value;
+      const res = compareAdd(code, mkt, code);
+      if (!res.ok) { flash(res.err, false); return; }
+      panel.querySelector('#cmpManualCode').value = '';
+      renderCompare();
+    });
+    panel.querySelector('#cmpManualCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') panel.querySelector('#cmpManualAdd').click(); });
+    panel.querySelectorAll('.cmp-pick-chip:not(.added)').forEach((b) => b.addEventListener('click', () => {
+      const res = compareAdd(b.dataset.sym, b.dataset.mkt, b.dataset.q);
+      if (!res.ok) { flash(res.err, false); return; }
+      renderCompare();
+    }));
+  }
+
+  async function renderCompare() {
+    const wrap = document.getElementById('compareWrap');
+    const status = document.getElementById('compareStatus');
+    if (!wrap) return;
+    const items = loadCompare();
+
+    // İskelet: sol metrik kolonu + hisse sütunları + "+" ekle kolonu
+    let head = '<div class="compare-table"><div class="compare-col compare-metric-col"><div class="compare-cell compare-corner">Metrik</div>';
+    COMPARE_ROWS.forEach((r) => {
+      head += `<div class="compare-cell compare-mlabel"${r.hint ? ` title="${r.hint}"` : ''}>${r.label}</div>`;
+    });
+    head += '</div>';
+
+    // Sütun başlıkları (yükleme öncesi)
+    items.forEach((it) => {
+      head += `<div class="compare-col" data-col="${it.market}:${it.symbol}"><div class="compare-cell compare-head">`
+        + `<button class="cmp-remove" data-sym="${it.symbol}" data-mkt="${it.market}" title="Kaldır">×</button>`
+        + `<span class="cmp-sym">${it.symbol}</span><span class="cmp-mkt">${it.market === 'BIST' ? 'BIST' : 'ABD'}</span></div>`;
+      COMPARE_ROWS.forEach(() => { head += '<div class="compare-cell">…</div>'; });
+      head += '</div>';
+    });
+    // Ekle kolonu
+    head += '<div class="compare-col compare-add-col"><button id="compareAddBtn" class="compare-add-btn" title="Hisse ekle">＋</button></div>';
+    head += '</div>';
+    head += '<div id="comparePicker" class="compare-picker"></div>';
+    if (!items.length) {
+      wrap.innerHTML = '<div class="compare-empty">Kıyaslamak için <b>＋</b> ile hisse ekle. Listelerinden seçebilir ya da kod yazabilirsin.</div>' + head;
+    } else {
+      wrap.innerHTML = head;
+    }
+
+    // Kontrol bağla
+    const addBtn = document.getElementById('compareAddBtn');
+    if (addBtn) addBtn.addEventListener('click', () => { comparePickerOpen = !comparePickerOpen; renderComparePicker(); });
+    wrap.querySelectorAll('.cmp-remove').forEach((b) => b.addEventListener('click', () => {
+      compareRemove(b.dataset.sym, b.dataset.mkt); renderCompare();
+    }));
+    renderComparePicker();
+
+    if (!items.length) { if (status) status.textContent = ''; return; }
+    if (status) status.textContent = 'Temel veriler alınıyor…';
+    await fetchCompareBatch(items);
+
+    // Değerleri doldur + satır bazlı en iyi/en kötü vurgula
+    const metrics = items.map((it) => { const m = compareMem.get(it.market + ':' + it.symbol); return (m && m.ok) ? m : null; });
+    COMPARE_ROWS.forEach((row, ri) => {
+      const ext = rowExtrema(row, metrics);
+      items.forEach((it, ci) => {
+        const col = wrap.querySelector(`.compare-col[data-col="${it.market}:${it.symbol}"]`);
+        if (!col) return;
+        const cell = col.querySelectorAll('.compare-cell')[ri + 1]; // +1 başlık hücresi
+        if (!cell) return;
+        cell.textContent = fmtCell(row, metrics[ci]);
+        cell.classList.remove('cmp-best', 'cmp-worst');
+        if (ext.best === ci) cell.classList.add('cmp-best');
+        else if (ext.worst === ci) cell.classList.add('cmp-worst');
+      });
+    });
+    const okN = metrics.filter(Boolean).length;
+    if (status) status.textContent = `${items.length} hisse · ${okN} veri geldi` + (okN < items.length ? ` · ${items.length - okN} için temel veri bulunamadı` : '');
+  }
+
+  function initCompare() {
+    if (!compareInited) { compareInited = true; }
+    renderCompare();
+  }
+
   // ===== Sekme yönetimi =====
   let generalLoaded = false;
   document.querySelectorAll('.tab').forEach(btn => {
@@ -5141,6 +5364,7 @@
       if (btn.dataset.tab === 'macro') initMacro();
       if (btn.dataset.tab === 'today') initToday();
       if (btn.dataset.tab === 'pulse') initPulse();
+      if (btn.dataset.tab === 'compare') initCompare();
       if (btn.dataset.tab === 'lists') initLists();
       if (btn.dataset.tab === 'search') initSearch();
     });

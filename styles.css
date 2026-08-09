@@ -1562,3 +1562,72 @@ main {
   .modal.as-page { padding: 10px; }
   .modal.as-page .modal-card.detail-card { padding: 16px; width: 100%; }
 }
+
+/* ===== Karşılaştır (yan yana hisse kıyaslama) ===== */
+.compare-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.compare-empty {
+  padding: 22px; text-align: center; color: var(--text-dim);
+  border: 1px dashed var(--border); border-radius: 12px; margin-bottom: 14px;
+}
+.compare-table { display: flex; min-width: min-content; align-items: stretch; }
+.compare-col { display: flex; flex-direction: column; min-width: 132px; flex-shrink: 0; }
+.compare-metric-col {
+  min-width: 158px; position: sticky; left: 0; z-index: 2;
+  background: var(--bg); box-shadow: 2px 0 6px rgba(0,0,0,.25);
+}
+.compare-cell {
+  padding: 9px 12px; min-height: 44px; display: flex; align-items: center;
+  border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+  font-size: 14px; font-variant-numeric: tabular-nums; color: var(--text);
+}
+.compare-metric-col .compare-cell { border-left: 1px solid var(--border); }
+.compare-corner { font-weight: 700; color: var(--text-dim); background: var(--bg-soft); }
+.compare-mlabel { color: var(--text-dim); font-size: 13px; cursor: help; }
+.compare-head {
+  flex-direction: column; align-items: flex-start; gap: 2px; position: relative;
+  background: var(--bg-card-grad); font-weight: 700;
+}
+.compare-head .cmp-sym { font-size: 15px; font-weight: 800; }
+.compare-head .cmp-mkt, .cmp-pick-chip .cmp-mkt {
+  font-size: 10px; font-weight: 700; color: var(--accent);
+  background: var(--accent-soft); padding: 1px 6px; border-radius: 6px; margin-left: 6px;
+}
+.cmp-remove {
+  position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; line-height: 1;
+  border: none; border-radius: 6px; background: var(--red-soft); color: var(--red);
+  font-size: 15px; cursor: pointer; padding: 0;
+}
+.cmp-remove:hover { background: var(--red); color: #fff; }
+.compare-add-col { justify-content: flex-start; min-width: 56px; }
+.compare-add-btn {
+  width: 44px; height: 44px; margin: 0 6px; border: 1px dashed var(--accent);
+  border-radius: 10px; background: var(--accent-soft); color: var(--accent);
+  font-size: 22px; cursor: pointer; align-self: center;
+}
+.compare-add-btn:hover { background: var(--accent); color: #fff; }
+.compare-cell.cmp-best  { background: var(--green-soft); color: var(--green); font-weight: 700; }
+.compare-cell.cmp-worst { background: var(--red-soft);  color: var(--red); }
+
+.compare-picker {
+  display: none; margin-top: 14px; padding: 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg-card);
+}
+.cmp-pick-manual { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.cmp-pick-manual input, .cmp-pick-manual select {
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg-soft); color: var(--text); font-size: 14px;
+}
+.cmp-pick-manual input { flex: 1; min-width: 140px; }
+.cmp-pick-msg { font-size: 13px; }
+.cmp-pick-msg.err { color: var(--red); }
+.cmp-pick-msg.ok  { color: var(--green); }
+.cmp-pick-group { margin-top: 10px; }
+.cmp-pick-gname { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+.cmp-pick-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cmp-pick-chip {
+  display: inline-flex; align-items: center; padding: 6px 10px;
+  border: 1px solid var(--border); border-radius: 20px; background: var(--bg-soft);
+  color: var(--text); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.cmp-pick-chip:hover:not(.added) { border-color: var(--accent); background: var(--accent-soft); }
+.cmp-pick-chip.added { opacity: .45; cursor: default; }
