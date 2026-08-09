@@ -5139,8 +5139,87 @@
   function saveCompare(items) { try { localStorage.setItem(COMPARE_LS_KEY, JSON.stringify(items)); } catch (_) {} }
 
   // Kıyas metrikleri (satırlar). dir: 'low' = düşük iyi, 'high' = yüksek iyi, null = vurgulama yok.
+  // Yahoo "industry" (sektör altı alan) → Türkçe kısa etiket. Eşleşmezse ham değeri gösterir.
+  const INDUSTRY_TR = {
+    'Semiconductors': 'Yarı iletken',
+    'Semiconductor Equipment & Materials': 'Yarı iletken ekipman & malzeme',
+    'Consumer Electronics': 'Tüketici elektroniği',
+    'Communication Equipment': 'İletişim/fiberoptik ekipman',
+    'Computer Hardware': 'Bilgisayar donanımı',
+    'Electronic Components': 'Elektronik bileşen',
+    'Electronics & Computer Distribution': 'Elektronik dağıtım',
+    'Scientific & Technical Instruments': 'Bilimsel/teknik cihaz',
+    'Information Technology Services': 'BT hizmetleri',
+    'Software - Application': 'Yazılım (uygulama)',
+    'Software - Infrastructure': 'Yazılım (altyapı)',
+    'Solar': 'Güneş enerjisi',
+    'Internet Content & Information': 'İnternet içerik/servis',
+    'Internet Retail': 'İnternet perakende',
+    'Banks - Regional': 'Banka (bölgesel)',
+    'Banks - Diversified': 'Banka (evrensel)',
+    'Capital Markets': 'Sermaye piyasaları',
+    'Insurance - Diversified': 'Sigorta',
+    'Insurance - Life': 'Hayat sigortası',
+    'Asset Management': 'Varlık yönetimi',
+    'Credit Services': 'Kredi/finansman hizmetleri',
+    'Oil & Gas Integrated': 'Petrol & gaz (entegre)',
+    'Oil & Gas E&P': 'Petrol & gaz (arama/üretim)',
+    'Oil & Gas Refining & Marketing': 'Rafineri & pazarlama',
+    'Oil & Gas Midstream': 'Petrol & gaz (taşıma/depo)',
+    'Utilities - Regulated Electric': 'Elektrik (regüle)',
+    'Utilities - Renewable': 'Yenilenebilir enerji',
+    'Steel': 'Çelik',
+    'Aluminum': 'Alüminyum',
+    'Copper': 'Bakır',
+    'Gold': 'Altın madenciliği',
+    'Other Industrial Metals & Mining': 'Sanayi metali & madencilik',
+    'Building Materials': 'İnşaat malzemeleri',
+    'Chemicals': 'Kimya',
+    'Specialty Chemicals': 'Özel kimyasallar',
+    'Agricultural Inputs': 'Tarımsal girdi/gübre',
+    'Auto Manufacturers': 'Otomobil üreticisi',
+    'Auto Parts': 'Otomotiv yan sanayi',
+    'Airlines': 'Havayolu',
+    'Aerospace & Defense': 'Havacılık & savunma',
+    'Industrial Distribution': 'Sanayi dağıtım',
+    'Farm & Heavy Construction Machinery': 'Ağır makine/iş makinesi',
+    'Specialty Industrial Machinery': 'Özel sanayi makineleri',
+    'Railroads': 'Demiryolu',
+    'Integrated Freight & Logistics': 'Lojistik & taşımacılık',
+    'Telecom Services': 'Telekom hizmetleri',
+    'Entertainment': 'Eğlence/medya',
+    'Restaurants': 'Restoran',
+    'Discount Stores': 'İndirim marketi',
+    'Grocery Stores': 'Market/gıda perakende',
+    'Packaged Foods': 'Paketli gıda',
+    'Beverages - Non-Alcoholic': 'İçecek (alkolsüz)',
+    'Beverages - Brewers': 'Bira',
+    'Tobacco': 'Tütün',
+    'Household & Personal Products': 'Ev & kişisel bakım',
+    'Apparel Retail': 'Giyim perakende',
+    'Apparel Manufacturing': 'Giyim üretimi',
+    'Drug Manufacturers - General': 'İlaç (büyük ölçek)',
+    'Drug Manufacturers - Specialty & Generic': 'İlaç (jenerik/özel)',
+    'Biotechnology': 'Biyoteknoloji',
+    'Medical Devices': 'Tıbbi cihaz',
+    'Medical Instruments & Supplies': 'Tıbbi araç & malzeme',
+    'Healthcare Plans': 'Sağlık sigortası',
+    'Diagnostics & Research': 'Tanı & araştırma',
+    'REIT - Retail': 'GYO (perakende)',
+    'REIT - Residential': 'GYO (konut)',
+    'REIT - Industrial': 'GYO (sanayi/lojistik)',
+    'Real Estate - Development': 'Gayrimenkul geliştirme',
+    'Real Estate Services': 'Gayrimenkul hizmetleri',
+    'Conglomerates': 'Holding',
+    'Paper & Paper Products': 'Kağıt & selüloz',
+    'Packaging & Containers': 'Ambalaj',
+    'Textile Manufacturing': 'Tekstil üretimi',
+  };
+  const trIndustry = (v) => v ? (INDUSTRY_TR[v] || v) : '—';
+
   const COMPARE_ROWS = [
     { key: 'sector',        label: 'Sektör',              type: 'text' },
+    { key: 'industry',      label: 'Detay',               type: 'text', xf: trIndustry, hint: 'Sektör içindeki alt alan (ör. yarı iletken, bellek, fiberoptik, kimya…). Kaynak: Yahoo Finance sınıflandırması.' },
     { key: 'price',         label: 'Fiyat',               type: 'price' },
     { key: 'marketCap',     label: 'Piyasa Değeri',       type: 'mcap' },
     { key: 'trailingPE',    label: 'F/K',                 type: 'ratio', dir: 'low',  hint: 'Fiyat / Kazanç (son 12 ay). Düşük = daha ucuz.' },
@@ -5169,7 +5248,7 @@
     const v = m ? m[row.key] : null;
     if (v == null || (typeof v === 'number' && isNaN(v))) return '—';
     switch (row.type) {
-      case 'text':   return v;
+      case 'text':   return row.xf ? row.xf(v) : v;
       case 'price':  return curSymFor(m.currency) + Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
       case 'mcap':   return fmtMcap(v, m.currency);
       case 'ratio':  return Number(v).toFixed(1);
