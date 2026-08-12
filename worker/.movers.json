@@ -1,6 +1,7 @@
 {
   "date": "2026-08-12",
   "levels": {
-    "ASELS.BIST": 1
+    "ASELS.BIST": 1,
+    "TUPRS.BIST": 1
   }
 }
