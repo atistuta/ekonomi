@@ -1,9 +1,8 @@
 {
-  "date": "2026-08-12",
+  "date": "2026-08-13",
   "levels": {
-    "ASELS.BIST": 1,
     "TUPRS.BIST": 1,
-    "SOXX.US": 1,
+    "ASELS.BIST": 1,
     "NVDA.US": 1
   }
 }
