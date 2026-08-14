@@ -1,6 +1,7 @@
 {
   "date": "2026-08-14",
   "levels": {
-    "DOAS.BIST": -2
+    "DOAS.BIST": -2,
+    "TUPRS.BIST": 1
   }
 }
