@@ -1,9 +1,6 @@
 {
-  "date": "2026-08-13",
+  "date": "2026-08-14",
   "levels": {
-    "TUPRS.BIST": 1,
-    "ASELS.BIST": 0,
-    "NVDA.US": 1,
     "DOAS.BIST": -2
   }
 }
