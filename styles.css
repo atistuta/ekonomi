@@ -1500,9 +1500,16 @@ main {
 .rp-zone { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 5px 8px; border-radius: 7px; background: rgba(255,255,255,0.03); }
 .rp-zone.buy { background: var(--green-soft); } .rp-zone.buy2 { background: color-mix(in srgb, var(--green-soft) 55%, transparent); }
 .rp-zone.sell { background: var(--red-soft); }
+.rp-zone.mom { background: color-mix(in srgb, var(--gold) 16%, transparent); border: 1px dashed color-mix(in srgb, var(--gold) 55%, transparent); }
+.rp-zone.mom .rp-zl { color: var(--gold); font-weight: 600; }
 .rp-zl { color: var(--text-dim); } .rp-zv { font-weight: 700; font-variant-numeric: tabular-nums; }
+.rp-mom-badge { font-size: 10px; font-weight: 700; color: var(--gold); background: color-mix(in srgb, var(--gold) 18%, transparent); padding: 1px 6px; border-radius: 20px; vertical-align: middle; white-space: nowrap; }
 .rp-plan { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 8px; }
 .rp-plan b { color: var(--text); font-weight: 600; }
+.rp-mom-note { color: color-mix(in srgb, var(--gold) 82%, var(--text)); line-height: 1.5; }
+.rp-mom-note b { color: var(--text); }
+.rp-mom-over { margin-top: 8px; padding: 8px 10px; border-radius: 8px; font-size: 11.5px; line-height: 1.5; background: color-mix(in srgb, var(--gold) 12%, transparent); border-left: 3px solid var(--gold); color: var(--text-dim); }
+.rp-mom-over b { color: var(--text); }
 .rp-val { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
 .rp-val-h { font-size: 13px; font-weight: 700; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rp-val-h em { font-size: 11px; font-weight: 500; color: var(--text-dim); font-style: normal; }

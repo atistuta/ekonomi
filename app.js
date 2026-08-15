@@ -2677,6 +2677,31 @@
     { key: 'uzun', label: 'Uzun vade', horizon: '≈ 1–3 yıl' },
   ];
 
+  // ===== Momentum / trend-devam rejimi =====
+  // Sorun: "Güçlü alış" bölgesi hep fiyatın ALTINDAKİ desteğe çapalanır. Güçlü bir
+  // yükseliş trendinde fiyat oraya geri gelmez → hisse "pahalı" görünse de ralliye
+  // devam eder ve derin alım bölgesini bekleyen fırsatı kaçırır. Bu fonksiyon, hâlâ
+  // hesapladığımız sinyallerden (skor + SMA dizilimi + ADX + alım bölgesine uzaklık)
+  // bir "trend güçlü" rejimi tespit eder ve fiyata YAKIN, kademeli bir momentum
+  // girişi bölgesi önerir. Yön/kesinlik iddiası değil; fırsat maliyetini azaltmak için.
+  function momentumInfo(res, vadeKey) {
+    if (!res || !res.levels) return { active: false };
+    const L = res.levels, p = L.price, bz = L.buyZone;
+    if (p == null) return { active: false };
+    const bzTop = (bz && bz[1] != null) ? bz[1] : null;
+    const trendAligned = (L.sma50 != null && p > L.sma50) && (L.sma200 == null || L.sma50 >= L.sma200);
+    const adx = res.adxVal;
+    const strongTrend = adx != null && adx >= 22;      // ADX ≥ 22 → yönlü/güçlü trend
+    const bullish = res.score >= 56;                    // en az "AL eğilimi"
+    const gapPct = bzTop != null ? (p - bzTop) / p : 0; // fiyat, güçlü-alış tavanının ne kadar üstünde?
+    const gapTh = { gunici: 0.02, kisa: 0.03, orta: 0.05, uzun: 0.08 }[vadeKey] || 0.04;
+    const active = bullish && trendAligned && strongTrend && gapPct >= gapTh;
+    if (!active) return { active: false, trendAligned, adx, gapPct };
+    const atr = L.atr != null ? L.atr : p * 0.02;
+    const pull = { gunici: 0.5, kisa: 0.6, orta: 1.0, uzun: 1.5 }[vadeKey] || 0.8;
+    return { active: true, zone: [p - pull * atr, p], gapPct, adx, sma50: L.sma50, sma200: L.sma200 };
+  }
+
   async function fillResultPlan(box, symbol, market, faScore, aliveFn, valuation) {
     if (!box) return;
     const daily = await ensureDailyCandles(symbol, market);
@@ -2690,11 +2715,17 @@
 
     // --- Bileşke özet (TA orta + FA) ---
     const taMid = computeVadeScore(daily, 'orta');
+    const midMom = momentumInfo(taMid, 'orta');
     let compHTML = '';
     if (taMid) {
       const m = COMPOSITE_MATRIX[faBand(faScore) + ':' + taBand(taMid.score)] || COMPOSITE_MATRIX['mid:mid'];
       const blended = 0.55 * faScore + 0.45 * taMid.score;
       const faCls = faScore >= 60 ? 'bull' : faScore < 45 ? 'bear' : 'neutral';
+      // Momentum override: teknik trend güçlü ama temel skor zayıf (çoğu zaman yüksek
+      // değerleme). Kullanıcıyı "pahalı ⇒ kaçın" yanılgısından koruyan uyarı.
+      const momOver = midMom.active && faScore < 52;
+      const momOverHTML = momOver ? `
+          <div class="rp-mom-over">⚡ <b>Teknik trend güçlü, temel skor daha zayıf</b> — bu genelde yüksek değerleme (F/K) demektir. Güçlü momentumda hisse "pahalı" görünse de yükselişini sürdürebilir. Planı yalnızca ucuzlamayı bekleyerek değil, aşağıdaki <b>momentum girişi</b> ile birlikte değerlendir.</div>` : '';
       compHTML = `
         <div class="rp-summary ${m.band}">
           <div class="rp-verdict">${m.label}</div>
@@ -2704,6 +2735,7 @@
             <span>Bileşke <b>${Math.round(blended)}</b>/100</span>
           </div>
           <div class="rp-verdict-txt">${m.txt}</div>
+          ${momOverHTML}
         </div>`;
     }
 
@@ -2739,18 +2771,22 @@
         rr = ((tgt - entry) / (entry - invalid)).toFixed(1) + ':1';
       }
       const trail = L.atr != null ? 2 * L.atr : null;
+      const mom = momentumInfo(res, key);
+      const momZone = (mom.active && mom.zone) ? `${fmtP(mom.zone[0])} – ${fmtP(mom.zone[1])}` : '';
       return `
         <div class="rp-card ${res.cls}">
           <div class="rp-card-h">
-            <span class="rp-vade">${label} <em>${horizon}</em></span>
+            <span class="rp-vade">${label} <em>${horizon}</em>${mom.active ? ' <span class="rp-mom-badge">⚡ Trend güçlü</span>' : ''}</span>
             <span class="ta-sig ${res.cls}">${res.label} · ${Math.round(res.score)}</span>
           </div>
           <div class="rp-zones">
+            ${mom.active ? `<div class="rp-zone mom"><span class="rp-zl">⚡ Momentum girişi (kademeli)</span><span class="rp-zv">${momZone}</span></div>` : ''}
             <div class="rp-zone buy"><span class="rp-zl">🟢 Güçlü alış</span><span class="rp-zv">${strongBuy}</span></div>
             ${accumBuy ? `<div class="rp-zone buy2"><span class="rp-zl">🟢 Uygun toplama</span><span class="rp-zv">${accumBuy}</span></div>` : ''}
             <div class="rp-zone sell"><span class="rp-zl">${sellLabel}</span><span class="rp-zv">${sellRange}</span></div>
           </div>
           <div class="rp-plan">
+            ${mom.active ? `<span class="rp-mom-note">⚡ Trend güçlü (fiyat SMA50 üstünde${mom.sma200 != null ? ' · SMA50≥SMA200' : ''}${mom.adx != null ? ` · ADX ${Math.round(mom.adx)}` : ''}); fiyat, güçlü-alış bölgesinin ~%${Math.round(mom.gapPct * 100)} üzerinde. <b>Pahalı olsa da derin geri çekilme gelmeyebilir</b> — sadece iskonto beklemek fırsatı kaçırabilir. Kademeli giriş: bir kısmını momentum bölgesinden, kalanını güçlü-alış bölgesinde.</span>` : ''}
             <span>⊘ Geçersizleşme (alış tabanı altı): <b>${fmtP(invalid)}</b></span>
             <span>🛡️ Takip stopu: <b>2×ATR ≈ ${fmtP(trail)}</b> (açık pozisyonu fiyatın altında sürükleyerek)</span>
             <span>⚑ Trend tetiği: <b>${trigTxt}</b></span>
@@ -2773,9 +2809,17 @@
       if (valuation.eps > 0) {
         const fair = valuation.eps * 18, attractive = valuation.eps * 15, strong = valuation.eps * 10;
         const peNow = valuation.pe;
+        const pricey = peNow != null && peNow > 25;
         const conf = (taMid && taMid.levels && taMid.levels.price != null && taMid.levels.price <= attractive)
           ? '<span class="rp-conf good">✓ Fiyat cazip değer bölgesinde</span>'
-          : (peNow != null && peNow > 25) ? '<span class="rp-conf warn">Değerleme pahalı bölgede</span>' : '';
+          : pricey
+            ? (midMom.active
+                ? '<span class="rp-conf warn">Pahalı — ama güçlü momentum (pahalı kalabilir)</span>'
+                : '<span class="rp-conf warn">Değerleme pahalı bölgede</span>')
+            : '';
+        const momValNote = (pricey && midMom.active)
+          ? ' <b>Not:</b> Yüksek F/K çoğu zaman güçlü büyüme/momentumla birlikte gelir; teknik trend güçlüyken "pahalı" tek başına satış ya da kaçınma sinyali değildir — güçlü trendler değerlemeyi uzun süre yüksek tutabilir.'
+          : '';
         valHTML = `
           <div class="rp-val">
             <div class="rp-val-h">🧮 Temel değer bandı <em>(F/K bazlı, kaba)</em> ${conf}</div>
@@ -2783,7 +2827,7 @@
             <div class="rp-val-row"><span>Cazip (F/K ≤ 15)</span><b>≤ ${fmtP(attractive)}</b></div>
             <div class="rp-val-row"><span>Makul üst sınır (F/K ≈ 18)</span><b>≈ ${fmtP(fair)}</b></div>
             ${pbRow}
-            <div class="rp-val-note">Şu an ${peNow != null ? 'F/K ' + peNow.toFixed(1) : 'F/K —'} · HBK ${cs}${valuation.eps.toFixed(2)}. F/K eşikleri sektöre göre değişir — kaba referanstır, teknik bölgelerle örtüşürse güçlü sinyal.${bistCaveat}</div>
+            <div class="rp-val-note">Şu an ${peNow != null ? 'F/K ' + peNow.toFixed(1) : 'F/K —'} · HBK ${cs}${valuation.eps.toFixed(2)}. F/K eşikleri sektöre göre değişir — kaba referanstır, teknik bölgelerle örtüşürse güçlü sinyal.${bistCaveat}${momValNote}</div>
           </div>`;
       } else {
         valHTML = `
