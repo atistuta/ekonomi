@@ -5,10 +5,11 @@
 
 import fs from 'node:fs/promises';
 import { XMLParser } from 'fast-xml-parser';
+import { getWatchlist } from './watchlist.mjs';
 
 const KAP_RSS    = 'https://www.kap.org.tr/tr/api/disclosures/rss';
 const NTFY_TOPIC = process.env.NTFY_TOPIC;
-const PORTFOLIO  = JSON.parse(await fs.readFile(new URL('./portfolio.json', import.meta.url)));
+const PORTFOLIO  = await getWatchlist(); // canlı KV → app'in güncel portföy+listeleri
 const SEEN_PATH  = new URL('./.seen.json', import.meta.url);
 
 if (!NTFY_TOPIC) {
@@ -49,7 +50,11 @@ const matches = [];
 try {
   const parsed = await fetchXML(KAP_RSS);
   const items = parsed?.rss?.channel?.item || [];
-  const tickers = PORTFOLIO.bist.map(upper);
+  // Portföy BIST + listelerdeki BIST sembolleri (tekilleştirilmiş)
+  const tickers = [...new Set([
+    ...PORTFOLIO.bist,
+    ...PORTFOLIO.watch.filter((w) => w.market === 'BIST').map((w) => w.symbol),
+  ].map(upper))];
   for (const it of items) {
     const id = it.link || it.title;
     if (seenSet.has(id)) continue;
@@ -68,8 +73,14 @@ try {
   console.error('KAP failed:', e.message);
 }
 
-// ---- 2) US ETF haberleri (Google News RSS) ----
-for (const p of PORTFOLIO.us) {
+// ---- 2) US haberleri (Google News RSS) — portföy US + listelerdeki US (tekilleştirilmiş) ----
+const usFeeds = [
+  ...PORTFOLIO.us,
+  ...PORTFOLIO.watch.filter((w) => w.market === 'US').map((w) => ({ symbol: w.symbol, query: w.query || `${w.symbol} stock` })),
+];
+const _usSeen = new Set();
+const usUniq = usFeeds.filter((p) => (_usSeen.has(p.symbol) ? false : _usSeen.add(p.symbol)));
+for (const p of usUniq) {
   const url = `https://news.google.com/rss/search?q=${encodeURIComponent(p.query)}&hl=en&gl=US&ceid=US:en`;
   try {
     const parsed = await fetchXML(url);

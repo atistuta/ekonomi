@@ -1147,6 +1147,7 @@
   }
   function saveUserPortfolio(list) {
     try { localStorage.setItem(PF_LS_KEY, JSON.stringify(list)); } catch (_) {}
+    scheduleWatchlistSync();
   }
   function loadHiddenPortfolio() {
     try { const raw = localStorage.getItem(PF_HIDE_KEY); if (raw) return JSON.parse(raw); } catch (_) {}
@@ -1154,6 +1155,7 @@
   }
   function saveHiddenPortfolio(list) {
     try { localStorage.setItem(PF_HIDE_KEY, JSON.stringify(list)); } catch (_) {}
+    scheduleWatchlistSync();
   }
   function getPortfolio() {
     const hidden = new Set(loadHiddenPortfolio().map(h => h.market + ':' + h.symbol));
@@ -1400,7 +1402,7 @@
     try { localStorage.setItem(LISTS_LS_KEY, JSON.stringify(seed)); } catch (_) {}
     return seed;
   }
-  function saveLists(lists) { try { localStorage.setItem(LISTS_LS_KEY, JSON.stringify(lists)); } catch (_) {} }
+  function saveLists(lists) { try { localStorage.setItem(LISTS_LS_KEY, JSON.stringify(lists)); } catch (_) {} scheduleWatchlistSync(); }
   function createList(name) {
     const lists = loadLists();
     const nm = (name || '').trim() || 'Liste ' + (lists.length + 1);
@@ -1429,6 +1431,43 @@
     const l = lists.find((x) => x.id === id); if (!l) return;
     l.items = l.items.filter((i) => !(i.symbol === symbol && i.market === market)); saveLists(lists);
   }
+
+  // ---- Bildirim senkronizasyonu (portföy + listeler → KV) ----
+  // App'teki güncel portföy + tüm liste sembollerini `/api/watchlist`'e POST eder;
+  // telefon bildirim worker'ı (poll.mjs/movers.mjs) aynı koddan okur → ekleme/çıkarma
+  // yaptığında telefona gelen bildirimler de güncellenir. Kod public JS'te (kişisel
+  // uygulama, watchlist hassas veri değil). Endpoint yoksa (KV kurulmadıysa) sessiz geçer.
+  const SYNC_CODE = 'atahan-bulten-9f3c';
+  const SYNC_BASE = (window.MY_PROXY || '').replace(/\/api\/proxy.*$/, '') || '';
+  let _syncTimer = null;
+  function collectWatchlistPayload() {
+    const portfolio = getPortfolio().map((p) => ({ symbol: p.symbol, market: p.market, query: p.query || p.symbol }));
+    const seen = new Set();
+    const list = [];
+    loadLists().forEach((l) => (l.items || []).forEach((it) => {
+      const k = it.market + ':' + it.symbol;
+      if (seen.has(k)) return; seen.add(k);
+      list.push({ symbol: it.symbol, market: it.market, query: it.query || it.symbol });
+    }));
+    return { portfolio, list };
+  }
+  function pushWatchlistSync() {
+    if (!SYNC_BASE) return;
+    try {
+      fetch(`${SYNC_BASE}/api/watchlist?code=${encodeURIComponent(SYNC_CODE)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(collectWatchlistPayload()),
+        keepalive: true,
+      }).catch(() => {});
+    } catch (_) {}
+  }
+  function scheduleWatchlistSync() {
+    if (_syncTimer) clearTimeout(_syncTimer);
+    _syncTimer = setTimeout(pushWatchlistSync, 1200);
+  }
+  // Açılışta bir kez gönder (kullanıcı hiç değişiklik yapmasa da worker güncel kalsın).
+  setTimeout(pushWatchlistSync, 3000);
 
   // Son aranan semboller (Arama sekmesi)
   const RECENT_LS_KEY = 'sb:recentSearch';

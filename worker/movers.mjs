@@ -4,9 +4,10 @@
 // Durum worker/.movers.json içinde tutulur (gün + seviye bazlı dedup → spam yok).
 
 import fs from 'node:fs/promises';
+import { getWatchlist } from './watchlist.mjs';
 
 const NTFY_TOPIC = process.env.NTFY_TOPIC;
-const PORTFOLIO  = JSON.parse(await fs.readFile(new URL('./portfolio.json', import.meta.url)));
+const PORTFOLIO  = await getWatchlist(); // canlı KV → app'in güncel portföy+listeleri
 const STATE_PATH = new URL('./.movers.json', import.meta.url);
 
 if (!NTFY_TOPIC) {

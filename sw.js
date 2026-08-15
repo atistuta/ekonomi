@@ -1,6 +1,6 @@
 // Sabah Bülteni — service worker (network-first, cache-as-fallback)
 // Cache adını her büyük kod değişikliğinde bump et.
-const CACHE = 'bulten-v61';
+const CACHE = 'bulten-v62';
 const SHELL = [
   './',
   './index.html',
