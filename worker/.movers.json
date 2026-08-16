@@ -9,6 +9,8 @@
     "MP.US": 1,
     "CLS.US": -1,
     "LITE.US": 1,
-    "AAOI.US": 5
+    "AAOI.US": 5,
+    "HSYDF.US": -1,
+    "HSAI.US": -1
   }
 }
