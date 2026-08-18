@@ -3,23 +3,24 @@
   "levels": {
     "HLGYO.BIST": -1,
     "SKHY.US": -2,
-    "SNDK.US": -2,
-    "MU.US": -1,
-    "LITE.US": -2,
+    "SNDK.US": -3,
+    "MU.US": -2,
+    "LITE.US": -3,
     "MRVL.US": -2,
-    "AAOI.US": -2,
+    "AAOI.US": -4,
     "ASTOR.BIST": -1,
     "ESCOM.BIST": -1,
-    "SIMO.US": -1,
+    "SIMO.US": -2,
     "AMSC.US": -1,
     "GEV.US": -1,
     "CLS.US": -2,
-    "ASTS.US": -1,
+    "ASTS.US": -2,
     "TSM.US": -1,
     "STM.US": -1,
     "TTDKY.US": -1,
     "HSAI.US": -1,
     "ONDS.US": 0,
-    "MP.US": 0
+    "MP.US": -1,
+    "YASKY.US": -2
   }
 }
