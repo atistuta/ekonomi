@@ -5,7 +5,7 @@
     "SKHY.US": -2,
     "SNDK.US": -2,
     "MU.US": -1,
-    "LITE.US": -1,
+    "LITE.US": -2,
     "MRVL.US": -2,
     "AAOI.US": -2,
     "ASTOR.BIST": -1,
@@ -13,11 +13,13 @@
     "SIMO.US": -1,
     "AMSC.US": -1,
     "GEV.US": -1,
-    "CLS.US": -1,
-    "ASTS.US": -2,
+    "CLS.US": -2,
+    "ASTS.US": -1,
     "TSM.US": -1,
     "STM.US": -1,
     "TTDKY.US": -1,
-    "HSAI.US": -1
+    "HSAI.US": -1,
+    "ONDS.US": 0,
+    "MP.US": 0
   }
 }
