@@ -14,7 +14,7 @@
     "AMSC.US": -1,
     "GEV.US": -2,
     "CLS.US": -2,
-    "ASTS.US": -1,
+    "ASTS.US": -2,
     "TSM.US": -1,
     "STM.US": -2,
     "TTDKY.US": -1,
@@ -25,6 +25,6 @@
     "HSYDF.US": -3,
     "LWLG.US": -3,
     "CRDO.US": -4,
-    "MXL.US": -5
+    "MXL.US": -4
   }
 }
