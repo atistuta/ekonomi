@@ -3,7 +3,7 @@
   "levels": {
     "HLGYO.BIST": -1,
     "SKHY.US": -2,
-    "SNDK.US": -2,
+    "SNDK.US": -3,
     "MU.US": -2,
     "LITE.US": -3,
     "MRVL.US": -2,
@@ -12,7 +12,7 @@
     "ESCOM.BIST": -1,
     "SIMO.US": -1,
     "AMSC.US": -1,
-    "GEV.US": -1,
+    "GEV.US": -2,
     "CLS.US": -2,
     "ASTS.US": -1,
     "TSM.US": -1,
