@@ -12,7 +12,7 @@
     "AAOI.US": 1,
     "TSLA.US": 1,
     "STM.US": -1,
-    "HSYDF.US": -3,
+    "HSYDF.US": 0,
     "HSAI.US": 1,
     "ZBRA.US": -1,
     "CRDO.US": -1,
@@ -22,6 +22,8 @@
     "MP.US": -1,
     "AMSC.US": -1,
     "ASTS.US": -1,
-    "GEV.US": -1
+    "GEV.US": -1,
+    "YASKY.US": 0,
+    "SHECY.US": -1
   }
 }
