@@ -25,6 +25,20 @@ const parser = new XMLParser({ ignoreAttributes: false });
 // ---- Helpers ----
 const upper = (s) => (s || '').toString().toUpperCase();
 
+// ---- Filtre: yalnız "önemli" haberler geçsin (haber selini keser) ----
+// Hisse başlığı bu kalıplardan BİRİNİ içermezse push edilmez (rutin başlıklar bastırılır).
+// M&A / dev sözleşme / bilanço sürprizi / analist aksiyonu / regülasyon / sert fiyat hareketi.
+const MAJOR_KW = /\b(acquir\w*|merg\w*|buyout|takeover|to buy|deal|stake|\d+\s*billion|guidance|forecast|raises?|cuts?|slash\w*|downgrad\w*|upgrad\w*|price target|lawsuit|sues?|antitrust|probe|investigation|recall|bankrupt\w*|default|beats?|miss(es|ed)?|earnings|layoffs?|contract|awarded|wins?|partnership|approval|halts?|surge\w*|plunge\w*|soars?|tumbl\w*|crash\w*|record)\b/i;
+// SEC ayrı (kelime sınırı büyük harfle çakışmasın)
+const SEC_KW = /\bSEC\b|\bFDA\b|\bDOJ\b/;
+const isMajor = (title) => MAJOR_KW.test(title) || SEC_KW.test(title);
+
+// ---- Makro kanalı: tüm piyasayı ilgilendiren faiz/enflasyon gelişmeleri ----
+// Hisseye değil dünyaya bakar; senin örneğindeki "faiz + rekor borçlanma → yarı iletken/AI düşüşü"
+// türü tetikleyiciler burada, ayrı ve YÜKSEK öncelikli çıkar.
+const MACRO_QUERY = '("Federal Reserve" OR "interest rate" OR "rate hike" OR "rate cut" OR inflation OR CPI OR "Treasury yield" OR FOMC OR "jobs report" OR recession OR "debt ceiling" OR "credit rating")';
+const MACRO_KW = /\b(fed|federal reserve|interest rate|rate hike|rate cut|inflation|cpi|ppi|treasury yield|yields?|fomc|powell|jobs report|payroll|unemployment|recession|debt ceiling|downgrad\w*|credit rating|bond)\b/i;
+
 async function fetchXML(url) {
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 sabah-bulteni-worker' },
@@ -85,20 +99,78 @@ for (const p of usUniq) {
   try {
     const parsed = await fetchXML(url);
     const items = parsed?.rss?.channel?.item || [];
-    for (const it of items.slice(0, 8)) {
+    let pushedForTicker = 0;
+    for (const it of items.slice(0, 15)) {
+      if (pushedForTicker >= 3) break;          // hisse başına en fazla 3 önemli haber
       const id = it.link || it.title;
       if (seenSet.has(id)) continue;
+      if (!isMajor(it.title)) continue;         // rutin başlıkları bastır → yalnız önemli olaylar
       matches.push({
         id,
-        title:   `[${p.symbol}] News`,
+        title:   `[${p.symbol}] ⭐ Önemli`,
         message: it.title,
         click:   it.link,
         tags:    ['newspaper'],
       });
+      pushedForTicker++;
     }
   } catch (e) {
     console.error(p.symbol, 'failed:', e.message);
   }
+}
+
+// ---- 2b) 🌍 MAKRO: dünya faiz + enflasyon gelişmeleri (hisseden bağımsız, yüksek öncelik) ----
+try {
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(MACRO_QUERY + ' when:1d')}&hl=en&gl=US&ceid=US:en`;
+  const parsed = await fetchXML(url);
+  const items = parsed?.rss?.channel?.item || [];
+  let macroPushed = 0;
+  for (const it of items.slice(0, 25)) {
+    if (macroPushed >= 4) break;                // makro spam da olmasın → en fazla 4/tur
+    const id = it.link || it.title;
+    if (seenSet.has(id)) continue;
+    if (!MACRO_KW.test(it.title || '')) continue;
+    matches.push({
+      id,
+      title:    '🌍 MAKRO — faiz/enflasyon',
+      message:  it.title,
+      click:    it.link,
+      tags:     ['warning'],
+      priority: 5,                              // en yüksek → ticker spam'ının altında kaybolmaz
+    });
+    macroPushed++;
+  }
+} catch (e) {
+  console.error('MAKRO feed failed:', e.message);
+}
+
+// ---- 2c) ⏰ Ekonomik takvim hatırlatması (FOMC/CPI önceden bellidir → GERÇEK önden uyarı) ----
+try {
+  const cal = JSON.parse(await fs.readFile(new URL('./calendar.json', import.meta.url), 'utf8'));
+  const events = Array.isArray(cal) ? cal : (cal.events || []);
+  const now = Date.now();
+  const WINDOW_MS = 4 * 60 * 60 * 1000;          // olaydan ~4 saat önce, bir kez hatırlat
+  for (const ev of events) {
+    const when = Date.parse(ev.whenUTC);
+    if (!Number.isFinite(when)) continue;
+    const ms = when - now;
+    if (ms <= 0 || ms > WINDOW_MS) continue;      // yalnız yaklaşan olaylar
+    const id = `cal:${ev.id}`;
+    if (seenSet.has(id)) continue;               // aynı olay için tek hatırlatma (.seen dedup)
+    const mins = Math.round(ms / 60000);
+    const hh = Math.floor(mins / 60), mm = mins % 60;
+    const eta = hh > 0 ? `${hh}s ${mm}dk` : `${mm}dk`;
+    matches.push({
+      id,
+      title:    `⏰ ${ev.title}`,
+      message:  `~${eta} sonra${ev.note ? ' · ' + ev.note : ''} · (takvim verisi — resmi kaynaktan doğrula)`,
+      click:    ev.link || 'https://day-starter.vercel.app/',
+      tags:     ['alarm_clock'],
+      priority: 5,
+    });
+  }
+} catch (e) {
+  console.error('Takvim okunamadı:', e.message);
 }
 
 // ---- 3) Notify ----
