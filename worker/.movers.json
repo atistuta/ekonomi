@@ -5,9 +5,9 @@
     "ASELS.BIST": 1,
     "ASTOR.BIST": 0,
     "SNDK.US": -1,
-    "SIMO.US": 0,
+    "SIMO.US": 1,
     "LWLG.US": -1,
-    "LITE.US": 1,
+    "LITE.US": 2,
     "MRVL.US": 1,
     "AAOI.US": 1,
     "TSLA.US": 1,
@@ -24,6 +24,7 @@
     "ASTS.US": -1,
     "GEV.US": -1,
     "YASKY.US": 0,
-    "SHECY.US": -1
+    "SHECY.US": -1,
+    "MU.US": 1
   }
 }
