@@ -5,7 +5,7 @@
     "ASELS.BIST": 1,
     "ASTOR.BIST": 0,
     "SNDK.US": -1,
-    "SIMO.US": 1,
+    "SIMO.US": 0,
     "LWLG.US": -1,
     "LITE.US": 1,
     "MRVL.US": 0,
@@ -16,11 +16,12 @@
     "HSAI.US": 1,
     "ZBRA.US": -1,
     "CRDO.US": -1,
-    "MXL.US": -2,
+    "MXL.US": 0,
     "ONDS.US": -2,
     "SKHY.US": 1,
     "MP.US": -1,
-    "AMSC.US": 0,
-    "ASTS.US": -1
+    "AMSC.US": -1,
+    "ASTS.US": -1,
+    "GEV.US": -1
   }
 }
