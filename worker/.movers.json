@@ -1,30 +1,17 @@
 {
-  "date": "2026-08-20",
+  "date": "2026-08-21",
   "levels": {
-    "TUPRS.BIST": 1,
-    "ASELS.BIST": 1,
-    "ASTOR.BIST": 0,
-    "SNDK.US": -1,
-    "SIMO.US": 1,
-    "LWLG.US": -1,
+    "ONDS.US": -1,
+    "SKHY.US": 1,
+    "MU.US": 1,
+    "MP.US": 0,
+    "AMSC.US": -1,
     "LITE.US": 2,
     "MRVL.US": 1,
     "AAOI.US": 1,
-    "TSLA.US": 1,
-    "STM.US": -1,
-    "HSYDF.US": 0,
-    "HSAI.US": 1,
-    "ZBRA.US": -1,
-    "CRDO.US": -1,
-    "MXL.US": 0,
-    "ONDS.US": -1,
-    "SKHY.US": 1,
-    "MP.US": 0,
-    "AMSC.US": -1,
-    "ASTS.US": -1,
-    "GEV.US": -1,
     "YASKY.US": 0,
+    "HSYDF.US": 0,
     "SHECY.US": -1,
-    "MU.US": 1
+    "HSAI.US": 1
   }
 }
