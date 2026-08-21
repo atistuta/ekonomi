@@ -1,13 +1,13 @@
 {
   "date": "2026-08-21",
   "levels": {
-    "ONDS.US": -1,
+    "ONDS.US": 1,
     "SKHY.US": 1,
     "MU.US": 0,
-    "MP.US": 1,
+    "MP.US": 2,
     "AMSC.US": 0,
     "LITE.US": 0,
-    "MRVL.US": -1,
+    "MRVL.US": -2,
     "AAOI.US": -1,
     "YASKY.US": 0,
     "HSYDF.US": 0,
@@ -17,7 +17,7 @@
     "SIMO.US": 0,
     "LWLG.US": 0,
     "CLS.US": 0,
-    "ASTS.US": 0,
+    "ASTS.US": 1,
     "TSLA.US": 1,
     "CRDO.US": 0,
     "MXL.US": 0
