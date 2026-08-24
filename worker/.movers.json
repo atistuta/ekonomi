@@ -1,15 +1,8 @@
 {
-  "date": "2026-08-23",
+  "date": "2026-08-24",
   "levels": {
-    "ONDS.US": 1,
-    "SIMO.US": 1,
-    "MP.US": 3,
-    "ASTS.US": 1,
-    "PLTR.US": 1,
-    "MRVL.US": -1,
-    "AAOI.US": -1,
-    "TSLA.US": 1,
     "ARKG.US": 1,
-    "UMAC.US": 1
+    "TSLA.US": 1,
+    "MP.US": 3
   }
 }
