@@ -1,8 +1,13 @@
 {
   "date": "2026-08-24",
   "levels": {
-    "ARKG.US": 1,
+    "ARKG.US": -1,
     "TSLA.US": 1,
-    "MP.US": 3
+    "MP.US": -1,
+    "SOXX.US": -1,
+    "NVDA.US": 0,
+    "TSM.US": -1,
+    "STM.US": -1,
+    "HSAI.US": -1
   }
 }
