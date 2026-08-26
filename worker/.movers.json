@@ -1,29 +1,12 @@
 {
-  "date": "2026-08-25",
+  "date": "2026-08-26",
   "levels": {
-    "ONDS.US": -1,
-    "SKHY.US": -1,
-    "SNDK.US": -2,
-    "MU.US": -1,
-    "SIMO.US": -1,
     "MP.US": 1,
-    "AMSC.US": -1,
-    "LWLG.US": -2,
+    "CLS.US": 1,
     "LITE.US": 2,
-    "ASTS.US": -3,
     "MRVL.US": 1,
     "AAOI.US": 1,
-    "TSLA.US": -1,
-    "HSAI.US": -1,
-    "CRDO.US": -1,
     "MXL.US": 1,
-    "AVAV.US": -2,
-    "KTOS.US": -2,
-    "UMAC.US": -3,
-    "ESCOM.BIST": -1,
-    "ASELS.BIST": 0,
-    "TUPRS.BIST": -1,
-    "CLS.US": 1,
     "ARKG.US": 1
   }
 }
