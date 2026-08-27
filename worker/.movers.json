@@ -1,20 +1,10 @@
 {
-  "date": "2026-08-26",
+  "date": "2026-08-27",
   "levels": {
-    "MP.US": 1,
-    "CLS.US": 1,
-    "LITE.US": 2,
-    "MRVL.US": 1,
-    "AAOI.US": 0,
-    "MXL.US": -1,
-    "ARKG.US": 1,
     "SIMO.US": 2,
-    "AMSC.US": 0,
-    "LWLG.US": 0,
+    "LITE.US": 2,
     "ASTS.US": -1,
-    "PLTR.US": 0,
     "HSAI.US": -2,
-    "CRDO.US": 0,
-    "UMAC.US": -1
+    "MXL.US": -1
   }
 }
