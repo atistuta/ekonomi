@@ -20,6 +20,9 @@
     "KTOS.US": -1,
     "UMAC.US": -2,
     "ONDS.US": -3,
-    "ARKG.US": -1
+    "ARKG.US": -1,
+    "TUPRS.BIST": 1,
+    "SOXX.US": -1,
+    "QCLN.US": -1
   }
 }
