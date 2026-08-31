@@ -9,9 +9,12 @@
     "MP.US": -1,
     "SONY.US": 1,
     "STM.US": -1,
-    "HSYDF.US": -1,
+    "HSYDF.US": 0,
     "MRVL.US": -3,
     "GEV.US": -1,
-    "ENJSA.BIST": -1
+    "ENJSA.BIST": -1,
+    "ASELS.BIST": -1,
+    "TSLA.US": 1,
+    "HSAI.US": -2
   }
 }
