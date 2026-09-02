@@ -1,20 +1,18 @@
 {
-  "date": "2026-09-01",
+  "date": "2026-09-02",
   "levels": {
-    "ENJSA.BIST": -1,
-    "ASELS.BIST": -1,
-    "TSLA.US": -1,
-    "HSYDF.US": 1,
-    "HSAI.US": 1,
     "SIMO.US": -1,
     "LWLG.US": -1,
     "LITE.US": -1,
     "ASTS.US": -1,
-    "AAOI.US": -1,
-    "YASKY.US": -1,
-    "UMAC.US": -1,
-    "ONDS.US": -2,
     "PLTR.US": -1,
-    "KTOS.US": -1
+    "AAOI.US": -1,
+    "TSLA.US": -1,
+    "YASKY.US": -1,
+    "HSYDF.US": 1,
+    "HSAI.US": 1,
+    "KTOS.US": -1,
+    "UMAC.US": -1,
+    "ONDS.US": -2
   }
 }
