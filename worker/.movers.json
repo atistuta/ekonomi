@@ -1,13 +1,13 @@
 {
-  "date": "2026-09-04",
+  "date": "2026-09-05",
   "levels": {
     "HLGYO.BIST": 1,
     "SOXX.US": 1,
     "TSLA.US": -1,
-    "YASKY.US": 0,
-    "SKHY.US": 2,
-    "MRVL.US": 2,
     "TTDKY.US": 1,
-    "HSYDF.US": 1
+    "YASKY.US": 0,
+    "HSYDF.US": 1,
+    "SKHY.US": 2,
+    "MRVL.US": 2
   }
 }
