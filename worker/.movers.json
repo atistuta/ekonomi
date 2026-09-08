@@ -3,7 +3,7 @@
   "levels": {
     "SIMO.US": 2,
     "MU.US": 2,
-    "SKHY.US": 2,
+    "SKHY.US": 1,
     "SNDK.US": 3,
     "LWLG.US": 1,
     "LITE.US": 1,
@@ -15,6 +15,7 @@
     "YASKY.US": 0,
     "HSYDF.US": 3,
     "UMAC.US": -1,
-    "SOXX.US": 1
+    "SOXX.US": 1,
+    "SONY.US": -1
   }
 }
