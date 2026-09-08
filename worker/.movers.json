@@ -1,21 +1,19 @@
 {
-  "date": "2026-09-07",
+  "date": "2026-09-08",
   "levels": {
-    "HLGYO.BIST": 1,
-    "SOXX.US": 1,
-    "TSLA.US": -1,
-    "TTDKY.US": 1,
-    "YASKY.US": 0,
-    "HSYDF.US": 3,
-    "SKHY.US": 2,
-    "MRVL.US": 2,
     "SIMO.US": 2,
     "MU.US": 2,
+    "SKHY.US": 2,
     "SNDK.US": 3,
     "LWLG.US": 1,
     "LITE.US": 1,
     "PLTR.US": -1,
+    "MRVL.US": 2,
     "AAOI.US": 1,
+    "TSLA.US": -1,
+    "TTDKY.US": 1,
+    "YASKY.US": 0,
+    "HSYDF.US": 3,
     "UMAC.US": -1
   }
 }
