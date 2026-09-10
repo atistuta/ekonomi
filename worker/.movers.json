@@ -3,6 +3,14 @@
   "levels": {
     "TUPRS.BIST": 1,
     "SKHY.US": 2,
-    "MRVL.US": 1
+    "MRVL.US": 1,
+    "AMSC.US": -1,
+    "LWLG.US": -1,
+    "ASTS.US": -1,
+    "AAOI.US": -1,
+    "AVAV.US": -1,
+    "KTOS.US": -1,
+    "UMAC.US": -2,
+    "ONDS.US": -1
   }
 }
