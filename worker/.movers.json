@@ -2,15 +2,21 @@
   "date": "2026-09-10",
   "levels": {
     "TUPRS.BIST": 1,
-    "SKHY.US": 2,
-    "MRVL.US": 1,
+    "SKHY.US": -1,
+    "MRVL.US": 0,
     "AMSC.US": -1,
-    "LWLG.US": -1,
+    "LWLG.US": 0,
     "ASTS.US": -1,
-    "AAOI.US": -1,
-    "AVAV.US": -1,
-    "KTOS.US": -1,
-    "UMAC.US": -2,
-    "ONDS.US": -1
+    "AAOI.US": 0,
+    "AVAV.US": 3,
+    "KTOS.US": 0,
+    "UMAC.US": 1,
+    "ONDS.US": 0,
+    "SIMO.US": 0,
+    "MU.US": -1,
+    "SNDK.US": -1,
+    "CLS.US": 0,
+    "HSAI.US": -1,
+    "REMX.US": -1
   }
 }
