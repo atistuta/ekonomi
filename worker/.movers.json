@@ -1,13 +1,8 @@
 {
-  "date": "2026-09-09",
+  "date": "2026-09-10",
   "levels": {
-    "KCHOL.BIST": 0,
-    "TSLA.US": 1,
-    "SONY.US": -1,
-    "TTDKY.US": -1,
-    "SKHY.US": 2,
-    "GEV.US": 1,
     "TUPRS.BIST": 1,
+    "SKHY.US": 2,
     "MRVL.US": 1
   }
 }
