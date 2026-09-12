@@ -1,11 +1,8 @@
 {
-  "date": "2026-09-11",
+  "date": "2026-09-12",
   "levels": {
-    "SKHY.US": -1,
+    "HSYDF.US": 1,
     "MRVL.US": 1,
-    "REMX.US": -1,
-    "MU.US": -1,
-    "GEV.US": 1,
-    "HSYDF.US": 1
+    "GEV.US": 1
   }
 }
