@@ -91,9 +91,15 @@ window.NTFY_TOPIC = 'sabah-bulteni-7f3k9d2x'; // BENZERSIZ değiştir!
 // (kısa vade: reversal + hacim; uzun vade: trend dominant). Kod ağırlıkları mevcut
 // göstergelere göre normalize eder — toplamın tam 1.0 olması şart değil.
 // interp: 'reversal' (RSI/Stokastik/Bollinger aşırı alım-satım okunur) | 'momentum' | 'trend'
+//   NOT: v64 ile RSI/Stokastik REJİM-KOŞULLU okunur — güçlü trendde (ADX≥22 & fiyat>SMA50>SMA200)
+//   'reversal' otomatik 'momentum'a döner (RSI 70 artık "sat" değil, momentum teyidi; sadece
+//   negatif uyumsuzluk cezalandırılır). Yataylaşan piyasada (ADX<18) klasik reversal korunur.
+//   Buradaki interp yalnızca "varsayılan/nötr rejim" okumasıdır.
 // blend: hangi zaman diliminden ne kadar (D=günlük, W=haftalık, M=aylık, H1=saatlik, M15=15dk)
 // intraday:true olan vade günlük yerine saatlik/15dk veri çeker; order flow gün içinde
 // gerçekten değerli olduğu için ağırlığı burada yüksektir (araştırma: OF yalnız intraday'de öncü).
+// Yeni göstergeler (v64): rs = Göreli Güç (endekse karşı, O'Neil/Minervini), volconf = Hacim Teyidi
+// (kırılım hacimle mi? sahte kırılım filtresi), ttmpl = Trend Şablonu (Minervini kalite kapısı).
 window.TA_WEIGHTS = {
   gunici: {
     label: 'Gün içi',
@@ -102,7 +108,7 @@ window.TA_WEIGHTS = {
     blend: [ { tf: 'H1', w: 0.55 }, { tf: 'M15', w: 0.45 } ],
     interp: 'reversal',
     adxTf: 'H1',
-    weights: { trend: 0.06, macd: 0.14, rsi: 0.14, stoch: 0.14, boll: 0.12, obv: 0.09, vp: 0.13, oflow: 0.18 },
+    weights: { trend: 0.06, macd: 0.13, rsi: 0.13, stoch: 0.13, boll: 0.11, obv: 0.08, vp: 0.12, oflow: 0.16, volconf: 0.08 },
   },
   kisa: {
     label: 'Kısa vade',
@@ -110,7 +116,7 @@ window.TA_WEIGHTS = {
     blend: [ { tf: 'D', w: 0.70 }, { tf: 'W', w: 0.30 } ],
     interp: 'reversal',
     adxTf: 'D',
-    weights: { trend: 0.10, ichimoku: 0.05, macd: 0.12, rsi: 0.20, stoch: 0.15, boll: 0.13, obv: 0.08, vp: 0.15, oflow: 0.07 },
+    weights: { trend: 0.10, ichimoku: 0.05, macd: 0.11, rsi: 0.15, stoch: 0.11, boll: 0.11, obv: 0.07, vp: 0.12, oflow: 0.06, rs: 0.07, volconf: 0.05 },
   },
   orta: {
     label: 'Orta-uzun vade',
@@ -118,7 +124,7 @@ window.TA_WEIGHTS = {
     blend: [ { tf: 'D', w: 0.50 }, { tf: 'W', w: 0.50 } ],
     interp: 'momentum',
     adxTf: 'D',
-    weights: { trend: 0.20, ichimoku: 0.15, macd: 0.20, rsi: 0.12, stoch: 0.05, boll: 0.06, obv: 0.12, vp: 0.10 },
+    weights: { trend: 0.18, ichimoku: 0.13, macd: 0.17, rsi: 0.10, stoch: 0.04, boll: 0.05, obv: 0.10, vp: 0.09, rs: 0.09, ttmpl: 0.05 },
   },
   uzun: {
     label: 'Uzun vade',
@@ -126,6 +132,10 @@ window.TA_WEIGHTS = {
     blend: [ { tf: 'W', w: 0.60 }, { tf: 'M', w: 0.40 } ],
     interp: 'trend',
     adxTf: 'W',
-    weights: { trend: 0.28, ichimoku: 0.22, macd: 0.18, rsi: 0.10, obv: 0.12, vp: 0.10 },
+    weights: { trend: 0.25, ichimoku: 0.20, macd: 0.16, rsi: 0.08, obv: 0.10, vp: 0.09, rs: 0.07, ttmpl: 0.05 },
   },
 };
+
+// Göreli Güç (RS) için karşılaştırma endeksi (Yahoo sembolü). BIST için XU100, ABD için S&P500.
+// yahooSymbol() BIST'e '.IS' ekler; endeks zaten tam sembol verildiği için market='RAW' ile ham geçilir.
+window.TA_BENCHMARK = { BIST: 'XU100.IS', US: '^GSPC' };
