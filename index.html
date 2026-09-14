@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://finans.truncgil.com" crossorigin />
   <link rel="preconnect" href="https://query1.finance.yahoo.com" crossorigin />
   <link rel="dns-prefetch" href="https://news.google.com" />
-  <link rel="stylesheet" href="styles.css?v=62" />
+  <link rel="stylesheet" href="styles.css?v=71" />
   <link rel="manifest" href="manifest.json" />
 </head>
 <body>
@@ -33,68 +33,86 @@
     <div class="ticker-item" data-key="gram">
       <span class="label">Gram Altın</span>
       <span class="value" id="val-gram">—</span>
+      <button class="tk-x" title="Kaldır" data-tkey="gram">×</button>
     </div>
     <div class="ticker-item" data-key="usd">
       <span class="label">USD/TRY</span>
       <span class="value" id="val-usd">—</span>
+      <button class="tk-x" title="Kaldır" data-tkey="usd">×</button>
     </div>
     <div class="ticker-item" data-key="eur">
       <span class="label">EUR/TRY</span>
       <span class="value" id="val-eur">—</span>
+      <button class="tk-x" title="Kaldır" data-tkey="eur">×</button>
     </div>
     <div class="ticker-item" data-key="gbp">
       <span class="label">GBP/TRY</span>
       <span class="value" id="val-gbp">—</span>
+      <button class="tk-x" title="Kaldır" data-tkey="gbp">×</button>
     </div>
     <div class="ticker-item" data-key="btc">
       <span class="label">BTC/USD</span>
       <span class="value" id="val-btc">—</span>
+      <button class="tk-x" title="Kaldır" data-tkey="btc">×</button>
     </div>
     <div class="ticker-item" data-key="eth">
       <span class="label">ETH/USD</span>
       <span class="value" id="val-eth">—</span>
+      <button class="tk-x" title="Kaldır" data-tkey="eth">×</button>
     </div>
+    <button id="basketAddBtn" class="refresh basket-add" title="Fiyat göstergesi iğnele (üst şeride sabitle · en çok 10)">＋</button>
     <button id="notifBtn" class="refresh" title="Bildirim ayarları">🔔</button>
     <button id="refreshBtn" class="refresh" title="Yenile">↻</button>
   </header>
 
   <nav class="tabs">
-    <button class="tab active" data-tab="portfolio">Portföy</button>
-    <button class="tab" data-tab="today">⭐ Bugün</button>
-    <button class="tab" data-tab="pulse">⚡ Nabız</button>
-    <button class="tab" data-tab="opps">🔥 Fırsatlar</button>
-    <button class="tab" data-tab="radar">🌍 Radar</button>
-    <button class="tab" data-tab="macro">📊 Makro</button>
-    <button class="tab" data-tab="compare">⚖️ Karşılaştır</button>
-    <button class="tab" data-tab="lists">Listeler</button>
-    <button class="tab" data-tab="news">Hisse Gelişmeleri</button>
-    <button class="tab" data-tab="calendar">Takvim</button>
-    <button class="tab" data-tab="general">Gündem</button>
-    <button class="tab" data-tab="technical">Teknik Analiz</button>
-    <button class="tab" data-tab="fundamental">Temel Analiz</button>
-    <button class="tab" data-tab="search">Arama</button>
+    <button class="tab active" data-tab="lists">Listeler</button>
+
+    <div class="tab-group" data-group="daily">
+      <button class="tab-group-btn" type="button" aria-expanded="false">📡 Günlük <span class="tg-caret">▾</span></button>
+      <div class="tab-group-menu" hidden>
+        <button class="tab" data-tab="today">⭐ Bugün</button>
+        <button class="tab" data-tab="pulse">⚡ Nabız</button>
+      </div>
+    </div>
+
+    <div class="tab-group" data-group="discover">
+      <button class="tab-group-btn" type="button" aria-expanded="false">🔍 Keşif <span class="tg-caret">▾</span></button>
+      <div class="tab-group-menu" hidden>
+        <button class="tab" data-tab="opps">🔥 Fırsatlar</button>
+        <button class="tab" data-tab="scan">🔎 Tarama</button>
+        <button class="tab" data-tab="earn">📅 Bilanço</button>
+        <button class="tab" data-tab="sektor">🗺️ Sektör</button>
+        <button class="tab" data-tab="radar">🌍 Radar</button>
+      </div>
+    </div>
+
+    <div class="tab-group" data-group="analyze">
+      <button class="tab-group-btn" type="button" aria-expanded="false">🧠 Analiz <span class="tg-caret">▾</span></button>
+      <div class="tab-group-menu" hidden>
+        <button class="tab" data-tab="compare">⚖️ Karşılaştır</button>
+        <button class="tab" data-tab="tez">📓 Tez</button>
+        <button class="tab" data-tab="technical">📈 Teknik Analiz</button>
+        <button class="tab" data-tab="fundamental">📊 Temel Analiz</button>
+        <button class="tab" data-tab="calendar">🗓️ Takvim</button>
+        <button class="tab" data-tab="news">📈 Hisse Gelişmeleri</button>
+      </div>
+    </div>
+
+    <div class="tab-group" data-group="market">
+      <button class="tab-group-btn" type="button" aria-expanded="false">🌐 Piyasa <span class="tg-caret">▾</span></button>
+      <div class="tab-group-menu" hidden>
+        <button class="tab" data-tab="macro">📊 Makro Seyir</button>
+        <button class="tab" data-tab="general">📰 Gündem</button>
+      </div>
+    </div>
+
+    <button class="tab" data-tab="search">🔎 Arama</button>
+
     <span class="updated" id="lastUpdated"></span>
   </nav>
 
   <main>
-    <section id="tab-portfolio" class="tab-content active">
-      <div class="subnav">
-        <button class="chip active" data-pf="TR">Türkiye</button>
-        <button class="chip" data-pf="US">Amerika</button>
-        <button class="chip" data-pf="METALS">Madenler</button>
-      </div>
-      <div id="portfolioControls" class="watch-controls" data-market="BIST">
-        <input id="pfInput" type="text" maxlength="8" placeholder="Hisse/ETF kodu (ör. THYAO, AAPL, QQQ)" />
-        <input id="pfName" type="text" maxlength="40" placeholder="Şirket adı — haber araması için (opsiyonel)" />
-        <button id="pfAdd" class="primary-btn">Portföye Ekle</button>
-        <span id="pfAddStatus" class="sync-status"></span>
-      </div>
-      <div id="pfChangeBar" class="pf-change-bar" hidden></div>
-      <div id="portfolioGridTR" class="grid"></div>
-      <div id="portfolioGridUS" class="grid" hidden></div>
-      <div id="portfolioGridMETALS" class="grid" hidden></div>
-    </section>
-
     <section id="tab-opps" class="tab-content">
       <div class="subnav" id="oppsMarketChips">
         <button class="chip active" data-opps-mkt="ALL">Tümü</button>
@@ -108,6 +126,67 @@
       <div id="oppsStatus" class="opps-status"></div>
       <div id="oppsList" class="opps-list"></div>
       <p class="hint ta-disclaimer">Sıralama teknik göstergelere dayanır (orta-uzun vade). Temel/haber/sektör katmanları sonraki fazlarda eklenecek. Yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-scan" class="tab-content">
+      <div class="subnav" id="scanPresetChips">
+        <button class="chip active" data-scan-preset="value">💰 Değer</button>
+        <button class="chip" data-scan-preset="growth">🚀 Büyüme</button>
+        <button class="chip" data-scan-preset="quality">🏅 Kalite</button>
+      </div>
+      <div class="subnav mkt" id="scanMktChips">
+        <button class="chip active" data-scan-mkt="ALL">Tümü</button>
+        <button class="chip" data-scan-mkt="BIST">BIST</button>
+        <button class="chip" data-scan-mkt="US">ABD</button>
+      </div>
+      <div class="opps-controls">
+        <span class="opps-hint" id="scanDesc"></span>
+        <button id="scanRefresh" class="ghost-btn" title="Yeniden tara">↻ Tara</button>
+      </div>
+      <div id="scanStatus" class="opps-status"></div>
+      <div id="scanList" class="scn-list"></div>
+      <p class="hint ta-disclaimer">Sıralama kamuya açık Yahoo Finance temel metriklerine dayanır; anlık olmayabilir. Ölçütler mekanik eşiklerdir, şirketin niteliğini yansıtmaz. Yalnızca bilgi amaçlıdır, bileşke/uygunluk skoruna dahil değildir, yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-earn" class="tab-content">
+      <div class="subnav mkt" id="earnMktChips">
+        <button class="chip active" data-earn-mkt="ALL">Tümü</button>
+        <button class="chip" data-earn-mkt="BIST">BIST</button>
+        <button class="chip" data-earn-mkt="US">ABD</button>
+      </div>
+      <div class="opps-controls">
+        <span class="opps-hint">İzleme evrenindeki yaklaşan bilançolar — tarihe göre sıralı. Bir satıra dokun: boğa/baz/ayı senaryosu + izlenecek metrikler.</span>
+        <button id="earnRefresh" class="ghost-btn" title="Takvimi yenile">↻ Yenile</button>
+      </div>
+      <div id="earnStatus" class="opps-status"></div>
+      <div id="earnList"></div>
+      <p class="hint ta-disclaimer">Tarihler ve tahminler kamuya açık Yahoo Finance takvim + analist konsensüs verisine dayanır; kesinleşmemiş/güncellenebilir olabilir. Senaryolar mekanik bir çerçevedir (tahmin aralığı × tepki duyarlılığı), olasılık değil. Yalnızca bilgi amaçlıdır, bileşke/uygunluk skoruna dahil değildir, yatırım tavsiyesi değildir.</p>
+    </section>
+
+    <section id="tab-tez" class="tab-content">
+      <div class="tz-disc">Bu defter <b>senin kendi analiz notlarındır</b>. Hedef ve çıkış seviyelerini sen belirlersin; uygulama yalnızca yapı, canlı fiyat ve bilanço takvimini sağlar — yatırım tavsiyesi değildir.</div>
+      <button id="tezNewBtn" class="tz-newbtn">＋ Yeni tez ekle</button>
+      <div id="tezFormWrap"></div>
+      <div id="tezStatus" class="opps-status"></div>
+      <div id="tezList"></div>
+      <p class="tz-foot">Veriler bu cihazda saklanır (listelerin gibi). Skor motoruna dokunmaz — yalnızca bilgi katmanıdır.</p>
+    </section>
+
+    <section id="tab-sektor" class="tab-content">
+      <h2 class="sek-h">🗺️ Sektör Manzarası</h2>
+      <div class="sek-sub">Takip evrenin sektöre göre — nerede yoğunlaşmışsın, hangi sektör ucuz, sektör içinde kim önde?</div>
+      <div class="sec-disc">Bu tablo <b>senin takip evrenindeki</b> (portföy + listeler + arama) hisselerin sektör kıyaslamasıdır — piyasanın tamamı ya da TAM/pazar-payı analizi <b>değildir</b>. Değerleme ortancaları yalnız buradaki hisselerden hesaplanır. <b>Yatırım tavsiyesi değildir; skor motoruna dokunmaz.</b></div>
+      <div id="sektorSortbar" class="sortbar">
+        <span class="lbl">Sırala:</span>
+        <span class="chip on" data-sek-sort="cheap">💸 En ucuz (medyan F/K)</span>
+        <span class="chip" data-sek-sort="growth">🚀 En hızlı büyüyen</span>
+        <span class="chip" data-sek-sort="margin">💚 En kârlı (marj)</span>
+        <span class="chip" data-sek-sort="count">🔢 En çok hisse</span>
+      </div>
+      <div id="sektorStatus" class="opps-status"></div>
+      <div id="sektorStrip" class="strip"></div>
+      <div id="sektorList"></div>
+      <div id="sektorFoot" class="foot"></div>
     </section>
 
     <section id="tab-radar" class="tab-content">
@@ -140,17 +219,28 @@
 
     <section id="tab-today" class="tab-content">
       <div class="radar-intro">
-        <h2 class="radar-title">⭐ Bugünün Önerileri</h2>
-        <p class="radar-sub">Teknik momentum + haber nabzı + doğru sektör (makro faz) + küresel gündem rüzgârını tek skorda birleştirir. <b>Ucuz bölge + güçlü teknik + düşük haber riski + doğru sektör = 🔥 Güçlü Fırsat.</b></p>
+        <h2 class="radar-title">🗓️ Bugün</h2>
+        <p class="radar-sub">Önce <b>günün gündemi</b>: her gün canlı taranan gerçek manşetlerden günlük konjonktür. Ardından bu gündemle uyumlu <b>hisse önerileri</b> en altta.</p>
       </div>
       <div class="opps-controls">
-        <span class="opps-hint">Faz 1-4'ün birleşimi. Her satırdaki rozetler önerinin nedenini gösterir.</span>
-        <button id="todayRefresh" class="ghost-btn" title="Yeniden hesapla">↻ Hesapla</button>
+        <span class="opps-hint">Gündem TR+ABD manşet/ekonomi/dünya/teknoloji feed'lerinden canlı çıkarılır; sabit liste değildir.</span>
+        <button id="todayRefresh" class="ghost-btn" title="Yeniden tara & hesapla">↻ Tara</button>
       </div>
+
+      <div class="today-block">
+        <h3 class="today-block-h">📰 Günün Gündemi</h3>
+        <div id="todayAgenda" class="today-agenda"></div>
+      </div>
+
       <div id="todayHead" class="today-head"></div>
-      <div id="todayStatus" class="opps-status"></div>
-      <div id="todayList" class="today-list"></div>
-      <p class="hint ta-disclaimer">Birleşik skor teknik, haber, sektör ve gündem katmanlarının otomatik bir yorumudur; kesinlik içermez. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
+
+      <div class="today-block">
+        <h3 class="today-block-h">⭐ Bugünün Önerileri <span class="today-block-sub">— gündem + makro faz + teknik + haber birleşik</span></h3>
+        <div id="todayStatus" class="opps-status"></div>
+        <div id="todayList" class="today-list"></div>
+      </div>
+
+      <p class="hint ta-disclaimer">Gündem canlı haber akışının, birleşik skor ise teknik+haber+sektör+gündem katmanlarının otomatik bir yorumudur; kesinlik içermez. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
     </section>
 
     <section id="tab-pulse" class="tab-content">
@@ -178,7 +268,7 @@
       <p class="hint ta-disclaimer">Temel veriler ~çeyreklik/gecikmeli olabilir; bazı BIST hisseleri için ileriye dönük (forward P/E, PEG) tahmin bulunmayabilir ("—"). Metriklerin "iyi/kötü" yönü sektöre göre değişir. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
     </section>
 
-    <section id="tab-lists" class="tab-content">
+    <section id="tab-lists" class="tab-content active">
       <div class="lists-controls">
         <input id="newListName" type="text" maxlength="30" placeholder="Yeni liste adı (ör. Bankalar, Takip)" />
         <button id="newListBtn" class="primary-btn">Liste Oluştur</button>
@@ -249,12 +339,8 @@
         <button id="taBacktestBtn" class="ghost-btn" title="Skorun geçmişteki isabetini ölç">🔬 Doğruluk testi</button>
       </div>
       <div class="ta-controls ta-search-row">
-        <input id="taSearch" class="ta-select ta-search-input" type="text" maxlength="10"
-               placeholder="Kod ara (ör. THYAO, AAPL, QQQ) — listeye eklemeden analiz aç" />
-        <select id="taSearchMarket" class="ta-select" title="Piyasa">
-          <option value="BIST">BIST</option>
-          <option value="US">ABD</option>
-        </select>
+        <input id="taSearch" class="ta-select ta-search-input" type="text" maxlength="40"
+               placeholder="Ara: hisse, kripto ya da maden (ör. AAPL, bitcoin, altın) — listeye eklemeden aç" />
         <button id="taSearchBtn" class="primary-btn">Analizi Aç</button>
       </div>
       <div id="taScorePanel" class="ta-score-wrap"></div>
@@ -273,16 +359,17 @@
         <select id="faSymbol" class="ta-select"></select>
         <button id="faRefresh" class="ghost-btn" title="Yenile">↻</button>
       </div>
+      <div class="ta-controls ta-search-row">
+        <input id="faSearch" class="ta-select ta-search-input" type="text" maxlength="40"
+               placeholder="Ara: hisse, kripto ya da maden (ör. AAPL, bitcoin, altın) — listeye eklemeden aç" />
+        <button id="faSearchBtn" class="primary-btn">Analizi Aç</button>
+      </div>
       <div id="faContent"><div class="loading">Sembol seç…</div></div>
     </section>
 
     <section id="tab-search" class="tab-content">
       <div class="search-controls">
-        <input id="searchInput" type="text" maxlength="10" placeholder="Hisse/ETF kodu ara (ör. THYAO, AAPL, NVDA)" />
-        <select id="searchMarket">
-          <option value="BIST">BIST</option>
-          <option value="US">ABD</option>
-        </select>
+        <input id="searchInput" type="text" maxlength="40" placeholder="Ara: hisse, kripto ya da maden (ör. THYAO, AAPL, bitcoin, altın)" />
         <button id="searchBtn" class="primary-btn">Ara</button>
       </div>
       <div id="searchResult"></div>
@@ -318,8 +405,203 @@
         <li>Bildirimleri göndermek için GitHub Actions worker'ı kurmalısın — bkz. <code>worker/README.md</code>.</li>
       </ol>
       <p class="hint">Tarayıcı açıkken ayrıca anlık (in-page) bildirim de gelir.</p>
+
+      <div class="notif-prefs" id="notifPrefs">
+        <h4>⚡ Nabız bildirim kapsamı</h4>
+        <p class="hint">Tarayıcı açıkken ani hareket bildirimleri hangi varlıklardan gelsin? (Yalnızca anlık/in-page bildirimleri etkiler.)</p>
+        <label class="np-row"><input type="checkbox" data-np="stocks" checked> <span>📈 Hisseler (BIST + ABD)</span></label>
+        <label class="np-row"><input type="checkbox" data-np="crypto" checked> <span>🪙 Kripto</span></label>
+        <label class="np-row"><input type="checkbox" data-np="metal" checked> <span>🥇 Madenler</span></label>
+        <label class="np-row np-sep"><input type="checkbox" data-np="onlyMine"> <span>Yalnızca portföyüm + listelerimdeki hisseler</span></label>
+      </div>
+
       <button id="enableBrowserNotif" class="primary-btn">Tarayıcı bildirimlerini aç</button>
       <button id="closeNotif" class="ghost-btn">Kapat</button>
+    </div>
+  </div>
+
+  <!-- Sepete varlık ekleme modali -->
+  <div id="basketModal" class="modal" hidden>
+    <div class="modal-card basket-modal-card">
+      <button id="basketModalClose" class="modal-close" aria-label="Kapat">×</button>
+      <h3>Sepete varlık ekle</h3>
+      <p class="bm-sub">Maden, döviz, kripto veya hisseyi <b>miktarıyla</b> ekle. Alış fiyatını boş bırakırsan eklendiği andaki piyasa fiyatı baz alınır.</p>
+
+      <label class="bm-label">Varlık türü</label>
+      <div class="bm-class subnav" id="bmClass">
+        <button class="chip active" data-bmcls="fx">💱 Döviz</button>
+        <button class="chip" data-bmcls="crypto">🪙 Kripto</button>
+        <button class="chip" data-bmcls="metal">🥇 Maden</button>
+        <button class="chip" data-bmcls="us">🇺🇸 ABD Hisse</button>
+        <button class="chip" data-bmcls="bist">🇹🇷 BIST Hisse</button>
+        <button class="chip" data-bmcls="fund">🧺 Fon</button>
+      </div>
+
+      <div class="bm-field" id="bmPickWrap">
+        <label class="bm-label" id="bmPickLabel">Varlık</label>
+        <select id="bmPick" class="bm-input"></select>
+        <input id="bmSymbol" class="bm-input" type="text" maxlength="10" placeholder="Sembol (ör. AAPL / THYAO)" hidden />
+      </div>
+
+      <div class="bm-row">
+        <div class="bm-field">
+          <label class="bm-label" id="bmQtyLabel">Miktar</label>
+          <input id="bmQty" class="bm-input" type="number" min="0" step="any" inputmode="decimal" placeholder="ör. 10" />
+        </div>
+        <div class="bm-field">
+          <label class="bm-label">Alış fiyatım <span class="bm-opt" id="bmCostCur">(TL, ops.)</span></label>
+          <input id="bmCost" class="bm-input" type="number" min="0" step="any" inputmode="decimal" placeholder="Boş = anlık fiyat" />
+        </div>
+      </div>
+
+      <div class="bm-field" id="bmFundPxWrap" hidden>
+        <label class="bm-label">Güncel birim fiyat <span class="bm-opt">(TL)</span></label>
+        <input id="bmFundPx" class="bm-input" type="number" min="0" step="any" inputmode="decimal" placeholder="ör. 1,8423" />
+        <div class="bm-hint-note">Fon fiyatı (NAV) otomatik çekilemiyor — güncel birim fiyatı buraya sen girersin, sonra sepette ✎ ile güncellersin.</div>
+      </div>
+
+      <div class="bm-preview" id="bmPreview"></div>
+      <div class="bm-status" id="bmStatus"></div>
+
+      <div class="bm-actions">
+        <button id="bmAdd" class="primary-btn">Sepete ekle</button>
+        <button id="bmCancel" class="ghost-btn">Vazgeç</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manuel işlem (hamle) ekleme modali -->
+  <div id="txnModal" class="modal" hidden>
+    <div class="modal-card basket-modal-card">
+      <button id="txnModalClose" class="modal-close" aria-label="Kapat">×</button>
+      <h3>İşlem ekle</h3>
+      <p class="bm-sub"><b>Alım</b> sepetteki varlığı artırır (yoksa ekler), <b>Satım</b> azaltır ve maliyet biliniyorsa <b>Gerçekleşen K/Z</b>'yi otomatik hesaplar. <b>Kapanan işlem</b> ise sepete dokunmaz; sadece geçmiş bir işlemin kârını/zararını günlüğe yazar.</p>
+
+      <label class="bm-label">İşlem türü</label>
+      <div class="bm-class subnav" id="txnTypeChips">
+        <button type="button" class="chip active" data-txntype="buy">↗ Alım</button>
+        <button type="button" class="chip" data-txntype="sell">↘ Satım</button>
+        <button type="button" class="chip" data-txntype="closed">✓ Kapanan işlem (K/Z)</button>
+      </div>
+      <input type="hidden" id="txnType" value="buy" />
+
+      <label class="bm-label">Varlık türü</label>
+      <div class="bm-class subnav" id="txnClass">
+        <button type="button" class="chip active" data-txncls="fx">💱 Döviz</button>
+        <button type="button" class="chip" data-txncls="crypto">🪙 Kripto</button>
+        <button type="button" class="chip" data-txncls="metal">🥇 Maden</button>
+        <button type="button" class="chip" data-txncls="us">🇺🇸 ABD Hisse</button>
+        <button type="button" class="chip" data-txncls="bist">🇹🇷 BIST Hisse</button>
+        <button type="button" class="chip" data-txncls="fund">🧺 Fon</button>
+      </div>
+
+      <div class="bm-field" id="txnPickWrap">
+        <label class="bm-label">Varlık</label>
+        <select id="txnPick" class="bm-input"></select>
+        <input id="txnSymbol" class="bm-input" type="text" maxlength="10" placeholder="Sembol (ör. AAPL / THYAO)" hidden />
+      </div>
+
+      <div class="bm-field">
+        <label class="bm-label">Miktar</label>
+        <input id="txnQty" class="bm-input" type="number" min="0" step="any" inputmode="decimal" placeholder="ör. 10" />
+      </div>
+
+      <div class="bm-field" id="txnSingleRow">
+        <label class="bm-label">Fiyat (birim başına) <span class="bm-opt" id="txnCurHint">(TL)</span></label>
+        <input id="txnPrice" class="bm-input" type="number" min="0" step="any" inputmode="decimal" placeholder="ör. 250" />
+      </div>
+
+      <div class="bm-row" id="txnPairedRow" hidden>
+        <div class="bm-field">
+          <label class="bm-label">Alış fiyatı</label>
+          <input id="txnBuy" class="bm-input" type="number" min="0" step="any" inputmode="decimal" placeholder="ör. 200" />
+        </div>
+        <div class="bm-field">
+          <label class="bm-label">Satış fiyatı</label>
+          <input id="txnSell" class="bm-input" type="number" min="0" step="any" inputmode="decimal" placeholder="ör. 250" />
+        </div>
+      </div>
+
+      <div class="bm-field">
+        <label class="bm-label">Tarih</label>
+        <input id="txnDate" class="bm-input" type="date" />
+      </div>
+
+      <div class="bm-status" id="txnStatus"></div>
+
+      <div class="bm-actions">
+        <button id="txnSaveBtn" class="primary-btn">Kaydet</button>
+        <button id="txnCancel" class="ghost-btn">Vazgeç</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nakit bakiye ekleme/düzenleme modali -->
+  <div id="cashModal" class="modal" hidden>
+    <div class="modal-card basket-modal-card">
+      <button id="cashModalClose" class="modal-close" aria-label="Kapat">×</button>
+      <h3>💵 Nakit bakiye</h3>
+      <p class="bm-sub">Sepetinde <b>bekleyen nakit</b> (alım-satım sonrası kalan para) tut. Nakit dağılım grafiğinde ve toplam sepet büyüklüğünde görünür; kâr/zarar üretmez. Temettü geldiğinde ilgili hissenin satırındaki <b>💰 Temettü geldi</b> ile buraya otomatik eklenir.</p>
+
+      <label class="bm-label">Para birimi</label>
+      <div class="bm-class subnav" id="cashCurChips">
+        <button type="button" class="chip active" data-cashcur="TRY">₺ TL</button>
+        <button type="button" class="chip" data-cashcur="USD">$ USD</button>
+      </div>
+      <input type="hidden" id="cashCur" value="TRY" />
+
+      <label class="bm-label">İşlem</label>
+      <div class="bm-class subnav" id="cashOpChips">
+        <button type="button" class="chip active" data-cashop="add">＋ Ekle / yatır</button>
+        <button type="button" class="chip" data-cashop="set">✎ Bakiyeyi ayarla</button>
+        <button type="button" class="chip" data-cashop="sub">－ Çıkar / çek</button>
+      </div>
+      <input type="hidden" id="cashOp" value="add" />
+
+      <div class="bm-field">
+        <label class="bm-label">Tutar <span class="bm-opt" id="cashCurHint">(TL)</span></label>
+        <input id="cashAmt" class="bm-input" type="number" min="0" step="any" inputmode="decimal" placeholder="ör. 5000" />
+      </div>
+
+      <div class="bm-preview" id="cashPreview"></div>
+      <div class="bm-status" id="cashStatus"></div>
+
+      <div class="bm-actions">
+        <button id="cashSaveBtn" class="primary-btn">Kaydet</button>
+        <button id="cashCancel" class="ghost-btn">Vazgeç</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fiyat göstergesi (üst şerit) iğneleme modali -->
+  <div id="tickerModal" class="modal" hidden>
+    <div class="modal-card basket-modal-card">
+      <button id="tickerModalClose" class="modal-close" aria-label="Kapat">×</button>
+      <h3>Fiyat göstergesi iğnele</h3>
+      <p class="bm-sub">Sürekli göz önünde tutmak istediğin fiyatları üst şeride sabitle. <b>Sepet değildir</b> — yalnızca canlı fiyat gösterir. En çok <b id="tkMaxNote">4</b> özel gösterge (yerleşik 6 + özel = toplam 10).</p>
+
+      <label class="bm-label">Tür</label>
+      <div class="bm-class subnav" id="tkClass">
+        <button class="chip active" data-tkcls="fx">💱 Döviz</button>
+        <button class="chip" data-tkcls="crypto">🪙 Kripto</button>
+        <button class="chip" data-tkcls="metal">🥇 Maden</button>
+        <button class="chip" data-tkcls="us">🇺🇸 ABD Hisse</button>
+        <button class="chip" data-tkcls="bist">🇹🇷 BIST Hisse</button>
+      </div>
+
+      <div class="bm-field">
+        <label class="bm-label" id="tkPickLabel">Varlık</label>
+        <select id="tkPick" class="bm-input"></select>
+        <input id="tkSymbol" class="bm-input" type="text" maxlength="10" placeholder="Sembol (ör. AAPL / THYAO)" hidden />
+      </div>
+
+      <div class="bm-status" id="tkStatus"></div>
+      <div class="bm-actions">
+        <button id="tkAdd" class="primary-btn">İğnele</button>
+        <button id="tkCancel" class="ghost-btn">Kapat</button>
+      </div>
+
+      <div class="tk-pinned" id="tkPinned"></div>
     </div>
   </div>
 
@@ -328,7 +610,7 @@
   </footer>
 
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
-  <script src="config.js?v=62"></script>
-  <script src="app.js?v=62"></script>
+  <script src="config.js?v=71"></script>
+  <script src="app.js?v=75"></script>
 </body>
 </html>
