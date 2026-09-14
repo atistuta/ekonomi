@@ -1,7 +1,11 @@
 {
   "date": "2026-09-14",
   "levels": {
-    "MRVL.US": 1,
-    "GEV.US": 1
+    "MRVL.US": -2,
+    "GEV.US": -2,
+    "SKHY.US": -2,
+    "ARKG.US": 0,
+    "MU.US": -1,
+    "PLTR.US": 1
   }
 }
