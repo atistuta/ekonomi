@@ -13,6 +13,9 @@
     "FLY.US": -1,
     "RXT.US": -1,
     "COIN.US": -3,
-    "POWL.US": 0
+    "POWL.US": 0,
+    "HLGYO.BIST": -1,
+    "ENJSA.BIST": -1,
+    "KCHOL.BIST": -1
   }
 }
