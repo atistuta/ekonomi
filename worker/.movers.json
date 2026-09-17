@@ -3,10 +3,11 @@
   "levels": {
     "DOAS.BIST": 0,
     "HLGYO.BIST": -1,
-    "ENJSA.BIST": 1,
+    "ENJSA.BIST": 0,
     "ASELS.BIST": 1,
     "KCHOL.BIST": 1,
     "SOXX.US": 1,
-    "ARKG.US": 2
+    "ARKG.US": 2,
+    "QCLN.US": 1
   }
 }
