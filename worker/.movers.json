@@ -1,26 +1,10 @@
 {
-  "date": "2026-09-16",
+  "date": "2026-09-17",
   "levels": {
-    "USO.US": 1,
-    "CRWD.US": 1,
-    "IREN.US": -1,
-    "SPCX.US": -1,
-    "MXL.US": 1,
-    "SMMT.US": -1,
-    "SRRK.US": -1,
-    "SCTX.US": 2,
-    "OTLK.US": 1,
-    "FLY.US": -1,
-    "RXT.US": -1,
-    "COIN.US": -3,
-    "POWL.US": 0,
+    "DOAS.BIST": 0,
     "HLGYO.BIST": -1,
     "ENJSA.BIST": -1,
-    "KCHOL.BIST": -1,
-    "DOAS.BIST": 0,
     "ASELS.BIST": -1,
-    "YASKY.US": 1,
-    "MRVL.US": 1,
-    "GEV.US": 1
+    "KCHOL.BIST": -1
   }
 }
