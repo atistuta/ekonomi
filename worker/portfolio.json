@@ -1,16 +1,6 @@
 {
-  "bist": ["DOAS", "BIMAS", "HLGYO", "TUPRS", "ENJSA"],
-  "us": [
-    { "symbol": "SOXX", "query": "SOXX semiconductor ETF" },
-    { "symbol": "UFO",  "query": "UFO Procure Space ETF" },
-    { "symbol": "VGT",  "query": "VGT Vanguard Technology" },
-    { "symbol": "QCLN", "query": "QCLN clean energy ETF" },
-    { "symbol": "VXUS", "query": "VXUS Vanguard Total International" },
-    { "symbol": "ARKG", "query": "ARKG ARK Genomic ETF" }
-  ],
-  "watch": [
-    { "symbol": "ASELS", "market": "BIST" },
-    { "symbol": "KCHOL", "market": "BIST" },
-    { "symbol": "NVDA",  "market": "US" }
-  ]
+  "_comment": "SON ÇARE fallback — yalnızca /api/watchlist (KV) tamamen erişilemezse kullanılır. Tek doğru kaynak KV'dir (uygulama liste değiştikçe günceller). Buraya sembol EKLEME: aksi halde erişilemezlik anında kullanıcının sildiği semboller (ör. QCLN) telefona bildirim gönderir. Boş = arıza anında sessizlik, eski listeyi diriltmekten iyidir.",
+  "bist": [],
+  "us": [],
+  "watch": []
 }
