@@ -1,14 +1,6 @@
 {
-  "date": "2026-09-17",
+  "date": "2026-09-18",
   "levels": {
-    "DOAS.BIST": 0,
-    "HLGYO.BIST": -1,
-    "ENJSA.BIST": 0,
-    "ASELS.BIST": 1,
-    "KCHOL.BIST": 1,
-    "SOXX.US": 1,
-    "ARKG.US": 2,
-    "QCLN.US": 1,
     "SNDK.US": 2,
     "SKHY.US": 1,
     "MU.US": 1,
