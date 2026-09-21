@@ -15,7 +15,7 @@
     "KLAC.US": 1,
     "TER.US": 1,
     "ALB.US": -1,
-    "MP.US": 2,
+    "MP.US": 1,
     "VRT.US": 1,
     "ARM.US": 5,
     "AMLX.US": -1,
@@ -23,6 +23,8 @@
     "USO.US": -1,
     "APH.US": 1,
     "FN.US": 1,
-    "GLW.US": 2
+    "GLW.US": 1,
+    "FTNT.US": 1,
+    "PLTR.US": 1
   }
 }
