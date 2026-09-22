@@ -12,8 +12,13 @@
     "AMAT.US": 1,
     "KLAC.US": 1,
     "MP.US": 1,
-    "ARM.US": 5,
+    "ARM.US": 1,
     "GLW.US": 1,
-    "SNDK.US": 1
+    "SNDK.US": 2,
+    "MU.US": 1,
+    "IOVA.US": 1,
+    "SIMO.US": 1,
+    "COHR.US": -1,
+    "TER.US": 1
   }
 }
