@@ -1,16 +1,21 @@
 {
   "date": "2026-09-23",
   "levels": {
-    "SNDK.US": 2,
-    "SKHY.US": 1,
+    "SNDK.US": -1,
+    "SKHY.US": -1,
     "MU.US": 1,
-    "IOVA.US": 1,
-    "SIMO.US": 1,
+    "IOVA.US": -1,
+    "SIMO.US": -1,
     "ZBRA.US": 1,
     "COHR.US": -1,
-    "TER.US": 1,
+    "TER.US": -1,
     "ALB.US": 1,
-    "FCX.US": 1,
-    "ARM.US": 1
+    "FCX.US": -1,
+    "ARM.US": 1,
+    "GFI.US": -1,
+    "PLTR.US": 1,
+    "MP.US": -1,
+    "GLW.US": -1,
+    "AMLX.US": -1
   }
 }
