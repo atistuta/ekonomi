@@ -1,17 +1,9 @@
 {
-  "date": "2026-09-24",
+  "date": "2026-09-25",
   "levels": {
     "SNDK.US": -1,
-    "SKHY.US": -1,
-    "SPCX.US": -1,
     "IOVA.US": 1,
-    "USO.US": 1,
-    "GFI.US": -1,
-    "PLTR.US": 1,
     "COHR.US": -1,
-    "MP.US": -1,
-    "GLW.US": -1,
-    "AMLX.US": -2,
     "ALB.US": -1,
     "ARM.US": -2
   }
