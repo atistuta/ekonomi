@@ -3,8 +3,10 @@
   "levels": {
     "SNDK.US": -1,
     "IOVA.US": 1,
-    "COHR.US": -1,
+    "COHR.US": 1,
     "ALB.US": -1,
-    "ARM.US": -2
+    "ARM.US": 1,
+    "USO.US": -1,
+    "FN.US": 1
   }
 }
