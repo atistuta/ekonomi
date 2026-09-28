@@ -3,9 +3,9 @@
   "levels": {
     "USO.US": 1,
     "FN.US": -1,
-    "VRT.US": 1,
-    "SNDK.US": -2,
-    "SKHY.US": -2,
+    "VRT.US": -1,
+    "SNDK.US": -1,
+    "SKHY.US": -1,
     "MU.US": -1,
     "MRVL.US": -1,
     "LITE.US": -2,
@@ -13,11 +13,11 @@
     "GFI.US": -4,
     "LRCX.US": 0,
     "ETN.US": 0,
-    "COHR.US": -2,
+    "COHR.US": -1,
     "AMAT.US": 0,
     "TER.US": -1,
     "MP.US": -1,
-    "ARM.US": -3,
+    "ARM.US": -2,
     "GLW.US": -1
   }
 }
