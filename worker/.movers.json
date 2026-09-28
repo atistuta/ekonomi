@@ -1,8 +1,23 @@
 {
   "date": "2026-09-28",
   "levels": {
-    "USO.US": -1,
-    "FN.US": 1,
-    "VRT.US": 1
+    "USO.US": 1,
+    "FN.US": -1,
+    "VRT.US": 1,
+    "SNDK.US": -2,
+    "SKHY.US": -2,
+    "MU.US": -1,
+    "MRVL.US": -1,
+    "LITE.US": -2,
+    "COIN.US": 0,
+    "GFI.US": -4,
+    "LRCX.US": 0,
+    "ETN.US": 0,
+    "COHR.US": -2,
+    "AMAT.US": 0,
+    "TER.US": -1,
+    "MP.US": -1,
+    "ARM.US": -3,
+    "GLW.US": -1
   }
 }
