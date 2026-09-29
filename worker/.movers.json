@@ -3,12 +3,18 @@
   "levels": {
     "SNDK.US": -1,
     "SKHY.US": -1,
-    "MRVL.US": -1,
-    "GFI.US": -4,
-    "COHR.US": -1,
+    "MRVL.US": 1,
+    "GFI.US": 1,
+    "COHR.US": 1,
     "MP.US": -1,
     "VRT.US": -1,
-    "ARM.US": -2,
-    "GLW.US": -1
+    "ARM.US": 1,
+    "GLW.US": 1,
+    "IOVA.US": 11,
+    "LITE.US": 1,
+    "USO.US": -1,
+    "ASML.US": 1,
+    "AMAT.US": 1,
+    "KLAC.US": 1
   }
 }
