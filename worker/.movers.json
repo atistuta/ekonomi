@@ -3,15 +3,17 @@
   "levels": {
     "IOVA.US": 10,
     "MRVL.US": 1,
-    "LITE.US": 1,
+    "LITE.US": 0,
     "USO.US": -1,
     "GFI.US": 1,
     "COHR.US": 1,
-    "FN.US": 1,
+    "FN.US": 0,
     "ASML.US": 1,
     "AMAT.US": 1,
     "KLAC.US": 1,
     "ARM.US": 1,
-    "GLW.US": 1
+    "GLW.US": -1,
+    "VST.US": 0,
+    "MP.US": 2
   }
 }
