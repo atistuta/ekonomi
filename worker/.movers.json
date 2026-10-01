@@ -1,7 +1,10 @@
 {
   "date": "2026-10-01",
   "levels": {
-    "MP.US": 1,
-    "GLW.US": -1
+    "MP.US": -1,
+    "GLW.US": -1,
+    "LITE.US": 3,
+    "COHR.US": 3,
+    "FN.US": 1
   }
 }
