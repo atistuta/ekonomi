@@ -1,18 +1,17 @@
 {
-  "date": "2026-10-01",
+  "date": "2026-10-02",
   "levels": {
-    "MP.US": -1,
-    "GLW.US": 1,
-    "LITE.US": 2,
-    "COHR.US": 3,
-    "FN.US": 2,
     "SKHY.US": 1,
     "MU.US": 1,
     "IOVA.US": -1,
+    "LITE.US": 2,
     "LRCX.US": 1,
+    "COHR.US": 3,
+    "FN.US": 2,
     "GEV.US": 1,
     "AMAT.US": 1,
     "TER.US": 1,
+    "GLW.US": 1,
     "AMLX.US": -1
   }
 }
