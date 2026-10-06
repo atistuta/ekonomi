@@ -232,6 +232,8 @@
         <div id="todayAgenda" class="today-agenda"></div>
       </div>
 
+      <div id="todayIndex" class="today-index"></div>
+
       <div id="todayHead" class="today-head"></div>
 
       <div class="today-block">
@@ -331,9 +333,10 @@
         </select>
         <select id="taRange" class="ta-select" title="Grafik aralığı">
           <option value="3mo">3 Ay</option>
-          <option value="6mo" selected>6 Ay</option>
-          <option value="1y">1 Yıl</option>
+          <option value="6mo">6 Ay</option>
+          <option value="1y" selected>1 Yıl</option>
           <option value="2y">2 Yıl</option>
+          <option value="5y">5 Yıl</option>
         </select>
         <button id="taRefresh" class="ghost-btn" title="Yenile">↻</button>
         <button id="taBacktestBtn" class="ghost-btn" title="Skorun geçmişteki isabetini ölç">🔬 Doğruluk testi</button>
@@ -611,6 +614,6 @@
 
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="config.js?v=71"></script>
-  <script src="app.js?v=75"></script>
+  <script src="app.js?v=88"></script>
 </body>
 </html>

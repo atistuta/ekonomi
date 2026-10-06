@@ -1253,6 +1253,120 @@
              levels: { price, target, stop, rr, poc: vpD ? vpD.poc : null, atr, buyZone, sellZone, zMult, sellKind: longHorizon ? 'target' : 'sell', sma50: s50, sma200: s200, anchorKind, anchorSrc } };
   }
 
+  // ===== Sıralı Destek/Direnç Bölgeleri (Ranked S/R Zones — Zeiierman uyarlaması) =====
+  // Yaklaşım: pivot tepe/dipleri bul → fiyatça yakın pivotları tek bir "bölgeye" kümele →
+  // her bölgeyi DOKUNUŞ sayısı (birincil güç) + hacim + tazelik ile sırala. Fiyatın çok
+  // test ettiği alanlar en güçlü destek/direnç olarak öne çıkar. SADECE BİLGİ; vade skoruna
+  // DAHİL DEĞİLDİR — yalnız "nerede güçlü seviyeler var" bilgisidir, yön/tavsiye değildir.
+  function rankedSRZones(daily, opts) {
+    opts = opts || {};
+    if (!daily || daily.length < 40) return null;        // yeni halka arzlar için ~40 bar yeterli
+    const N = daily.length;
+    const lb = Math.min(N, opts.lookback || 400);        // son ~400 bar (≈1.5 yıl)
+    const series = daily.slice(-lb);
+    const L = series.length;
+    // Pivot penceresi geçmiş uzunluğuna uyarlanır: az bar varsa daralt ki pivot bulunabilsin.
+    const lr = opts.pivot || Math.max(3, Math.min(8, Math.floor(L / 15)));
+    const price = series[L - 1].close;
+    if (!isFinite(price) || price <= 0) return null;
+
+    // Basit ATR — bölge genişliği ve kümeleme toleransı için
+    let atrSum = 0, atrN = 0;
+    for (let i = 1; i < L; i++) {
+      const c = series[i], p = series[i - 1];
+      const tr = Math.max(c.high - c.low, Math.abs(c.high - p.close), Math.abs(c.low - p.close));
+      if (isFinite(tr)) { atrSum += tr; atrN++; }
+    }
+    const atr = atrN ? atrSum / atrN : price * 0.02;
+    const tol = (opts.tolMult || 0.6) * atr;              // kümeleme yarı-toleransı
+
+    // Pivotları topla (fraktal tepe/dip)
+    const pivs = [];
+    for (let i = lr; i < L - lr; i++) {
+      const c = series[i];
+      let isHi = true, isLo = true;
+      for (let j = i - lr; j <= i + lr; j++) {
+        if (j === i) continue;
+        if (series[j].high >= c.high) isHi = false;
+        if (series[j].low  <= c.low)  isLo = false;
+        if (!isHi && !isLo) break;
+      }
+      const age = L - 1 - i;                              // kaç bar önce
+      if (isHi) pivs.push({ price: c.high, vol: c.volume || 0, age });
+      if (isLo) pivs.push({ price: c.low,  vol: c.volume || 0, age });
+    }
+    if (pivs.length < 2) return null;
+
+    // Fiyata göre kümele (greedy, kayan çapa)
+    pivs.sort((a, b) => a.price - b.price);
+    const clusters = [];
+    for (const pv of pivs) {
+      const last = clusters[clusters.length - 1];
+      if (last && Math.abs(pv.price - last.center) <= tol) {
+        last.members.push(pv);
+        last.sum += pv.price; last.center = last.sum / last.members.length;
+        last.lo = Math.min(last.lo, pv.price); last.hi = Math.max(last.hi, pv.price);
+      } else {
+        clusters.push({ members: [pv], sum: pv.price, center: pv.price, lo: pv.price, hi: pv.price });
+      }
+    }
+
+    // Güç skoru: dokunuş (birincil) + hacim payı + tazelik
+    const maxVol = Math.max(1, ...pivs.map(p => p.vol));
+    clusters.forEach(cl => {
+      const touches = cl.members.length;
+      const volScore = cl.members.reduce((a, m) => a + (m.vol / maxVol), 0);            // 0..touches
+      const recency = cl.members.reduce((a, m) => a + Math.exp(-m.age / (L * 0.5)), 0); // yeni dokunuşlar ağır
+      cl.touches = touches;
+      cl.lastAge = Math.min(...cl.members.map(m => m.age));
+      cl.strength = touches + volScore * 0.6 + recency * 0.8;
+      const half = Math.max((cl.hi - cl.lo) / 2, atr * 0.35);
+      const mid = (cl.hi + cl.lo) / 2;
+      cl.zone = [mid - half, mid + half];
+      cl.center = mid;
+    });
+
+    const maxStr = Math.max(...clusters.map(c => c.strength)) || 1;
+    clusters.forEach(c => { c.rank = c.strength / maxStr; });   // 0..1
+    const support = clusters.filter(c => c.center < price).sort((a, b) => b.center - a.center);   // yakın→uzak (aşağı)
+    const resistance = clusters.filter(c => c.center >= price).sort((a, b) => a.center - b.center); // yakın→uzak (yukarı)
+    const strong = clusters.slice().sort((a, b) => b.strength - a.strength);
+    const topStr = strong.length ? strong[0].strength : 0;
+    return { price, atr, tol, barCount: L, support, resistance, strong, topStr };
+  }
+
+  // Sıralı S/R bölgelerini panel HTML'ine dönüştür (SADECE BİLGİ). curSym = ₺/$, fmtP = sayı biçimleyici.
+  function rankedSRHtml(sr, curSym, fmtP) {
+    if (!sr || (!sr.support.length && !sr.resistance.length)) return '';
+    const p = sr.price;
+    const MAXN = 3;                                       // her yönden en yakın 3 bölge
+    const row = (cl, side) => {
+      const mid = cl.center;
+      const dist = (mid - p) / p * 100;
+      const bars = Math.max(1, Math.round(cl.rank * 5));  // 1..5 güç kademesi
+      const strong = cl.strength >= sr.topStr * 0.999;    // evrensel en güçlü bölge
+      const dots = '●'.repeat(bars) + '○'.repeat(5 - bars);
+      const ageTxt = cl.lastAge <= 15 ? 'taze' : cl.lastAge <= 60 ? 'yakın' : 'eski';
+      return `<div class="ta-sr-row ${side}">
+        <span class="ta-sr-zone">${fmtP(cl.zone[0])} – ${fmtP(cl.zone[1])} ${curSym}</span>
+        <span class="ta-sr-dist">${dist >= 0 ? '+' : ''}${dist.toFixed(1)}%</span>
+        <span class="ta-sr-strength" title="Güç ≈ dokunuş + hacim + tazelik">${dots}</span>
+        <span class="ta-sr-touch">${cl.touches} dokunuş · ${ageTxt}${strong ? ' · ⭐ en güçlü' : ''}</span>
+      </div>`;
+    };
+    const resHtml = sr.resistance.slice(0, MAXN).map(c => row(c, 'res')).join('') || '<div class="ta-sr-empty">Üstte belirgin bölge yok</div>';
+    const supHtml = sr.support.slice(0, MAXN).map(c => row(c, 'sup')).join('') || '<div class="ta-sr-empty">Altta belirgin bölge yok</div>';
+    const shortHist = sr.barCount < 90
+      ? ` <span class="ta-sr-warn" title="Kısa işlem geçmişi — bölgeler daha az doğrulanmıştır">⚠ kısa geçmiş (${sr.barCount} bar)</span>` : '';
+    return `
+      <div class="ta-score-brk-head">📍 Sıralı Destek/Direnç Bölgeleri <span>(dokunuş + hacim ile sıralı · yakından uzağa)</span>${shortHist}</div>
+      <div class="ta-sr">
+        <div class="ta-sr-side"><div class="ta-sr-cap res">🔴 Dirençler (üstte)</div>${resHtml}</div>
+        <div class="ta-sr-side"><div class="ta-sr-cap sup">🟢 Destekler (altta)</div>${supHtml}</div>
+      </div>
+      <div class="ta-of-disc">Fiyatın geçmişte en çok test ettiği (çok dokunulan + yüksek hacimli) alanlar bölge olarak kümelenip güce göre sıralanır — ● çubuğu göreli gücü, “dokunuş” kaç kez tepki verildiğini gösterir. Tek çizgi değil bant verir; kırılınca rol değiştirebilir (destek→direnç). Geçmiş fiyata dayanır, kesinlik değildir — vade skoruna dahil değildir, yatırım tavsiyesi değildir.</div>`;
+  }
+
   // ===== Yahoo Finance (temettü/dağıtım) — BIST + US =====
   // SADECE içinde bulunduğumuz yılın temettüleri.
   // Yahoo'nun events=div endpoint'i açıklanmış ileri tarihli temettüleri de içeriyor,
@@ -1700,6 +1814,52 @@
   }
   seedAmericaV1List();
 
+  // Tek seferlik tohum: "🇺🇸 Amerika Gelecek Tema" — 10 yıllık, yüksek risk/getiri
+  // frontier temaları (drone · kuantum · SMR nükleer · uzay · gen düzenleme ·
+  // AI destekli robot). Spekülatif/yüksek oynaklık. Bir kez eklenir; kullanıcı
+  // silerse geri gelmez (sb:seeded:gelecek). Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+  function seedGelecekTemaList() {
+    try {
+      if (localStorage.getItem('sb:seeded:gelecek') === '1') return;
+      const items = [
+        // 🚁 Drone / karşı-drone
+        { symbol: 'ONDS', market: 'US', query: 'ONDS Ondas' },              // drone + karşı-drone
+        { symbol: 'RCAT', market: 'US', query: 'RCAT Red Cat' },            // askeri drone (Teal)
+        { symbol: 'KTOS', market: 'US', query: 'KTOS Kratos' },             // drone + hipersonik
+        { symbol: 'AVAV', market: 'US', query: 'AVAV AeroVironment' },      // askeri drone (Switchblade)
+        // ⚛️ Kuantum bilişim
+        { symbol: 'IONQ', market: 'US', query: 'IONQ IonQ' },               // tuzaklı iyon kuantum
+        { symbol: 'RGTI', market: 'US', query: 'RGTI Rigetti' },            // süperiletken kuantum
+        { symbol: 'QBTS', market: 'US', query: 'QBTS D-Wave' },             // kuantum tavlama
+        // ☢️ SMR / yeni nesil nükleer
+        { symbol: 'OKLO', market: 'US', query: 'OKLO Oklo' },               // mikro reaktör (SMR)
+        { symbol: 'SMR',  market: 'US', query: 'SMR NuScale' },             // küçük modüler reaktör
+        { symbol: 'NNE',  market: 'US', query: 'NNE Nano Nuclear' },        // mikro reaktör
+        { symbol: 'LEU',  market: 'US', query: 'LEU Centrus' },             // uranyum zenginleştirme (HALEU)
+        // 🛰️ Uzay (SPCX'i tamamlayan)
+        { symbol: 'RKLB', market: 'US', query: 'RKLB Rocket Lab' },         // fırlatma + uzay sistemleri
+        { symbol: 'ASTS', market: 'US', query: 'ASTS AST SpaceMobile' },    // uydu→telefon
+        { symbol: 'LUNR', market: 'US', query: 'LUNR Intuitive Machines' }, // ay iniş aracı
+        // 🧬 Gen düzenleme / AI-biyo
+        { symbol: 'CRSP', market: 'US', query: 'CRSP CRISPR Therapeutics' },// CRISPR tedavi
+        { symbol: 'NTLA', market: 'US', query: 'NTLA Intellia' },           // in-vivo CRISPR
+        { symbol: 'BEAM', market: 'US', query: 'BEAM Beam Therapeutics' },  // baz düzenleme
+        { symbol: 'RXRX', market: 'US', query: 'RXRX Recursion' },          // AI ilaç keşfi
+        // 🤖 AI destekli robot
+        { symbol: 'SERV', market: 'US', query: 'SERV Serve Robotics' },     // otonom teslimat robotu
+        { symbol: 'SYM',  market: 'US', query: 'SYM Symbotic' },            // AI depo robotiği
+        { symbol: 'RR',   market: 'US', query: 'RR Richtech Robotics' },    // AI hizmet robotu
+      ];
+      const lists = loadLists();
+      if (!lists.some((l) => l.name === '🇺🇸 Amerika Gelecek Tema')) {
+        lists.push({ id: 'gelecek' + Date.now().toString(36), name: '🇺🇸 Amerika Gelecek Tema', items });
+        saveLists(lists);
+      }
+      localStorage.setItem('sb:seeded:gelecek', '1');
+    } catch (_) {}
+  }
+  seedGelecekTemaList();
+
   // ---- Bildirim senkronizasyonu (portföy + listeler → KV) ----
   // App'teki güncel portföy + tüm liste sembollerini `/api/watchlist`'e POST eder;
   // telefon bildirim worker'ı (poll.mjs/movers.mjs) aynı koddan okur → ekleme/çıkarma
@@ -1723,23 +1883,70 @@
     });
     return { portfolio: [], list };
   }
+  // ===== Cihazlar arası senkron (çift yönlü) =====
+  // `list`/`portfolio` → bildirim worker'ı içindir (düz semboller, şema sabit).
+  // `ui` → TAM arayüz durumu (liste isimleri/sırası/notify + karşılaştırma); başka
+  // cihaz açılışta bunu çekip listelerini/karşılaştırmasını birebir kurar. KV aynı
+  // SYNC_CODE'u paylaşan tüm cihazlar = tek portföy. Son-yazan-kazanır (updatedAt).
+  const SYNC_STATE_V = 1;
+  const LAST_SYNC_KEY = 'sb:lastSyncAt';
+  const getLastSync = () => { try { return +localStorage.getItem(LAST_SYNC_KEY) || 0; } catch (_) { return 0; } };
+  const setLastSync = (t) => { try { localStorage.setItem(LAST_SYNC_KEY, String(t || 0)); } catch (_) {} };
+  function buildUiState() {
+    return { v: SYNC_STATE_V, lists: loadLists(), compare: loadCompare() };
+  }
   function pushWatchlistSync() {
     if (!SYNC_BASE) return;
     try {
+      const body = collectWatchlistPayload();
+      body.ui = buildUiState();
       fetch(`${SYNC_BASE}/api/watchlist?code=${encodeURIComponent(SYNC_CODE)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(collectWatchlistPayload()),
+        body: JSON.stringify(body),
         keepalive: true,
-      }).catch(() => {});
+      }).then((r) => r && r.ok ? r.json() : null)
+        .then((j) => { if (j && j.updatedAt) setLastSync(j.updatedAt); })
+        .catch(() => {});
     } catch (_) {}
   }
   function scheduleWatchlistSync() {
     if (_syncTimer) clearTimeout(_syncTimer);
     _syncTimer = setTimeout(pushWatchlistSync, 1200);
   }
-  // Açılışta bir kez gönder (kullanıcı hiç değişiklik yapmasa da worker güncel kalsın).
-  setTimeout(pushWatchlistSync, 3000);
+  // Uzaktaki tam durumu benimse (localStorage'a DOĞRUDAN yaz → tekrar push tetiklemez).
+  function adoptRemoteState(ui, updatedAt) {
+    if (!ui || ui.v !== SYNC_STATE_V) return false;
+    let changed = false;
+    try {
+      if (Array.isArray(ui.lists)) { localStorage.setItem(LISTS_LS_KEY, JSON.stringify(ui.lists)); changed = true; }
+      if (Array.isArray(ui.compare)) { localStorage.setItem(COMPARE_LS_KEY, JSON.stringify(ui.compare)); changed = true; }
+    } catch (_) {}
+    setLastSync(updatedAt || Date.now());
+    return changed;
+  }
+  // Açılışta: KV'den çek. Uzaktaki daha yeniyse (updatedAt) yerel durumu onunla kur.
+  function pullWatchlistSync() {
+    if (!SYNC_BASE) { setTimeout(pushWatchlistSync, 3000); return; }
+    fetch(`${SYNC_BASE}/api/watchlist?code=${encodeURIComponent(SYNC_CODE)}`, { cache: 'no-store' })
+      .then((r) => r && r.ok ? r.json() : null)
+      .then((j) => {
+        const remoteAt = j && j.updatedAt ? +j.updatedAt : 0;
+        if (j && j.ui && remoteAt > getLastSync()) {
+          if (adoptRemoteState(j.ui, remoteAt)) {
+            try { if (typeof renderLists === 'function') renderLists(); } catch (_) {}
+            try { if (typeof renderCompare === 'function') renderCompare(); } catch (_) {}
+          }
+        } else if (!remoteAt) {
+          // Uzak boş (bu kod hiç yazılmamış) → yerel durumu ilk kez yukarı taşı.
+          pushWatchlistSync();
+        }
+      })
+      .catch(() => {})
+      .finally(() => { setTimeout(pushWatchlistSync, 3000); });
+  }
+  // Açılışta bir kez: önce çek (başka cihazın değişikliğini al), sonra kendi durumunu gönder.
+  setTimeout(pullWatchlistSync, 800);
 
   // Son aranan semboller (Arama sekmesi)
   const RECENT_LS_KEY = 'sb:recentSearch';
@@ -2975,6 +3182,10 @@
   let taFibLines = [];         // grafikte o an duran Fib PriceLine nesneleri
   let taFibDefs = [];          // Fib çizgi tanımları (gizle/göster için yeniden kurmak)
   let taIndVis = null;         // grafik indikatör göster/gizle durumu (localStorage'da kalıcı)
+  let taBuyZonePrim = null;    // "Uygun alım bölgesi" dikdörtgen primitive (candle serisine iliştirilir)
+  let taBuyZoneBand = null;    // { lo, hi } o an geçerli vade skorunun alım aralığı
+  let taSRPrim = null;         // "Sıralı S/R Bölgeleri" primitive (candle serisine iliştirilir)
+  let taSRZones = null;        // rankedSRZones() çıktısı — grafikte bant olarak çizilir
   let taInited = false;
   let vadeCache = {}; // symbol:market -> 5y günlük mumlar (skorlama için)
   let benchCache = {}; // market -> endeks 5y günlük mumlar (Göreli Güç/RS için)
@@ -3104,24 +3315,57 @@
     }
     taShowMsg('Yükleniyor…');
     indWrap.innerHTML = '';
+    taBuyZoneBand = null; // yeni sembol/aralık → vade skoru gelene kadar eski bandı gösterme
+    taSRZones = null;     // aynı şekilde S/R bölgeleri yeni vade skoru gelene kadar temizlenir
 
-    let data;
-    try {
-      data = await fetchYahooOHLC(symbol, market, range, '1d');
-    } catch (e) {
-      if (myReq !== taReqSeq) return; // sembol değişti — bu hatayı gösterme
-      taShowMsg('Veri alınamadı. Tekrar dene.');
-      return;
+    // İndikatörleri TAM 5y geçmiş üzerinde hesapla, sonra seçili aralığa göre kırp.
+    // Böylece SMA200 gibi uzun bakışlı göstergeler görünen pencerenin sol kenarında bile
+    // değer taşır (eskiden 6ay ~126 bar < 200 → SMA200 hiç çizilmiyordu). 5y veri zaten
+    // vade skoru için önbelleklendiğinden tekrar çekmeyiz.
+    const ck = market + ':' + symbol;
+    let full = vadeCache[ck];
+    if (!full) {
+      try {
+        const d = await fetchYahooOHLC(symbol, market, '5y', '1d');
+        full = d.candles;
+        vadeCache[ck] = full;
+      } catch (e) {
+        if (myReq !== taReqSeq) return; // sembol değişti — bu hatayı gösterme
+        taShowMsg('Veri alınamadı. Tekrar dene.');
+        return;
+      }
     }
     if (myReq !== taReqSeq) return; // arada başka sembol seçildi — eski veriyi çizme
-    const candles = data.candles;
-    if (candles.length < 30) { taShowMsg('Yeterli veri yok.'); return; }
+    if (!full || full.length < 30) { taShowMsg('Yeterli veri yok.'); return; }
     taShowMsg('');
 
+    // Tam seri üzerinde göstergeler
+    const closesF  = full.map(c => c.close);
+    const highsF   = full.map(c => c.high);
+    const lowsF    = full.map(c => c.low);
+    const volumesF = full.map(c => c.volume);
+    const ema20F  = calcEMA(closesF, 20);
+    const sma50F  = calcSMA(closesF, 50);
+    const sma200F = calcSMA(closesF, 200);
+    const bollF   = calcBollinger(closesF, 20, 2);
+    const rsiArrF = calcRSI(closesF, 14);
+    const macdF   = calcMACD(closesF, 12, 26, 9);
+    const adxF    = calcADX(highsF, lowsF, closesF, 14);
+    const stochF  = calcStochastic(highsF, lowsF, closesF, 14, 3, 3);
+    const atrF    = calcATR(highsF, lowsF, closesF, 14);
+    const obvF    = calcOBV(closesF, volumesF);
+    const ichiF   = calcIchimoku(highsF, lowsF, closesF);
+
+    // Görünen pencere = seçili aralığın yaklaşık işlem günü sayısı (5y = tümü)
+    const RANGE_BARS = { '3mo': 66, '6mo': 132, '1y': 264, '2y': 528, '5y': 1e9 };
+    const showN = Math.min(full.length, RANGE_BARS[range] || 264);
+    const sliceTail = (a) => Array.isArray(a) ? a.slice(-showN) : a;
+    const sliceObj  = (o) => { const r = {}; for (const k in o) r[k] = sliceTail(o[k]); return r; };
+
+    const candles = full.slice(-showN);
     const closes  = candles.map(c => c.close);
     const highs   = candles.map(c => c.high);
     const lows    = candles.map(c => c.low);
-    const volumes = candles.map(c => c.volume);
     const times   = candles.map(c => c.time);
     const lineData = (arr) => arr.map((v, i) => v == null ? null : { time: times[i], value: v })
                                  .filter(Boolean);
@@ -3138,17 +3382,19 @@
       return out;
     };
 
-    const ema20  = calcEMA(closes, 20);
-    const sma50  = calcSMA(closes, 50);
-    const sma200 = calcSMA(closes, 200);
-    const boll   = calcBollinger(closes, 20, 2);
-    const rsiArr = calcRSI(closes, 14);
-    const macd   = calcMACD(closes, 12, 26, 9);
-    const adx    = calcADX(highs, lows, closes, 14);
-    const stoch  = calcStochastic(highs, lows, closes, 14, 3, 3);
-    const atr    = calcATR(highs, lows, closes, 14);
-    const obv    = calcOBV(closes, volumes);
-    const ichi   = calcIchimoku(highs, lows, closes);
+    // Uzun-bakışlı göstergeler: tam seride hesaplanıp görünen pencereye kırpıldı
+    const ema20  = sliceTail(ema20F);
+    const sma50  = sliceTail(sma50F);
+    const sma200 = sliceTail(sma200F);
+    const boll   = sliceObj(bollF);
+    const rsiArr = sliceTail(rsiArrF);
+    const macd   = sliceObj(macdF);
+    const adx    = sliceTail(adxF);
+    const stoch  = sliceObj(stochF);
+    const atr    = sliceTail(atrF);
+    const obv    = sliceTail(obvF);
+    const ichi   = sliceObj(ichiF); // base (kaydırma) sayı → sliceTail dokunmaz
+    // Fibonacci / hacim profili / emir akışı: görünen pencerenin salınımına göre
     const fib    = calcFibonacci(highs, lows);
     const vprof  = calcVolumeProfile(candles, 24);
     const oflow  = calcOrderFlow(candles, 14);
@@ -3222,6 +3468,13 @@
     }
     if (stale()) return;
     if (!res) { panel.innerHTML = '<div class="ta-score-msg empty">Bu sembol için yeterli geçmiş veri yok.</div>'; return; }
+    // Grafikteki "Uygun alım bölgesi" dikdörtgeni bu vadenin alım aralığını yansıtır
+    const bz = res.levels && res.levels.buyZone;
+    taBuyZoneBand = (bz && bz[0] != null && bz[1] != null) ? { lo: bz[0], hi: bz[1] } : null;
+    updateBuyZonePrimitive();
+    // Sıralı S/R bölgelerini grafiğe overlay olarak hazırla (toggle ile açılır) — SADECE BİLGİ
+    try { taSRZones = rankedSRZones(vadeCache[market + ':' + symbol]); } catch (_) { taSRZones = null; }
+    updateSRZonesPrimitive();
     renderVadeScore(panel, symbol, market, res, vade);
   }
 
@@ -3319,6 +3572,7 @@
           ${lvl.poc != null ? lvlBox('POC · hacim yoğ.', lvl.poc) : ''}
           <div class="ta-bs-lvl"><span>Risk / Ödül</span><b>${lvl.rr == null ? '—' : '≈ 1 : ' + lvl.rr.toFixed(1)}</b></div>
         </div>
+        ${(() => { try { return rankedSRHtml(rankedSRZones(vadeCache[market + ':' + symbol]), curSym, fmtP); } catch (_) { return ''; } })()}
         <div class="ta-of-disc">${cfg.label} ufku için göstergelerin ağırlıklı matematiksel özeti. 50 üstü alım, altı satım eğilimi. Alım aralığı destek çevresinde; ${lvl.sellKind === 'target' ? 'hedef aralığı bu ufuk için güncel fiyatın belirgin üzerindeki bir direnç/projeksiyon bölgesidir — anlık "sat" değil, uzun vadeli üst hedeftir' : 'satım aralığı en yakın direnç çevresindedir'}. Çapa ve bant vade uzadıkça uzaklaşıp genişler (ATR ölçekli) — sipariş önerisi değil, yön değil "nerede" bilgisidir. Geçmiş fiyat verisine dayanır, gelecek garantisi vermez — yatırım tavsiyesi değildir.</div>
       </div>`;
 
@@ -3346,17 +3600,154 @@
     { key: 'boll',   label: 'Bollinger', sw: '#8b5cf6', lines: ['bbU', 'bbL'] },
     { key: 'ichi',   label: 'Ichimoku',  sw: '#f472b6', sw2: '#38bdf8', lines: ['tenkan', 'kijun', 'spanA', 'spanB'] },
     { key: 'fib',    label: 'Fibonacci', sw: '#f4b400', fib: true },
+    { key: 'buyzone', label: 'Uygun alım bölgesi', sw: 'rgba(34,211,154,0.9)', zone: true },
+    { key: 'srzones', label: 'S/R Bölgeleri', sw: 'rgba(34,211,154,0.9)', sw2: 'rgba(255,94,126,0.9)', srzone: true },
   ];
   function loadTAIndVis() {
     // Varsayılan sade grafik: yalnız SMA50 + SMA200 açık, gerisi kapalı.
-    const def = { ema20: false, sma50: true, sma200: true, boll: false, ichi: false, fib: false };
+    const def = { ema20: false, sma50: true, sma200: true, boll: false, ichi: false, fib: false, buyzone: false, srzones: false };
     try { const raw = localStorage.getItem(TA_IND_LS); if (raw) return Object.assign(def, JSON.parse(raw)); } catch (_) {}
     return def;
   }
   function saveTAIndVis() { try { localStorage.setItem(TA_IND_LS, JSON.stringify(taIndVis)); } catch (_) {} }
+  // "Uygun alım bölgesi" — vade skorunun alım aralığını grafiğe yatay dolu bir dikdörtgen
+  // (bant) olarak çizen ISeriesPrimitive (LightweightCharts v4.2). Bant fiyatları
+  // taBuyZoneBand'ten okunur; vade/skor değişince güncellenir. Bitmap uzayında çizeriz
+  // ki bant kenarları keskin ve zoom'dan bağımsız olsun.
+  function makeBuyZonePrimitive(series) {
+    let reqUpdate = null;
+    const paneView = {
+      renderer() {
+        return {
+          draw(target) {
+            const b = taBuyZoneBand;
+            if (!b || b.lo == null || b.hi == null) return;
+            const yTop = series.priceToCoordinate(Math.max(b.lo, b.hi));
+            const yBot = series.priceToCoordinate(Math.min(b.lo, b.hi));
+            if (yTop == null || yBot == null) return;
+            target.useBitmapCoordinateSpace((scope) => {
+              const ctx = scope.context;
+              const vr = scope.verticalPixelRatio, hr = scope.horizontalPixelRatio;
+              const top = yTop * vr, bot = yBot * vr, W = scope.bitmapSize.width;
+              ctx.fillStyle = 'rgba(34,211,154,0.13)';
+              ctx.fillRect(0, top, W, bot - top);
+              ctx.strokeStyle = 'rgba(34,211,154,0.55)';
+              ctx.lineWidth = Math.max(1, Math.round(vr));
+              ctx.setLineDash([4 * hr, 3 * hr]);
+              ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(W, top); ctx.stroke();
+              ctx.beginPath(); ctx.moveTo(0, bot); ctx.lineTo(W, bot); ctx.stroke();
+            });
+          },
+        };
+      },
+    };
+    return {
+      attached(p) { reqUpdate = p && p.requestUpdate; },
+      detached() { reqUpdate = null; },
+      updateAllViews() {},
+      paneViews() { return [paneView]; },
+      requestUpdate() { if (reqUpdate) reqUpdate(); },
+    };
+  }
+  // LightweightCharts v4.2: detachPrimitive tek başına yeniden çizim tetiklemiyor —
+  // bant kaldırıldığında eski pikseller bir sonraki pan/zoom'a kadar ekranda kalıyor.
+  // applyOptions({width}) (resize yolunun yaptığı) tam yeniden çizimi zorlar. SADECE SUNUM.
+  function taForceChartRepaint() {
+    try {
+      const w = document.getElementById('taChart');
+      if (taChartObj && w) taChartObj.applyOptions({ width: w.clientWidth });
+    } catch (_) {}
+  }
+  // Toggle durumu + bant verisine göre dikdörtgeni iliştir/kaldır/tazele
+  function updateBuyZonePrimitive() {
+    const wantOn = !!(taIndVis && taIndVis.buyzone) && taBuyZoneBand && taCandleSeries;
+    if (wantOn) {
+      if (!taBuyZonePrim) {
+        try {
+          taBuyZonePrim = makeBuyZonePrimitive(taCandleSeries);
+          taCandleSeries.attachPrimitive(taBuyZonePrim);
+          taForceChartRepaint(); // attachPrimitive tek başına çizim tetiklemiyor — bant hemen görünsün
+        } catch (_) { taBuyZonePrim = null; }
+      } else {
+        try { taBuyZonePrim.requestUpdate(); } catch (_) {}
+      }
+    } else if (taBuyZonePrim && taCandleSeries) {
+      try { taCandleSeries.detachPrimitive(taBuyZonePrim); } catch (_) {}
+      taBuyZonePrim = null;
+      taForceChartRepaint();
+    }
+  }
+  // "Sıralı S/R Bölgeleri" — rankedSRZones çıktısındaki en yakın destek (yeşil) ve
+  // direnç (kırmızı) bantlarını grafiğe yatay dolu dikdörtgenler olarak çizen primitive.
+  // En güçlü bölge biraz daha opak. taSRZones'tan okunur; SADECE BİLGİ, skora dahil değil.
+  function makeSRZonesPrimitive(series) {
+    let reqUpdate = null;
+    const MAXN = 3; // panelle aynı: her yönden en yakın 3 bölge
+    const paneView = {
+      renderer() {
+        return {
+          draw(target) {
+            const sr = taSRZones;
+            if (!sr) return;
+            const zones = [];
+            (sr.support || []).slice(0, MAXN).forEach(c => zones.push({ z: c.zone, strong: c.strength >= sr.topStr * 0.999, sup: true }));
+            (sr.resistance || []).slice(0, MAXN).forEach(c => zones.push({ z: c.zone, strong: c.strength >= sr.topStr * 0.999, sup: false }));
+            if (!zones.length) return;
+            target.useBitmapCoordinateSpace((scope) => {
+              const ctx = scope.context;
+              const vr = scope.verticalPixelRatio, hr = scope.horizontalPixelRatio;
+              const W = scope.bitmapSize.width;
+              zones.forEach(zn => {
+                const yTop = series.priceToCoordinate(Math.max(zn.z[0], zn.z[1]));
+                const yBot = series.priceToCoordinate(Math.min(zn.z[0], zn.z[1]));
+                if (yTop == null || yBot == null) return;
+                const top = yTop * vr, bot = yBot * vr;
+                const fill = zn.sup
+                  ? (zn.strong ? 'rgba(34,211,154,0.22)' : 'rgba(34,211,154,0.11)')
+                  : (zn.strong ? 'rgba(255,94,126,0.22)' : 'rgba(255,94,126,0.11)');
+                const stroke = zn.sup ? 'rgba(34,211,154,0.6)' : 'rgba(255,94,126,0.6)';
+                ctx.fillStyle = fill;
+                ctx.fillRect(0, top, W, bot - top);
+                ctx.strokeStyle = stroke;
+                ctx.lineWidth = Math.max(1, Math.round(vr));
+                ctx.setLineDash([2 * hr, 2 * hr]);
+                ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(W, top); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, bot); ctx.lineTo(W, bot); ctx.stroke();
+              });
+            });
+          },
+        };
+      },
+    };
+    return {
+      attached(p) { reqUpdate = p && p.requestUpdate; },
+      detached() { reqUpdate = null; },
+      updateAllViews() {},
+      paneViews() { return [paneView]; },
+      requestUpdate() { if (reqUpdate) reqUpdate(); },
+    };
+  }
+  function updateSRZonesPrimitive() {
+    const has = taSRZones && ((taSRZones.support && taSRZones.support.length) || (taSRZones.resistance && taSRZones.resistance.length));
+    const wantOn = !!(taIndVis && taIndVis.srzones) && has && taCandleSeries;
+    if (wantOn) {
+      if (!taSRPrim) {
+        try { taSRPrim = makeSRZonesPrimitive(taCandleSeries); taCandleSeries.attachPrimitive(taSRPrim); taForceChartRepaint(); }
+        catch (_) { taSRPrim = null; }
+      } else {
+        try { taSRPrim.requestUpdate(); } catch (_) {}
+      }
+    } else if (taSRPrim && taCandleSeries) {
+      try { taCandleSeries.detachPrimitive(taSRPrim); } catch (_) {}
+      taSRPrim = null;
+      taForceChartRepaint();
+    }
+  }
   function setTAIndVisible(key, on) {
     const g = TA_IND_GROUPS.find(x => x.key === key);
     if (!g) return;
+    if (g.zone) { updateBuyZonePrimitive(); return; }
+    if (g.srzone) { updateSRZonesPrimitive(); return; }
     if (g.fib) { // Fib = candle serisi üstünde fiyat çizgileri: göster=kur, gizle=kaldır
       if (on) {
         if (!taFibLines.length && taCandleSeries) taFibDefs.forEach(d => taFibLines.push(taCandleSeries.createPriceLine(d)));
@@ -3396,6 +3787,8 @@
   function drawTAChart(candles, ind) {
     const wrap = document.getElementById('taChart');
     if (taChartObj) { taChartObj.remove(); taChartObj = null; taSeries = {}; }
+    taBuyZonePrim = null; // eski grafik yıkıldı → primitive referansı geçersiz
+    taSRPrim = null;      // S/R bölgeleri primitive'i de yeni seride yeniden kurulur
     wrap.innerHTML = '';
     const chart = LightweightCharts.createChart(wrap, {
       width: wrap.clientWidth,
@@ -5376,7 +5769,14 @@
       { label: 'Gelir Büyümesi (YoY)', val: revYoY == null ? '—' : '%' + revYoY.toFixed(1) },
       { label: '3Y Gelir BYBO', val: revCagr == null ? '—' : '%' + revCagr.toFixed(1) },
     ];
-    return { tiles, criteria: C, metrics: { netProfit, equity, price, freeCF, netDebt, totalDebt: totalFinDebt, ebitda, revCagr, revYoY } };
+    // Atahan Notları için çok-yıllık gelir/kâr serisi (İş Yatırım tek çağrı = en güncel 4 yıl).
+    // Net kâr her dönem için 3L→3J→2OCF sırasıyla; boşsa null. Yıllar en güncel önce.
+    const netSeries = [0, 1, 2, 3].map((i) => {
+      let v = P(g('3L'), i); if (v == null) v = P(g('3J'), i); if (v == null) v = P(g('2OCF'), i); return v;
+    });
+    const income = { years: mali.years.slice(), rev: rev.slice(), net: netSeries, currency: '₺', period: 'yıllık (İş Yatırım)' };
+    return { tiles, criteria: C, income, statementTiles: tiles, incPeriod: mali.years[0] + ' yıllık',
+             metrics: { netProfit, equity, price, freeCF, netDebt, totalDebt: totalFinDebt, ebitda, revCagr, revYoY } };
   }
 
   // İş Yatırım şirket kartından piyasa değerini (mnTL) çeker → TL. Sonuç değer bandı için
@@ -5664,6 +6064,13 @@
     // 3Y BYBO için yıllık gelir serisi (yıllık-yıllık)
     const revAnnuals = secAnnualsList(revA);
     const revA0 = revAnnuals[0] ? revAnnuals[0].val : null, rev3 = revAnnuals[3] ? revAnnuals[3].val : null;
+    // Atahan Notları — çok yıllık gelir/net kâr serisi (yıllık 10-K, en güncel önce, 5 yıla kadar)
+    const niAnnuals = secAnnualsList(niA);
+    const yrOf = (e) => e ? new Date(e.end).getFullYear() : null;
+    const incYears = revAnnuals.slice(0, 5).map(yrOf);
+    const income = { years: incYears, rev: revAnnuals.slice(0, 5).map((e) => e ? e.val : null),
+      net: incYears.map((yr) => { const m = niAnnuals.find((e) => yrOf(e) === yr); return m ? m.val : null; }),
+      currency: '$', period: 'yıllık (10-K)' };
 
     const ebitda = (op != null && da != null) ? op + da : null;
     const totalDebt = (D1 != null || D2 != null) ? (D1 || 0) + (D2 || 0) : null;
@@ -5765,7 +6172,7 @@
     const incAsOf = (revT && revT.asOf) || (niT && niT.asOf) || null;
     const fy = incAsOf ? incBasis + ' · ' + fmtDate(incAsOf) : (assetsS[0] ? new Date(assetsS[0].end).getFullYear() : '');
     const bsDate = assetsS[0] ? fmtDate(assetsS[0].end) : '';
-    const out = { criteria: C, statementTiles, fy, bsDate, incBasis, incAsOf, metrics: { ni, rev, eps, fcf, netDebt, totalDebt, ebitda, revCagr, revYoY } };
+    const out = { criteria: C, statementTiles, income, incPeriod: fy, fy, bsDate, incBasis, incAsOf, metrics: { ni, rev, eps, fcf, netDebt, totalDebt, ebitda, revCagr, revYoY } };
     secModelCache[symbol] = out;
     return out;
   }
@@ -6998,6 +7405,123 @@
   const listActivePeriods = {}; // listId -> dönem anahtarı
   const listExpanded = {};      // listId -> true ise açık (varsayılan: kapalı)
 
+  // ===== ⚡ Momentum girişi — sabit üst liste (otomatik taranan sanal liste) =====
+  // Evrendeki (listelere dahil) TÜM hisseleri her Listeler girişinde tarar ve
+  // momentumInfo(res,'orta').active === true olanları (güçlü trend + fiyata yakın
+  // kademeli giriş uygun) en üste sıralar. SADECE BİLGİ; hiçbir skoru değiştirmez.
+  // Gerçek bir kayıtlı liste değildir (sb:lists'e yazılmaz), silinemez/eklenemez.
+  const MOM_LIST_ID = '__momentum';
+  const MOM_TTL = 8 * 60 * 1000; // 8 dk tazelik penceresi (mumlar zaten cache'li → ucuz)
+  let momScanState = { at: 0, items: null, running: false };
+
+  async function scanMomentumUniverse(force) {
+    if (momScanState.running) return momScanState.items || [];
+    if (!force && momScanState.items && (Date.now() - momScanState.at) < MOM_TTL) return momScanState.items;
+    momScanState.running = true;
+    try {
+      const uni = getPortfolio(); // evrene dahil listelerdeki tekilleştirilmiş {symbol, market, query}
+      const out = [];
+      let idx = 0;
+      const CONC = 4; // Yahoo'yu yormamak için eşzamanlılık sınırı
+      async function worker() {
+        while (idx < uni.length) {
+          const it = uni[idx++];
+          try {
+            const daily = await ensureDailyCandles(it.symbol, it.market);
+            if (!daily) continue;
+            const bench = await ensureBenchDaily(it.market);
+            const res = computeVadeScore(daily, 'orta', undefined, bench);
+            if (!res) continue;
+            const mom = momentumInfo(res, 'orta');
+            if (mom && mom.active) {
+              out.push({ symbol: it.symbol, market: it.market, query: it.query || it.symbol, res, mom, score: res.score });
+            }
+          } catch (_) {}
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(CONC, uni.length || 1) }, worker));
+      // Güçlü trend önce: ADX (trend gücü), eşitlikte skor
+      out.sort((a, b) => (b.mom.adx || 0) - (a.mom.adx || 0) || (b.score - a.score));
+      momScanState = { at: Date.now(), items: out, running: false };
+      return out;
+    } catch (_) {
+      momScanState.running = false;
+      return momScanState.items || [];
+    }
+  }
+
+  function momRowsHtml(items) {
+    if (!items) return '<div class="empty">Taranıyor…</div>';
+    if (!items.length) return '<div class="empty">Şu an evrende ⚡ momentum girişi için uygun hisse yok.</div>';
+    return items.map((x) => {
+      const fp = (n) => fmtPrice(n, x.market);
+      const zone = (x.mom.zone) ? `${fp(x.mom.zone[0])} – ${fp(x.mom.zone[1])}` : '';
+      const adx = x.mom.adx != null ? Math.round(x.mom.adx) : '—';
+      const gap = x.mom.gapPct != null ? Math.round(x.mom.gapPct * 100) : null;
+      return `
+        <div class="list-row mom-row" data-symbol="${x.symbol}" data-market="${x.market}" title="Güçlü trend + fiyata yakın kademeli giriş; güçlü-alış bölgesinin ~%${gap != null ? gap : '?'} üzerinde">
+          <span class="lr-sym">${x.symbol} <span class="badge">${x.market}</span></span>
+          <span class="mom-zone">⚡ ${zone}</span>
+          <span class="mom-gap"${gap != null ? '' : ' data-na'}>${gap != null ? `▲ güçlü alışın %${gap} üzerinde` : '▲ güçlü alışın üzerinde'}</span>
+          <span class="mom-meta">ADX ${adx} · Skor ${Math.round(x.score)}</span>
+        </div>`;
+    }).join('');
+  }
+
+  function renderMomentumBlock() {
+    const items = momScanState.items;
+    const scanned = momScanState.at > 0;
+    const status = scanned
+      ? ('güncellendi ' + new Date(momScanState.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }))
+      : 'taranıyor…';
+    const count = items ? (items.length + ' hisse') : '…';
+    return `
+      <div class="list-block mom-block is-open" data-lid="${MOM_LIST_ID}">
+        <div class="list-head">
+          <span class="list-name">⚡ Momentum girişi</span>
+          <span class="list-count" data-role="mom-count">${count}</span>
+          <span class="mom-status" data-role="mom-status">${status}</span>
+          <span class="list-actions">
+            <button class="list-mini" data-act="mom-refresh" title="Evreni yeniden tara">↻</button>
+          </span>
+        </div>
+        <div class="list-body">
+          <div class="mom-note">Evrendeki (listelere dahil) hisseler içinde <b>güçlü trend + fiyata yakın kademeli giriş</b> uygun olanlar. Her Listeler girişinde otomatik taranır · <b>SADECE BİLGİ</b>, yatırım tavsiyesi değildir.</div>
+          <div class="list-rows" data-role="mom-rows">${momRowsHtml(items)}</div>
+        </div>
+      </div>`;
+  }
+
+  function wireMomentumBlock() {
+    const block = document.querySelector(`.list-block[data-lid="${MOM_LIST_ID}"]`); if (!block) return;
+    block.querySelector('[data-act="mom-refresh"]')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fillMomentumBlock(true);
+    });
+    block.querySelectorAll('.mom-row').forEach((row) => row.addEventListener('click', () => {
+      openStockPage(row.dataset.symbol, row.dataset.market, row.dataset.symbol);
+    }));
+  }
+
+  async function fillMomentumBlock(force) {
+    const block = document.querySelector(`.list-block[data-lid="${MOM_LIST_ID}"]`); if (!block) return;
+    const fresh = momScanState.items && (Date.now() - momScanState.at) < MOM_TTL && !force;
+    if (!fresh) {
+      const s = block.querySelector('[data-role="mom-status"]'); if (s) s.textContent = 'taranıyor…';
+      if (!momScanState.items) { const r = block.querySelector('[data-role="mom-rows"]'); if (r) r.innerHTML = '<div class="empty">Taranıyor…</div>'; }
+    }
+    const items = await scanMomentumUniverse(force);
+    const b2 = document.querySelector(`.list-block[data-lid="${MOM_LIST_ID}"]`); if (!b2) return; // sekme değişmiş olabilir
+    const r2 = b2.querySelector('[data-role="mom-rows"]'); if (r2) r2.innerHTML = momRowsHtml(items);
+    const c2 = b2.querySelector('[data-role="mom-count"]'); if (c2) c2.textContent = items.length + ' hisse';
+    const s2 = b2.querySelector('[data-role="mom-status"]');
+    if (s2) s2.textContent = 'güncellendi ' + new Date(momScanState.at).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    b2.querySelectorAll('.mom-row').forEach((row) => {
+      if (row._momWired) return; row._momWired = true;
+      row.addEventListener('click', () => openStockPage(row.dataset.symbol, row.dataset.market, row.dataset.symbol));
+    });
+  }
+
   function initLists() {
     if (!listsInited) {
       const btn = document.getElementById('newListBtn');
@@ -7007,15 +7531,22 @@
       if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') create(); });
       listsInited = true;
     }
+    momScanState.at = 0; // her Listeler girişinde taze tara (kullanıcı isteği: güncel olması önemli)
     renderLists();
   }
 
   function renderLists() {
     const wrap = document.getElementById('listsContainer'); if (!wrap) return;
     const lists = loadLists();
-    if (!lists.length) { wrap.innerHTML = '<div class="empty">Henüz liste yok. Yukarıdan yeni bir liste oluştur.</div>'; return; }
-    wrap.innerHTML = lists.map(renderListBlock).join('');
-    lists.forEach(wireListBlock);
+    const momHtml = renderMomentumBlock(); // ⚡ sabit üst liste (her zaman en üstte)
+    if (!lists.length) {
+      wrap.innerHTML = momHtml + '<div class="empty">Henüz liste yok. Yukarıdan yeni bir liste oluştur.</div>';
+    } else {
+      wrap.innerHTML = momHtml + lists.map(renderListBlock).join('');
+      lists.forEach(wireListBlock);
+    }
+    wireMomentumBlock();
+    fillMomentumBlock(false);
   }
 
   function renderListBlock(l) {
@@ -7446,6 +7977,36 @@
     return { txt: '⛔ Uzak dur', cls: 'risk' };
   }
 
+  // ===== Fiyat uygunluğu = fırsatın kilit parçası =====
+  // Teknik skor güçlü olsa bile fiyat "uygun alım bölgesi"nin çok üstündeyse bu bir ALIM
+  // fırsatı değil, kovalamadır. buyZoneProximity ile fiyatın banda ATR-ölçekli uzaklığını
+  // puana çeviririz: içinde/altında = asıl fırsat fiyatı (+), banda yakın = hafif (+),
+  // uzak = ceza (−). Güçlü momentum rejiminde derin geri çekilme gelmeyebilir → uzaklık
+  // cezası yumuşatılır (sadece iskonto beklemek fırsatı kaçırabilir). Sınır ±8 puan
+  // (haber nabzı ±7 ile aynı ağırlık düzeyi). YALNIZ Fırsatlar sıralama katmanı;
+  // computeVadeScore skorunu, alım bandını ve TA/FA bileşke skorunu DEĞİŞTİRMEZ (bilgi amaçlı).
+  function priceOppAdj(prox, mom) {
+    if (!prox || prox.dAtr == null) return 0;
+    const d = prox.dAtr; // fiyatın bandın kaç ATR üstünde olduğu (≤0 = içinde/altında)
+    let pts;
+    if (d <= 0)      pts = 8;                         // içinde/altında — asıl fırsat fiyatı
+    else if (d <= 1) pts = 6 * (1 - d);               // banda yakın: +6 → 0
+    else             pts = -Math.min(8, (d - 1) * 4); // banda uzak: her ATR −4, −8 tavan
+    if (pts < 0 && mom && mom.active) pts *= 0.4;     // güçlü trend → cezayı yumuşat
+    return pts;
+  }
+  function priceOppChip(prox) {
+    if (!prox) return '';
+    const map = {
+      below: { cls: 'in',   t: '🟢 Alım bandının altında — ucuz' },
+      in:    { cls: 'in',   t: '🟢 Fiyat alım bölgesinde' },
+      near:  { cls: 'near', t: `🟢 Banda yakın (~${(prox.dAtr || 0).toFixed(1)}×ATR)` },
+      far:   { cls: 'far',  t: `🟡 Banda uzak (~${(prox.dAtr || 0).toFixed(1)}×ATR)` },
+    };
+    const m = map[prox.state];
+    return m ? `<span class="opp-prox ${m.cls}">${m.t}</span>` : '';
+  }
+
   async function renderOpportunities(force) {
     const listEl = document.getElementById('oppsList');
     const statusEl = document.getElementById('oppsStatus');
@@ -7480,7 +8041,12 @@
             const r = computeVadeScore(daily, 'orta', undefined, bench);
             if (r) {
               const drivers = (r.breakdown || []).slice(0, 2).map((b) => b.label).filter(Boolean);
-              row = { symbol: s.symbol, market: s.market, group: s.group, score: r.score, label: r.label, cls: r.cls, drivers };
+              // Fiyat uygunluğu = fırsatın kilit parçası. buyZoneProximity fiyatın uygun alım
+              // bandına ATR-ölçekli uzaklığını verir; momentumInfo güçlü trend rejiminde uzaklık
+              // cezasını yumuşatır. priceOppAdj bunu ±8 puanlık sıralama düzeltmesine çevirir.
+              const prox = buyZoneProximity(r);
+              const priceAdj = priceOppAdj(prox, momentumInfo(r, 'orta'));
+              row = { symbol: s.symbol, market: s.market, group: s.group, score: r.score, label: r.label, cls: r.cls, drivers, prox, priceAdj };
             }
           }
         } catch (_) {}
@@ -7501,8 +8067,10 @@
       return;
     }
 
-    // Bileşik skor = teknik skor + haber duyarlılığı eğimi (±7 puan). Haber gelene kadar = teknik.
-    results.forEach((r) => { r.combined = r.score; });
+    // Bileşik skor = teknik skor + fiyat uygunluğu (±8) + haber duyarlılığı eğimi (±7). Haber
+    // gelene kadar teknik + fiyat. Fiyat uygunluğu (uygun alım fiyatına yakınlık) asıl fırsatı
+    // oluşturan kilit parçadır: teknik güçlü ama fiyat banddan çok uzaksa sıra aşağı iner.
+    results.forEach((r) => { r.combined = Math.max(2, Math.min(99, r.score + (r.priceAdj || 0))); });
 
     // Satırı çiz (bileşik skora göre)
     function oppRowHtml(r, i) {
@@ -7520,7 +8088,7 @@
               <span class="opp-tag ${tag.cls}">${tag.txt}</span>
             </div>
             <div class="opp-bar"><i class="${r.cls}" style="width:${w}%"></i></div>
-            <div class="opp-meta"><span class="opp-label ${r.cls}">${r.label}</span>${news}${drv}<span class="opp-group">${r.group || ''}</span></div>
+            <div class="opp-meta"><span class="opp-label ${r.cls}">${r.label}</span>${priceOppChip(r.prox)}${news}${drv}<span class="opp-group">${r.group || ''}</span></div>
           </div>
           <span class="opp-score ${r.cls}">${Math.round(eff)}<em>/100</em></span>
         </div>`;
@@ -7550,8 +8118,8 @@
           const se = await computeNewsSentiment(r.symbol, r.market, { force });
           if (myScan !== oppsScanId) return;
           r.senti = se;
-          // Teknik skora ±7 puanlık haber eğimi ekle (2..98 sınırlı)
-          r.combined = Math.max(2, Math.min(98, r.score + se.score * 7));
+          // Teknik + fiyat uygunluğu (±8) + haber eğimi (±7), 2..98 sınırlı
+          r.combined = Math.max(2, Math.min(98, r.score + (r.priceAdj || 0) + se.score * 7));
         } catch (_) {}
         sDone++;
         scheduleRepaint();
@@ -7561,7 +8129,7 @@
     await Promise.all([sentiWorker(), sentiWorker(), sentiWorker()]);
     if (myScan !== oppsScanId) return;
     paint();
-    statusEl.textContent = `${scored} sembol · teknik + haber nabzı ile sıralandı${failed ? ` · ${failed} veri yok` : ''}`;
+    statusEl.textContent = `${scored} sembol · teknik + fiyat uygunluğu + haber nabzı ile sıralandı${failed ? ` · ${failed} veri yok` : ''}`;
   }
 
   // ===== 🔎 Sistematik Tarama (Değer / Büyüme / Kalite presetleri) =====
@@ -9352,6 +9920,128 @@
     renderToday();
   }
 
+  // ===== 📊 Endeks Tetikleyicileri — BIST / Altın / NASDAQ / S&P ani hareket okuması =====
+  // "Bugün" panelinin tepesinde, büyük endekslerdeki sert yükseliş/düşüşleri OTOMATİK yakalar ve
+  // "ne oldu + neden" olarak açıklar. Neden'i makro dims (faiz/enflasyon/risk/büyüme) + sıcak gündem
+  // temalarından çıkarır. YALNIZCA BİLGİ AMAÇLIDIR; hisse skoruna DAHİL DEĞİLDİR, tavsiye değildir.
+  const INDEX_PULSE = [
+    { key: 'XU100', symbol: 'XU100', market: 'BIST', emoji: '🇹🇷', name: 'BIST 100',   kind: 'equity_tr',   sharp: 2.0, notable: 1.0 },
+    { key: 'GSPC',  symbol: '^GSPC', market: 'US',   emoji: '🇺🇸', name: 'S&P 500',    kind: 'equity_us',   sharp: 1.2, notable: 0.6 },
+    { key: 'IXIC',  symbol: '^IXIC', market: 'US',   emoji: '💻', name: 'NASDAQ',      kind: 'equity_tech', sharp: 1.5, notable: 0.8 },
+    { key: 'GOLD',  symbol: 'GC=F',  market: 'US',   emoji: '🥇', name: 'Altın (ons)', kind: 'gold',        sharp: 1.5, notable: 0.8 },
+  ];
+
+  // Endeks hareketinin "neden"i — makro boyutlardan (dims) yön-duyarlı çıkarım. Kâhinlik değil, okuma.
+  function indexWhyFactors(cfg, pct, m) {
+    const up = pct > 0, d = m.dims;
+    const dovish = d.rate <= -0.15, hawkish = d.rate >= 0.15;
+    const riskHi = d.risk >= 0.4, riskCalm = d.risk < 0.2;
+    const inflHot = d.infl >= 0.5;
+    const f = [];
+    if (cfg.kind === 'gold') {
+      if (up) {
+        if (riskHi) f.push('Jeopolitik risk artışı güvenli-liman altın talebini besliyor olabilir.');
+        if (dovish) f.push('Faiz indirim beklentisi (düşen reel faiz) altını destekliyor olabilir.');
+        if (inflHot) f.push('Enflasyon endişesi enflasyona-karşı-koruma talebini artırıyor olabilir.');
+        if (!f.length) f.push('Zayıf dolar / genel emtia akımı ya da teknik alımlar olabilir.');
+      } else {
+        if (hawkish) f.push('Şahin faiz beklentisi (yükselen reel faiz) altına baskı yapıyor olabilir.');
+        if (riskCalm) f.push('Risk iştahının artması güvenli-liman talebini azaltıyor olabilir.');
+        if (!f.length) f.push('Güçlü dolar / kâr realizasyonu ya da teknik satışlar olabilir.');
+      }
+    } else if (cfg.kind === 'equity_tr') {
+      if (up) {
+        if (riskCalm) f.push('Küresel risk iştahının iyileşmesi gelişen piyasalara olumlu yansıyabilir.');
+        f.push('Yurt içi gündem, TL kuru ve sektörel akım belirleyici; şirkete/sektöre özel haberler etkili olabilir.');
+      } else {
+        if (riskHi) f.push('Küresel risk artışı gelişen piyasa varlıklarına baskı yapıyor olabilir.');
+        f.push('Yurt içi gündem, TL kuru ve sektörel akım belirleyici olabilir.');
+      }
+    } else {
+      const tech = cfg.kind === 'equity_tech';
+      if (up) {
+        if (dovish) f.push(`Faiz indirim beklentisi risk iştahını${tech ? ' ve faize duyarlı teknolojiyi' : ''} destekliyor olabilir.`);
+        if (riskCalm) f.push('Jeopolitik gerilimin gevşemesi risk iştahını artırıyor olabilir.');
+        if (d.growth > 0.2) f.push('Piyasa genişliği (breadth) güçlü — geniş tabanlı alım.');
+        if (!f.length) f.push('Genel piyasa akımı / sektörel rotasyon ya da bilanço-veri kaynaklı olabilir.');
+      } else {
+        if (hawkish) f.push(`Şahin faiz beklentisi / yükselen tahvil faizleri ${tech ? 'faize duyarlı teknolojiyi zorluyor' : 'değerlemeleri baskılıyor'} olabilir.`);
+        if (inflHot) f.push('Sıcak enflasyon verisi faiz endişesini artırıyor olabilir.');
+        if (riskHi) f.push('Jeopolitik risk artışı risk iştahını azaltıyor olabilir.');
+        if (d.growth < -0.2) f.push('Piyasa genişliği zayıf — geniş tabanlı satış.');
+        if (!f.length) f.push('Genel piyasa akımı / kâr realizasyonu ya da veri kaynaklı olabilir.');
+      }
+    }
+    return f;
+  }
+
+  async function renderIndexPulse(m) {
+    const box = document.getElementById('todayIndex');
+    if (!box) return;
+    let quotes;
+    try {
+      quotes = await Promise.all(INDEX_PULSE.map((c) => getQuote(c.symbol, c.market).catch(() => null)));
+    } catch (_) { box.innerHTML = ''; return; }
+
+    // Sıcak gündem teması çipleri (neden bağlamı)
+    const hotChips = RADAR_THEMES.filter((t) => m.themeData[t.key] && m.themeData[t.key].heat.lvl === 'hot')
+      .map((t) => `${t.emoji}${t.label.split(' / ')[0]}`);
+
+    const rows = INDEX_PULSE.map((cfg, i) => {
+      const q = quotes[i];
+      const price = q && q.price != null ? q.price : null;
+      const prev = q && q.prevClose != null ? q.prevClose : null;
+      const pct = (price != null && prev) ? (price - prev) / prev * 100 : null;
+      return { cfg, pct };
+    });
+
+    // Tetiklenen (sert/belirgin) hareketler — büyükten küçüğe
+    const trig = rows.filter((r) => r.pct != null && Math.abs(r.pct) >= r.cfg.notable)
+      .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+    // Özet şerit: tüm endekslerin bugünkü değişimi
+    const strip = rows.map((r) => {
+      const cls = r.pct == null ? 'neutral' : r.pct >= 0 ? 'up' : 'down';
+      const txt = r.pct == null ? '—' : (r.pct >= 0 ? '+' : '') + r.pct.toFixed(2) + '%';
+      return `<span class="idx-chip ${cls}"><span class="idx-emj">${r.cfg.emoji}</span>${r.cfg.name} <b>${txt}</b></span>`;
+    }).join('');
+
+    let cards = '';
+    if (trig.length) {
+      cards = trig.map((r) => {
+        const cfg = r.cfg, pct = r.pct, up = pct > 0;
+        const absP = Math.abs(pct);
+        const sharp = absP >= cfg.sharp;
+        const dirWord = up ? 'yükseliş' : 'düşüş';
+        const moveWord = sharp ? 'sert' : 'belirgin';
+        const vCls = up ? 'bull' : 'bear';
+        const vDot = up ? (sharp ? '🚀' : '🟢') : (sharp ? '⚠️' : '🔴');
+        const factors = indexWhyFactors(cfg, pct, m);
+        const facHtml = factors.map((t) => `<li>${t}</li>`).join('');
+        return `
+          <div class="idx-card ${vCls}">
+            <div class="idx-head">
+              <span class="idx-dot">${vDot}</span>
+              <span class="idx-name">${cfg.emoji} ${cfg.name}</span>
+              <span class="idx-move ${up ? 'up' : 'down'}">${up ? '+' : ''}${pct.toFixed(2)}%</span>
+              <span class="idx-badge ${sharp ? 'sharp' : 'notable'}">${sharp ? 'sert hareket' : 'belirgin'}</span>
+            </div>
+            <div class="idx-verdict">Bugün <b>${moveWord} ${dirWord}</b>. Olası nedenler:</div>
+            <ul class="idx-why">${facHtml}</ul>
+          </div>`;
+      }).join('');
+    }
+
+    box.innerHTML = `
+      <div class="today-block idx-block">
+        <h3 class="today-block-h">📊 Endeks Tetikleyicileri <span class="today-block-sub">— BIST · Altın · NASDAQ · S&amp;P ani hareket okuması</span></h3>
+        <div class="idx-strip">${strip}</div>
+        ${cards || '<div class="idx-calm">⚪ Büyük endekslerde bugün tetikleyici düzeyde (belirgin/sert) bir hareket yok — piyasa sakin.</div>'}
+        ${hotChips.length ? `<div class="idx-hot">🔴 Sıcak gündem: ${hotChips.join(' · ')}</div>` : ''}
+        <div class="idx-foot">Endeks hareketlerinin makro (faiz/enflasyon/risk/büyüme) okumasıyla otomatik yorumudur; <b>skora dahil değildir</b>, yatırım tavsiyesi değildir.</div>
+      </div>`;
+  }
+
   async function renderToday(force) {
     const listEl = document.getElementById('todayList');
     const headEl = document.getElementById('todayHead');
@@ -9378,6 +10068,9 @@
     let m;
     try { m = await computeMacro(force); } catch (_) { todayBusy = false; statusEl.textContent = 'Veri alınamadı.'; return; }
     const ph = CYCLE_PHASES[m.phase];
+
+    // 1.5) Endeks tetikleyicileri (BIST/altın/NASDAQ/S&P ani hareket + "neden") — bilgi amaçlı, skora dahil değil
+    try { await renderIndexPulse(m); } catch (_) {}
 
     // Sıcak temaların "up" sektörleri = gündem rüzgârı olan sektörler
     const tailSectors = new Set();
@@ -9896,6 +10589,7 @@
   let compareInited = false;
   let comparePickerOpen = false;
   let compareDcfOpen = false; // İçsel Değer (DCF) satırı varsayılan KAPALI; başlığa tıklayınca açılır.
+  let compareAtahanOpen = false; // 📝 Atahan Notları satırı varsayılan KAPALI; başlığa tıklayınca açılır.
 
   const YFIN_BASE = (window.MY_PROXY || '').replace(/\/api\/proxy.*$/, '') + '/api/yfin' || '/api/yfin';
   const yahooSym = (symbol, market) => market === 'BIST' ? symbol + '.IS' : symbol;
@@ -9983,7 +10677,50 @@
     'Packaging & Containers': 'Ambalaj',
     'Textile Manufacturing': 'Tekstil üretimi',
   };
-  const trIndustry = (v) => v ? (INDUSTRY_TR[v] || v) : '—';
+  // Sembol bazlı İNCE alt-alan (Yahoo "industry" çoğu zaman fazla genel: Cloudflare,
+  // CrowdStrike, Snowflake hepsi "Software - Infrastructure" → hepsi "Yazılım (altyapı)").
+  // Burada tanınan hisseler için daha ayırt edici etiket veririz (bulut / siber güvenlik /
+  // yapay zeka / fintech …). Kod = düz sembol (BIST .IS'siz), büyük harf. SADECE BİLGİ.
+  const SYMBOL_INDUSTRY_TR = {
+    // ── Bulut & SaaS ──
+    CRM: 'Bulut yazılım (CRM/SaaS)', NOW: 'Bulut iş akışı (SaaS)', SNOW: 'Veri bulutu',
+    DDOG: 'Bulut gözlemleme', MDB: 'Bulut veritabanı', DBX: 'Bulut depolama',
+    WDAY: 'Bulut İK & finans (SaaS)', TEAM: 'Bulut iş birliği (SaaS)', HUBS: 'Bulut pazarlama (SaaS)',
+    ORCL: 'Bulut altyapı & veritabanı', ADBE: 'Bulut yaratıcı yazılım', INTU: 'Bulut finans yazılımı',
+    TWLO: 'Bulut iletişim (API)', ESTC: 'Bulut arama & veri', NET: 'Bulut ağ & siber güvenlik (CDN)',
+    FSLY: 'Uç bulut (CDN)', DOCN: 'Bulut altyapı (KOBİ)', GTLB: 'Bulut yazılım geliştirme',
+    ZM: 'Bulut video iletişim', BILL: 'Bulut finans yazılımı', APP: 'Mobil reklam platformu',
+    // ── Siber güvenlik ──
+    CRWD: 'Siber güvenlik (uç nokta)', PANW: 'Siber güvenlik (ağ)', ZS: 'Siber güvenlik (SASE)',
+    FTNT: 'Siber güvenlik (ağ)', S: 'Siber güvenlik (uç nokta/AI)', OKTA: 'Kimlik & erişim güvenliği',
+    CYBR: 'Ayrıcalıklı erişim güvenliği', QLYS: 'Siber güvenlik (zafiyet)', TENB: 'Siber güvenlik (zafiyet)',
+    GEN: 'Tüketici siber güvenlik', RBRK: 'Veri güvenliği & yedekleme', VRNS: 'Veri güvenliği',
+    // ── Yapay zeka & veri analitiği ──
+    PLTR: 'Yapay zeka veri analitiği', AI: 'Kurumsal yapay zeka', PATH: 'Süreç otomasyonu (RPA)',
+    // ── Yarı iletken alt-kırılımı (Yahoo hepsine "Semiconductors" der) ──
+    NVDA: 'Yarı iletken (AI/GPU)', AMD: 'Yarı iletken (CPU/GPU)', AVGO: 'Yarı iletken (ağ/AI)',
+    MU: 'Yarı iletken (bellek)', TSM: 'Yarı iletken (döküm/foundry)', ASML: 'Yarı iletken ekipman (litografi)',
+    ARM: 'Yarı iletken (IP/tasarım)', SMCI: 'AI sunucu donanımı', QCOM: 'Yarı iletken (mobil)',
+    // ── Fintech & ödeme ──
+    V: 'Ödeme ağı', MA: 'Ödeme ağı', PYPL: 'Dijital ödeme', SQ: 'Fintech & ödeme',
+    COIN: 'Kripto borsası', HOOD: 'Aracı kurum (fintech)', SOFI: 'Dijital bankacılık',
+    // ── E-ticaret & platform ──
+    SHOP: 'Bulut e-ticaret altyapısı', MELI: 'E-ticaret & fintech (LatAm)', SE: 'E-ticaret & oyun (SEA)',
+    U: 'Oyun & 3B motor', RBLX: 'Oyun platformu', DASH: 'Teslimat platformu', ABNB: 'Konaklama platformu',
+    UBER: 'Ulaşım & teslimat platformu',
+    // ── BIST teknoloji/savunma alt-alan ──
+    ASELS: 'Savunma elektroniği',
+
+    SDTTR: 'Savunma sistemleri', KONTR: 'Kontrol & otomasyon sistemleri',
+    LOGO: 'Kurumsal yazılım (ERP)', ARDYZ: 'Yazılım & AR-GE', PAPIL: 'Biyometri & güvenlik teknolojisi',
+    ARENA: 'BT donanım dağıtımı', INDES: 'BT donanım dağıtımı', KAREL: 'İletişim teknolojisi',
+    NETAS: 'Ağ & iletişim teknolojisi', HTTBT: 'Ödeme & finans teknolojisi',
+  };
+  const trIndustry = (v, m) => {
+    const sym = m && m.symbol ? String(m.symbol).toUpperCase().replace(/\.IS$/, '') : '';
+    if (sym && SYMBOL_INDUSTRY_TR[sym]) return SYMBOL_INDUSTRY_TR[sym];
+    return v ? (INDUSTRY_TR[v] || v) : '—';
+  };
 
   const COMPARE_ROWS = [
     { key: 'sector',        label: 'Sektör',              type: 'text' },
@@ -10016,7 +10753,7 @@
     const v = m ? m[row.key] : null;
     if (v == null || (typeof v === 'number' && isNaN(v))) return '—';
     switch (row.type) {
-      case 'text':   return row.xf ? row.xf(v) : v;
+      case 'text':   return row.xf ? row.xf(v, m) : v;
       case 'price':  return curSymFor(m.currency) + Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
       case 'mcap':   return fmtMcap(v, m.currency);
       case 'ratio':  return Number(v).toFixed(1);
@@ -10123,7 +10860,8 @@
           }
           const fa = computeFaScore(criteria);
           const valuation = (eps != null) ? { curSym: '$', eps, pe, price, dcfIn: usDcfIn(sec, price, eps) } : null;
-          if (fa.score != null) out = { ok: true, score: fa.score, valuation };
+          const notes = { income: sec.income, statementTiles: sec.statementTiles, incPeriod: sec.incPeriod || sec.fy, bsDate: sec.bsDate, revCagr: sec.metrics.revCagr, revYoY: sec.metrics.revYoY };
+          if (fa.score != null) out = { ok: true, score: fa.score, valuation, notes };
         }
       } else {
         const [metaR, maliR] = await Promise.allSettled([
@@ -10136,12 +10874,84 @@
           const model = bistFundamentalModel(parseIsMali(maliRaw), meta);
           const fa = computeFaScore(model.criteria);
           const valuation = await bistValuation(symbol, model.metrics);
-          if (fa.score != null) out = { ok: true, score: fa.score, valuation };
+          const notes = { income: model.income, statementTiles: model.statementTiles || model.tiles, incPeriod: model.incPeriod, bsDate: (model.income && model.income.years[0]) ? model.income.years[0] + ' (İş Yatırım)' : null, revCagr: model.metrics.revCagr, revYoY: model.metrics.revYoY };
+          if (fa.score != null) out = { ok: true, score: fa.score, valuation, notes };
         }
       }
     } catch (_) { out = { ok: false }; }
     faModelMem.set(key, out);
     return out;
+  }
+
+  // Enflasyon referans çıpaları (yaklaşık, BİLGİ AMAÇLI) — nominal gelir büyümesini
+  // "reel" olarak yorumlamak için. Kesin değil; genel bir kıyas eşiği.
+  const ATAHAN_INFL_REF = { BIST: 33, US: 3.2 };
+
+  // 📝 Atahan Notları verisini kurar: 5 yıllık gelir/kâr tablosu, F/K & İleri F/K,
+  // ileriye dönük kâr-artış beklentisi, enflasyona-karşı-gelir değerlendirmesi ve
+  // son açıklanan bilanço tile'ları. Motora/skora DAHİL DEĞİL — yalnız bilgi.
+  function buildAtahanNotes(notes, market, trailingPE, yMetrics) {
+    if (!notes || !notes.income) return null;
+    const inc = notes.income;
+    const cur = inc.currency || (market === 'BIST' ? '₺' : '$');
+    const fmtBig = (v) => {
+      if (v == null || !isFinite(v)) return '—';
+      const a = Math.abs(v); let s;
+      if (a >= 1e12) s = (v / 1e12).toFixed(2) + ' T';
+      else if (a >= 1e9) s = (v / 1e9).toFixed(2) + ' Mr';
+      else if (a >= 1e6) s = (v / 1e6).toFixed(1) + ' Mn';
+      else s = v.toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+      return cur + s;
+    };
+    const pct = (v) => (v == null || !isFinite(v)) ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+    // Yıl kolonları (en güncel önce). Boş yılları at.
+    const rows = [];
+    const yrs = inc.years || [];
+    for (let i = 0; i < yrs.length; i++) {
+      if (yrs[i] == null && inc.rev[i] == null && inc.net[i] == null) continue;
+      rows.push({ year: yrs[i], rev: inc.rev[i], net: inc.net[i],
+                  margin: (inc.net[i] != null && inc.rev[i]) ? inc.net[i] / inc.rev[i] * 100 : null });
+    }
+    // Gelir BYBO (ilk→son mevcut yıl) ve enflasyona-karşı verdict.
+    let revCagr = notes.revCagr;
+    const valid = rows.filter((r) => r.rev != null);
+    if (revCagr == null && valid.length >= 2) {
+      const newest = valid[0].rev, oldest = valid[valid.length - 1].rev, n = valid.length - 1;
+      if (newest > 0 && oldest > 0) revCagr = (Math.pow(newest / oldest, 1 / n) - 1) * 100;
+    }
+    const inflRef = ATAHAN_INFL_REF[market] != null ? ATAHAN_INFL_REF[market] : 3.2;
+    let inflVerdict = null, inflCls = 'mid';
+    if (revCagr != null) {
+      const real = revCagr - inflRef;
+      if (real >= 8) { inflCls = 'good'; inflVerdict = `Gelir ~%${revCagr.toFixed(0)}/yıl büyümüş; ~%${inflRef} referans enflasyonun belirgin üzerinde (reel ≈ +%${real.toFixed(0)}) — şirket fiyatlama gücünü koruyarak reel olarak büyüyebilmiş.`; }
+      else if (real >= 0) { inflCls = 'mid'; inflVerdict = `Gelir ~%${revCagr.toFixed(0)}/yıl; ~%${inflRef} referans enflasyonu ancak karşılıyor (reel ≈ +%${real.toFixed(0)}) — yerinde sayıyor, reel büyüme sınırlı.`; }
+      else { inflCls = 'bad'; inflVerdict = `Gelir ~%${revCagr.toFixed(0)}/yıl; ~%${inflRef} referans enflasyonun altında (reel ≈ %${real.toFixed(0)}) — reel olarak küçülmüş, enflasyona karşı gelirini koruyamamış.`; }
+    }
+    // Kâr trendi: net kâr düzenli artmış mı?
+    const nets = rows.filter((r) => r.net != null).map((r) => r.net);
+    let netTrend = null;
+    if (nets.length >= 2) {
+      let ups = 0; for (let i = 0; i < nets.length - 1; i++) if (nets[i] > nets[i + 1]) ups++;
+      const share = ups / (nets.length - 1);
+      netTrend = share >= 0.75 ? 'Net kâr son yıllarda düzenli artış eğiliminde.'
+               : share >= 0.5 ? 'Net kâr genelde artış eğiliminde ancak dalgalı.'
+               : 'Net kâr istikrarsız / düşüş eğiliminde.';
+    }
+    // F/K & İleri F/K + ileriye dönük kâr-artış beklentisi.
+    const fwdPE = (yMetrics && yMetrics.forwardPE != null && isFinite(yMetrics.forwardPE)) ? yMetrics.forwardPE : null;
+    const tPE = (trailingPE != null && isFinite(trailingPE)) ? trailingPE : (yMetrics && yMetrics.trailingPE) || null;
+    // İleri F/K < F/K ise piyasa kâr büyümesi bekliyor. İma edilen kâr artışı ≈ F/K / İleriF/K − 1.
+    let fwdGrowth = null;
+    if (tPE != null && fwdPE != null && fwdPE > 0 && tPE > 0) fwdGrowth = (tPE / fwdPE - 1) * 100;
+    return {
+      cur, period: inc.period || notes.incPeriod || '',
+      rows: rows.map((r) => ({ year: r.year, rev: fmtBig(r.rev), net: fmtBig(r.net),
+                               margin: r.margin == null ? '—' : (r.margin >= 0 ? '' : '') + r.margin.toFixed(1) + '%' })),
+      revCagr, revCagrStr: pct(revCagr), inflRef, inflVerdict, inflCls, netTrend,
+      pe: tPE, peStr: tPE == null ? '—' : tPE.toFixed(1), fwdPE, fwdPEStr: fwdPE == null ? '—' : fwdPE.toFixed(1),
+      fwdGrowth, fwdGrowthStr: fwdGrowth == null ? null : pct(fwdGrowth),
+      statementTiles: notes.statementTiles || [], bsDate: notes.bsDate || null, incPeriod: notes.incPeriod || null,
+    };
   }
 
   // Bir kolon için özet değerlendirme: FA/TA skoru, bileşke, uygun alım bandı (orta vade),
@@ -10243,6 +11053,9 @@
         const atrC = (L.atr != null && L.atr > 0) ? L.atr : (px != null ? px * 0.02 : null);
         const dAtr = (buyHi != null && px != null && atrC != null && px > buyHi) ? (px - buyHi) / atrC : 0;
         const nearBuy = (!inBuy && px != null && px > (buyHi != null ? buyHi : Infinity) && dAtr > 0 && dAtr <= 1.0);
+        // 📝 Atahan Notları — 5 yıllık gelir/kâr, F/K & İleri F/K, ileriye dönük getiri beklentisi,
+        // enflasyona-karşı-gelir verdict ve son açıklanan bilanço çıktıları (SADECE BİLGİ).
+        const atahan = buildAtahanNotes(fam.notes, item.market, pe, yMetrics);
         out = { ok: true, taScore: res.score, taCls: res.cls, faScore, blended, compLabel, compBand,
                 buyBand, buyLo, buyHi, px, inBuy, nearBuy, dAtr, aboveGap, belowGap,
                 sellBand, sellKind, sellUpPct, brkStr, brkPct, majorStr, atrStopStr, rrRatio,
@@ -10252,7 +11065,7 @@
                 dcfOk: dcf.ok, dcfReason: dcf.reason, dcfBadge: dcf.badge, dcfUp: dcf.upside,
                 dcfRange: dcf.ok ? `${fmtP(dcf.lo)} – ${fmtP(dcf.hi)}` : null,
                 dcfBase: dcf.ok ? fmtP(dcf.base) : null,
-                conjChips: conj.chips, conjEmoji: conj.stanceEmoji, conjCls: conj.stanceCls };
+                conjChips: conj.chips, conjEmoji: conj.stanceEmoji, conjCls: conj.stanceCls, atahan };
       }
     } catch (_) { out = { ok: false }; }
     compareVerdictMem.set(key, out);
@@ -10282,10 +11095,10 @@
     const has = (s, m) => current.some((i) => i.symbol === s && i.market === m);
     const lists = loadLists();
     let html = '<div class="cmp-pick-manual">'
-      + '<input id="cmpManualCode" type="text" maxlength="10" placeholder="Kod (ör. NVDA, ASELS)" />'
-      + '<select id="cmpManualMkt"><option value="BIST">BIST</option><option value="US">ABD</option></select>'
+      + '<input id="cmpManualCode" type="text" maxlength="10" placeholder="Kod yaz (ör. NVDA, ASELS, THYAO)" />'
       + '<button id="cmpManualAdd" class="primary-btn">Ekle</button>'
-      + '<span id="cmpPickMsg" class="cmp-pick-msg"></span></div>';
+      + '<span id="cmpPickMsg" class="cmp-pick-msg"></span></div>'
+      + '<div id="cmpPickChoose" class="cmp-pick-choose" style="display:none"></div>';
     html += '<div class="cmp-pick-lists">';
     if (!lists.length || lists.every((l) => !l.items.length)) {
       html += '<span class="opps-hint">Listelerinde hisse yok. Yukarıdan kod girerek ekleyebilirsin.</span>';
@@ -10304,16 +11117,56 @@
     panel.innerHTML = html;
 
     const msg = panel.querySelector('#cmpPickMsg');
+    const chooseBox = panel.querySelector('#cmpPickChoose');
     const flash = (t, ok) => { if (msg) { msg.textContent = t; msg.className = 'cmp-pick-msg ' + (ok ? 'ok' : 'err'); } };
-    panel.querySelector('#cmpManualAdd').addEventListener('click', () => {
-      const code = panel.querySelector('#cmpManualCode').value;
-      const mkt = panel.querySelector('#cmpManualMkt').value;
-      const res = compareAdd(code, mkt, code);
-      if (!res.ok) { flash(res.err, false); return; }
+    const clearChoose = () => { if (chooseBox) { chooseBox.style.display = 'none'; chooseBox.innerHTML = ''; } };
+
+    // Bir borsadaki eşleşmeyi doğrudan ekle (bulunan veriyi compareMem'e tohumla → yeniden çekme yok).
+    const addMatch = (code, market, res) => {
+      const r = compareAdd(code, market, code);
+      if (!r.ok) { flash(r.err, false); return; }
+      if (res && res.ok) compareMem.set(market + ':' + code, res);
       panel.querySelector('#cmpManualCode').value = '';
+      clearChoose();
       renderCompare();
-    });
-    panel.querySelector('#cmpManualCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') panel.querySelector('#cmpManualAdd').click(); });
+    };
+
+    // Kullanıcı yalnız kodu yazar; kod hem BIST'te hem ABD'de varsa borsa bilgisiyle seçtiririz.
+    const doAdd = async () => {
+      clearChoose();
+      const code = (panel.querySelector('#cmpManualCode').value || '').trim().toUpperCase();
+      if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(code)) { flash('Geçersiz kod.', false); return; }
+      const cur = loadCompare();
+      if (cur.some((i) => i.symbol === code)) { flash('Zaten ekli.', false); return; }
+      if (cur.length >= 8) { flash('En fazla 8 hisse.', false); return; }
+      flash('Aranıyor…', true);
+      // Aynı çağrıda iki borsayı da yokla: ABD (kod) + BIST (kod.IS).
+      const byY = await yfinQuery([code, code + '.IS']);
+      const usRes = byY[code];
+      const bistRes = byY[code + '.IS'];
+      const hits = [];
+      if (usRes && usRes.ok) hits.push({ market: 'US', res: usRes });
+      if (bistRes && bistRes.ok) hits.push({ market: 'BIST', res: bistRes });
+      if (!hits.length) { flash('Bu kodla hisse bulunamadı.', false); return; }
+      if (hits.length === 1) { flash('', true); addMatch(code, hits[0].market, hits[0].res); return; }
+      // Birden fazla borsada var → hangi borsada olduğunu göstererek seçtir.
+      flash('Bu kod birden fazla borsada var — birini seç:', true);
+      let ch = '';
+      hits.forEach((h) => {
+        const label = h.market === 'BIST' ? 'BIST (Borsa İstanbul)' : 'ABD (US)';
+        const nm = h.res && h.res.name ? h.res.name : code;
+        ch += `<button class="cmp-choose-btn" data-mkt="${h.market}"><b>${code}</b> · ${label}<span class="cmp-choose-nm">${String(nm).replace(/</g, '&lt;')}</span></button>`;
+      });
+      chooseBox.innerHTML = ch;
+      chooseBox.style.display = 'flex';
+      chooseBox.querySelectorAll('.cmp-choose-btn').forEach((b) => b.addEventListener('click', () => {
+        const h = hits.find((x) => x.market === b.dataset.mkt);
+        addMatch(code, b.dataset.mkt, h && h.res);
+      }));
+    };
+
+    panel.querySelector('#cmpManualAdd').addEventListener('click', doAdd);
+    panel.querySelector('#cmpManualCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
     panel.querySelectorAll('.cmp-pick-chip:not(.added)').forEach((b) => b.addEventListener('click', () => {
       const res = compareAdd(b.dataset.sym, b.dataset.mkt, b.dataset.q);
       if (!res.ok) { flash(res.err, false); return; }
@@ -10337,7 +11190,7 @@
     } else {
       const metrics = items.map((it) => { const m = compareMem.get(it.market + ':' + it.symbol); return (m && m.ok) ? m : null; });
       const cols = `170px repeat(${items.length}, 148px)`;
-      let g = `<div class="compare-grid${compareDcfOpen ? ' dcf-open' : ''}" style="grid-template-columns:${cols}">`;
+      let g = `<div class="compare-grid${compareDcfOpen ? ' dcf-open' : ''}${compareAtahanOpen ? ' atahan-open' : ''}" style="grid-template-columns:${cols}">`;
       // Başlık satırı
       g += '<div class="compare-cell compare-corner cmp-c0">Metrik</div>';
       items.forEach((it) => {
@@ -10543,6 +11396,40 @@
         g += `<div class="compare-cell cmp-vconj ${v.conjCls || 'neu'}"><span class="cvj-emoji">${v.conjEmoji || '🌍'}</span><span class="cvj-chips">${v.conjChips}</span></div>`;
       });
 
+      // --- 📝 Atahan Notları (aç/kapa) — 5 yıllık gelir/kâr, F/K & İleri F/K, ileriye dönük
+      //     getiri beklentisi, enflasyona-karşı-gelir ve son bilanço. SADECE BİLGİ; skora dahil değil. ---
+      g += '<div class="compare-cell compare-mlabel cmp-c0 cmp-mlbl2 cmp-atahan-toggle" role="button" tabindex="0" title="📝 Atahan Notları — 5 yıllık gelir tablosu, F/K & İleri F/K, ileriye dönük kâr-artış beklentisi, gelirin enflasyona karşı reel büyüyüp büyümediği ve son açıklanan bilanço çıktıları. SADECE BİLGİ; skora/bileşkeye DAHİL DEĞİLDİR. Aç/kapa için tıkla. Yatırım tavsiyesi değildir."><span class="cml-t"><span class="cmp-atahan-caret">▸</span> 📝 Atahan Notları</span><span class="cml-s cmp-atahan-sub">· 5Y gelir/kâr · F/K · bilanço · tıkla → aç</span></div>';
+      verds.forEach((v) => {
+        const wrapOpen = '<div class="compare-cell cmp-vatahan"><span class="cvd-collapsed">•••</span><span class="cvd-body">';
+        if (v === undefined) { g += wrapOpen + '…</span></div>'; return; }
+        if (!v || !v.ok || !v.atahan) { g += wrapOpen + '<span class="cva-na">veri yok</span></span></div>'; return; }
+        const a = v.atahan;
+        let card = '';
+        // 5 yıllık gelir tablosu
+        if (a.rows && a.rows.length) {
+          card += '<div class="cva-tbl-h">Gelir tablosu <em>' + (a.period || '') + '</em></div>';
+          card += '<table class="cva-tbl"><thead><tr><th>Yıl</th><th>Gelir</th><th>Net Kâr</th><th>Marj</th></tr></thead><tbody>';
+          a.rows.forEach((r) => { card += `<tr><td>${r.year != null ? r.year : '—'}</td><td>${r.rev}</td><td>${r.net}</td><td>${r.margin}</td></tr>`; });
+          card += '</tbody></table>';
+        }
+        // Enflasyona karşı gelir + kâr trendi
+        if (a.inflVerdict) card += `<div class="cva-infl ${a.inflCls}"><b>Enflasyona karşı gelir:</b> ${a.inflVerdict}</div>`;
+        if (a.netTrend) card += `<div class="cva-line"><b>Kâr trendi:</b> ${a.netTrend}</div>`;
+        if (a.revCagr != null) card += `<div class="cva-line"><b>Gelir BYBO:</b> ${a.revCagrStr}/yıl <span class="cva-ref">(ref. enflasyon ≈ %${a.inflRef})</span></div>`;
+        // F/K & İleri F/K & ileriye dönük getiri
+        card += `<div class="cva-metrics"><span><b>F/K</b> ${a.peStr}</span><span><b>İleri F/K</b> ${a.fwdPEStr}</span></div>`;
+        if (a.fwdGrowthStr) card += `<div class="cva-line"><b>İleriye dönük kâr beklentisi:</b> ${a.fwdGrowthStr} <span class="cva-ref">(İleri F/K, F/K'dan ${a.fwdGrowth >= 0 ? 'düşük → piyasa kâr artışı bekliyor' : 'yüksek → kâr daralması bekleniyor'})</span></div>`;
+        // Son açıklanan bilanço
+        if (a.statementTiles && a.statementTiles.length) {
+          card += `<div class="cva-tbl-h">Son açıklanan bilanço ${a.bsDate ? '<em>' + a.bsDate + '</em>' : ''}</div>`;
+          card += '<div class="cva-tiles">';
+          a.statementTiles.forEach((t) => { card += `<div class="cva-tile"><span class="cvat-l">${t.label}</span><span class="cvat-v">${t.val}</span></div>`; });
+          card += '</div>';
+        }
+        card += '<div class="cva-disc">SADECE BİLGİ · skora dahil değil</div>';
+        g += wrapOpen + card + '</span></div>';
+      });
+
       g += '</div>';
       g += '<div class="compare-suit-disc">🧭 <b>Temel Uygunluk</b>, Sonuç ekranındaki puanla aynı motordur (Temel %40 · Teknik %30 · Değerleme/fiyat %30). 🌍 <b>Konjonktür notu</b> puana dahil değildir — dünya/sektör/gündem eğilimidir. Yatırım tavsiyesi değildir; kişisel durumunuza, risk toleransınıza ve zaman ufkunuza göre değişir.</div>';
       wrap.innerHTML = html + g;
@@ -10573,6 +11460,21 @@
       };
       dcfToggle.addEventListener('click', flip);
       dcfToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+    }
+    // 📝 Atahan Notları satırını aç/kapa — tam yeniden çizim yapmadan (durum korunur).
+    const atahanToggle = wrap.querySelector('.cmp-atahan-toggle');
+    if (atahanToggle) {
+      const flipA = () => {
+        compareAtahanOpen = !compareAtahanOpen;
+        const grid = wrap.querySelector('.compare-grid');
+        if (grid) grid.classList.toggle('atahan-open', compareAtahanOpen);
+        const caret = atahanToggle.querySelector('.cmp-atahan-caret');
+        if (caret) caret.textContent = compareAtahanOpen ? '▾' : '▸';
+        const sub = atahanToggle.querySelector('.cmp-atahan-sub');
+        if (sub) sub.textContent = compareAtahanOpen ? '· 5Y gelir/kâr · F/K · bilanço · tıkla → kapat' : '· 5Y gelir/kâr · F/K · bilanço · tıkla → aç';
+      };
+      atahanToggle.addEventListener('click', flipA);
+      atahanToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipA(); } });
     }
     renderComparePicker();
   }

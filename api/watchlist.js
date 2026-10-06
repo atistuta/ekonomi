@@ -18,7 +18,7 @@ export const config = {
   maxDuration: 10,
 };
 
-const MAX_LIST_BYTES = 64 * 1024; // 64 KB güvenlik üst sınırı
+const MAX_LIST_BYTES = 256 * 1024; // 256 KB — list/portfolio + tam `ui` durumu (listeler + karşılaştırma)
 
 function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin',  '*');
@@ -65,6 +65,9 @@ export default async function handler(req, res) {
       res.status(200).json({
         list: data?.list || [],
         portfolio: data?.portfolio || [],
+        // `ui` = tam arayüz durumu (listeler + karşılaştırma); cihazlar arası senkron için.
+        // Worker bunu yok sayar; yalnızca uygulama okur.
+        ui: data?.ui || null,
         updatedAt: data?.updatedAt || null,
       });
       return;
@@ -83,6 +86,11 @@ export default async function handler(req, res) {
       const clean   = cleanList(body.list);
       const cleanPf = cleanList(body.portfolio);
       const payload = { list: clean, portfolio: cleanPf, updatedAt: Date.now() };
+      // `ui` = uygulamanın tam durumu (listeler + karşılaştırma). Düz nesneyse olduğu gibi
+      // sakla; genel boyut sınırı (MAX_LIST_BYTES) zaten tavan koyuyor. Worker bunu okumaz.
+      if (body.ui && typeof body.ui === 'object' && !Array.isArray(body.ui)) {
+        payload.ui = body.ui;
+      }
       const size = Buffer.byteLength(JSON.stringify(payload), 'utf8');
       if (size > MAX_LIST_BYTES) {
         res.status(413).json({ error: 'List too large' });
