@@ -41,6 +41,16 @@ const TH = {
 const parser = new XMLParser({ ignoreAttributes: false });
 const upper = (s) => (s || '').toString().toUpperCase();
 
+// Her fetch'e zaman aşımı koy — takılan tek bir istek tüm fonksiyonu kilitlemesin.
+async function fetchT(url, opts = {}, ms = 8000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  finally { clearTimeout(timer); }
+}
+
+const MAX_PUSH = 20; // tek çalıştırmada en fazla kaç bildirim (spam/süre emniyeti)
+
 // Basit eşzamanlılık havuzu (serverless süre sınırında çok fetch'i paralelleştir)
 async function pool(items, limit, fn) {
   const out = [];
@@ -56,18 +66,18 @@ async function pool(items, limit, fn) {
 }
 
 async function fetchXML(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 sabah-bulteni-worker' } });
+  const res = await fetchT(url, { headers: { 'User-Agent': 'Mozilla/5.0 sabah-bulteni-worker' } }, 8000);
   if (!res.ok) throw new Error(`${url} → ${res.status}`);
   return parser.parse(await res.text());
 }
 
 async function notify(topic, { title, message, click, tags = [], priority = 4 }) {
   try {
-    const r = await fetch('https://ntfy.sh/', {
+    const r = await fetchT('https://ntfy.sh/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, title, message, click, tags, priority }),
-    });
+    }, 6000);
     return r.ok;
   } catch { return false; }
 }
@@ -88,7 +98,7 @@ async function getWatchlist() {
 }
 
 // ================= HABER TARAMASI =================
-async function runNews(topic, PORTFOLIO, seenSet) {
+async function runNews(topic, PORTFOLIO, seenSet, { prime = false } = {}) {
   const matches = [];
 
   // 1) KAP (BIST)
@@ -176,9 +186,17 @@ async function runNews(topic, PORTFOLIO, seenSet) {
     }
   } catch (e) { console.error('Takvim okunamadı:', e.message); }
 
-  // Push
+  // İlk çalıştırma: bildirim ATMA, sadece mevcut birikimi "görüldü" işaretle
+  // (yoksa ilk tarama tüm geçmişi telefona boşaltır ve süreyi aşar).
+  if (prime) {
+    for (const m of matches) seenSet.add(m.id);
+    return { pushed: 0, candidates: matches.length, primed: matches.length };
+  }
+
+  // Push (üst sınırla — spam ve süre emniyeti)
   let pushed = 0;
   for (const m of matches) {
+    if (pushed >= MAX_PUSH) { seenSet.add(m.id); continue; } // sınır aşıldıysa yine de görüldü say
     const ok = await notify(topic, m);
     if (ok) { seenSet.add(m.id); pushed++; }
   }
@@ -194,7 +212,7 @@ async function fetchIntraday(sym, mkt) {
   for (const host of hosts) {
     try {
       const url = `https://${host}/v8/finance/chart/${ysym}?range=1d&interval=5m`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 sabah-bulteni-worker' } });
+      const res = await fetchT(url, { headers: { 'User-Agent': 'Mozilla/5.0 sabah-bulteni-worker' } }, 8000);
       if (!res.ok) continue;
       const json = await res.json();
       const r = json.chart?.result?.[0];
@@ -228,7 +246,7 @@ function analyze(data) {
   return { price, prevClose, dayChg, hourChg, rvol };
 }
 
-async function runMovers(topic, PORTFOLIO, state) {
+async function runMovers(topic, PORTFOLIO, state, { prime = false } = {}) {
   const symbols = [];
   for (const s of (PORTFOLIO.bist || [])) symbols.push({ symbol: s, market: 'BIST', tag: 'portföy' });
   for (const p of (PORTFOLIO.us || [])) symbols.push({ symbol: p.symbol, market: 'US', tag: 'portföy' });
@@ -259,6 +277,10 @@ async function runMovers(topic, PORTFOLIO, state) {
     const key = `${entry.symbol}.${entry.market}`;
     if (state.levels[key] === level) continue;
     state.levels[key] = level;
+
+    // İlk çalıştırma: mevcut durumu kaydet ama bildirim atma
+    if (prime) continue;
+    if (pushed >= MAX_PUSH) continue;
 
     const dir = up ? '📈 Yükseliş' : '📉 Düşüş';
     const arrow = up ? '▲' : '▼';
@@ -294,15 +316,18 @@ export default async function handler(req, res) {
     let news = null, movers = null;
 
     if (mode === 'all' || mode === 'news') {
-      const seenArr = (await kv.get(SEEN_KEY)) || [];
+      const seenArr = await kv.get(SEEN_KEY);
+      const prime = seenArr == null; // KV'de hiç yoksa = ilk çalıştırma → sessiz tohumla
       const seenSet = new Set(Array.isArray(seenArr) ? seenArr : []);
-      news = await runNews(topic, PORTFOLIO, seenSet);
+      news = await runNews(topic, PORTFOLIO, seenSet, { prime });
       await kv.set(SEEN_KEY, [...seenSet].slice(-1000)); // son 1000
     }
 
     if (mode === 'all' || mode === 'movers') {
-      const state = (await kv.get(MOVERS_KEY)) || { date: null, levels: {} };
-      movers = await runMovers(topic, PORTFOLIO, state);
+      const raw = await kv.get(MOVERS_KEY);
+      const prime = raw == null; // ilk çalıştırma → mevcut hareketleri sessiz kaydet
+      const state = raw || { date: null, levels: {} };
+      movers = await runMovers(topic, PORTFOLIO, state, { prime });
       await kv.set(MOVERS_KEY, state);
     }
 
