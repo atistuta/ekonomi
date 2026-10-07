@@ -9,8 +9,10 @@ import { getWatchlist } from './watchlist.mjs';
 const NTFY_TOPIC = process.env.NTFY_TOPIC;
 const PORTFOLIO  = await getWatchlist(); // canlı KV → app'in güncel portföy+listeleri
 const STATE_PATH = new URL('./.movers.json', import.meta.url);
+const PRIME      = process.env.PRIME === '1'; // sessiz tohumlama: tara, seviye kaydet, GÖNDERME
+const MAX_PUSH   = 10;                         // tek çalıştırmada en fazla bildirim (patlama emniyeti)
 
-if (!NTFY_TOPIC) {
+if (!NTFY_TOPIC && !PRIME) {
   console.error('NTFY_TOPIC env var missing.');
   process.exit(1);
 }
@@ -120,6 +122,8 @@ for (const { symbol, market, tag } of symbols) {
   const key = `${symbol}.${market}`;
   if (state.levels[key] === level) continue;    // aynı seviye → tekrar etme
   state.levels[key] = level;
+  if (PRIME) continue;                          // tohumlama: seviye kaydedildi, gönderme
+  if (pushed >= MAX_PUSH) continue;             // patlama emniyeti: sınırı aşma
 
   const arrow = up ? '▲' : '▼';
   const rvolTxt = a.rvol >= 1.5 ? ` · hacim ${a.rvol.toFixed(1)}×` : '';

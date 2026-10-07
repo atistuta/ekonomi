@@ -11,8 +11,10 @@ const KAP_RSS    = 'https://www.kap.org.tr/tr/api/disclosures/rss';
 const NTFY_TOPIC = process.env.NTFY_TOPIC;
 const PORTFOLIO  = await getWatchlist(); // canlı KV → app'in güncel portföy+listeleri
 const SEEN_PATH  = new URL('./.seen.json', import.meta.url);
+const PRIME      = process.env.PRIME === '1'; // sessiz tohumlama: tara, 'görüldü' işaretle, GÖNDERME
+const MAX_PUSH   = 10;                         // tek çalıştırmada en fazla bildirim (patlama emniyeti)
 
-if (!NTFY_TOPIC) {
+if (!NTFY_TOPIC && !PRIME) {
   console.error('NTFY_TOPIC env var missing.');
   process.exit(1);
 }
@@ -175,12 +177,18 @@ try {
 
 // ---- 3) Notify ----
 let pushed = 0;
-for (const m of matches) {
-  const ok = await notify(m);
-  if (ok) {
-    seenSet.add(m.id);
-    pushed++;
-    console.log('Pushed:', m.title, '-', m.message.slice(0, 80));
+if (PRIME) {
+  for (const m of matches) seenSet.add(m.id);
+  console.log(`PRIME: ${matches.length} eşleşme 'görüldü' işaretlendi, 0 gönderildi.`);
+} else {
+  for (const m of matches) {
+    if (pushed >= MAX_PUSH) { seenSet.add(m.id); continue; } // sınırı aşanları sessizce görüldü say
+    const ok = await notify(m);
+    if (ok) {
+      seenSet.add(m.id);
+      pushed++;
+      console.log('Pushed:', m.title, '-', m.message.slice(0, 80));
+    }
   }
 }
 

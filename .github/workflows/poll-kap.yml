@@ -1,15 +1,15 @@
-name: KAP Poller (DEVRE DIŞI — bkz. Plan A)
+name: KAP Poller (AKTİF — bildirim kaynağı)
 
-# ⚠️ Bu worker DEVRE DIŞI bırakıldı. Bildirimler artık Vercel "Plan A" üzerinden:
-#   api/poll.js  +  harici cron (cron-job.org → /api/poll?key=SECRET, 15 dk).
-# Tek push kaynağı olsun diye otomatik (schedule) çalıştırma kapatıldı; aksi halde
-# hem bu worker hem Plan A aynı ntfy konusuna push eder → telefona ÇİFT bildirim gelir.
-# Gerekirse elle (workflow_dispatch) yedek olarak çalıştırılabilir.
+# ✅ TEK bildirim kaynağı. Worker canlı izleme-listesini /api/watchlist'ten (Vercel KV)
+# herkese açık GET ile okur, yeni KAP/haber/makro + fiyat-sıçramalarını ntfy.sh'e push eder.
+# Harici cron (cron-job.org) ya da Vercel Plan A (api/poll.js) KULLANILMIYOR — ÇİFT bildirim
+# olmaması için yalnız bu worker çalışıyor. Plan A yedektir; ikisini AYNI anda açma.
+# İlk çalıştırmada patlama olmaması için poll.mjs/movers.mjs'de MAX_PUSH=10 sınırı var.
 
 on:
-  # schedule:
-  #   - cron: '*/15 * * * *'  # DEVRE DIŞI — Plan A (api/poll.js) devraldı
-  workflow_dispatch:          # yalnız manuel tetikleme (yedek)
+  schedule:
+    - cron: '*/15 * * * *'   # her 15 dk (GitHub Actions zamanı birkaç dk gecikebilir)
+  workflow_dispatch:          # elle tetikleme de açık
 
 jobs:
   poll:
