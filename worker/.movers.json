@@ -1,13 +1,15 @@
 {
-  "date": "2026-10-06",
+  "date": "2026-10-07",
   "levels": {
-    "TTDKY.US": 1,
-    "HSAI.US": 1,
-    "ARKG.US": 1,
-    "CRSP.US": 1,
-    "NTLA.US": 1,
-    "BEAM.US": 1,
-    "RXRX.US": 5,
-    "SERV.US": 1
+    "VST.US": 1,
+    "MU.US": 1,
+    "COIN.US": -1,
+    "GFI.US": -1,
+    "ETN.US": -1,
+    "GEV.US": -1,
+    "TER.US": -1,
+    "ALB.US": -1,
+    "MP.US": -1,
+    "GLW.US": -1
   }
 }
