@@ -6,16 +6,18 @@
     "SKHY.US": -1,
     "MU.US": -1,
     "SPCX.US": -1,
-    "IOVA.US": 1,
+    "IOVA.US": 2,
     "SIMO.US": -2,
     "MRVL.US": -1,
-    "LITE.US": -1,
-    "COIN.US": -1,
+    "LITE.US": 2,
+    "COIN.US": 1,
     "COHR.US": -3,
     "TER.US": -1,
     "TSM.US": -1,
     "AVGO.US": -1,
     "ARM.US": -2,
-    "GLW.US": -2
+    "GLW.US": -2,
+    "AMLX.US": 0,
+    "ARKG.US": 1
   }
 }
