@@ -69,19 +69,20 @@
     <button class="tab active" data-tab="lists">Listeler</button>
 
     <div class="tab-group" data-group="daily">
-      <button class="tab-group-btn" type="button" aria-expanded="false">📡 Günlük <span class="tg-caret">▾</span></button>
+      <button class="tab-group-btn" type="button" aria-expanded="false">📡 Bugün <span class="tg-caret">▾</span></button>
       <div class="tab-group-menu" hidden>
-        <button class="tab" data-tab="today">⭐ Bugün</button>
+        <button class="tab" data-tab="today">⭐ Gündem</button>
+        <button class="tab" data-tab="general">📰 Haberler</button>
         <button class="tab" data-tab="pulse">⚡ Nabız</button>
       </div>
     </div>
 
     <div class="tab-group" data-group="discover">
-      <button class="tab-group-btn" type="button" aria-expanded="false">🔍 Keşif <span class="tg-caret">▾</span></button>
+      <button class="tab-group-btn" type="button" aria-expanded="false">🔍 Keşfet <span class="tg-caret">▾</span></button>
       <div class="tab-group-menu" hidden>
         <button class="tab" data-tab="opps">🔥 Fırsatlar</button>
         <button class="tab" data-tab="scan">🔎 Tarama</button>
-        <button class="tab" data-tab="earn">📅 Bilanço</button>
+        <button class="tab" data-tab="momentum">⚡ Momentum girişi</button>
         <button class="tab" data-tab="sektor">🗺️ Sektör</button>
         <button class="tab" data-tab="radar">🌍 Radar</button>
       </div>
@@ -94,16 +95,9 @@
         <button class="tab" data-tab="tez">📓 Tez</button>
         <button class="tab" data-tab="technical">📈 Teknik Analiz</button>
         <button class="tab" data-tab="fundamental">📊 Temel Analiz</button>
+        <button class="tab" data-tab="earn">📅 Bilanço</button>
         <button class="tab" data-tab="calendar">🗓️ Takvim</button>
         <button class="tab" data-tab="news">📈 Hisse Gelişmeleri</button>
-      </div>
-    </div>
-
-    <div class="tab-group" data-group="market">
-      <button class="tab-group-btn" type="button" aria-expanded="false">🌐 Piyasa <span class="tg-caret">▾</span></button>
-      <div class="tab-group-menu" hidden>
-        <button class="tab" data-tab="macro">📊 Makro Seyir</button>
-        <button class="tab" data-tab="general">📰 Gündem</button>
       </div>
     </div>
 
@@ -203,18 +197,13 @@
       <p class="hint ta-disclaimer">Gündem taraması kamuya açık haber başlıklarına dayanır; olay→sektör→hisse zinciri otomatik bir yorumdur, kesinlik içermez. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
     </section>
 
-    <section id="tab-macro" class="tab-content">
+    <section id="tab-momentum" class="tab-content">
       <div class="radar-intro">
-        <h2 class="radar-title">📊 Makro-Sektör Rotasyonu</h2>
-        <p class="radar-sub">Faiz yönü, enflasyon/emtia baskısı, piyasa genişliği ve jeopolitik riski okuyup <b>konjonktür fazını</b> (erken / orta / geç / durgunluk) tahmin eder; o fazda <b>öne çıkan sektörleri</b> ve evrendeki en güçlü hisseleri gösterir.</p>
+        <h2 class="radar-title">⚡ Momentum girişi</h2>
+        <p class="radar-sub">Evrendeki (listelerine dahil) hisseler içinde <b>güçlü trend + fiyata yakın kademeli giriş</b> uygun olanları otomatik tarar. Her satırda hissenin <b>hangi liste(ler)de</b> olduğu da gösterilir.</p>
       </div>
-      <div class="opps-controls">
-        <span class="opps-hint">Makro sinyaller kamuya açık haber yoğunluğundan ve evrenin teknik genişliğinden türetilir.</span>
-        <button id="macroRefresh" class="ghost-btn" title="Yeniden hesapla">↻ Hesapla</button>
-      </div>
-      <div id="macroStatus" class="opps-status"></div>
-      <div id="macroBody" class="macro-body"></div>
-      <p class="hint ta-disclaimer">Konjonktür tahmini basitleştirilmiş, şeffaf bir modeldir (kesin makro veri değil). Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
+      <div id="momentumWrap"></div>
+      <p class="hint ta-disclaimer">Momentum taraması sabit teknik kurallara dayanır; güçlü trend gelecekte de süreceği anlamına gelmez. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
     </section>
 
     <section id="tab-today" class="tab-content">
@@ -229,10 +218,17 @@
 
       <div class="today-block">
         <h3 class="today-block-h">📰 Günün Gündemi</h3>
-        <div id="todayAgenda" class="today-agenda"></div>
+        <div id="todayConj" class="today-conj"></div>
       </div>
 
       <div id="todayIndex" class="today-index"></div>
+
+      <div id="todayCause" class="today-cause"></div>
+
+      <div class="today-block">
+        <h3 class="today-block-h">🗞️ Günün Manşetleri <span class="today-block-sub">— konjonktürü oluşturan başlıklar</span></h3>
+        <div id="todayAgenda" class="today-agenda"></div>
+      </div>
 
       <div id="todayHead" class="today-head"></div>
 
@@ -376,6 +372,16 @@
         <button id="searchBtn" class="primary-btn">Ara</button>
       </div>
       <div id="searchResult"></div>
+
+      <!-- 🔭 Tematik arama (keşif) — ticker aramasından ayrı; skor motorunu etkilemez -->
+      <div class="theme-search">
+        <div class="theme-search-h">🔭 Tematik keşif <span class="theme-search-sub">bir tema/sektör yazın, ilişkili hisseleri görün</span></div>
+        <div class="search-controls">
+          <input id="themeInput" type="text" maxlength="60" placeholder="Tema ara: ör. yapay zeka enerji talebi, savunma sanayi" />
+          <button id="themeBtn" class="primary-btn">Tara</button>
+        </div>
+        <div id="themeResult"></div>
+      </div>
     </section>
   </main>
 
@@ -614,6 +620,6 @@
 
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="config.js?v=71"></script>
-  <script src="app.js?v=88"></script>
+  <script src="app.js?v=95"></script>
 </body>
 </html>

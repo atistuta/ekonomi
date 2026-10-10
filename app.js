@@ -488,6 +488,69 @@
     `;
   }
 
+  // Detay sayfası grafiği — sparkline'ın okunur hali:
+  // dönem etiketi (kaç ay), dönem % değişimi (renkli ↑/↓), y-ekseni fiyat skalası,
+  // başlangıç/bitiş tarihleri ve baz çizgisi. Yalnız GÖRÜNÜM; veriyi/skoru değiştirmez.
+  const _AY_KISA = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  function makeDetailChart(points, curSym) {
+    curSym = curSym || '';
+    if (!points || points.length < 2) return makeSparkline(points || []); // güvenli geri düşüş
+    const w = 640, h = 150, padT = 8, padB = 8;
+    const xs = points.map(p => p.t), ys = points.map(p => p.c);
+    const xmin = Math.min(...xs), xmax = Math.max(...xs);
+    let ymin = Math.min(...ys), ymax = Math.max(...ys);
+    if (ymin === ymax) { ymin -= 1; ymax += 1; }
+    const first = points[0].c, last = points[points.length - 1].c;
+    const up = last >= first;
+    const color = up ? '#22d39a' : '#ff5e7e';
+    const uid = 'spc' + Math.random().toString(36).slice(2, 8);
+    const sx = (x) => (x - xmin) / (xmax - xmin || 1) * w;
+    const sy = (y) => padT + (h - padT - padB) * (1 - (y - ymin) / (ymax - ymin || 1));
+    const line = points.map((p, i) => (i === 0 ? 'M' : 'L') + sx(p.t).toFixed(1) + ',' + sy(p.c).toFixed(1)).join(' ');
+    const area = line + ` L${sx(xmax).toFixed(1)},${h - padB} L${sx(xmin).toFixed(1)},${h - padB} Z`;
+    const by = sy(first).toFixed(1); // baz (ilk gün) çizgisi
+    // dönem etiketi
+    const days = Math.round((xmax - xmin) / 86400000);
+    const months = days / 30.44;
+    const periodLabel = months >= 1.6 ? Math.round(months) + ' ay'
+      : (days >= 10 ? Math.round(days / 7) + ' hafta' : Math.max(days, 1) + ' gün');
+    const pct = first ? (last - first) / first * 100 : 0;
+    const sign = pct >= 0 ? '+' : '';
+    const fmtD = (ms) => { const d = new Date(ms); return d.getDate() + ' ' + _AY_KISA[d.getMonth()]; };
+    const fmtP = (v) => {
+      const a = Math.abs(v);
+      const n = a >= 1000 ? v.toLocaleString('tr-TR', { maximumFractionDigits: 0 })
+        : a >= 1 ? v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+      return curSym + n;
+    };
+    return `
+      <div class="sp-chart ${up ? 'up' : 'down'}">
+        <div class="spc-top">
+          <span class="spc-period">Son ${periodLabel} · kapanış fiyatı</span>
+          <span class="spc-delta">${up ? '▲' : '▼'} ${sign}${pct.toFixed(2)}% <small>(${periodLabel})</small></span>
+        </div>
+        <div class="spc-plot">
+          <div class="spc-yax"><span>${fmtP(ymax)}</span><span>${fmtP((ymin + ymax) / 2)}</span><span>${fmtP(ymin)}</span></div>
+          <svg class="spc-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="${uid}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="${color}" stop-opacity="0.28"/>
+                <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <line class="spc-grid" x1="0" y1="${padT}" x2="${w}" y2="${padT}"/>
+            <line class="spc-grid" x1="0" y1="${(h / 2).toFixed(1)}" x2="${w}" y2="${(h / 2).toFixed(1)}"/>
+            <line class="spc-grid" x1="0" y1="${h - padB}" x2="${w}" y2="${h - padB}"/>
+            <line class="spc-base" x1="0" y1="${by}" x2="${w}" y2="${by}" stroke="${color}"/>
+            <path d="${area}" fill="url(#${uid})"/>
+            <path class="spc-line" d="${line}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>
+          </svg>
+        </div>
+        <div class="spc-xax"><span>${fmtD(xmin)}</span><span class="spc-xax-base">başlangıç ${fmtP(first)}</span><span>${fmtD(xmax)}</span></div>
+      </div>`;
+  }
+
   // ===== Teknik analiz: OHLCV + indikatörler =====
   async function fetchYahooOHLC(symbol, market, range = '6mo', interval = '1d') {
     const ysym = encodeURIComponent(yahooSymbol(symbol, market)); // endeks ^GSPC → %5EGSPC
@@ -6468,6 +6531,7 @@
       <div class="sp">
         <div class="sp-actionbar" id="spActions"></div>
         <div class="sp-head" id="spHead"><div class="loading">Yükleniyor…</div></div>
+        <div class="sp-section"><div class="sp-sec-h">🏢 Şirket ne yapıyor?</div><div id="spBiz"><div class="loading">Yükleniyor…</div></div></div>
         <div class="sp-section"><div class="sp-sec-h">🔀 Neden hareket ediyor?</div><div id="spWhy"><div class="loading">Yükleniyor…</div></div></div>
         <div class="sp-section"><div class="sp-sec-h">📰 Gelişmeler</div><div id="spNews"><div class="loading">Yükleniyor…</div></div></div>
         <div class="sp-section"><div class="sp-sec-h">📅 Takvim — Temettü &amp; Bilanço</div><div id="spCal"><div class="loading">Yükleniyor…</div></div></div>
@@ -6482,6 +6546,7 @@
     });
     renderSpActions(symbol, market, query);
     fillSpHead(symbol, market, req);
+    fillSpBiz(symbol, market, req);
     fillSpWhy(symbol, market, query, req);
     fillSpNews(symbol, market, query, req);
     fillSpCalendar(symbol, market, req);
@@ -6607,7 +6672,7 @@
             <span class="sp-daychg ${cls}">${sign}${cUsd(change)} (${sign}${pct.toFixed(2)}%) bugün</span></div>
         </div>
         <div class="sp-meta">Kripto · 7/24 piyasa · ${fmtTime((q && q.marketTime) || (chart && chart.marketTime))}</div>
-        ${chart ? makeSparkline(chart.points) : ''}`;
+        ${chart ? makeDetailChart(chart.points, '$') : ''}`;
     } else {
       html = `<div class="sp-price-row"><h2>${coin.name} <span class="badge">🪙 ${coin.sym}</span></h2></div><div class="sp-meta">Fiyat verisi alınamadı.</div>`;
     }
@@ -6950,7 +7015,7 @@
         <div class="sp-price">${gramTxt}</div>
       </div>
       <div class="sp-meta">Dünya spot (ons): ${spot != null ? '$' + spot.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}${pct != null ? ` <span class="sp-daychg ${cls}">${sign}${pct.toFixed(2)}% bugün</span>` : ''} · ${fmtTime((q && q.marketTime) || (chart && chart.marketTime))}</div>
-      ${chart ? makeSparkline(chart.points) : ''}
+      ${chart ? makeDetailChart(chart.points, '$') : ''}
       <div class="sp-changes" id="spChanges"></div>`;
     fillSpChanges(info.ysym, 'US', req);
   }
@@ -7119,12 +7184,73 @@
             <span class="sp-daychg ${cls}">${sign}${change.toFixed(2)} (${sign}${pct.toFixed(2)}%) bugün</span></div>
         </div>
         <div class="sp-meta">${(chart && chart.exchange) || ''} · ${fmtTime((q && q.marketTime) || (chart && chart.marketTime))}</div>
-        ${chart ? makeSparkline(chart.points) : ''}`;
+        ${chart ? makeDetailChart(chart.points, curSym) : ''}`;
     } else {
       priceHtml = `<div class="sp-price-row"><h2>${symbol} <span class="badge">${market}</span></h2></div><div class="sp-meta">Fiyat verisi alınamadı.</div>`;
     }
     head.innerHTML = priceHtml + `<div class="sp-changes" id="spChanges"></div>`;
     fillSpChanges(symbol, market, req);
+  }
+
+  // İngilizce şirket özetinden ilk (tek) cümleyi çıkar — kısaltmalara ("Inc.", "U.S." …) takılmaz.
+  const _FS_ABBR = new Set(['inc', 'corp', 'co', 'ltd', 'plc', 'llc', 'lp', 'sa', 'ag', 'nv', 'no', 'st', 'dr', 'mr', 'ms', 'mrs', 'u.s', 'u.k', 'etc', 'vs', 'jr', 'sr']);
+  function firstSentence(txt) {
+    const s = (txt || '').replace(/\s+/g, ' ').trim();
+    if (!s) return '';
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (ch === '.' || ch === '!' || ch === '?') {
+        const next = s[i + 1], next2 = s[i + 2];
+        if (next === ' ' && next2 && /[A-ZÇĞİÖŞÜ(]/.test(next2)) {
+          const before = s.slice(0, i).split(' ').pop().toLowerCase().replace(/[^a-zçğıöşü.]/g, '');
+          if (!_FS_ABBR.has(before) && before.length > 1) return s.slice(0, i + 1);
+        }
+        if (!next) return s.slice(0, i + 1);
+      }
+    }
+    return s.length > 240 ? s.slice(0, 238).replace(/\s\S*$/, '') + '…' : s;
+  }
+
+  // 🏢 Şirket ne yapıyor? — Yahoo profilinden tek cümlelik "ne iş yapar" özeti.
+  // BİLGİ AMAÇLI; temel/teknik skora DAHİL DEĞİL (SPK). bizSummary İngilizce → not düşülür.
+  async function fillSpBiz(symbol, market, req) {
+    const box = document.getElementById('spBiz'); if (!box) return;
+    let m = null;
+    try {
+      const ys = yahooSym(symbol, market);
+      const r = await yfinQuery([ys]);
+      m = r && r[ys];
+      if (!m || !m.ok || (!m.bizSummary && !m.sector && !m.industry)) {
+        // ters piyasada dene (sembol çözümü şaşmış olabilir)
+        const om = otherMarket(market);
+        if (om && om !== market) {
+          const ys2 = yahooSym(symbol, om);
+          const r2 = await yfinQuery([ys2]);
+          if (r2 && r2[ys2] && r2[ys2].ok && (r2[ys2].bizSummary || r2[ys2].sector)) m = r2[ys2];
+        }
+      }
+    } catch (_) { /* yoksay */ }
+    if (req !== spReq) return;
+    if (!m || !m.ok) { box.innerHTML = '<p class="sp-biz-na">Şirket profili bu an alınamadı.</p>'; return; }
+    const tag = [m.sector, m.industry].filter(Boolean).map(escapeHtml).join(' · ');
+    const site = m.website ? String(m.website).trim() : '';
+    const siteLink = site ? ` <a href="${escapeHtml(site)}" target="_blank" rel="noopener">Şirket sitesi ↗</a>` : '';
+    const summary = m.bizSummary ? String(m.bizSummary).trim() : '';
+    let html = '';
+    if (summary) {
+      const one = firstSentence(summary);
+      const rest = summary.length > one.length ? summary.slice(one.length).trim() : '';
+      html += `<p class="sp-biz-one">${escapeHtml(one)}</p>`;
+      if (tag) html += `<div class="sp-biz-tag">${tag}</div>`;
+      if (rest) html += `<details class="sp-biz-more"><summary>Tam profili oku</summary><p class="sp-biz-rest">${escapeHtml(rest)}</p></details>`;
+      html += `<p class="sp-biz-src">Kaynak: Yahoo Finance şirket profili (İngilizce) — sektör etiketinin ötesinde şirketin ne yaptığını özetler. Yalnız bilgi; skora etkisi yoktur.${siteLink}</p>`;
+    } else if (tag) {
+      html += `<p class="sp-biz-one">${tag}</p>`;
+      html += `<p class="sp-biz-src">Ayrıntılı şirket profili metni bulunamadı; yukarıdaki sektör/sanayi etiketidir.${siteLink}</p>`;
+    } else {
+      html += `<p class="sp-biz-na">Bu hisse için şirket profili bulunamadı.${siteLink}</p>`;
+    }
+    box.innerHTML = html;
   }
 
   async function fillSpChanges(symbol, market, req) {
@@ -7450,6 +7576,15 @@
     }
   }
 
+  // Bir sembolün evrende hangi kullanıcı liste(ler)inde olduğunu döndürür (momentum satırında göstermek için).
+  function momListsFor(symbol, market) {
+    try {
+      return loadLists()
+        .filter((l) => Array.isArray(l.items) && l.items.some((it) => it.symbol === symbol && (it.market || 'BIST') === (market || 'BIST')))
+        .map((l) => l.name);
+    } catch (_) { return []; }
+  }
+
   function momRowsHtml(items) {
     if (!items) return '<div class="empty">Taranıyor…</div>';
     if (!items.length) return '<div class="empty">Şu an evrende ⚡ momentum girişi için uygun hisse yok.</div>';
@@ -7458,12 +7593,17 @@
       const zone = (x.mom.zone) ? `${fp(x.mom.zone[0])} – ${fp(x.mom.zone[1])}` : '';
       const adx = x.mom.adx != null ? Math.round(x.mom.adx) : '—';
       const gap = x.mom.gapPct != null ? Math.round(x.mom.gapPct * 100) : null;
+      const names = momListsFor(x.symbol, x.market);
+      const listTags = names.length
+        ? `<span class="mom-lists" title="Bu hissenin bulunduğu liste(ler)">${names.map((n) => `<span class="mom-list-tag">📋 ${escapeHtml(n)}</span>`).join('')}</span>`
+        : '';
       return `
         <div class="list-row mom-row" data-symbol="${x.symbol}" data-market="${x.market}" title="Güçlü trend + fiyata yakın kademeli giriş; güçlü-alış bölgesinin ~%${gap != null ? gap : '?'} üzerinde">
           <span class="lr-sym">${x.symbol} <span class="badge">${x.market}</span></span>
           <span class="mom-zone">⚡ ${zone}</span>
           <span class="mom-gap"${gap != null ? '' : ' data-na'}>${gap != null ? `▲ güçlü alışın %${gap} üzerinde` : '▲ güçlü alışın üzerinde'}</span>
           <span class="mom-meta">ADX ${adx} · Skor ${Math.round(x.score)}</span>
+          ${listTags}
         </div>`;
     }).join('');
   }
@@ -7538,13 +7678,19 @@
   function renderLists() {
     const wrap = document.getElementById('listsContainer'); if (!wrap) return;
     const lists = loadLists();
-    const momHtml = renderMomentumBlock(); // ⚡ sabit üst liste (her zaman en üstte)
     if (!lists.length) {
-      wrap.innerHTML = momHtml + '<div class="empty">Henüz liste yok. Yukarıdan yeni bir liste oluştur.</div>';
+      wrap.innerHTML = '<div class="empty">Henüz liste yok. Yukarıdan yeni bir liste oluştur.</div>';
     } else {
-      wrap.innerHTML = momHtml + lists.map(renderListBlock).join('');
+      wrap.innerHTML = lists.map(renderListBlock).join('');
       lists.forEach(wireListBlock);
     }
+  }
+
+  // ⚡ Momentum girişi artık Keşfet grubunda ayrı bir sekme (data-tab="momentum").
+  function initMomentum() {
+    const wrap = document.getElementById('momentumWrap'); if (!wrap) return;
+    momScanState.at = 0; // her girişte taze tara (güncellik önemli)
+    wrap.innerHTML = renderMomentumBlock();
     wireMomentumBlock();
     fillMomentumBlock(false);
   }
@@ -7862,6 +8008,224 @@
     box.querySelectorAll('.search-qchip[data-qm]').forEach((b) => b.addEventListener('click', () => {
       if (typeof openMetalPage === 'function') openMetalPage(b.dataset.qm, metalNames[b.dataset.qm] || b.dataset.qm);
     }));
+  }
+
+  // ===== 🔭 Tematik Arama Motoru (BİLGİ AMAÇLI — keşif; skora dokunmaz) =====
+  // Kullanıcı bir TEMA/SEKTÖR yazar ("yapay zeka enerji talebi"), motor o temayla
+  // ilişkili hisseleri çıkarır. İki katman:
+  //   (A) Haber katmanı  — Google News RSS (US+TR) → ısı + kanıt başlıkları (anahtar GEREKMEZ)
+  //   (B) Semantik katman — /api/theme (Claude) → aday semboller (ANTHROPIC_API_KEY gerektirir)
+  // Her LLM sembolü /api/yfin ?symbols= ile DOĞRULANIR (gerçek + kote mi) → halüsinasyon kalkanı.
+  // Framing: "al bunu" DEĞİL → "bu temayla ilişkili / haberde geçen hisseler". Yatırım tavsiyesi değildir.
+  let themeInited = false;
+  const THEME_BASE = (window.MY_PROXY || '').replace(/\/api\/proxy.*$/, '') + '/api/theme' || '/api/theme';
+  const THEME_EXAMPLES = [
+    'yapay zeka enerji talebi', 'savunma sanayi', 'yapay zeka çip',
+    'siber güvenlik', 'nükleer enerji', 'elektrikli araç', 'veri merkezi',
+  ];
+
+  // LLM adayı → {base, market, yahoo} normalize
+  function themeNorm(sym, market) {
+    let m = (market === 'BIST' || market === 'US') ? market : (/\.IS$/i.test(sym) ? 'BIST' : 'US');
+    const base = String(sym || '').toUpperCase().replace(/\.IS$/i, '');
+    return { base, market: m, yahoo: m === 'BIST' ? base + '.IS' : base };
+  }
+
+  // Semantik adayları Claude ucundan al (anahtar yoksa {candidates:[],error:'no_key'})
+  async function themeFetchLLM(query) {
+    try {
+      const r = await fetch(THEME_BASE + '?q=' + encodeURIComponent(query), { cache: 'no-store' });
+      const j = await r.json();
+      return { candidates: Array.isArray(j.candidates) ? j.candidates : [], error: j.error || null };
+    } catch (e) {
+      return { candidates: [], error: 'fetch_error' };
+    }
+  }
+
+  // Google News (US+TR) → birleşik başlık listesi (ısı + kanıt)
+  async function themeFetchNews(query) {
+    const urls = [googleNewsUrl(query, 'US'), googleNewsUrl(query, 'TR')];
+    const lists = await Promise.all(urls.map((u) => fetchRSS(u, 10).catch(() => [])));
+    const seen = new Set(); const out = [];
+    lists.flat().forEach((it) => {
+      const key = (it.title || '').toLowerCase().slice(0, 60);
+      if (!key || seen.has(key)) return; seen.add(key); out.push(it);
+    });
+    out.sort((a, b) => (Date.parse(b.pubDate) || 0) - (Date.parse(a.pubDate) || 0));
+    return out;
+  }
+
+  // Bir adayın haberde geçip geçmediğini sapta → kanıt başlığı iliştir
+  function themeMatchNews(cand, news) {
+    const sym = cand.base.toLowerCase();
+    const nameWords = String(cand.name || '').toLowerCase().split(/[\s,.\-&]+/).filter((w) => w.length >= 4);
+    for (const it of news) {
+      const t = (it.title || '').toLowerCase();
+      if (new RegExp('\\b' + sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(t)) return it;
+      for (const w of nameWords) { if (t.includes(w)) return it; }
+    }
+    return null;
+  }
+
+  const themeEngine = {
+    async search(query) {
+      const q = query.trim();
+      const ckey = 'theme:' + q.toLowerCase();
+      const cached = cacheGet(ckey);
+      if (cacheFresh(cached)) return cached.data;
+
+      // A + B paralel
+      const [llm, news] = await Promise.all([themeFetchLLM(q), themeFetchNews(q)]);
+      const heat = themeHeat(news);
+
+      // Adayları normalize + tekilleştir (en çok 12 → yfin batch sınırı)
+      const norm = []; const seen = new Set();
+      for (const c of llm.candidates) {
+        const n = themeNorm(c.symbol, c.market);
+        if (!n.base || seen.has(n.yahoo)) continue; seen.add(n.yahoo);
+        norm.push({ base: n.base, market: n.market, yahoo: n.yahoo, name: c.name || null, reason: c.reason || null });
+        if (norm.length >= 12) break;
+      }
+
+      // yfin ile doğrula + zenginleştir (gerçek + kote olmayanları ELE)
+      let candidates = [];
+      if (norm.length) {
+        const by = await yfinQuery(norm.map((n) => n.yahoo));
+        norm.forEach((n) => {
+          const res = by[n.yahoo];
+          if (!res || !res.ok) return; // halüsinasyon / kote değil → düş
+          const ev = themeMatchNews(n, news);
+          candidates.push({
+            base: n.base, market: n.market,
+            name: res.name || n.name || n.base,
+            sector: res.sector || res.industry || null,
+            price: (typeof res.price === 'number') ? res.price : null,
+            currency: res.currency || null,
+            reason: n.reason,
+            evidence: ev ? { title: ev.title, link: ev.link } : null,
+            inNews: !!ev,
+          });
+        });
+        // Sıralama: haberde geçenler önce (LLM sırası korunur), sonra kalanlar
+        candidates = candidates.filter((c) => c.inNews).concat(candidates.filter((c) => !c.inNews));
+      }
+
+      const result = {
+        query: q, heat,
+        news: news.slice(0, 6),
+        candidates,
+        llmError: llm.error, // 'no_key' | 'llm_error' | 'fetch_error' | null
+      };
+      cacheSet(ckey, result);
+      return result;
+    },
+  };
+
+  const CUR_SYM = { USD: '$', TRY: '₺', EUR: '€', GBP: '£' };
+  function themePrice(p, cur) {
+    if (p == null) return '';
+    const s = CUR_SYM[cur] || '';
+    const v = p >= 1000 ? p.toLocaleString('tr-TR', { maximumFractionDigits: 0 })
+                        : p.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+    return s ? (s + v) : (v + (cur ? ' ' + cur : ''));
+  }
+
+  function renderThemeIntro() {
+    const box = document.getElementById('themeResult'); if (!box) return;
+    box.innerHTML = `
+      <div class="ts-intro">
+        <div class="ts-intro-h">🔭 Bir tema ya da sektör yazın ${infoDot('Örn. "yapay zeka enerji talebi" → o temayla ilişkili / haberde geçen hisseler listelenir. Bu bir KEŞİF aracıdır; yatırım tavsiyesi değildir ve skor motorunu etkilemez.')}</div>
+        <div class="ts-intro-s">Örnekler:</div>
+        <div class="ts-chips">${THEME_EXAMPLES.map((t) => `<button class="ts-chip" data-t="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')}</div>
+      </div>`;
+    box.querySelectorAll('.ts-chip').forEach((b) => b.addEventListener('click', () => {
+      const inp = document.getElementById('themeInput');
+      if (inp) inp.value = b.dataset.t;
+      runThemeSearch(b.dataset.t);
+    }));
+  }
+
+  async function runThemeSearch(query) {
+    const q = (query || '').trim();
+    const box = document.getElementById('themeResult'); if (!box) return;
+    if (q.length < 2) { renderThemeIntro(); return; }
+    box.innerHTML = '<div class="loading" style="padding:14px">🔭 Tema taranıyor… (haber akışı + ilişkili hisseler)</div>';
+    let data;
+    try { data = await themeEngine.search(q); }
+    catch (e) { box.innerHTML = `<div class="empty" style="padding:14px">Tarama şu an yapılamadı. Birazdan tekrar deneyin.</div>`; return; }
+    renderThemeResults(data);
+  }
+
+  function renderThemeResults(data) {
+    const box = document.getElementById('themeResult'); if (!box) return;
+    const q = data.query;
+    const heatCls = 'ts-heat-' + (data.heat.lvl || 'na');
+    const newsLink = googleNewsUrl(q, 'TR');
+
+    const head = `
+      <div class="ts-head">
+        <span class="ts-badge ${heatCls}">${data.heat.txt}</span>
+        <span class="ts-count">${data.candidates.length ? data.candidates.length + ' ilişkili hisse' : 'tema akışı'}</span>
+        <a class="ts-newslink" href="${newsLink}" target="_blank" rel="noopener">📰 Tüm haberler ↗</a>
+      </div>
+      <div class="ts-note">Keşif aracı — “${escapeHtml(q)}” temasıyla <b>ilişkili / haberde geçen</b> hisseler. Yatırım tavsiyesi değildir; skor motorunu etkilemez.</div>`;
+
+    let body = '';
+    if (data.candidates.length) {
+      body = `<div class="ts-list">${data.candidates.map((c, i) => `
+        <div class="ts-card" data-i="${i}">
+          <div class="ts-top">
+            <button class="ts-sym" data-i="${i}">${c.base} <span class="badge">${c.market}</span></button>
+            ${c.inNews ? '<span class="ts-tag ts-tag-news">📰 haberde</span>' : ''}
+            <span class="ts-price">${themePrice(c.price, c.currency)}</span>
+          </div>
+          <div class="ts-name">${escapeHtml(c.name)}${c.sector ? ' · <span class="ts-sector">' + escapeHtml(c.sector) + '</span>' : ''}</div>
+          ${c.reason ? `<div class="ts-reason">🔗 ${escapeHtml(c.reason)}</div>` : ''}
+          ${c.evidence ? `<a class="ts-eved" href="${c.evidence.link}" target="_blank" rel="noopener">📰 ${escapeHtml(c.evidence.title)}</a>` : ''}
+          <div class="ts-actions">
+            <button class="ts-open" data-i="${i}">Analiz sayfasını aç</button>
+            <button class="ts-add" data-i="${i}">+ Listeye ekle</button>
+          </div>
+        </div>`).join('')}</div>`;
+    } else {
+      // Aday yok → nedeni + haber katmanı (anahtar yoksa bilgilendir)
+      let why = '';
+      if (data.llmError === 'no_key') {
+        why = `<div class="ts-info">Semantik hisse keşfi için sunucuda <code>ANTHROPIC_API_KEY</code> tanımlı değil. Aşağıda bu temanın <b>haber akışı</b> yer alıyor; anahtar eklenince ilişkili hisseler de listelenecek.</div>`;
+      } else if (data.llmError) {
+        why = `<div class="ts-info">İlişkili hisse taraması şu an yanıt vermedi. Aşağıda bu temanın güncel <b>haber akışı</b> var.</div>`;
+      } else {
+        why = `<div class="ts-info">Bu tema için doğrulanmış (kote) bir hisse eşleşmedi. Daha belirgin bir tema deneyin (ör. “nükleer enerji”, “savunma sanayi”). Aşağıda haber akışı var.</div>`;
+      }
+      const nl = (data.news || []).length
+        ? `<ul class="ts-news">${data.news.map((n) => `<li><a href="${n.link}" target="_blank" rel="noopener">${escapeHtml(n.title || '')}</a><span class="ts-news-m">${n.author ? escapeHtml(n.author) + ' · ' : ''}${fmtTime(n.pubDate)}</span></li>`).join('')}</ul>`
+        : `<div class="empty" style="padding:10px">Bu tema için güncel haber bulunamadı.</div>`;
+      body = why + nl;
+    }
+
+    box.innerHTML = head + body;
+
+    // Aksiyonlar
+    const cs = data.candidates;
+    box.querySelectorAll('.ts-sym, .ts-open').forEach((b) => b.addEventListener('click', () => {
+      const c = cs[+b.dataset.i]; if (c) openStockPage(c.base, c.market, c.base);
+    }));
+    box.querySelectorAll('.ts-add').forEach((b) => b.addEventListener('click', () => {
+      const c = cs[+b.dataset.i]; if (c) openListMenu(b, c.base, c.market, c.base);
+    }));
+  }
+
+  function initThemeSearch() {
+    if (!themeInited) {
+      const inp = document.getElementById('themeInput');
+      const btn = document.getElementById('themeBtn');
+      const go = () => runThemeSearch(inp ? inp.value : '');
+      if (btn) btn.addEventListener('click', go);
+      if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      themeInited = true;
+    }
+    const box = document.getElementById('themeResult');
+    if (box && !box.innerHTML.trim()) renderThemeIntro();
   }
 
   // ===== Faz 2: Haber Duyarlılık (Sentiment) Motoru =====
@@ -9104,7 +9468,8 @@
     energy: 'Enerji/Petrol', defense: 'Savunma', tech: 'Teknoloji', semis: 'Çip/Yarı İletken',
     clean: 'Temiz Enerji', gold: 'Altın/Değerli Maden', banks: 'Banka/Finans', staples: 'Temel Tüketim',
     auto: 'Otomotiv', reit: 'Gayrimenkul', utilities: 'Elektrik/Altyapı', space: 'Uzay/Uydu',
-    biotech: 'Biyoteknoloji', industrials: 'Sanayi', intl: 'Global/Gelişen Piyasa',
+    biotech: 'Biyotek/Sağlık', industrials: 'Sanayi', intl: 'Global/Gelişen Piyasa',
+    software: 'Yazılım/Siber', crypto: 'Kripto/Blok Zinciri', materials: 'Metal/Madencilik',
   };
   // İzleme evrenindeki bilinen sembollerin sektör etiketleri (genişletilebilir)
   const SYMBOL_SECTORS = {
@@ -9117,6 +9482,55 @@
     SOXX: ['semis', 'tech'], UFO: ['space', 'defense'], VGT: ['tech'], QCLN: ['clean', 'energy'],
     VXUS: ['intl'], ARKG: ['biotech'], NVDA: ['semis', 'tech'], TSLA: ['auto', 'tech'],
     XLE: ['energy'], ITA: ['defense'], GLD: ['gold'], SMH: ['semis', 'tech'],
+    // ABD/ADR — izleme evreninin gerçek sembolleri (tohumlu listelerden: 🤖 Robot,
+    // 🇺🇸 Amerika V1, 🇺🇸 Amerika Gelecek Tema). radarUniverse() yalnız hem etiketli
+    // HEM listede olan sembolleri eşler; eskiden tech/semis kesişimi tek başına NVDA'ya
+    // düşüyordu → her gündem kartında aynı isim. Gerçek evreni etiketleyince çeşitlilik
+    // gelir. Yalnız "ilgili takip" ilişkisi içindir; FA/TA skoruna DOKUNMAZ.
+    TSM: ['semis', 'tech'], SKHY: ['semis', 'tech'], MRVL: ['semis', 'tech'], STM: ['semis', 'tech'],
+    SONY: ['tech'], ZBRA: ['tech', 'industrials'], HSAI: ['tech', 'auto'], RXRX: ['biotech', 'tech'],
+    IONQ: ['tech'], RGTI: ['tech'], QBTS: ['tech'], ROBO: ['industrials', 'tech'], SYM: ['industrials', 'tech'],
+    SERV: ['industrials', 'tech'], RR: ['industrials', 'tech'], YASKY: ['industrials'], HSYDF: ['industrials'],
+    NJDCY: ['industrials'], TTDKY: ['tech', 'industrials'], SHECY: ['semis', 'industrials'],
+    GEV: ['utilities', 'industrials'], ONDS: ['defense', 'tech'], RCAT: ['defense'],
+    KTOS: ['defense'], AVAV: ['defense'], RKLB: ['space', 'defense'], ASTS: ['space', 'tech'],
+    LUNR: ['space', 'defense'], OKLO: ['utilities', 'energy', 'clean'], SMR: ['utilities', 'energy', 'clean'],
+    NNE: ['utilities', 'energy', 'clean'], LEU: ['energy', 'industrials'], CRSP: ['biotech'], NTLA: ['biotech'],
+    BEAM: ['biotech'],
+    // --- Genişletme (v95): izleme evreninin kalan gerçek sembolleri ---
+    // Çip & yarı iletken ekipman/bellek/IP
+    AMAT: ['semis', 'tech'], KLAC: ['semis', 'tech'], LRCX: ['semis', 'tech'], MU: ['semis', 'tech'],
+    INTC: ['semis', 'tech'], TXN: ['semis', 'tech'], AVGO: ['semis', 'tech'], ARM: ['semis', 'tech'],
+    ASML: ['semis', 'tech'], AMKR: ['semis', 'tech'], MXL: ['semis', 'tech'], SIMO: ['semis', 'tech'],
+    CRDO: ['semis', 'tech'], SNDK: ['semis', 'tech'], TER: ['semis', 'tech'],
+    // Optik / fotonik / ağ donanımı
+    AAOI: ['tech', 'semis'], COHR: ['tech', 'semis'], LITE: ['tech', 'semis'], LWLG: ['tech', 'semis'],
+    FN: ['tech', 'industrials'], GLW: ['tech', 'industrials'], APH: ['tech', 'industrials'],
+    ANET: ['tech'], VIAV: ['tech'], DELL: ['tech'],
+    // Yazılım / siber güvenlik / bulut
+    CRWD: ['software', 'tech'], PANW: ['software', 'tech'], FTNT: ['software', 'tech'], ZS: ['software', 'tech'],
+    NOW: ['software', 'tech'], CRWV: ['software', 'tech'], RXT: ['software', 'tech'], ZETA: ['software', 'tech'],
+    IBM: ['tech', 'software'], PLTR: ['software', 'tech', 'defense'],
+    // Yapay zeka altyapısı — veri merkezi güç/soğutma/elektrik
+    VRT: ['industrials', 'tech'], ETN: ['industrials', 'utilities'], POWL: ['industrials', 'utilities'],
+    VST: ['utilities', 'energy'], CEG: ['utilities', 'energy', 'clean'],
+    // Kripto / blok zinciri / madencilik
+    COIN: ['crypto', 'tech'], IREN: ['crypto', 'tech'],
+    // Fintech
+    SOFI: ['banks', 'tech'],
+    // Temiz enerji / batarya / yakıt hücresi
+    BE: ['clean', 'energy'], AMPX: ['clean', 'tech'],
+    // Metal / madencilik / nadir toprak / lityum
+    ALB: ['materials', 'clean'], FCX: ['materials', 'industrials'], MP: ['materials', 'industrials'],
+    REMX: ['materials', 'industrials'], GFI: ['gold', 'materials'],
+    // Biyoteknoloji / sağlık
+    IOVA: ['biotech'], SMMT: ['biotech'], SRRK: ['biotech'], AMLX: ['biotech'], OTLK: ['biotech'],
+    XLV: ['biotech'], VHT: ['biotech'],
+    // Havacılık / savunma / uzay
+    BA: ['defense', 'industrials'], RDW: ['space', 'defense'], FLY: ['space', 'defense'],
+    SPCX: ['space'], UMAC: ['defense', 'tech'],
+    // Enerji ETF
+    USO: ['energy'],
   };
 
   // Gündem temaları — her biri bir haber sorgusu + etkilediği sektörler (yön: up/down)
@@ -9151,6 +9565,15 @@
     return taAllSymbols()
       .map((s) => ({ ...s, sectors: SYMBOL_SECTORS[s.symbol] || [] }))
       .filter((s) => s.sectors.length);
+  }
+
+  // Öneri evreni: TÜM izleme listesi (Radar'ın aksine sektör etiketi şart değil).
+  // Etiketsiz semboller de yarışır — yalnız makro-faz/gündem primi alamaz, saf
+  // teknik+haber skoruyla sıralanır. radarUniverse() yalnız ~12 elle-etiketli ABD
+  // sembolüyle sınırlıydı; bu yüzden öneriler hep aynı birkaç isme (ARKG/NVDA…)
+  // takılıyordu. Radar/gündem-eşleşmesi etiketli evreni kullanmaya devam eder.
+  function recommendUniverse() {
+    return taAllSymbols().map((s) => ({ ...s, sectors: SYMBOL_SECTORS[s.symbol] || [] }));
   }
 
   function themeNewsUrl(theme) {
@@ -9368,10 +9791,10 @@
   const CYCLE_PHASES = {
     early: { label: 'Erken Döngü / Toparlanma', emoji: '🌱', cls: 'early', sectors: ['banks', 'auto', 'tech'],
       desc: 'Faizler geriliyor, risk iştahı toparlanıyor. Faize duyarlı ve büyüme hisseleri öne çıkar.' },
-    mid: { label: 'Orta Döngü / Genişleme', emoji: '🚀', cls: 'mid', sectors: ['tech', 'industrials', 'semis'],
-      desc: 'Büyüme güçlü, koşullar dengeli. Teknoloji, sanayi ve çip liderlik eder.' },
-    late: { label: 'Geç Döngü / Aşırı Isınma', emoji: '🔥', cls: 'late', sectors: ['energy', 'industrials', 'gold'],
-      desc: 'Enflasyon/emtia baskısı ve para sıkılaşması. Enerji, emtia ve reel varlıklar korunaklı olur.' },
+    mid: { label: 'Orta Döngü / Genişleme', emoji: '🚀', cls: 'mid', sectors: ['tech', 'industrials', 'semis', 'software'],
+      desc: 'Büyüme güçlü, koşullar dengeli. Teknoloji, yazılım, sanayi ve çip liderlik eder.' },
+    late: { label: 'Geç Döngü / Aşırı Isınma', emoji: '🔥', cls: 'late', sectors: ['energy', 'industrials', 'gold', 'materials'],
+      desc: 'Enflasyon/emtia baskısı ve para sıkılaşması. Enerji, metal/madencilik ve reel varlıklar korunaklı olur.' },
     recession: { label: 'Durgunluk / Risk-off', emoji: '🛡️', cls: 'recession', sectors: ['utilities', 'staples', 'gold'],
       desc: 'Büyüme zayıf, güvenli liman talebi yüksek. Savunmacı sektörler ve altın öne çıkar.' },
   };
@@ -9651,9 +10074,21 @@
       sectors: [['banks', 'up'], ['staples', 'up'], ['energy', 'up'], ['industrials', 'up'], ['utilities', 'up'], ['gold', 'up'], ['tech', 'down'], ['semis', 'down']],
       note: 'Paranın pahalılaşan büyüme/teknolojiden ucuz "değer" hisselerine (banka, temel tüketim, enerji, sanayi, temettü) kayabileceği "büyük rotasyon" gündemi; balon/piyasa-tepesi tartışması yükseldiğinde savunmacı ve değer odaklı isimler öne çıkar. Bilgi amaçlıdır, yatırım tavsiyesi değildir.' },
     { key: 'crypto', emoji: '₿', label: 'Kripto / Bitcoin', risk: 'on',
-      kw: ['bitcoin', 'kripto', 'ethereum', 'crypto', 'btc', 'blockchain', 'stablecoin', 'spot etf', 'altcoin', 'binance'],
-      sectors: [['tech', 'up']],
-      note: 'Kripto risk iştahının uç barometresi; güçlü rally risk-on, sert satış risk-off ortamına işaret eder.' },
+      kw: ['bitcoin', 'kripto', 'ethereum', 'crypto', 'btc', 'blockchain', 'stablecoin', 'spot etf', 'altcoin', 'binance', 'coinbase', 'bitcoin madenci', 'bitcoin mining', 'microstrategy', 'strategy btc'],
+      sectors: [['crypto', 'up'], ['tech', 'up']],
+      note: 'Kripto risk iştahının uç barometresi; güçlü rally risk-on, sert satış risk-off ortamına işaret eder. Borsa (Coinbase) ve madenci hisseleri doğrudan kripto fiyatına bağlı.' },
+    { key: 'software', emoji: '🔐', label: 'Yazılım / Siber Güvenlik / Bulut', risk: 'on',
+      kw: ['siber saldırı', 'siber güvenlik', 'veri ihlali', 'fidye yazılım', 'cyberattack', 'cyber attack', 'cybersecurity', 'data breach', 'ransomware', 'hack', 'hacked', 'zero-day', 'saas', 'software stocks', 'enterprise software', 'bulut bilişim', 'cloud computing', 'cloud spending', 'crowdstrike', 'palo alto', 'fortinet', 'zscaler', 'servicenow', 'palantir'],
+      sectors: [['software', 'up'], ['tech', 'up']],
+      note: 'Siber saldırı/veri ihlali haberleri güvenlik yazılımına talep yaratır; bulut ve kurumsal yazılım harcaması teknolojinin tekrarlayan gelir çekirdeği. Bilgi amaçlıdır, yatırım tavsiyesi değildir.' },
+    { key: 'biotech', emoji: '🧬', label: 'İlaç / Biyoteknoloji / Sağlık', risk: 'on',
+      kw: ['fda onay', 'fda approval', 'fda', 'klinik deney', 'clinical trial', 'faz 3', 'phase 3', 'phase iii', 'faz 2', 'phase 2', 'ilaç onay', 'drug approval', 'biyoteknoloji', 'biotech', 'gen tedavi', 'gene therapy', 'crispr', 'kanser ilacı', 'cancer drug', 'oncology', 'onkoloji', 'pharma', 'ilaç şirketi', 'breakthrough therapy', 'aşı', 'vaccine'],
+      sectors: [['biotech', 'up']],
+      note: 'FDA onayı ve klinik faz sonuçları biyoteknoloji/ilaç hisselerinin en güçlü tekil katalizörü; olumlu veri sert yükseliş, başarısız deney sert düşüş getirebilir. Bilgi amaçlıdır, yatırım tavsiyesi değildir.' },
+    { key: 'materials', emoji: '⛏️', label: 'Metal / Madencilik / Nadir Toprak', risk: 'on',
+      kw: ['bakır', 'copper', 'lityum', 'lithium', 'nadir toprak', 'rare earth', 'nikel', 'nickel', 'kobalt', 'cobalt', 'alüminyum', 'aluminum', 'demir cevheri', 'iron ore', 'madencilik', 'mining', 'metal fiyat', 'metal prices', 'critical minerals', 'kritik mineral', 'çelik fiyat', 'commodity rally'],
+      sectors: [['materials', 'up'], ['industrials', 'up']],
+      note: 'Bakır/lityum/nadir toprak gibi metaller elektrifikasyon, savunma ve çip tedarik zincirinin hammaddesi; fiyat ve arz haberleri madencilik ve sanayi hisselerini hareketlendirir. Bilgi amaçlıdır, yatırım tavsiyesi değildir.' },
     { key: 'earnings', emoji: '📊', label: 'Bilanço / Kâr Sezonu', risk: 'on',
       kw: ['bilanço', 'kâr açıkladı', 'çeyrek kâr', 'earnings', 'quarterly results', 'guidance', 'beats estimates', 'misses estimates', 'profit warning', 'revenue growth', 'net kâr'],
       sectors: [['tech', 'up'], ['banks', 'up'], ['staples', 'up']],
@@ -9841,17 +10276,33 @@
     };
   }
 
-  // Bir gündem başlığına eşleşen izleme-evreni hisseleri (bilgi amaçlı ilişki)
-  function agendaMatchedStocks(sectors) {
+  // Bir gündem başlığına eşleşen izleme-evreni hisseleri (bilgi amaçlı ilişki).
+  // opts.used verilirse kartlar arası tekrar önlenir (aynı isim her kartta çıkmasın):
+  // önce kullanılmamışlar seçilir, havuz biterse kullanılmışlara düşülür ve seçilenler
+  // used'a eklenir. opts.limit kart başına sayıyı belirler. Skora DOKUNMAZ.
+  function agendaMatchedStocks(sectors, opts) {
     if (!sectors || !sectors.length) return [];
     const up = new Set(sectors.filter(([, d]) => d === 'up').map(([s]) => s));
     if (!up.size) return [];
-    return radarUniverse().filter((s) => s.sectors.some((x) => up.has(x))).slice(0, 5);
+    const limit = (opts && opts.limit) || 5;
+    const used = opts && opts.used;
+    const all = radarUniverse().filter((s) => s.sectors.some((x) => up.has(x)));
+    let pool = all;
+    if (used) {
+      const fresh = all.filter((s) => !used.has(s.market + ':' + s.symbol));
+      pool = fresh.length ? fresh : all; // tüm eşleşmeler tükendiyse tekrara izin ver
+    }
+    const picked = pool.slice(0, limit);
+    if (used) picked.forEach((s) => used.add(s.market + ':' + s.symbol));
+    return picked;
   }
 
+  // {head, body} döner: head = günlük konjonktür özeti (en üstte), body = rotasyon
+  // bannerı + manşet kartları. Araya "📊 Endeks Tetikleyicileri" girsin diye ikiye
+  // ayrıldı (kullanıcı: endeks tetikleyiciler günlük konjonktürün hemen altında).
   function renderTodayAgenda(ag) {
     if (!ag || ag.empty) {
-      return `<div class="agenda-empty">Bugünün gündemi için canlı haber alınamadı. Bağlantıyı kontrol edip ↻ ile tekrar dene.</div>`;
+      return { head: `<div class="agenda-empty">Bugünün gündemi için canlı haber alınamadı. Bağlantıyı kontrol edip ↻ ile tekrar dene.</div>`, body: '' };
     }
     const s = ag.summary;
     const secTxt = (arr) => arr.length ? arr.map((x) => SECTORS[x] || x).join(' · ') : '—';
@@ -9880,11 +10331,15 @@
         </div>`;
     }
 
+    // Kartlar arası tekrarı önlemek için paylaşılan "kullanıldı" kümesi. Rotasyon
+    // bannerının seçtiği değer hisseleriyle tohumlanır ki kartlar onları yinelemesin.
+    const usedStk = new Set();
+    ((s.rotation && s.rotation.stocks) || []).forEach((st) => usedStk.add(st.market + ':' + st.symbol));
     const cards = ag.items.map((it) => {
       const heatTxt = it.heat === 'hot' ? '🔴 Sıcak' : it.heat === 'warm' ? '🟠 Gündemde' : '⚪ Hafif';
       const impacts = (it.sectors || []).map(([sec, dir]) =>
         `<span class="agenda-imp ${dir}">${dir === 'up' ? '▲' : '▼'} ${SECTORS[sec] || sec}</span>`).join('');
-      const stocks = agendaMatchedStocks(it.sectors);
+      const stocks = agendaMatchedStocks(it.sectors, { used: usedStk, limit: 4 });
       const stocksHtml = stocks.length
         ? `<div class="agenda-stocks">İlgili takip: ${stocks.map((st) =>
             `<button class="agenda-stk" data-symbol="${st.symbol}" data-market="${st.market}">${st.symbol}</button>`).join('')}</div>`
@@ -9904,7 +10359,7 @@
         </div>`;
     }).join('');
 
-    return summary + rotationBanner + `<div class="agenda-list">${cards}</div>`;
+    return { head: summary, body: rotationBanner + `<div class="agenda-list">${cards}</div>` };
   }
 
   // ===== Faz 5: "Bugünün Önerileri" birleşik panel =====
@@ -10040,6 +10495,141 @@
         ${hotChips.length ? `<div class="idx-hot">🔴 Sıcak gündem: ${hotChips.join(' · ')}</div>` : ''}
         <div class="idx-foot">Endeks hareketlerinin makro (faiz/enflasyon/risk/büyüme) okumasıyla otomatik yorumudur; <b>skora dahil değildir</b>, yatırım tavsiyesi değildir.</div>
       </div>`;
+    // Hesaplanan endeks hareketleri "Günün Nedeni" motoruna devredilir (yeniden kote çekmeden).
+    return rows;
+  }
+
+  // ===== 📉 Günün Nedeni — Haber ⇄ Piyasa Nedensellik Motoru (Faz A: anahtarsız) =====
+  // Endeks Tetikleyicileri "neden"i makro boyutlardan GENEL çıkarır. Bu motor bir adım öteye
+  // geçer: bugün BELİRGİN hareket eden endeksi, CANLI TARANMIŞ gerçek manşetlerle eşleştirir
+  // ("eş-hareket + taze etiketli haber" = olası ilişki). Böylece "NASDAQ +%1.8 → muhtemel
+  // tetikleyici: [gerçek AI-çip haberi başlığı]" gibi SOMUT bir bağ kurulur.
+  //
+  // DÜRÜSTLÜK / SPK: Bu bir KORELASYON okumasıdır (eş-zamanlı hareket + ilgili taze manşet),
+  // kanıtlanmış nedensellik DEĞİL. Dil hep "olası / ilişkili olabilir". Skora DAHİL DEĞİLDİR,
+  // yatırım tavsiyesi değildir.
+  //
+  // Faz B (LLM): Gerçek manşet metinlerini Claude'a verip doğal-dil nedensellik anlatısı ürettirir.
+  // ANTHROPIC_API_KEY (api/explain.js serverless) gelince açılır; aşağıdaki stub şimdilik atıldır.
+
+  // Her endeksin "haber yakınlığı": hangi sektör etiketleri o endeksi en çok hareket ettirir.
+  const CAUSAL_INDEX_AFFINITY = {
+    equity_tech: ['tech', 'semis', 'ai', 'software', 'internet', 'cloud', 'crypto'],
+    equity_us:   ['tech', 'semis', 'banks', 'energy', 'industrials', 'health', 'biotech', 'consumer', 'staples', 'defense', 'auto', 'software', 'materials'],
+    equity_tr:   ['banks', 'holding', 'industrials', 'energy', 'retail', 'staples', 'steel', 'airline', 'defense', 'materials'],
+    gold:        ['gold', 'safe', 'rates', 'inflation'],
+  };
+
+  // Faz B kapısı — ANTHROPIC_API_KEY gelince api/explain.js üzerinden doğal-dil yorum.
+  // Şimdilik kapalı: anahtar yokken Faz A (deterministik) tek başına çalışır.
+  const CAUSAL_LLM = { enabled: false, endpoint: '/api/explain' };
+
+  // Bir endeks hareketi ile bir gündem konsepti arasındaki hizalanmayı (olası ilişki gücü) ölç.
+  // Hizalı = konsept, endeksin yakın sektörlerini hareket yönünde itiyor VE risk tonu uyumlu.
+  function causalAlign(cfg, pct, concept) {
+    const aff = CAUSAL_INDEX_AFFINITY[cfg.kind] || [];
+    const up = pct > 0;
+    let score = 0;
+    const why = [];
+    // 1) Sektör yönü hizası: konsept yakın sektörleri yukarı itiyorsa + endeks yukarıysa → hizalı.
+    let secMatch = 0, secOpp = 0, matchedSecs = [];
+    (concept.sectors || []).forEach(([sec, dir]) => {
+      if (!aff.includes(sec)) return;
+      if ((dir === 'up') === up) { secMatch++; matchedSecs.push(sec); }
+      else secOpp++;
+    });
+    if (secMatch) { score += 2 * secMatch; }
+    if (secOpp) { score -= 1.2 * secOpp; }
+    // 2) Risk tonu hizası (hisse: risk-on↑ / risk-off↓; altın: risk-off↑).
+    if (cfg.kind === 'gold') {
+      if (concept.risk === 'off' && up) { score += 1.6; why.push('riskten kaçış'); }
+      if (concept.risk === 'on' && !up) { score += 1.0; }
+    } else {
+      if (concept.risk === 'on' && up) { score += 1.4; why.push('risk iştahı'); }
+      if (concept.risk === 'off' && !up) { score += 1.4; why.push('riskten kaçış'); }
+      if (concept.risk === 'on' && !up) { score -= 0.8; }
+      if (concept.risk === 'off' && up) { score -= 0.8; }
+    }
+    // 3) Haber tonu hareket yönüyle aynı mı (pozitif ton + yükseliş).
+    if (concept.tone != null) {
+      if ((concept.tone > 0.12) === up && Math.abs(concept.tone) > 0.12) score += 0.6;
+    }
+    // 4) Isı & tazelik ağırlığı — sıcak ve yeni gündem daha güçlü tetikleyicidir.
+    const heatW = concept.heat === 'hot' ? 1.4 : concept.heat === 'warm' ? 1.0 : 0.5;
+    const freshH = (concept.heads && concept.heads.length) ? Math.min(...concept.heads.map((h) => h.ageH)) : 48;
+    const freshW = freshH <= 12 ? 1.2 : freshH <= 24 ? 1.0 : freshH <= 48 ? 0.75 : 0.5;
+    score *= heatW * freshW;
+    return { score, matchedSecs, why };
+  }
+
+  // Belirgin hareket eden her endeks için en iyi hizalanan 1-2 gündem konseptini bul.
+  function computeCausalLinks(ag, rows, m) {
+    if (!ag || !ag.items || !ag.items.length || !rows) return [];
+    // Yalnız "belirgin" (notable eşiğini aşan) endeks hareketleri nedensellik adayıdır.
+    const moved = rows.filter((r) => r.pct != null && Math.abs(r.pct) >= r.cfg.notable)
+      .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+    if (!moved.length) return [];
+    return moved.map((r) => {
+      const scored = ag.items.map((concept) => {
+        const a = causalAlign(r.cfg, r.pct, concept);
+        return { concept, ...a };
+      }).filter((x) => x.score >= 1.6) // yalnız anlamlı hizalar (gürültü eşiği)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 2);
+      return { cfg: r.cfg, pct: r.pct, links: scored };
+    }).filter((x) => x.links.length); // haberle eşleşmeyen hareketleri çıkar (dürüstlük)
+  }
+
+  // Faz B stub — anahtar gelince api/explain.js'e gerçek manşetleri gönderip anlatı alır.
+  // Şimdilik: anahtar yoksa null döner, Faz A olduğu gibi gösterilir. (Kullanıcı API verince bağlanacak.)
+  async function causalExplainLLM(_moves, _m) {
+    if (!CAUSAL_LLM.enabled) return null;
+    // TODO(API): fetch(CAUSAL_LLM.endpoint, {method:'POST', body: JSON.stringify({moves,heads})}) → {html|text}
+    return null;
+  }
+
+  async function renderCausalLinks(ag, rows, m) {
+    const box = document.getElementById('todayCause');
+    if (!box) return;
+    const groups = computeCausalLinks(ag, rows, m);
+    if (!groups.length) { box.innerHTML = ''; return; } // hareket yok / eşleşen taze haber yok → sessiz
+
+    const cards = groups.map((g) => {
+      const up = g.pct > 0;
+      const vCls = up ? 'bull' : 'bear';
+      const arrow = up ? '▲' : '▼';
+      const moveTxt = (up ? '+' : '') + g.pct.toFixed(2) + '%';
+      const links = g.links.map((l) => {
+        const c = l.concept;
+        const tags = (l.why || []).map((w) => `<span class="cau-tag">${w}</span>`).join('');
+        const heads = (c.heads || []).slice(0, 2).map((h) =>
+          `<a class="cau-head" href="${h.link}" target="_blank" rel="noopener">${h.title}</a>`).join('');
+        return `
+          <div class="cau-link">
+            <div class="cau-con">${c.emoji || '📰'} <b>${c.label}</b>${tags}</div>
+            ${heads}
+          </div>`;
+      }).join('');
+      return `
+        <div class="cau-card ${vCls}">
+          <div class="cau-head-row">
+            <span class="cau-idx">${g.cfg.emoji} ${g.cfg.name}</span>
+            <span class="cau-move ${up ? 'up' : 'down'}">${arrow} ${moveTxt}</span>
+          </div>
+          <div class="cau-verdict">Bu hareketle <b>eş-zamanlı öne çıkan</b> taze başlıklar — olası tetikleyici:</div>
+          ${links}
+        </div>`;
+    }).join('');
+
+    box.innerHTML = `
+      <div class="today-block cau-block">
+        <h3 class="today-block-h">📉 Günün Nedeni <span class="today-block-sub">— endeks hareketi ⇄ canlı manşet eşleşmesi</span></h3>
+        ${cards}
+        <div class="cau-foot">⚠️ Bu bir <b>korelasyon</b> okumasıdır (eş-zamanlı hareket + ilgili taze haber), kanıtlanmış nedensellik değil. <b>Skora dahil değildir</b>, yatırım tavsiyesi değildir.</div>
+      </div>`;
+
+    // Faz B (LLM) — anahtar geldiğinde doğal-dil nedensellik anlatısını buraya ekler.
+    try { await causalExplainLLM(groups, m); } catch (_) {}
   }
 
   async function renderToday(force) {
@@ -10052,16 +10642,23 @@
     todayBusy = true;
     statusEl.textContent = 'Günün gündemi taranıyor, makro faz ve hisseler birleştiriliyor…';
 
-    // 1) Günün Gündemi (canlı taranmış) — en üstte, önerilerden bağımsız
-    if (agendaEl) {
-      if (!agendaEl.innerHTML) agendaEl.innerHTML = '<div class="agenda-empty">📰 Günün gündemi canlı taranıyor…</div>';
+    // 1) Günün Gündemi (canlı taranmış) — en üstte, önerilerden bağımsız.
+    // head (günlük konjonktür özeti) → #todayConj; body (rotasyon + manşet kartları)
+    // → #todayAgenda. Araya #todayIndex (endeks tetikleyicileri) index.html'de girer.
+    const conjEl = document.getElementById('todayConj');
+    let agData = null; // gündem verisi — "Günün Nedeni" motoru da kullanır (tek kaynak)
+    if (conjEl || agendaEl) {
+      if (conjEl && !conjEl.innerHTML) conjEl.innerHTML = '<div class="agenda-empty">📰 Günün gündemi canlı taranıyor…</div>';
       try {
         const ag = await computeAgenda(force);
-        agendaEl.innerHTML = renderTodayAgenda(ag);
-        agendaEl.querySelectorAll('.agenda-stk').forEach((el) =>
+        agData = ag;
+        const parts = renderTodayAgenda(ag);
+        if (conjEl) conjEl.innerHTML = parts.head;
+        if (agendaEl) agendaEl.innerHTML = parts.body;
+        (agendaEl || conjEl).querySelectorAll('.agenda-stk').forEach((el) =>
           el.addEventListener('click', () => openStockPage(el.dataset.symbol, el.dataset.market, el.dataset.symbol)));
       } catch (_) {
-        agendaEl.innerHTML = '<div class="agenda-empty">Günün gündemi alınamadı.</div>';
+        if (conjEl) conjEl.innerHTML = '<div class="agenda-empty">Günün gündemi alınamadı.</div>';
       }
     }
 
@@ -10070,7 +10667,11 @@
     const ph = CYCLE_PHASES[m.phase];
 
     // 1.5) Endeks tetikleyicileri (BIST/altın/NASDAQ/S&P ani hareket + "neden") — bilgi amaçlı, skora dahil değil
-    try { await renderIndexPulse(m); } catch (_) {}
+    let idxRows = null;
+    try { idxRows = await renderIndexPulse(m); } catch (_) {}
+
+    // 1.6) 📉 Günün Nedeni — endeks hareketi ⇄ canlı manşet eşleşmesi (Faz A, anahtarsız). Skora dahil değil.
+    try { if (agData && idxRows) await renderCausalLinks(agData, idxRows, m); } catch (_) {}
 
     // Sıcak temaların "up" sektörleri = gündem rüzgârı olan sektörler
     const tailSectors = new Set();
@@ -10080,15 +10681,29 @@
     });
     const macroSectors = new Set(ph.sectors);
 
-    // Tüm evreni teknik+haber skorla (sektör etiketli semboller)
-    const uni = radarUniverse();
-    const scMap = await scoreSymbolList(uni, force);
-
-    const recs = uni.map((s) => {
-      const sc = scMap[s.market + ':' + s.symbol];
+    // Öneri evreni: TÜM izleme listesi. İki aşama → (1) ucuz ön-eleme: yalnız teknik
+    // skor (haber ağı yok, OHLC cache'li → hızlı) + makro/gündem primi ile ön-sırala;
+    // (2) en güçlü ~16 aday için haber duyarlılığı çek (pahalı ağ işini sınırlar).
+    // Böylece evren ~12 etiketliyle sınırlı kalmaz; öneriler gerçekten çeşitlenir.
+    const uni = recommendUniverse();
+    const taMap = await scoreSymbolList(uni, force, { taOnly: true });
+    const pre = uni.map((s) => {
+      const sc = taMap[s.market + ':' + s.symbol];
       if (!sc) return null;
       const inMacro = s.sectors.some((x) => macroSectors.has(x));
-      const inTail = s.sectors.some((x) => tailSectors.has(x));
+      const inTail  = s.sectors.some((x) => tailSectors.has(x));
+      let u0 = sc.ta;
+      if (inMacro) u0 += 6;
+      if (inTail)  u0 += 5;
+      return { s, inMacro, inTail, u0 };
+    }).filter(Boolean).sort((a, b) => b.u0 - a.u0);
+
+    const finalists = pre.slice(0, 16);
+    const scMap = await scoreSymbolList(finalists.map((p) => p.s), force);
+
+    const recs = finalists.map(({ s, inMacro, inTail }) => {
+      const sc = scMap[s.market + ':' + s.symbol];
+      if (!sc) return null;
       const senti = sc.senti;
       const newsNeg = senti && senti.hits && senti.score <= -0.2;
       let u = sc.score;
@@ -10157,7 +10772,7 @@
     }).join('');
     listEl.querySelectorAll('.today-row').forEach((el) =>
       el.addEventListener('click', () => openStockPage(el.dataset.symbol, el.dataset.market, el.dataset.symbol)));
-    statusEl.textContent = `${recs.length} hisse değerlendirildi${strong ? ` · ${strong} güçlü fırsat` : ''} · teknik+haber+sektör+gündem birleşik · ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
+    statusEl.textContent = `${uni.length} hisse tarandı · en güçlü ${recs.length} değerlendirildi${strong ? ` · ${strong} güçlü fırsat` : ''} · teknik+haber+sektör+gündem birleşik · ${new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
     todayBusy = false;
   }
 
@@ -10251,7 +10866,7 @@
   // Fed başlıklarından yön (şahin/güvercin) + enflasyon başlıklarından ısınma/soğuma çıkarır,
   // bunu YÖN-DUYARLI sektör etkisine çevirir (şahin → faize duyarlı tech/çip/REIT baskı; güvercin → tersi)
   // ve senin movers'larınla eşleştirip bütüncül tek-cümle yorum üretir. Kâhinlik değil, haberden çıkarım.
-  const RATE_SENSITIVE = ['tech', 'semis', 'reit', 'auto', 'clean', 'biotech', 'space'];
+  const RATE_SENSITIVE = ['tech', 'semis', 'reit', 'auto', 'clean', 'biotech', 'space', 'software', 'crypto'];
 
   // Enflasyon yönü: +1 ısınma (şahin baskı) .. -1 soğuma (güvercin rahatlama)
   function inflDirection(items) {
@@ -10286,13 +10901,24 @@
     ];
     let td = {};
     try { td = await fetchThemesData(themes, force); } catch (_) {}
-    const fedItems  = (td.pmFed  && td.pmFed.items)  || [];
-    const inflItems = (td.pmInfl && td.pmInfl.items) || [];
-    const bigItems  = (td.pmBig  && td.pmBig.items)  || [];
+    const fedItemsAll  = (td.pmFed  && td.pmFed.items)  || [];
+    const inflItemsAll = (td.pmInfl && td.pmInfl.items) || [];
+    const bigItemsAll  = (td.pmBig  && td.pmBig.items)  || [];
+
+    // ⏳ Çürüme / tazelik penceresi — bayat haber "güncel makro" gibi görünmesin.
+    // Yön matematiği son ~14 güne, yüksek-etkili başlıklar son ~7 güne göre; tarihi
+    // okunamayan (pubDate parse edilemeyen) başlık "taze" SAYILMAZ, dışarıda kalır.
+    // (Bilgi amaçlı sunum katmanı; skora/bileşkeye DAHİL DEĞİL.)
+    const freshWithin = (items, days) => {
+      const now = Date.now(), win = days * 864e5;
+      return items.filter((it) => { const t = Date.parse(it.pubDate); return !isNaN(t) && now - t < win; });
+    };
+    const fedItems  = freshWithin(fedItemsAll, 14);
+    const inflItems = freshWithin(inflItemsAll, 14);
     const allItems  = fedItems.concat(inflItems);
 
-    const rateDir = rateDirection(fedItems);   // -1 gevşeme .. +1 sıkılaşma
-    const inflDir = inflDirection(inflItems);  // -1 soğuma .. +1 ısınma
+    const rateDir = rateDirection(fedItems);   // -1 gevşeme .. +1 sıkılaşma (yalnız taze)
+    const inflDir = inflDirection(inflItems);  // -1 soğuma .. +1 ısınma (yalnız taze)
     const fresh2d = pulseRecentCount(allItems, 2);
 
     // Birleşik para-politikası baskısı → yön-duyarlı sektör etkisi
@@ -10324,7 +10950,7 @@
     // yön matematiğinden bağımsız, sadece "bunlar oluyor" bilgisi. Yön okumasında
     // zaten görünen başlıkları (allItems) ele; en yeni 4'ü göster.
     const seenLinks = new Set(allItems.map((it) => it.link));
-    const bigHeadlines = bigItems
+    const bigHeadlines = freshWithin(bigItemsAll, 7)
       .filter((it) => it.title && it.link && !seenLinks.has(it.link))
       .sort((a, b) => (Date.parse(b.pubDate) || 0) - (Date.parse(a.pubDate) || 0))
       .slice(0, 4);
@@ -11193,10 +11819,17 @@
       let g = `<div class="compare-grid${compareDcfOpen ? ' dcf-open' : ''}${compareAtahanOpen ? ' atahan-open' : ''}" style="grid-template-columns:${cols}">`;
       // Başlık satırı
       g += '<div class="compare-cell compare-corner cmp-c0">Metrik</div>';
-      items.forEach((it) => {
+      items.forEach((it, ci) => {
+        // "Şirket ne yapıyor?" tek-kelimelik özet (döküm gibi) — SADECE BİLGİ, skora dokunmaz.
+        const hm = metrics[ci];
+        const desc = hm ? trIndustry(hm.industry, hm) : '';
+        const bizTip = hm && hm.bizSummary ? esc(String(hm.bizSummary).slice(0, 220)) : '';
+        const name = hm && hm.name ? esc(String(hm.name)) : '';
+        const descTip = bizTip || name;
         g += `<div class="compare-cell compare-head">`
           + `<button class="cmp-remove" data-sym="${it.symbol}" data-mkt="${it.market}" title="Kaldır">×</button>`
           + `<div class="cmp-head-top"><span class="cmp-sym">${it.symbol}</span><span class="cmp-mkt">${it.market === 'BIST' ? 'BIST' : 'ABD'}</span></div>`
+          + (desc && desc !== '—' ? `<div class="cmp-head-desc"${descTip ? ` title="${descTip}"` : ''}>${desc}</div>` : (hm ? '' : `<div class="cmp-head-desc cmp-head-desc-dim">…</div>`))
           + `<button class="cmp-tolist" data-sym="${it.symbol}" data-mkt="${it.market}" data-q="${esc(it.query || it.symbol)}" title="Listeye ekle">☆ Listeye ekle</button>`
           + `</div>`;
       });
@@ -11431,6 +12064,39 @@
       });
 
       g += '</div>';
+
+      // --- 📄 Ne yapıyor? (şirket profili) — SADECE BİLGİ; skora dahil değil. ---
+      // Sektör etiketi (örn. "Yarı iletken ve malzeme") çoğu zaman şirketin GERÇEK işini
+      // anlatmaz. Burada Yahoo'nun longBusinessSummary'sini tam genişlikte, aç-kapa
+      // kartlarda gösteririz; 148px grid hücresine sığmayan uzun metin için.
+      const bizCards = items.map((it, ci) => {
+        const m = metrics[ci];
+        const sym = it.symbol;
+        const mkt = it.market === 'BIST' ? 'BIST' : 'ABD';
+        const sec = (m && m.sector) ? escapeHtml(m.sector) : '';
+        const ind = (m && m.industry) ? escapeHtml(m.industry) : '';
+        const site = (m && m.website) ? m.website : '';
+        const tagLine = [sec, ind].filter(Boolean).join(' · ');
+        const summary = (m && m.bizSummary) ? String(m.bizSummary).trim() : '';
+        let body;
+        if (!m) body = '<p class="cmp-biz-na">…</p>';
+        else if (!summary) body = '<p class="cmp-biz-na">Bu hisse için şirket profili metni bulunamadı.' + (site ? ' <a href="' + escapeHtml(site) + '" target="_blank" rel="noopener">Şirket sitesi ↗</a>' : '') + '</p>';
+        else body = '<p class="cmp-biz-txt">' + escapeHtml(summary) + '</p>'
+          + (site ? '<a class="cmp-biz-link" href="' + escapeHtml(site) + '" target="_blank" rel="noopener">Şirket sitesi ↗</a>' : '')
+          + '<p class="cmp-biz-src">Kaynak: Yahoo Finance şirket profili (İngilizce). Sektör etiketinin ötesinde şirketin ne yaptığını özetler.</p>';
+        return '<details class="cmp-biz-card">'
+          + '<summary><span class="cmp-biz-sym">' + escapeHtml(sym) + '</span>'
+          + '<span class="cmp-biz-mkt">' + mkt + '</span>'
+          + (tagLine ? '<span class="cmp-biz-tag">' + tagLine + '</span>' : '')
+          + '<span class="cmp-biz-caret">▸</span></summary>'
+          + '<div class="cmp-biz-detail">' + body + '</div>'
+          + '</details>';
+      }).join('');
+      g += '<div class="cmp-biz-sec">'
+        + '<div class="cmp-biz-head">📄 Ne yapıyor? <span class="cmp-biz-hsub">şirket profili · sektör etiketinin ötesi · tıkla → aç</span></div>'
+        + bizCards
+        + '</div>';
+
       g += '<div class="compare-suit-disc">🧭 <b>Temel Uygunluk</b>, Sonuç ekranındaki puanla aynı motordur (Temel %40 · Teknik %30 · Değerleme/fiyat %30). 🌍 <b>Konjonktür notu</b> puana dahil değildir — dünya/sektör/gündem eğilimidir. Yatırım tavsiyesi değildir; kişisel durumunuza, risk toleransınıza ve zaman ufkunuza göre değişir.</div>';
       wrap.innerHTML = html + g;
     }
@@ -11624,12 +12290,12 @@
       if (btn.dataset.tab === 'tez') initTez();
       if (btn.dataset.tab === 'sektor') initSektor();
       if (btn.dataset.tab === 'radar') initRadar();
-      if (btn.dataset.tab === 'macro') initMacro();
+      if (btn.dataset.tab === 'momentum') initMomentum();
       if (btn.dataset.tab === 'today') initToday();
       if (btn.dataset.tab === 'pulse') initPulse();
       if (btn.dataset.tab === 'compare') initCompare();
       if (btn.dataset.tab === 'lists') initLists();
-      if (btn.dataset.tab === 'search') initSearch();
+      if (btn.dataset.tab === 'search') { initSearch(); initThemeSearch(); }
     });
   });
 

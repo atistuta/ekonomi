@@ -73,6 +73,9 @@ async function fetchOne(sym, ck, deep) {
     finCurrency: fd.financialCurrency || null, // raporlama para birimi (gelir/finansallar bunda)
     sector: pr.sector || null,
     industry: pr.industry || null,
+    bizSummary: pr.longBusinessSummary || null, // şirketin ne yaptığı (sektör etiketinin ötesi)
+    country: pr.country || null,
+    website: pr.website || null,
     trailingPE: num(sd.trailingPE),
     forwardPE: num(sd.forwardPE),
     peg: num(ks.pegRatio) ?? num(ks.trailingPegRatio),
