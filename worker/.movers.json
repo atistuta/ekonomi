@@ -1,26 +1,15 @@
 {
-  "date": "2026-10-09",
+  "date": "2026-10-10",
   "levels": {
     "VST.US": 1,
-    "SNDK.US": -1,
-    "SKHY.US": -1,
-    "MU.US": -1,
-    "SPCX.US": -1,
     "IOVA.US": 3,
-    "SIMO.US": -2,
-    "MRVL.US": -1,
     "LITE.US": 1,
     "COIN.US": 1,
-    "COHR.US": 1,
-    "TER.US": -1,
-    "TSM.US": -1,
-    "AVGO.US": -1,
-    "ARM.US": -1,
-    "GLW.US": -2,
-    "AMLX.US": 1,
-    "ARKG.US": 1,
-    "GFI.US": 1,
     "PLTR.US": 1,
-    "FCX.US": 1
+    "COHR.US": 1,
+    "FCX.US": 1,
+    "ARM.US": -1,
+    "AMLX.US": 1,
+    "ARKG.US": 1
   }
 }
