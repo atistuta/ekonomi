@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://finans.truncgil.com" crossorigin />
   <link rel="preconnect" href="https://query1.finance.yahoo.com" crossorigin />
   <link rel="dns-prefetch" href="https://news.google.com" />
-  <link rel="stylesheet" href="styles.css?v=71" />
+  <link rel="stylesheet" href="styles.css?v=72" />
   <link rel="manifest" href="manifest.json" />
 </head>
 <body>
@@ -74,6 +74,7 @@
         <button class="tab" data-tab="today">⭐ Gündem</button>
         <button class="tab" data-tab="general">📰 Haberler</button>
         <button class="tab" data-tab="pulse">⚡ Nabız</button>
+        <button class="tab" data-tab="news">📰 Hisse Haberleri</button>
       </div>
     </div>
 
@@ -96,8 +97,7 @@
         <button class="tab" data-tab="technical">📈 Teknik Analiz</button>
         <button class="tab" data-tab="fundamental">📊 Temel Analiz</button>
         <button class="tab" data-tab="earn">📅 Bilanço</button>
-        <button class="tab" data-tab="calendar">🗓️ Takvim</button>
-        <button class="tab" data-tab="news">📈 Hisse Gelişmeleri</button>
+        <button class="tab" data-tab="calendar">💰 Temettü Takvimi</button>
       </div>
     </div>
 
@@ -288,16 +288,9 @@
     </section>
 
     <section id="tab-calendar" class="tab-content">
-      <div class="subnav">
-        <button class="chip active" data-cal="earnings">Bilanço</button>
-        <button class="chip" data-cal="dividends">Temettü</button>
-      </div>
-      <div id="calendarEarnings" class="cal-section">
-        <h2 class="section-title">Bilanço Duyuruları (KAP / Alt. Kaynak)</h2>
-        <div id="earningsList" class="feed"></div>
-      </div>
-      <div id="calendarDividends" class="cal-section" hidden>
+      <div id="calendarDividends" class="cal-section">
         <h2 class="section-title">Bu Yıl Açıklanan Temettüler</h2>
+        <p class="hint">Bilanço duyuruları için 📅 <b>Bilanço</b> sekmesine bakın. Bu sayfa yalnız <b>temettü</b> takvimidir — bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
         <div class="cal-block">
           <h3>BIST</h3>
           <div id="dividendsBIST" class="feed"></div>
@@ -326,14 +319,7 @@
           <option value="kisa">Kısa vade</option>
           <option value="orta" selected>Orta-uzun vade</option>
           <option value="uzun">Uzun vade</option>
-        </select>
-        <select id="taRange" class="ta-select" title="Grafik aralığı">
-          <option value="3mo">3 Ay</option>
-          <option value="6mo">6 Ay</option>
-          <option value="1y" selected>1 Yıl</option>
-          <option value="2y">2 Yıl</option>
-          <option value="5y">5 Yıl</option>
-        </select>
+      </select>
         <button id="taRefresh" class="ghost-btn" title="Yenile">↻</button>
         <button id="taBacktestBtn" class="ghost-btn" title="Skorun geçmişteki isabetini ölç">🔬 Doğruluk testi</button>
       </div>
@@ -345,6 +331,16 @@
       <div id="taScorePanel" class="ta-score-wrap"></div>
       <div id="taBacktestPanel" class="ta-score-wrap"></div>
       <div id="taLegend" class="ta-legend"></div>
+      <div class="ta-controls ta-range-row">
+        <span class="ta-range-lbl">Grafik aralığı</span>
+        <select id="taRange" class="ta-select" title="Grafik aralığı">
+          <option value="3mo">3 Ay</option>
+          <option value="6mo">6 Ay</option>
+          <option value="1y" selected>1 Yıl</option>
+          <option value="2y">2 Yıl</option>
+          <option value="5y">5 Yıl</option>
+        </select>
+      </div>
       <div id="taChartWrap" class="ta-chart-wrap">
         <div id="taChart"></div>
         <div id="taChartMsg" class="loading">Sembol seç…</div>
@@ -367,9 +363,12 @@
     </section>
 
     <section id="tab-search" class="tab-content">
-      <div class="search-controls">
-        <input id="searchInput" type="text" maxlength="40" placeholder="Ara: hisse, kripto ya da maden (ör. THYAO, AAPL, bitcoin, altın)" />
-        <button id="searchBtn" class="primary-btn">Ara</button>
+      <div class="search-sug-wrap">
+        <div class="search-controls">
+          <input id="searchInput" type="text" maxlength="40" placeholder="Ara: hisse, kripto ya da maden (ör. THYAO, AAPL, bitcoin, altın)" />
+          <button id="searchBtn" class="primary-btn">Ara</button>
+        </div>
+        <div id="searchSuggest" class="sug-box" hidden role="listbox" aria-label="Arama önerileri"></div>
       </div>
       <div id="searchResult"></div>
 
@@ -620,6 +619,6 @@
 
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
   <script src="config.js?v=71"></script>
-  <script src="app.js?v=95"></script>
+  <script src="app.js?v=96"></script>
 </body>
 </html>
