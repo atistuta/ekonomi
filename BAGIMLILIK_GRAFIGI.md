@@ -214,6 +214,28 @@ kayıtları her koşuda yeniden sorar.)
 2. **`/api/score`** — 52 fonksiyon + 5 arayüz. İlk uç bu olmalı: en küçük kapanış,
    en yüksek değer, diğer bütün uçlar buna dayanıyor. Aday motor artık
    `PARITE_APP=... node tests/parity.mjs` ile **canlıya dokunmadan** ölçülebilir.
+
+   **Adım 1 — motor taşıyıcısı → TAMAM** (2026-10-12). Sunucuda motor
+   `tests/engine.mjs` gibi kurulamaz (`tests/` yayına gitmiyor, `app.js` tarayıcı
+   varlığı), bu yüzden tek bir ESM modülüne **üretiliyor**:
+   **[api/_motor.js](api/_motor.js)** — 1.405 satır / 9 dilim / 23 sembol, dışa
+   verdiği tek giriş `buildMotor(H)` ve `H` o beş arayüzün ta kendisi (§4). `_`
+   öneki Vercel'in dosyayı rotaya çevirmesini engelliyor.
+   Kopya **değil**: **[tools/motor-uret.mjs](tools/motor-uret.mjs)** her seferinde
+   `app.js`'i yeniden dilimliyor, **[tests/uretim-test.mjs](tests/uretim-test.mjs)**
+   (34 denetim) "bu dosya app.js'in ŞU ANKİ hali mi?" sorusunu soruyor — elle
+   düzenleme ya da app.js kayması testi kırmızı yakıyor.
+   **Kanıt:** parite artık iki şeritte koşuyor ve ikisi de aynı `baseline.json`'a
+   karşı **FARK 0** veriyor — `node tests/parity.mjs` (bellekte dilimlenmiş) ve
+   `PARITE_MOTOR=uretilmis node tests/parity.mjs` (diskteki üretilmiş motor).
+   Negatif kontrol: üretilmiş dosyada `taBand` eşiği 54→55 bozulunca test hem metin
+   farkını (satır 912) hem davranış farkını yakalayıp çıkış 1 verdi.
+
+   **Adım 2 — `api/score.js` ucu → sırada.** Yapılacaklar: ESM `export default
+   handler` (diğer beş uçla aynı biçim) + `vercel.json` `functions` girdisi;
+   §5.1 gereği **ham sayı** döndürmek (biçimlendirme istemcide kalır); §5.2'deki
+   F/K kriterinin **üç ekran kopyasının** motora devri; `COMPOSITE_MATRIX`'in
+   2 etiketli satırının belirtece çevrilmesi.
 3. ~~Skor paritesi testi~~ → **TAMAM** (2026-10-11). `tests/` · 20 sembol + 9 sentetik
    bileşke vektörü · **fark 0** · negatif kontrol 44 farkla kırmızı yandı.
    Ayrıntı: **[tests/README.md](tests/README.md)**.

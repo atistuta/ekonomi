@@ -14,18 +14,20 @@ dondurulmuş "doğru cevap"la karşılaştırma yapar ve kaymayı yol adıyla s�
 ## Çalıştırma
 
 ```bash
-node tests/capture.mjs    # 1) ham girdileri ağdan çeker ve dondurur (bir kez)
-node tests/baseline.mjs   # 2) "doğru cevap"ı üretir → tests/baseline.json
-node tests/parity.mjs     # 3) her değişiklikten sonra: FARK 0 olmalı
+node tests/capture.mjs      # 1) ham girdileri ağdan çeker ve dondurur (bir kez)
+node tests/baseline.mjs     # 2) "doğru cevap"ı üretir → tests/baseline.json
+node tests/parity.mjs       # 3) her değişiklikten sonra: FARK 0 olmalı
+node tests/uretim-test.mjs  # 4) api/_motor.js hâlâ app.js'in şu anki hali mi?
 ```
 
-Günlük kullanımda yalnız **3. komut** çalıştırılır. 1 ve 2 bir kez koşar; `capture`
+Günlük kullanımda **3. ve 4. komut** çalıştırılır. 1 ve 2 bir kez koşar; `capture`
 var olan fikstürleri atlar, `baseline` var olan referansın üstüne **yazmaz**.
 
 Beklenen çıktı:
 
 ```
 ✅ FARK 0 — parite tam. 29 karşılaştırma noktası birebir aynı.
+✅ 34 denetim geçti — api/_motor.js app.js ile birebir.
 ```
 
 Çıkış kodu 0 = geçti, 1 = kaydı.
@@ -47,6 +49,7 @@ Beklenen çıktı:
 | `parity.mjs` | Aynı çıktıyı yeniden üretip `baseline.json` ile karşılaştırır |
 | `metin.mjs` | **Metin biçimi** (FAZ 1/3) — belirteç dizisi ⇄ HTML / RN / düz metin |
 | `metin-test.mjs` | Biçim kanıtı — 46 gerçek cümle bayt bayt geri dönüyor mu |
+| `uretim-test.mjs` | **Üretim kanıtı** — `api/_motor.js` app.js'in **şu anki** hali mi |
 
 ---
 
@@ -222,6 +225,89 @@ tur: 46/46 birebir
   bilinmeyen rol, `</br>`, eksik metin…) — yoksa test hiçbir şey ölçmez.
 
 Parite bu dönüşümden **etkilenmez**: `baseline.json`'da etiketli tek bir dize yok.
+
+---
+
+## Motor taşıyıcısı kanıtı — `uretim-test.mjs`
+
+Sunucuda motor `engine.mjs` gibi kurulamaz: Vercel'de `tests/` yayına gönderilmiyor
+(`.vercelignore`) ve `app.js` bir tarayıcı varlığı. Bu yüzden motor sunucu tarafı için
+**tek bir ESM modülüne üretiliyor**:
+
+```bash
+node tools/motor-uret.mjs            # app.js → api/_motor.js (üret / yenile)
+node tools/motor-uret.mjs --denetle  # yalnız denetle: fark varsa çıkış 1
+node tests/uretim-test.mjs           # kanıt: 34 denetim
+```
+
+| Dosya | Rolü |
+|---|---|
+| `../tools/motor-uret.mjs` | Üretici — `app.js`'i dilimler, `buildMotor(H)` gövdesine sarar |
+| `../api/_motor.js` | **Üretilmiş** motor: 1.405 satır / 9 dilim, 23 sembol, `IMZA` gömülü |
+
+`_` önekli dosyaları Vercel uç noktaya çevirmez → `api/_motor.js` bir **rota değil**,
+yalnızca `/api/score`'un içe alacağı modül.
+
+### Neden kopya değil
+
+`engine.mjs`'in baştaki yasağı hâlâ geçerli: *"motor kopyalanırsa iki sürüm doğar ve
+parite testi kendi kopyasını doğrular — yani hiçbir şeyi."* Üretilen dosya o yasağı
+şöyle aşıyor: metin **elle yazılmıyor**, her seferinde `app.js`'ten türetiliyor ve
+üretim testi her koşuda metni **bellekte yeniden üretip** diskteki ile karşılaştırıyor.
+Elle düzenleme ya da `app.js`'in kayması testi kırmızı yakar. Yani dosya bir kopya
+değil, aynı metnin ikinci **taşıyıcısı**.
+
+İki tasarım kararı bunu ayakta tutuyor:
+
+- **Başlık tarihsiz olmak zorunda.** Üretim tarihi yazılsa dosya ertesi gün kendi
+  kendine "sürüklenmiş" görünür ve test her gün kırmızı yanardı. Başlıktaki her satır
+  yalnız `app.js`'ten türeyen belirlenimci bilgi taşıyor (dilim adları, satır
+  sayıları, sembol sayısı, imza).
+- **İki ayrı karşılaştırma.** Kanonik biçim **LF** (`api/proxy.js` örneği), ama depoda
+  `.gitattributes` yok → taze klonda `core.autocrlf` dosyayı CRLF'e çevirebilir ve bu
+  bir sürüklenme **değildir**. Bu yüzden **denetim** satır sonuna duyarsız
+  (`\r\n` → `\n` normalleştirerek), **yazma kararı** ise **bayt bayt**; tek bir
+  karşılaştırma kullanılsaydı bir satır sonu düzeltmesi "değişiklik yok" diye atlanırdı.
+
+Ölçülmüş sonuç (2026-10-12) — 34 denetimin özeti:
+
+```
+① Dosya ve biçim           satır sonu tek tip (lf 1483 / crlf 0) · başlık tarihsiz
+② Sürüklenme               bellekte yeniden üretilen metin diskteki ile aynı (1483 satır)
+③ İmza                     sha256:7049fb1cd9c44c9a — belirlenimci, tek karaktere duyarlı
+④ Dilim tablosu            canlı sliceInfo() ile birebir (9 / 9 · toplam 1405 satır)
+⑤ Modül yükü               buildMotor (function) · IMZA (string) · DILIMLER (array)
+⑥ Motor yüzeyi             EXPORTS sembollerinin hepsi var (23 sembol)
+⑦ Davranış eşitliği        faInterp 1827 nokta · faBand/taBand 442 nokta ·
+                           computeHolisticScore 9/9 vektör (tam sonuç, cümleler dahil)
+⑧ Olumsuz denetim          N1 metin · N2 eksik sembol · N3 dilim · N4 1e-9 → hepsi reddedildi
+
+✅ 34 denetim geçti — api/_motor.js app.js ile birebir.
+```
+
+⑦ burada **cümleleri de** karşılaştırıyor — `baseline.json`'ın bilerek dondurmadığı
+şeyi. Çelişki değil: orada cümle dondurmak FAZ 1/3 belirteç dönüşümünü gereksiz yere
+kırardı, burada ise iki taraf **aynı kaynaktan** türüyor, yani bir fark biçim tercihi
+olamaz — ancak gerçek bir bozulma olabilir.
+
+### Üretilmiş motor parite şeridi
+
+Parite testi iki şeritte koşuyor, ikisi de **aynı** `baseline.json`'a karşı:
+
+```bash
+node tests/parity.mjs                          # şerit A: app.js dilimlenerek (bellekte)
+PARITE_MOTOR=uretilmis node tests/parity.mjs   # şerit B: api/_motor.js diskten
+```
+
+İkisi de `✅ FARK 0 — parite tam. 29 karşılaştırma noktası birebir aynı.` veriyor.
+Asıl önemli olan **şerit B**: `/api/score`'un sunucuda diskten yükleyeceği dosya,
+20 sembolün 20'sini ve 9 sentetik vektörün 9'unu **dondurulmuş cevapla aynı** skorluyor.
+
+**Negatif kontrol** — yalnız içteki 4 olumsuz denetime güvenilmedi, testin gerçek bir
+sürüklenmede kırmızı yandığı uçtan uca gösterildi: üretilmiş dosyadaki `taBand` eşiği
+`54` → `55` yapıldı. Test iki yerden **birbirinden bağımsız** yakaladı — ② metin farkı
+(*ilk farklı satır: 912*) ve ⑦ davranış farkı (`taBand(54)`: `"hi"` ≠ `"mid"`) — çıkış
+kodu **1**. Dosya geri yüklendi, imza değişmedi.
 
 ---
 

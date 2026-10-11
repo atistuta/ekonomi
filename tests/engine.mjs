@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const TESTS = path.join(ROOT, 'tests');
@@ -37,11 +38,17 @@ const APP_PATH = process.env.PARITE_APP
   : path.join(ROOT, 'app.js');
 const CFG_PATH = path.join(ROOT, 'config.js');
 
+// PARITE_MOTOR=uretilmis → motor app.js'ten dilimlenmek yerine ÜRETİLMİŞ
+// dosyadan yüklenir. Amacı: /api/score'un sunucuda koşturacağı dosyayı,
+// canlıya dokunmadan aynı parite kapısından geçirmek.
+const MOTOR_PATH = path.join(ROOT, 'api', '_motor.js');
+const URETILMIS = process.env.PARITE_MOTOR === 'uretilmis';
+
 // ---------------------------------------------------------------------
 // Dilim imleri. Her im app.js'te TAM BİR KEZ geçmeli — geçmezse test
 // sessizce yanlış kod ölçmek yerine gürültüyle durur.
 // ---------------------------------------------------------------------
-const SLICES = [
+export const SLICES = [
   // fmtTRY/fmtTime, fmtDate'in 11 satir ustunde — bistFundamentalModel
   // fmtTRY'yi cagiriyor (fmtUSD ile ayni bagimlilik), bu yuzden dilim
   // yukari genisletildi.
@@ -63,7 +70,7 @@ const SLICES = [
 ];
 
 // Dilimlerden dışarı verilecek motor sembolleri.
-const EXPORTS = [
+export const EXPORTS = [
   'fetchYahooOHLC', 'yahooSymbol', 'resampleCandles', 'taTFIndicators', 'taRegime',
   'taNormalize', 'computeVadeScore', 'setTaScoreInd',
   'faInterp', 'faSD', 'faScoreSig', 'computeFaScore', 'faVerdict',
@@ -110,22 +117,68 @@ function deadProxy(label) {
   });
 }
 
+// ---------------------------------------------------------------------
+//  MOTOR METNİ — tek kurulum yeri.
+//  Hem test (bellek içinde `new Function`) hem üretici
+//  (tools/motor-uret.mjs → api/_motor.js) AYNI metni buradan kurar. İkisi
+//  metni ayrı ayrı kurarsa iki motor doğar ve üretim testi kendi kopyasını
+//  doğrular — yani hiçbir şeyi.
+// ---------------------------------------------------------------------
+export const PREAMBLE = [
+  '"use strict";',
+  '// --- konak kabukları: motor bunları yalnız ÇAĞIRIR, içeriğini bilmez ---',
+  'const window = H.window;',
+  'const localStorage = H.localStorage;',
+  'const fetch = (...a) => H.fetch(...a);',
+  'const fetchVia = (...a) => H.fetchVia(...a);',
+  'const proxy = (url) => url;              // Node\'da CORS yok → vekil gereksiz',
+  'const setDiag = () => {};                // tanı rozetleri ekrana aittir',
+  'const document = H.dead("document");     // erişilirse adıyla patlar',
+  'const navigator = H.dead("navigator");',
+  '',
+].join('\n');
+
+/** Depodaki app.js'i oku (PARITE_APP ile başka bir adaya yöneltilebilir). */
+export function readApp() {
+  return fs.readFileSync(APP_PATH, 'utf8');
+}
+
 /**
- * Motoru kur.
+ * app.js metninden motor gövdesini kur — dilimle, başa kabukları koy, sonuna
+ * `return {...}` ekle.
+ * @returns {{parts:{name:string,code:string}[], body:string, tail:string, govde:string}}
+ *   `govde` iki yerde AYNEN kullanılabilir: `new Function('H', govde)` ve
+ *   `function buildMotor(H) { <govde> }` — çünkü bir `return` ile bitiyor.
+ */
+export function engineSource(app) {
+  const parts = SLICES.map(([n, a, b]) => ({ name: n, code: sliceOne(app, n, a, b) }));
+  const body = parts.map((p) => `// ===== dilim: ${p.name} =====\n${p.code}`).join('\n');
+  const tail = `\nreturn { ${EXPORTS.join(', ')} };\n`;
+  return { parts, body, tail, govde: PREAMBLE + body + tail };
+}
+
+/** Dilim adı + satır sayısı. api/_motor.js bunu gömülü taşır (app.js okumadan). */
+export function sliceInfo(parts) {
+  return parts.map((p) => ({ name: p.name, lines: p.code.split('\n').length }));
+}
+
+/**
+ * Konak kabuğu: motorun dışarıdan gördüğü HER ŞEY. Motor bunları yalnız
+ * ÇAĞIRIR, içeriğini bilmez — aynı motor bu yüzden testte fikstürle,
+ * sunucuda gerçek ağla koşabiliyor.
  * @param {object} opt
  * @param {(url:string)=>Promise<Response>} [opt.fetch]    ağ kabuğu (fetchYahooOHLC + secGet kullanır)
  * @param {(url:string,o?:object)=>Promise<string>} [opt.fetchVia]  İş Yatırım metin kabuğu
  * @param {object} [opt.taScoreInd]  gösterge aç/kapa (varsayılan: hepsi açık = {})
  */
-export function buildEngine(opt = {}) {
-  const app = fs.readFileSync(APP_PATH, 'utf8');
-  const parts = SLICES.map(([n, a, b]) => ({ name: n, code: sliceOne(app, n, a, b) }));
-
+export function makeHost(opt = {}) {
   const noNet = async () => { throw new Error('ag kabugu verilmedi: parite kosusunda canli istek YASAK'); };
-  const host = {
+  let cfg = null;
+  const CFG = () => (cfg || (cfg = loadConfig()));   // config.js yalnız gerekirse okunur
+  return {
     window: {
-      TA_WEIGHTS: opt.window?.TA_WEIGHTS ?? loadConfig().TA_WEIGHTS,
-      TA_BENCHMARK: opt.window?.TA_BENCHMARK ?? loadConfig().TA_BENCHMARK,
+      TA_WEIGHTS: opt.window?.TA_WEIGHTS ?? CFG().TA_WEIGHTS,
+      TA_BENCHMARK: opt.window?.TA_BENCHMARK ?? CFG().TA_BENCHMARK,
       // secGet: `if (!base) return null` — BOŞ OLAMAZ. Varsayılan önek, kabuğun
       // decodeURIComponent ile gerçek URL'yi geri çıkarması için bir işaretçidir.
       MY_PROXY: opt.myProxy ?? 'fixture:',
@@ -138,37 +191,56 @@ export function buildEngine(opt = {}) {
     fetchVia: opt.fetchVia || noNet,
     dead: deadProxy,
   };
+}
 
-  const preamble = [
-    '"use strict";',
-    '// --- konak kabukları: motor bunları yalnız ÇAĞIRIR, içeriğini bilmez ---',
-    'const window = H.window;',
-    'const localStorage = H.localStorage;',
-    'const fetch = (...a) => H.fetch(...a);',
-    'const fetchVia = (...a) => H.fetchVia(...a);',
-    'const proxy = (url) => url;              // Node\'da CORS yok → vekil gereksiz',
-    'const setDiag = () => {};                // tanı rozetleri ekrana aittir',
-    'const document = H.dead("document");     // erişilirse adıyla patlar',
-    'const navigator = H.dead("navigator");',
-    '',
-  ].join('\n');
+/**
+ * Motoru kur ve sembollerini döndür.
+ *
+ * İKİ ŞERİT — ikisi de AYNI motor metnini koşturur:
+  *   · varsayılan              → app.js dilimlenir, `new Function` ile derlenir
+  *   · PARITE_MOTOR=uretilmis  → api/_motor.js DOSYASI yüklenir
+ *
+ * İkinci şerit /api/score'un sunucuda koşturacağı dosyayı ölçer. O dosya
+ * app.js'ten ÜRETİLDİĞİ ve tests/uretim-test.mjs eşitliğini kanıtladığı için
+ * bir kopya değil, aynı metnin ikinci taşıyıcısıdır.
+ */
+export function buildEngine(opt = {}) {
+  const host = makeHost(opt);
 
-  const body = parts.map((p) => `// ===== dilim: ${p.name} =====\n${p.code}`).join('\n');
-  const tail = `\nreturn { ${EXPORTS.join(', ')} };\n`;
-
-  let api;
-  try {
-    // eslint-disable-next-line no-new-func
-    api = new Function('H', preamble + body + tail)(host);
-  } catch (e) {
-    throw new Error('motor dilimleri derlenemedi: ' + e.message);
+  let api, dilimler;
+  if (URETILMIS) {
+    // createRequire: senkron require ile ESM yüklenebiliyor (Node 24, ölçüldü).
+    // buildEngine'in SENKRON kalması zorunlu — dört çağrı yerinin hepsi öyle,
+    // bu yüzden `await import` kullanılamıyor. Çapa Windows mutlak yolu olmak
+    // zorunda: file:/// URL çapası reddediliyor.
+    const req = createRequire(path.join(ROOT, 'package.json'));
+    let mod;
+    try {
+      mod = req(MOTOR_PATH);
+    } catch (e) {
+      throw new Error(`uretilmis motor yuklenemedi: ${MOTOR_PATH}\n  ${e.message}\n  once uret: node tools/motor-uret.mjs`);
+    }
+    if (typeof mod.buildMotor !== 'function') throw new Error('uretilmis motor buildMotor() disa vermiyor');
+    api = mod.buildMotor(host);
+    dilimler = mod.DILIMLER;
+  } else {
+    const src = engineSource(readApp());
+    try {
+      // eslint-disable-next-line no-new-func
+      api = new Function('H', src.govde)(host);
+    } catch (e) {
+      throw new Error('motor dilimleri derlenemedi: ' + e.message);
+    }
+    dilimler = sliceInfo(src.parts);
   }
+
   for (const k of EXPORTS) {
     if (api[k] === undefined) throw new Error(`motor sembolu bulunamadi: ${k} — dilim imleri kaymis olabilir`);
   }
-  api._slices = parts.map((p) => ({ name: p.name, lines: p.code.split('\n').length }));
+  api._slices = dilimler;
   api._weights = host.window.TA_WEIGHTS;
   api._bench = host.window.TA_BENCHMARK;
+  api._serit = URETILMIS ? 'uretilmis' : 'dilim';
   return api;
 }
 
@@ -187,6 +259,7 @@ export function readSymbols() {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const e = buildEngine();
   const total = e._slices.reduce((a, s) => a + s.lines, 0);
+  console.log(`serit: ${e._serit}`);
   console.log('dilimler:');
   for (const s of e._slices) console.log(`  ${s.name.padEnd(10)} ${String(s.lines).padStart(5)} satir`);
   console.log(`  ${'TOPLAM'.padEnd(10)} ${String(total).padStart(5)} satir`);

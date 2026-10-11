@@ -12,3 +12,9 @@ financial-services-main/
 total motor fikir/
 *.pdf
 *.docx
+
+# Motor ureticisi = GELISTIRME araci: tests/engine.mjs'i ice aliyor (o da yayinda
+# yok) ve yalnizca api/_motor.js'i URETMEK icin kosuyor; urun calisirken
+# cagrilmaz. DIKKAT: api/ HARIC TUTULMUYOR -> api/_motor.js motorun sunucu
+# tarafi tasiyicisi, /api/score onu ice alacak. (bkz. tools/motor-uret.mjs)
+tools/
