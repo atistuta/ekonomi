@@ -197,9 +197,20 @@ kayıtları her koşuda yeniden sorar.)
 
 ## 6. Sonraki iş
 
-1. **Metin biçimi kararı** — 40 "gizli sunum" fonksiyonu Türkçe metne `<b>`/`<i>`
-   gömüyor; React Native bunu render etmez. Karar bu fazda verilmeli (öneri:
-   belirteç dizisi), yoksa 40 fonksiyon iki kez taşınır.
+1. ~~Metin biçimi kararı~~ → **TAMAM** (2026-10-11). Karar: motor HTML değil
+   **belirteç dizisi** döndürür ve biçim etiket adı değil **rol** taşır
+   (`v` vurgu / `e` etiket / `s` sayı / `d` soluk / `i` italik / `br`). Kanıt:
+   `app.js`'teki 46 gerçek cümle belirtece çevrilip geri render edildiğinde
+   **bayt bayt aynı** HTML çıkıyor (31 doğrulama, 9 negatif kontrol).
+   Ayrıntı: **[tests/metin.mjs](tests/metin.mjs)**.
+
+   **Bu maddenin eski hali "40 fonksiyon iki kez taşınır" diyordu; ölçüm bunu üç
+   yönden düzeltti:** (a) skor motoru neredeyse etiketsiz — 1.405 satırlık 9 dilimde
+   **2 satır / 4 etiket**, ikisi de statik `COMPOSITE_MATRIX` verisi; (b) etiket gömen
+   63 yerin **38'i** zaten kendisi DOM'a yazıyor, yani RN için nasılsa yeniden
+   yazılacak sunum kodu; (c) dosyanın tamamında 1.337 yapısal satıra karşılık yalnız
+   **46 cümle satırı** var. Cümle kurma işi `/api/analyze` + `/api/recommend`'e ait;
+   `/api/score` taşınırken çevrilecek olan yalnız o 2 satır.
 2. **`/api/score`** — 52 fonksiyon + 5 arayüz. İlk uç bu olmalı: en küçük kapanış,
    en yüksek değer, diğer bütün uçlar buna dayanıyor. Aday motor artık
    `PARITE_APP=... node tests/parity.mjs` ile **canlıya dokunmadan** ölçülebilir.

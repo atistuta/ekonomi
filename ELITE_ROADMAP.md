@@ -44,9 +44,19 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       nedensellik, tematik, karşılaştırma) vs DOM kodu listesi çıkar.
       → **[MOTOR_ENVANTER.md](MOTOR_ENVANTER.md)** (2026-10-11). Ölçüm: saf motor
       223 fn / 3.544 satır · ağ 17 fn · **DOM 203 fn / 5.901 satır (atılacak)**.
-- [ ] **Metin biçimi kararı (envanterden çıktı, FAZ 1 içinde verilmeli):** 40 motor
-      fonksiyonunun Türkçe açıklama metninde `<b>`/`<i>` gömülü — RN bunu render
-      etmez. API düz `text` yerine **belirteç dizisi** dönmeli (öneri B).
+- [x] **Metin biçimi kararı (envanterden çıktı, FAZ 1 içinde verilmeli):** motor
+      metinlerinde `<b>`/`<i>` gömülü — RN bunu render etmez. API düz `text` yerine
+      **belirteç dizisi** dönmeli (öneri B).
+      → **[tests/metin.mjs](tests/metin.mjs)** + **[tests/metin-test.mjs](tests/metin-test.mjs)**
+      (2026-10-11). Sonuç: `node tests/metin-test.mjs` → **31 doğrulama geçti**;
+      `app.js`'teki **46 gerçek cümle bayt bayt** geri döndü, etiket dağarcığı 4
+      (`b`/`em`/`i`/`br`). Biçim etiket adı değil **rol** taşıyor: `<b>` üçe ayrıldı
+      (`v` vurgu / `e` etiket / `s` sayı — sayı yuvası mobilde `tabular-nums` ister),
+      `<em>` → `d` (soluk) çünkü bu projede `font-style: normal` (`styles.css:710`).
+      **Ölçüm maddenin "40 fonksiyon" varsayımını düzeltti:** skor motoru neredeyse
+      etiketsiz — 1.405 satırlık 9 dilimde **2 satır / 4 etiket**, ikisi de statik
+      `COMPOSITE_MATRIX` verisi. Cümle kurma işi `/api/analyze` + `/api/recommend`'e
+      ait, `/api/score`'a değil.
 - [x] **Bağımlılık grafiği:** motor fonksiyonları hangi DOM fonksiyonlarını çağırıyor
       (`computeVadeScore` gibi sınır vakalarını ayrıştırmak için).
       → **[BAGIMLILIK_GRAFIGI.md](BAGIMLILIK_GRAFIGI.md)** (2026-10-11). Sonuç: 3 arayüz

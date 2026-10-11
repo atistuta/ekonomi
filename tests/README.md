@@ -45,6 +45,8 @@ Beklenen çıktı:
 | `baseline.mjs` | `run.mjs` çıktısını diske yazar |
 | `baseline.json` | **Dondurulmuş ÇIKTI** — doğru cevap. Elle düzenlenmez. |
 | `parity.mjs` | Aynı çıktıyı yeniden üretip `baseline.json` ile karşılaştırır |
+| `metin.mjs` | **Metin biçimi** (FAZ 1/3) — belirteç dizisi ⇄ HTML / RN / düz metin |
+| `metin-test.mjs` | Biçim kanıtı — 46 gerçek cümle bayt bayt geri dönüyor mu |
 
 ---
 
@@ -184,6 +186,42 @@ fikstürleri atlar ama `null` kayıtları her koşuda yeniden sorar — çünkü
   Yalnız ana sayfa bağlantı zaman aşımına uğruyor.
 - `secGet` istisnaları `null`'a yutar → taşınan sunucu işlevi **404'ü taşıma
   hatasından açıkça ayırmak zorunda**.
+
+---
+
+## Metin biçimi kanıtı — `metin-test.mjs`
+
+Yukarıda cümlelerin **neden dondurulmadığı** yazıyor: FAZ 1/3'te belirteç dizisine
+çevrilecekler. Bu ikinci test, o dönüşümün web çıktısını **değiştirmediğini** kanıtlar.
+
+```bash
+node tests/metin-test.mjs
+```
+
+Ölçülmüş sonuç (2026-10-11):
+
+```
+dağarcık (açılış etiketi): b:53  em:1  i:1  br:2
+tur: 46/46 birebir
+✅ 31 doğrulama geçti
+```
+
+- **46 gerçek cümle** `app.js`'ten **okunarak** alınıyor (kopya yok — parite testiyle
+  aynı kural). Belirtece çevrilip geri render edildiğinde **bayt bayt aynı** HTML
+  çıkıyor; fark olursa test ilk ayrışan baytı gösteriyor.
+- Motorun kendi cümleleri de ölçülüyor: canlı `COMPOSITE_MATRIX`'in 9 hücresinden
+  **2'si** etiketli — yani skor motorundaki metin işi **2 satır**.
+- Biçim etiket adı değil **rol** taşıyor. `<b>` üçe ayrıldı (`v` vurgu / `e` etiket /
+  `s` sayı): web üçünü de `<b>` yapar ama mobilde sayı yuvası `tabular-nums` ister,
+  yoksa rakamlar zıplar. `<em>` → `d` (soluk), çünkü bu projede `<em>` italik **değil**
+  (`styles.css:710` → `font-style: normal`). Naif bir etiket→stil eşlemesi mobilde
+  yanlış görünürdü.
+- `v`/`e`/`s` HTML'de **ayırt edilemez** (üçü de `<b>X</b>`), bu yüzden dönüşüm
+  fonksiyon fonksiyon yapılabilir; `tokensToHtml` düz dizeyi aynen geçirir.
+- **9 negatif kontrol** reddedilmek zorunda (iç içe etiket, kapanmayan etiket,
+  bilinmeyen rol, `</br>`, eksik metin…) — yoksa test hiçbir şey ölçmez.
+
+Parite bu dönüşümden **etkilenmez**: `baseline.json`'da etiketli tek bir dize yok.
 
 ---
 
