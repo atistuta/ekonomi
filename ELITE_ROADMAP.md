@@ -1,0 +1,139 @@
+# Sabah Bülteni — Elit Native Uygulama Yol Haritası
+
+> Durum: PLANLAMA. Hedef: web PWA prototipinden App Store / Play Store'da
+> yayınlanan, akıcı ve elit hisli bir **native mobil uygulamaya** geçiş.
+> Tarih: 2026-10-10. Bu dosya yaşayan bir belgedir — ilerledikçe güncellenir.
+
+---
+
+## 0. Çalışma düzeni (ikimizin rolü)
+
+- **Kullanıcı (sen):** Web PWA'yı (`day-starter.vercel.app`) **laboratuvar** olarak
+  kullanmaya devam edersin — fikir/düzeltme/eklenti notları biriktirirsin. Bazı
+  oturumlar bu web notlarını uygularız (motor + özellik geliştirme burada hızlı).
+- **Claude (ben):** Native göçü + elit kabuk işini yürütürüm (aşağıdaki fazlar).
+- **İki iş paralel ilerler** ve birbirini besler: web'de olgunlaşan her özellik,
+  motor API'ye bağlı olduğu için native app'e "bedavaya" gelir.
+
+---
+
+## 1. Mimari ilke — MOTOR / KABUK AYRIMI (her şeyin temeli)
+
+Projenin asıl değeri **motor**: TA skoru, FA/Temel skoru, bileşke, öneri motoru,
+nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
+
+- **Motor = API.** Vercel serverless uçları (bir kısmı zaten var: `api/yfin`,
+  `api/theme`, `api/watchlist`). Native app bunları çağıran **ince istemci** olur.
+- **Kabuk = yeniden yazılır.** ~12k satırlık `app.js` motor + DOM iç içe. **Matematik/skor
+  mantığı temiz portlanır; sadece DOM (ekrana çizme) atılır.**
+- **Tek doğruluk kaynağı:** skor motoru API. Web PWA da, native app de aynı uca vurur.
+
+### Değişmez kurallar (tüm fazlar boyunca)
+- [ ] Motor / skor / bileşke **dokunulmaz** — yeni özellik skoru değiştirmez.
+- [ ] 5-menü düzeni korunur: Listeler · Bugün · Keşfet · Analiz · Arama.
+- [ ] Her yeni kullanıcı ekranında **"Bilgi amaçlıdır, yatırım tavsiyesi değildir."**
+- [ ] SPK çerçevesi: ürün "bilgi/analiz/araştırma" olarak konumlanır, "al X" tavsiyesi değil.
+
+---
+
+## FAZ 1 — Ayrım & iskelet
+
+**Amaç:** motoru API'ye çıkar, Expo projesini ve tasarım sistemini kur.
+
+- [ ] **Motor envanteri:** `app.js` içinde saf motor fonksiyonları (TA, FA, öneri,
+      nedensellik, tematik, karşılaştırma) vs DOM kodu listesi çıkar.
+- [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
+      `theme`, `causal`, `compare`. Vercel KV ile cache.
+- [ ] **Expo projesi** kur: TypeScript + expo-router + Supabase client.
+- [ ] **Tasarım sistemi:** renk token (koyu mürekkep `#0F1522` + altın `#D4A24E` +
+      yeşil/mercan sinyal), tipografi (2 ağırlık), spacing, `tabular-nums`.
+- [ ] Çekirdek komponentler: `Card`, `Pill/Badge`, `ScoreGauge`, `TickerRow`,
+      `SectorChip`, `Disclaimer`, `Skeleton`.
+- [ ] 5-sekmeli **tab navigasyon iskeleti** (boş ekranlar + disclaimer footer).
+
+## FAZ 2 — Çekirdek ekranlar
+
+**Amaç:** dört ana ekranın native hali, veriyi motor API'den çeker.
+
+- [ ] **Bugün (dashboard):** konjonktür kartı · piyasa nabzı · öne çıkan sektör ·
+      günün fırsatları (yukarıdaki mockup bu ekranın hedefi).
+- [ ] **Analiz:** tek hisse derin dalış — TA + FA + bileşke skor + grafik.
+- [ ] **Listeler:** portföy / izleme listeleri, **Supabase ile cihazlar arası senkron**.
+- [ ] **Arama + Keşfet:** sembol arama + 🔭 tematik keşif + 🤖 radar/gündem.
+- [ ] Her listede **FlashList** (virtualizasyon); skeleton + optimistic + pull-to-refresh.
+
+## FAZ 3 — Elit cila (sürekli, bitmeyen)
+
+**Amaç:** "native" ile "elit" arasındaki farkı kapatmak. AldınGitti'nin eksiğiydi.
+
+- [ ] 60fps geçişler (Reanimated), **haptik** mikro-etkileşim, spring animasyon.
+- [ ] Tasarlanmış **boş / hata / offline / yükleniyor** durumları (sonradan akla gelen değil).
+- [ ] Native grafikler (victory-native / Skia).
+- [ ] Koyu/açık tema; erişilebilirlik; renk körü için ▲/▼ ok (renge bağlı kalma).
+- [ ] **Performans bütçesi:** liste jank yok, hızlı TTI, algılanan anında-açılış (cache).
+
+## FAZ 4 — Kimlik & para (Faz 2–3 ile paralel)
+
+**Amaç:** free/premium ayrımı ve store IAP.
+
+- [ ] **Supabase auth** (Apple ile giriş + Google). "Kendi appstore hesaplarıyla girer."
+- [ ] **RevenueCat** + App Store / Play IAP → free vs **premium** kapısı.
+- [ ] **Premium kapsamı:** sınırsız analiz · LLM "günün nedeni" + tematik Yol B ·
+      ⚡ Nabız push bildirimleri · Karşılaştır · gelişmiş radar.
+- [ ] **Free kapsamı:** temel skorlar, listeler, günde sınırlı analiz.
+- [ ] Faturalama dili **SPK-uyumlu**: "analiz/bilgi aboneliği", tavsiye servisi değil.
+
+## FAZ 5 — LLM akıllı katman (ANTHROPIC_API_KEY gelince)
+
+**Amaç:** bekleyen Tier-B LLM işini açmak. (Şu an pasif: `CAUSAL_LLM.enabled:false`,
+`api/theme.js` Yol B.)
+
+- [ ] Anahtar Vercel env'e eklenince: nedensellik "günün nedeni" + tematik Yol B aktif.
+- [ ] **Maliyet kontrolü:** Haiku modeli + KV cache (6–24s) + kullanıcı/gün limiti.
+- [ ] Premium'a bağla — maliyeti ödeyen, faydalanan kullanıcı olur.
+- [ ] Motor skoruna DOKUNMAZ (yalnız açıklama/keşif katmanı).
+
+## FAZ 6 — Store'a çıkış
+
+- [ ] **EAS Build + Submit** (Expo CI → store).
+- [ ] App Store / Play listeleme: ekran görüntüleri, gizlilik beyanı, SPK-uyumlu metin.
+- [ ] TestFlight / Play internal test → prod yayın.
+- [ ] Apple Developer ($99/yıl) + Google Play ($25 tek sefer) hesapları (AldınGitti'den var olabilir).
+
+---
+
+## Elit kalite kontrol listesi (her sürümde geç)
+
+- [ ] Her scroll / geçiş 60fps
+- [ ] Tüm uzun listeler virtualize (FlashList)
+- [ ] Skeleton / optimistic UI — bekleme boş görünmüyor
+- [ ] Haptik + spring mikro-etkileşim
+- [ ] Boş / hata / offline durumları tasarlanmış
+- [ ] Offline'da anlamlı çalışır (cache)
+- [ ] Disclaimer her ekranda
+- [ ] Motor skoru değişmedi (regresyon yok)
+
+---
+
+## Teknoloji yığını (AldınGitti ile aynı — öğrenme eğrisi yok)
+
+| Katman | Seçim | Not |
+|---|---|---|
+| Native | **React Native + Expo** | AldınGitti'de kullanıldı |
+| Navigasyon | **expo-router** | tab + stack mimarisi |
+| Listeler | **FlashList** | virtualizasyon = akıcılık |
+| Animasyon | **Reanimated** | 60fps, haptik |
+| Backend/auth | **Supabase** | auth + kullanıcı verisi senkron |
+| Motor | **Vercel serverless** | mevcut; skor/analiz API'leri |
+| IAP | **RevenueCat** | free/premium, Apple+Google soyutlama |
+| Grafik | victory-native / Skia | native çizim |
+| CI/yayın | **EAS Build/Submit** | store'a otomatik |
+
+---
+
+## AldınGitti dersi (neden bu plan böyle)
+
+AldınGitti **zaten native'di** (RN/Expo + Supabase, App Store'a çıktı) ama "profesyonel
+değil" hissetti. Sorun framework değil **execution/cila**'ydı: navigasyon mimarisi,
+liste virtualizasyonu, algılanan hız, mikro-etkileşimler. Bu yüzden FAZ 3 ("elit cila")
+ve kalite kontrol listesi bu planın kalbidir — teknoloji seçimi değil, disiplin.
