@@ -1,0 +1,14 @@
+# Vercel YUKLEME filtresi (.gitignore gibi calisir, ama yalniz deploy'u etkiler)
+# ---------------------------------------------------------------------------
+# Buradaki dosyalar git'te KALIR; yalnizca CDN'e gonderilmez.
+# Olculdu: canli varliklar 988 KB, bu klasorler ~13 MB. Testin dondurulmus
+# fiksturu referans verisidir -> depoda durmasi gerekir, yayinda ISI YOK.
+
+# Skor paritesi testi + 8.5 MB dondurulmus ham girdi (bkz. tests/README.md)
+tests/
+
+# Yerel referans/arastirma malzemesi (izlenmiyor, yayinda da gereksiz)
+financial-services-main/
+total motor fikir/
+*.pdf
+*.docx

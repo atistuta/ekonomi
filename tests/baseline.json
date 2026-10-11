@@ -1,0 +1,3674 @@
+{
+  "_not": "Skor paritesi referansı. Elle DÜZENLENMEZ — `node tests/baseline.mjs` ile yenilenir. Bilgi amaçlıdır, yatırım tavsiyesi değildir.",
+  "vade": "orta",
+  "sabitler": {
+    "pe": {
+      "weight": 0.1,
+      "neg": 15,
+      "bp": [
+        [
+          5,
+          90
+        ],
+        [
+          10,
+          80
+        ],
+        [
+          15,
+          70
+        ],
+        [
+          20,
+          60
+        ],
+        [
+          25,
+          52
+        ],
+        [
+          35,
+          38
+        ],
+        [
+          50,
+          22
+        ],
+        [
+          80,
+          10
+        ]
+      ]
+    },
+    "blend": {
+      "fa": 0.55,
+      "ta": 0.45
+    },
+    "benchmark": {
+      "BIST": "XU100.IS",
+      "US": "^GSPC"
+    }
+  },
+  "dilimler": [
+    {
+      "name": "util",
+      "lines": 19
+    },
+    {
+      "name": "ysym",
+      "lines": 6
+    },
+    {
+      "name": "ta",
+      "lines": 771
+    },
+    {
+      "name": "fa-core",
+      "lines": 26
+    },
+    {
+      "name": "fmt",
+      "lines": 15
+    },
+    {
+      "name": "composite",
+      "lines": 15
+    },
+    {
+      "name": "holistic",
+      "lines": 107
+    },
+    {
+      "name": "fa-bist",
+      "lines": 154
+    },
+    {
+      "name": "fa-us",
+      "lines": 292
+    }
+  ],
+  "symbols": {
+    "THYAO": {
+      "sym": "THYAO",
+      "market": "BIST",
+      "ta": {
+        "score": 41.966905,
+        "raw": 42.561949,
+        "label": "SAT eğilimi",
+        "cls": "bear",
+        "regime": "trend",
+        "adx": 30.457083,
+        "bars": 1253,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 32,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 26,
+            "weight": 0.13
+          },
+          {
+            "key": "macd",
+            "score": 39.843847,
+            "weight": 0.17
+          },
+          {
+            "key": "vp",
+            "score": 36.966529,
+            "weight": 0.09
+          },
+          {
+            "key": "obv",
+            "score": 56.928009,
+            "weight": 0.1
+          },
+          {
+            "key": "boll",
+            "score": 61.418393,
+            "weight": 0.05
+          },
+          {
+            "key": "rs",
+            "score": 55.224679,
+            "weight": 0.09
+          },
+          {
+            "key": "stoch",
+            "score": 46.630065,
+            "weight": 0.04
+          },
+          {
+            "key": "rsi",
+            "score": 51.223629,
+            "weight": 0.1
+          },
+          {
+            "key": "ttmpl",
+            "score": 52,
+            "weight": 0.05
+          }
+        ]
+      },
+      "fa": {
+        "score": 62.340295,
+        "present": 16,
+        "total": 16,
+        "price": 287.5,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 73.196757
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 70.783943
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 62.663199
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 66.163317
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 95.596502
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 38.743687
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 42.543258
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 59.890694
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 71.807488
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 43.59065
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 60.626752
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 69.64089
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 42
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 45
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "lo",
+        "band": "mixed",
+        "label": "Kaliteli ama fiyat zayıf",
+        "blended": 53.17227,
+        "blendedShown": 53
+      }
+    },
+    "ASELS": {
+      "sym": "ASELS",
+      "market": "BIST",
+      "ta": {
+        "score": 52.563559,
+        "raw": 52.373666,
+        "label": "Zayıf AL",
+        "cls": "bull",
+        "regime": "neutral",
+        "adx": 26.079499,
+        "bars": 1253,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 65,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 34,
+            "weight": 0.13
+          },
+          {
+            "key": "ttmpl",
+            "score": 74,
+            "weight": 0.05
+          },
+          {
+            "key": "boll",
+            "score": 67.801115,
+            "weight": 0.05
+          },
+          {
+            "key": "rs",
+            "score": 58.233602,
+            "weight": 0.09
+          },
+          {
+            "key": "macd",
+            "score": 46.039505,
+            "weight": 0.17
+          },
+          {
+            "key": "vp",
+            "score": 57.237589,
+            "weight": 0.09
+          },
+          {
+            "key": "stoch",
+            "score": 35.123457,
+            "weight": 0.04
+          },
+          {
+            "key": "rsi",
+            "score": 45.703119,
+            "weight": 0.1
+          },
+          {
+            "key": "obv",
+            "score": 49.692369,
+            "weight": 0.1
+          }
+        ]
+      },
+      "fa": {
+        "score": 81.932106,
+        "present": 16,
+        "total": 16,
+        "price": 351.25,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 82.475947
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 84.781387
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 58.775886
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 88.040846
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 93.873207
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 95
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 100
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 89.616077
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 91.237904
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 72.036753
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 50.953862
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 73.259617
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 45
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "mid",
+        "band": "good",
+        "label": "Temelde güçlü, teknik nötr",
+        "blended": 68.71626,
+        "blendedShown": 69
+      }
+    },
+    "EREGL": {
+      "sym": "EREGL",
+      "market": "BIST",
+      "ta": {
+        "score": 57.061698,
+        "raw": 57.846331,
+        "label": "AL eğilimi",
+        "cls": "bull",
+        "regime": "range",
+        "adx": 11.937271,
+        "bars": 1254,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 75,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 34,
+            "weight": 0.13
+          },
+          {
+            "key": "rs",
+            "score": 71.241537,
+            "weight": 0.09
+          },
+          {
+            "key": "ttmpl",
+            "score": 85,
+            "weight": 0.05
+          },
+          {
+            "key": "vp",
+            "score": 63.966178,
+            "weight": 0.09
+          },
+          {
+            "key": "obv",
+            "score": 57.182372,
+            "weight": 0.1
+          },
+          {
+            "key": "macd",
+            "score": 46.656793,
+            "weight": 0.17
+          },
+          {
+            "key": "boll",
+            "score": 56.413431,
+            "weight": 0.05
+          },
+          {
+            "key": "rsi",
+            "score": 50.706305,
+            "weight": 0.1
+          },
+          {
+            "key": "stoch",
+            "score": 49.161066,
+            "weight": 0.04
+          }
+        ]
+      },
+      "fa": {
+        "score": 56.780293,
+        "present": 16,
+        "total": 16,
+        "price": 37.32,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 26.429173
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 90.760325
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 18.794125
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 20.787485
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 79.521327
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 15
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 62.13377
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 70.066902
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 82.825228
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 93.149638
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 87.166329
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 100
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 42
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 45
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "mid",
+        "taBand": "hi",
+        "band": "mixed",
+        "label": "Momentum var, temel orta",
+        "blended": 56.906925,
+        "blendedShown": 57
+      }
+    },
+    "TUPRS": {
+      "sym": "TUPRS",
+      "market": "BIST",
+      "ta": {
+        "score": 72.399795,
+        "raw": 70.740551,
+        "label": "GÜÇLÜ AL",
+        "cls": "bull",
+        "regime": "trend",
+        "adx": 29.594857,
+        "bars": 1253,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 93,
+            "weight": 0.18
+          },
+          {
+            "key": "rs",
+            "score": 97,
+            "weight": 0.09
+          },
+          {
+            "key": "ichimoku",
+            "score": 74,
+            "weight": 0.13
+          },
+          {
+            "key": "vp",
+            "score": 76.902644,
+            "weight": 0.09
+          },
+          {
+            "key": "ttmpl",
+            "score": 96,
+            "weight": 0.05
+          },
+          {
+            "key": "rsi",
+            "score": 56.534711,
+            "weight": 0.1
+          },
+          {
+            "key": "obv",
+            "score": 52.650915,
+            "weight": 0.1
+          },
+          {
+            "key": "stoch",
+            "score": 54.920869,
+            "weight": 0.04
+          },
+          {
+            "key": "macd",
+            "score": 49.127617,
+            "weight": 0.17
+          },
+          {
+            "key": "boll",
+            "score": 49.244411,
+            "weight": 0.05
+          }
+        ]
+      },
+      "fa": {
+        "score": 65.663905,
+        "present": 16,
+        "total": 16,
+        "price": 386.25,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 40.469566
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 37.062562
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 45.463331
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 20.929329
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 39.345482
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 86.852698
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 100
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 92.010803
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 72.704597
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 73.187044
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 67.303686
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 68.695056,
+        "blendedShown": 69
+      }
+    },
+    "BIMAS": {
+      "sym": "BIMAS",
+      "market": "BIST",
+      "ta": {
+        "score": 61.47719,
+        "raw": 62.752433,
+        "label": "AL eğilimi",
+        "cls": "bull",
+        "regime": "neutral",
+        "adx": 18.205159,
+        "bars": 1254,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 83,
+            "weight": 0.18
+          },
+          {
+            "key": "ttmpl",
+            "score": 90.5,
+            "weight": 0.05
+          },
+          {
+            "key": "rs",
+            "score": 72.105861,
+            "weight": 0.09
+          },
+          {
+            "key": "vp",
+            "score": 71.3,
+            "weight": 0.09
+          },
+          {
+            "key": "ichimoku",
+            "score": 64,
+            "weight": 0.13
+          },
+          {
+            "key": "macd",
+            "score": 45.074842,
+            "weight": 0.17
+          },
+          {
+            "key": "stoch",
+            "score": 37.95856,
+            "weight": 0.04
+          },
+          {
+            "key": "boll",
+            "score": 56.824644,
+            "weight": 0.05
+          },
+          {
+            "key": "obv",
+            "score": 51.115679,
+            "weight": 0.1
+          },
+          {
+            "key": "rsi",
+            "score": 49.270397,
+            "weight": 0.1
+          }
+        ]
+      },
+      "fa": {
+        "score": 59.247246,
+        "present": 16,
+        "total": 16,
+        "price": 402.75,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 36.172624
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 36.152338
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 56.364521
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 79.884848
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 93.299615
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 35.557094
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 38.404924
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 83.545236
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 88.057942
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 47.022181
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 23.797869
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 64.333593
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "mid",
+        "taBand": "hi",
+        "band": "mixed",
+        "label": "Momentum var, temel orta",
+        "blended": 60.250721,
+        "blendedShown": 60
+      }
+    },
+    "FROTO": {
+      "sym": "FROTO",
+      "market": "BIST",
+      "ta": {
+        "score": 33.112795,
+        "raw": 34.363699,
+        "label": "GÜÇLÜ SAT",
+        "cls": "bear",
+        "regime": "trend",
+        "adx": 26.430166,
+        "bars": 1254,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "ichimoku",
+            "score": 10,
+            "weight": 0.13
+          },
+          {
+            "key": "trend",
+            "score": 22,
+            "weight": 0.18
+          },
+          {
+            "key": "vp",
+            "score": 27.781482,
+            "weight": 0.09
+          },
+          {
+            "key": "macd",
+            "score": 41.243743,
+            "weight": 0.17
+          },
+          {
+            "key": "ttmpl",
+            "score": 24.5,
+            "weight": 0.05
+          },
+          {
+            "key": "stoch",
+            "score": 25.502704,
+            "weight": 0.04
+          },
+          {
+            "key": "rsi",
+            "score": 41.111432,
+            "weight": 0.1
+          },
+          {
+            "key": "boll",
+            "score": 66.033511,
+            "weight": 0.05
+          },
+          {
+            "key": "obv",
+            "score": 56.803858,
+            "weight": 0.1
+          },
+          {
+            "key": "rs",
+            "score": 47.262409,
+            "weight": 0.09
+          }
+        ]
+      },
+      "fa": {
+        "score": 63.677496,
+        "present": 16,
+        "total": 16,
+        "price": 74.65,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 42.589729
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 55.830043
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 90.139714
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 80.499899
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 93.267905
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 23.675062
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 50.07148
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 75.569421
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 64.900639
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 61.599825
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 68.162678
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82.957457
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 42
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 45
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "lo",
+        "band": "mixed",
+        "label": "Kaliteli ama fiyat zayıf",
+        "blended": 49.923381,
+        "blendedShown": 50
+      }
+    },
+    "SISE": {
+      "sym": "SISE",
+      "market": "BIST",
+      "ta": {
+        "score": 34.950805,
+        "raw": 34.950805,
+        "label": "SAT eğilimi",
+        "cls": "bear",
+        "regime": "trend",
+        "adx": 23.856749,
+        "bars": 1253,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 15,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 10,
+            "weight": 0.13
+          },
+          {
+            "key": "macd",
+            "score": 38.579218,
+            "weight": 0.17
+          },
+          {
+            "key": "vp",
+            "score": 36.426321,
+            "weight": 0.09
+          },
+          {
+            "key": "ttmpl",
+            "score": 30,
+            "weight": 0.05
+          },
+          {
+            "key": "boll",
+            "score": 65.903583,
+            "weight": 0.05
+          },
+          {
+            "key": "obv",
+            "score": 46.987054,
+            "weight": 0.1
+          },
+          {
+            "key": "stoch",
+            "score": 56.750814,
+            "weight": 0.04
+          },
+          {
+            "key": "rs",
+            "score": 47.59846,
+            "weight": 0.09
+          },
+          {
+            "key": "rsi",
+            "score": 50.661904,
+            "weight": 0.1
+          }
+        ]
+      },
+      "fa": {
+        "score": 57.511824,
+        "present": 16,
+        "total": 16,
+        "price": 38.04,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 43.27865
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 66.932579
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 30.051826
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 52.682669
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 66.996351
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 95
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 41.167813
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 16.76008
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 80.350827
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 63.19268
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 51.550788
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 67.379604
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 45
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "mid",
+        "taBand": "lo",
+        "band": "weak",
+        "label": "Temel orta, teknik zayıf",
+        "blended": 47.359365,
+        "blendedShown": 47
+      }
+    },
+    "KCHOL": {
+      "sym": "KCHOL",
+      "market": "BIST",
+      "ta": {
+        "score": 62.855444,
+        "raw": 61.903189,
+        "label": "AL eğilimi",
+        "cls": "bull",
+        "regime": "neutral",
+        "adx": 27.835696,
+        "bars": 1253,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 83,
+            "weight": 0.18
+          },
+          {
+            "key": "ttmpl",
+            "score": 90.5,
+            "weight": 0.05
+          },
+          {
+            "key": "ichimoku",
+            "score": 64,
+            "weight": 0.13
+          },
+          {
+            "key": "rs",
+            "score": 69.083049,
+            "weight": 0.09
+          },
+          {
+            "key": "vp",
+            "score": 61.494268,
+            "weight": 0.09
+          },
+          {
+            "key": "stoch",
+            "score": 34.911663,
+            "weight": 0.04
+          },
+          {
+            "key": "rsi",
+            "score": 46.255409,
+            "weight": 0.1
+          },
+          {
+            "key": "obv",
+            "score": 53.700596,
+            "weight": 0.1
+          },
+          {
+            "key": "macd",
+            "score": 48.032315,
+            "weight": 0.17
+          },
+          {
+            "key": "boll",
+            "score": 56.173401,
+            "weight": 0.05
+          }
+        ]
+      },
+      "fa": {
+        "score": 46.030176,
+        "present": 16,
+        "total": 16,
+        "price": 208,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 33.098496
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 18
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 28.775957
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 40.292045
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 66.880387
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 95
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 53.646113
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 22.613247
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 60.229511
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 30.908147
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 52.320192
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 34
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 40
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 45
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "mid",
+        "taBand": "hi",
+        "band": "mixed",
+        "label": "Momentum var, temel orta",
+        "blended": 53.601547,
+        "blendedShown": 54
+      }
+    },
+    "SAHOL": {
+      "sym": "SAHOL",
+      "market": "BIST",
+      "ta": {
+        "score": 41.195344,
+        "raw": 41.847541,
+        "label": "SAT eğilimi",
+        "cls": "bear",
+        "regime": "trend",
+        "adx": 35.98555,
+        "bars": 1253,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "ichimoku",
+            "score": 10,
+            "weight": 0.13
+          },
+          {
+            "key": "macd",
+            "score": 39.403816,
+            "weight": 0.17
+          },
+          {
+            "key": "vp",
+            "score": 32.066879,
+            "weight": 0.09
+          },
+          {
+            "key": "boll",
+            "score": 76.643525,
+            "weight": 0.05
+          },
+          {
+            "key": "obv",
+            "score": 46.275452,
+            "weight": 0.1
+          },
+          {
+            "key": "trend",
+            "score": 48,
+            "weight": 0.18
+          },
+          {
+            "key": "rs",
+            "score": 52.636264,
+            "weight": 0.09
+          },
+          {
+            "key": "rsi",
+            "score": 47.986478,
+            "weight": 0.1
+          },
+          {
+            "key": "ttmpl",
+            "score": 46.5,
+            "weight": 0.05
+          },
+          {
+            "key": "stoch",
+            "score": 50.055994,
+            "weight": 0.04
+          }
+        ]
+      },
+      "fa": {
+        "score": 63.377819,
+        "present": 16,
+        "total": 16,
+        "price": 83.5,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 38.300672
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 93.616773
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 22.292637
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 62.455115
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 86.301538
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 95
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 67.617289
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 67.768142
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 67.99999
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 21.594387
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 48.016681
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 34
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "lo",
+        "band": "mixed",
+        "label": "Kaliteli ama fiyat zayıf",
+        "blended": 53.395705,
+        "blendedShown": 53
+      }
+    },
+    "TCELL": {
+      "sym": "TCELL",
+      "market": "BIST",
+      "ta": {
+        "score": 42.043292,
+        "raw": 42.632678,
+        "label": "SAT eğilimi",
+        "cls": "bear",
+        "regime": "trend",
+        "adx": 25.113151,
+        "bars": 1253,
+        "benchBars": 1251,
+        "breakdown": [
+          {
+            "key": "ichimoku",
+            "score": 10,
+            "weight": 0.13
+          },
+          {
+            "key": "trend",
+            "score": 40,
+            "weight": 0.18
+          },
+          {
+            "key": "macd",
+            "score": 41.428732,
+            "weight": 0.17
+          },
+          {
+            "key": "boll",
+            "score": 61.501693,
+            "weight": 0.05
+          },
+          {
+            "key": "rs",
+            "score": 56.009407,
+            "weight": 0.09
+          },
+          {
+            "key": "stoch",
+            "score": 59.651663,
+            "weight": 0.04
+          },
+          {
+            "key": "obv",
+            "score": 46.847048,
+            "weight": 0.1
+          },
+          {
+            "key": "vp",
+            "score": 46.747278,
+            "weight": 0.09
+          },
+          {
+            "key": "ttmpl",
+            "score": 52,
+            "weight": 0.05
+          },
+          {
+            "key": "rsi",
+            "score": 50.958358,
+            "weight": 0.1
+          }
+        ]
+      },
+      "fa": {
+        "score": 71.007647,
+        "present": 16,
+        "total": 16,
+        "price": 98.55,
+        "years": [
+          2025,
+          2024,
+          2023,
+          2022
+        ],
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 58.053499
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "roe",
+            "weight": 0.1,
+            "score": 41.079827
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.08,
+            "score": 83.760565
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.07,
+            "score": 93.0823
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.07,
+            "score": 15
+          },
+          {
+            "key": "cashLt",
+            "weight": 0.08,
+            "score": 58.088178
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 88.406713
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 79.976706
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 84.863909
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 93.543212
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82.210474
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "lo",
+        "band": "mixed",
+        "label": "Kaliteli ama fiyat zayıf",
+        "blended": 57.973687,
+        "blendedShown": 58
+      }
+    },
+    "NVDA": {
+      "sym": "NVDA",
+      "market": "US",
+      "ta": {
+        "score": 68.58484,
+        "raw": 70.649822,
+        "label": "GÜÇLÜ AL",
+        "cls": "bull",
+        "regime": "neutral",
+        "adx": 18.229528,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 93,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 90,
+            "weight": 0.13
+          },
+          {
+            "key": "vp",
+            "score": 78.706747,
+            "weight": 0.09
+          },
+          {
+            "key": "ttmpl",
+            "score": 96,
+            "weight": 0.05
+          },
+          {
+            "key": "macd",
+            "score": 59.204328,
+            "weight": 0.17
+          },
+          {
+            "key": "rs",
+            "score": 57.218613,
+            "weight": 0.09
+          },
+          {
+            "key": "boll",
+            "score": 37.769368,
+            "weight": 0.05
+          },
+          {
+            "key": "rsi",
+            "score": 55.295479,
+            "weight": 0.1
+          },
+          {
+            "key": "stoch",
+            "score": 59.948963,
+            "weight": 0.04
+          },
+          {
+            "key": "obv",
+            "score": 52.958294,
+            "weight": 0.1
+          }
+        ]
+      },
+      "fa": {
+        "score": 87.012769,
+        "present": 18,
+        "total": 18,
+        "price": 229.28,
+        "eps": 7.91,
+        "pe": 28.986094,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 100
+          },
+          {
+            "key": "ebitdaMargin",
+            "weight": 0.07,
+            "score": 100
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 99.565083
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 100
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 100
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 100
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 95
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 91.794309
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 100
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 100
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 40
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 46.419469
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 78.720201,
+        "blendedShown": 79
+      }
+    },
+    "MSFT": {
+      "sym": "MSFT",
+      "market": "US",
+      "ta": {
+        "score": 73.746189,
+        "raw": 71.987212,
+        "label": "GÜÇLÜ AL",
+        "cls": "bull",
+        "regime": "trend",
+        "adx": 39.696703,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 85,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 90,
+            "weight": 0.13
+          },
+          {
+            "key": "vp",
+            "score": 85,
+            "weight": 0.09
+          },
+          {
+            "key": "rs",
+            "score": 80.290284,
+            "weight": 0.09
+          },
+          {
+            "key": "macd",
+            "score": 64.836554,
+            "weight": 0.17
+          },
+          {
+            "key": "ttmpl",
+            "score": 90.5,
+            "weight": 0.05
+          },
+          {
+            "key": "rsi",
+            "score": 65.668983,
+            "weight": 0.1
+          },
+          {
+            "key": "obv",
+            "score": 35.794538,
+            "weight": 0.1
+          },
+          {
+            "key": "boll",
+            "score": 24.659237,
+            "weight": 0.05
+          },
+          {
+            "key": "stoch",
+            "score": 79.613955,
+            "weight": 0.04
+          }
+        ]
+      },
+      "fa": {
+        "score": 81.070764,
+        "present": 17,
+        "total": 17,
+        "price": 535.07,
+        "eps": 17.95,
+        "pe": 29.808914,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 100
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 100
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 96.186787
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 96.217982
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 71.356242
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 67.860356
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 82.58188
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 92.996171
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 61.122908
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 80.882097
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 42
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 45
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 45.267521
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 77.774705,
+        "blendedShown": 78
+      }
+    },
+    "AAPL": {
+      "sym": "AAPL",
+      "market": "US",
+      "ta": {
+        "score": 68.362773,
+        "raw": 70.403081,
+        "label": "GÜÇLÜ AL",
+        "cls": "bull",
+        "regime": "range",
+        "adx": 15.503779,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 93,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 90,
+            "weight": 0.13
+          },
+          {
+            "key": "vp",
+            "score": 76.951955,
+            "weight": 0.09
+          },
+          {
+            "key": "ttmpl",
+            "score": 96,
+            "weight": 0.05
+          },
+          {
+            "key": "macd",
+            "score": 57.647446,
+            "weight": 0.17
+          },
+          {
+            "key": "obv",
+            "score": 57.504534,
+            "weight": 0.1
+          },
+          {
+            "key": "rs",
+            "score": 57.490986,
+            "weight": 0.09
+          },
+          {
+            "key": "boll",
+            "score": 37.822684,
+            "weight": 0.05
+          },
+          {
+            "key": "rsi",
+            "score": 53.607145,
+            "weight": 0.1
+          },
+          {
+            "key": "stoch",
+            "score": 56.521203,
+            "weight": 0.04
+          }
+        ]
+      },
+      "fa": {
+        "score": 77.855265,
+        "present": 18,
+        "total": 18,
+        "price": 336.64,
+        "eps": 8.72,
+        "pe": 38.605505,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 97.618605
+          },
+          {
+            "key": "ebitdaMargin",
+            "weight": 0.07,
+            "score": 94.638882
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 90.953552
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 100
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 63.909036
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 38.625071
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 81.865028
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 90.891507
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 74.42846
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 45.230636
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 64.4282
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 34.154128
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 73.583644,
+        "blendedShown": 74
+      }
+    },
+    "GOOGL": {
+      "sym": "GOOGL",
+      "market": "US",
+      "ta": {
+        "score": 62.620567,
+        "raw": 64.022852,
+        "label": "AL eğilimi",
+        "cls": "bull",
+        "regime": "range",
+        "adx": 16.206593,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 93,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 74,
+            "weight": 0.13
+          },
+          {
+            "key": "ttmpl",
+            "score": 96,
+            "weight": 0.05
+          },
+          {
+            "key": "macd",
+            "score": 57.937672,
+            "weight": 0.17
+          },
+          {
+            "key": "vp",
+            "score": 63.329675,
+            "weight": 0.09
+          },
+          {
+            "key": "obv",
+            "score": 42.061217,
+            "weight": 0.1
+          },
+          {
+            "key": "boll",
+            "score": 39.672098,
+            "weight": 0.05
+          },
+          {
+            "key": "rsi",
+            "score": 45.988483,
+            "weight": 0.1
+          },
+          {
+            "key": "stoch",
+            "score": 56.296481,
+            "weight": 0.04
+          },
+          {
+            "key": "rs",
+            "score": 47.481592,
+            "weight": 0.09
+          }
+        ]
+      },
+      "fa": {
+        "score": 86.526094,
+        "present": 16,
+        "total": 16,
+        "price": 351.66,
+        "eps": 19.93,
+        "pe": 17.644757,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 100
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 97.762452
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 100
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 76.040323
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 67.739533
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 95
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 91.559443
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 97.79185
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 100
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 40
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 64.710487
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 75.768607,
+        "blendedShown": 76
+      }
+    },
+    "AMZN": {
+      "sym": "AMZN",
+      "market": "US",
+      "ta": {
+        "score": 64.9768,
+        "raw": 66.640888,
+        "label": "AL eğilimi",
+        "cls": "bull",
+        "regime": "range",
+        "adx": 12.62006,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 93,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 90,
+            "weight": 0.13
+          },
+          {
+            "key": "ttmpl",
+            "score": 96,
+            "weight": 0.05
+          },
+          {
+            "key": "macd",
+            "score": 60.567213,
+            "weight": 0.17
+          },
+          {
+            "key": "vp",
+            "score": 66.361679,
+            "weight": 0.09
+          },
+          {
+            "key": "boll",
+            "score": 27.013981,
+            "weight": 0.05
+          },
+          {
+            "key": "rsi",
+            "score": 44.119247,
+            "weight": 0.1
+          },
+          {
+            "key": "stoch",
+            "score": 43.664615,
+            "weight": 0.04
+          },
+          {
+            "key": "obv",
+            "score": 51.522006,
+            "weight": 0.1
+          },
+          {
+            "key": "rs",
+            "score": 49.672247,
+            "weight": 0.09
+          }
+        ]
+      },
+      "fa": {
+        "score": 73.393001,
+        "present": 18,
+        "total": 18,
+        "price": 262.43,
+        "eps": 12.43,
+        "pe": 21.112631,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 84.368683
+          },
+          {
+            "key": "ebitdaMargin",
+            "weight": 0.07,
+            "score": 72.907178
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 73.454285
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 91.619448
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 84.570649
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 67.109794
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 58.635696
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 90.229506
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 91.489659
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 89.726573
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 47.318111
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 58.651304
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 38
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 58.219791
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 69.605711,
+        "blendedShown": 70
+      }
+    },
+    "META": {
+      "sym": "META",
+      "market": "US",
+      "ta": {
+        "score": 69.390316,
+        "raw": 67.953996,
+        "label": "GÜÇLÜ AL",
+        "cls": "bull",
+        "regime": "trend",
+        "adx": 36.473809,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 85,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 90,
+            "weight": 0.13
+          },
+          {
+            "key": "ttmpl",
+            "score": 90.5,
+            "weight": 0.05
+          },
+          {
+            "key": "obv",
+            "score": 69.989143,
+            "weight": 0.1
+          },
+          {
+            "key": "vp",
+            "score": 71.456807,
+            "weight": 0.09
+          },
+          {
+            "key": "macd",
+            "score": 58.951392,
+            "weight": 0.17
+          },
+          {
+            "key": "stoch",
+            "score": 29.174715,
+            "weight": 0.04
+          },
+          {
+            "key": "boll",
+            "score": 37.626402,
+            "weight": 0.05
+          },
+          {
+            "key": "rs",
+            "score": 55.697694,
+            "weight": 0.09
+          },
+          {
+            "key": "rsi",
+            "score": 49.161317,
+            "weight": 0.1
+          }
+        ]
+      },
+      "fa": {
+        "score": 83.025656,
+        "present": 17,
+        "total": 17,
+        "price": 718.67,
+        "eps": 26.55,
+        "pe": 27.06855,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 99.835222
+          },
+          {
+            "key": "ebitdaMargin",
+            "weight": 0.07,
+            "score": 100
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 100
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 92.855291
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 92.21499
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 82.121653
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 75.777046
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 40.232635
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 87.953828
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 93.804502
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 97.804502
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 49.10403
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 76.889753,
+        "blendedShown": 77
+      }
+    },
+    "AMD": {
+      "sym": "AMD",
+      "market": "US",
+      "ta": {
+        "score": 77.052155,
+        "raw": 75.048292,
+        "label": "GÜÇLÜ AL",
+        "cls": "bull",
+        "regime": "trend",
+        "adx": 26.693186,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 93,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 90,
+            "weight": 0.13
+          },
+          {
+            "key": "rs",
+            "score": 97,
+            "weight": 0.09
+          },
+          {
+            "key": "vp",
+            "score": 83.376304,
+            "weight": 0.09
+          },
+          {
+            "key": "ttmpl",
+            "score": 96,
+            "weight": 0.05
+          },
+          {
+            "key": "macd",
+            "score": 57.55587,
+            "weight": 0.17
+          },
+          {
+            "key": "rsi",
+            "score": 60.848946,
+            "weight": 0.1
+          },
+          {
+            "key": "boll",
+            "score": 35.776963,
+            "weight": 0.05
+          },
+          {
+            "key": "stoch",
+            "score": 62.820394,
+            "weight": 0.04
+          },
+          {
+            "key": "obv",
+            "score": 54.03368,
+            "weight": 0.1
+          }
+        ]
+      },
+      "fa": {
+        "score": 74.67794,
+        "present": 18,
+        "total": 18,
+        "price": 608.1,
+        "eps": 3.9,
+        "pe": 155.923077,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 80.268975
+          },
+          {
+            "key": "ebitdaMargin",
+            "weight": 0.07,
+            "score": 60.962716
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 79.926885
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 50.541354
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 67.040254
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 91.635135
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 62.651559
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 95
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 93.944246
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 96.873769
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 95.266286
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 78
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 10
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 75.746337,
+        "blendedShown": 76
+      }
+    },
+    "TSLA": {
+      "sym": "TSLA",
+      "market": "US",
+      "ta": {
+        "score": 50.630954,
+        "raw": 50.70106,
+        "label": "Nötr",
+        "cls": "neutral",
+        "regime": "range",
+        "adx": 17.088934,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "obv",
+            "score": 60.011497,
+            "weight": 0.1
+          },
+          {
+            "key": "vp",
+            "score": 59.674962,
+            "weight": 0.09
+          },
+          {
+            "key": "boll",
+            "score": 36.812981,
+            "weight": 0.05
+          },
+          {
+            "key": "ttmpl",
+            "score": 63,
+            "weight": 0.05
+          },
+          {
+            "key": "stoch",
+            "score": 36.684602,
+            "weight": 0.04
+          },
+          {
+            "key": "macd",
+            "score": 53.054817,
+            "weight": 0.17
+          },
+          {
+            "key": "rsi",
+            "score": 45.217846,
+            "weight": 0.1
+          },
+          {
+            "key": "rs",
+            "score": 45.444749,
+            "weight": 0.09
+          },
+          {
+            "key": "ichimoku",
+            "score": 48,
+            "weight": 0.13
+          },
+          {
+            "key": "trend",
+            "score": 50,
+            "weight": 0.18
+          }
+        ]
+      },
+      "fa": {
+        "score": 55.428584,
+        "present": 18,
+        "total": 18,
+        "price": 382.7,
+        "eps": 1.08,
+        "pe": 354.351852,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 40.785908
+          },
+          {
+            "key": "ebitdaMargin",
+            "weight": 0.07,
+            "score": 31.297988
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 67.671296
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 32.890511
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 37.928416
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 58.684965
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 45.388651
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 15
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 92.704967
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 90.582696
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 92.421962
+          },
+          {
+            "key": "fcfPos",
+            "weight": 0.05,
+            "score": 82
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 85
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 40
+          },
+          {
+            "key": "gmUp",
+            "weight": 0.04,
+            "score": 82
+          },
+          {
+            "key": "crUp",
+            "weight": 0.03,
+            "score": 45
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 10
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "mid",
+        "taBand": "mid",
+        "band": "mixed",
+        "label": "Kararsız",
+        "blended": 53.269651,
+        "blendedShown": 53
+      }
+    },
+    "JPM": {
+      "sym": "JPM",
+      "market": "US",
+      "ta": {
+        "score": 54.979514,
+        "raw": 54.610661,
+        "label": "Zayıf AL",
+        "cls": "bull",
+        "regime": "neutral",
+        "adx": 29.146382,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 75,
+            "weight": 0.18
+          },
+          {
+            "key": "ttmpl",
+            "score": 74,
+            "weight": 0.05
+          },
+          {
+            "key": "rs",
+            "score": 41.318392,
+            "weight": 0.09
+          },
+          {
+            "key": "obv",
+            "score": 57.468443,
+            "weight": 0.1
+          },
+          {
+            "key": "macd",
+            "score": 45.806909,
+            "weight": 0.17
+          },
+          {
+            "key": "stoch",
+            "score": 34.658609,
+            "weight": 0.04
+          },
+          {
+            "key": "rsi",
+            "score": 44.365099,
+            "weight": 0.1
+          },
+          {
+            "key": "boll",
+            "score": 59.303741,
+            "weight": 0.05
+          },
+          {
+            "key": "vp",
+            "score": 54.110503,
+            "weight": 0.09
+          },
+          {
+            "key": "ichimoku",
+            "score": 50,
+            "weight": 0.13
+          }
+        ]
+      },
+      "fa": {
+        "score": 66.793177,
+        "present": 12,
+        "total": 12,
+        "price": 332.99,
+        "eps": 23.34,
+        "pe": 14.266924,
+        "criteria": [
+          {
+            "key": "netMargin",
+            "weight": 0.11,
+            "score": 100
+          },
+          {
+            "key": "ocfMargin",
+            "weight": 0.08,
+            "score": 18
+          },
+          {
+            "key": "roe",
+            "weight": 0.09,
+            "score": 78.531354
+          },
+          {
+            "key": "roa",
+            "weight": 0.05,
+            "score": 29.082009
+          },
+          {
+            "key": "revYoY",
+            "weight": 0.07,
+            "score": 40.509248
+          },
+          {
+            "key": "revCagr",
+            "weight": 0.06,
+            "score": 59.908893
+          },
+          {
+            "key": "netTrend",
+            "weight": 0.06,
+            "score": 67.095608
+          },
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 76.059007
+          },
+          {
+            "key": "accruals",
+            "weight": 0.06,
+            "score": 40
+          },
+          {
+            "key": "roaUp",
+            "weight": 0.05,
+            "score": 85
+          },
+          {
+            "key": "pe",
+            "weight": 0.1,
+            "score": 71.466153
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 61.477029,
+        "blendedShown": 61
+      }
+    },
+    "XOM": {
+      "sym": "XOM",
+      "market": "US",
+      "ta": {
+        "score": 67.750751,
+        "raw": 69.723057,
+        "label": "GÜÇLÜ AL",
+        "cls": "bull",
+        "regime": "range",
+        "adx": 15.074439,
+        "bars": 1255,
+        "benchBars": 1255,
+        "breakdown": [
+          {
+            "key": "trend",
+            "score": 93,
+            "weight": 0.18
+          },
+          {
+            "key": "ichimoku",
+            "score": 90,
+            "weight": 0.13
+          },
+          {
+            "key": "vp",
+            "score": 83.582873,
+            "weight": 0.09
+          },
+          {
+            "key": "ttmpl",
+            "score": 96,
+            "weight": 0.05
+          },
+          {
+            "key": "macd",
+            "score": 61.555194,
+            "weight": 0.17
+          },
+          {
+            "key": "boll",
+            "score": 24.381926,
+            "weight": 0.05
+          },
+          {
+            "key": "rs",
+            "score": 54.975497,
+            "weight": 0.09
+          },
+          {
+            "key": "obv",
+            "score": 52.453488,
+            "weight": 0.1
+          },
+          {
+            "key": "stoch",
+            "score": 52.528202,
+            "weight": 0.04
+          },
+          {
+            "key": "rsi",
+            "score": 49.828475,
+            "weight": 0.1
+          }
+        ]
+      },
+      "fa": {
+        "score": 85.271809,
+        "present": 4,
+        "total": 4,
+        "price": 168.94,
+        "eps": null,
+        "pe": null,
+        "criteria": [
+          {
+            "key": "ndEbitda",
+            "weight": 0.09,
+            "score": 100
+          },
+          {
+            "key": "d2e",
+            "weight": 0.06,
+            "score": 94.140034
+          },
+          {
+            "key": "curRatio",
+            "weight": 0.05,
+            "score": 54.427108
+          },
+          {
+            "key": "quickRatio",
+            "weight": 0.04,
+            "score": 77.386919
+          }
+        ]
+      },
+      "composite": {
+        "faBand": "hi",
+        "taBand": "hi",
+        "band": "strong",
+        "label": "Güçlü uyum",
+        "blended": 77.387333,
+        "blendedShown": 77
+      }
+    }
+  },
+  "holistic": {
+    "bantta-kaliteli": {
+      "score10": 6.9,
+      "band": {
+        "l": "Ilımlı / seçici",
+        "c": "neutral"
+      },
+      "coreSoft": 0,
+      "thematic": false,
+      "growthCls": "good",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.72,
+          "conf": true
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.58,
+          "conf": true
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 0.765,
+          "conf": true
+        }
+      ]
+    },
+    "bant-alti-ucuz": {
+      "score10": 6.9,
+      "band": {
+        "l": "Ilımlı / seçici",
+        "c": "neutral"
+      },
+      "coreSoft": 0,
+      "thematic": false,
+      "growthCls": "good",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.65,
+          "conf": true
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.44,
+          "conf": true
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 1,
+          "conf": true
+        }
+      ]
+    },
+    "pahali-yavas-buyume": {
+      "score10": 3.5,
+      "band": {
+        "l": "Olumsuz",
+        "c": "bear"
+      },
+      "coreSoft": 0,
+      "thematic": false,
+      "growthCls": "bad",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.48,
+          "conf": true
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.52,
+          "conf": true
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 0,
+          "conf": true
+        }
+      ]
+    },
+    "pahali-hizli-buyume": {
+      "score10": 4.8,
+      "band": {
+        "l": "Zayıf — temkinli",
+        "c": "bear"
+      },
+      "coreSoft": 0,
+      "thematic": false,
+      "growthCls": "good",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.7,
+          "conf": true
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.66,
+          "conf": true
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 0.02,
+          "conf": true
+        }
+      ]
+    },
+    "momentum-rejimi": {
+      "score10": 5.3,
+      "band": {
+        "l": "Zayıf — temkinli",
+        "c": "bear"
+      },
+      "coreSoft": 0,
+      "thematic": false,
+      "growthCls": "mid",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.61,
+          "conf": true
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.74,
+          "conf": true
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 0.22,
+          "conf": true
+        }
+      ]
+    },
+    "kar-oncesi-tematik": {
+      "score10": 4.5,
+      "band": {
+        "l": "Zayıf — temkinli",
+        "c": "bear"
+      },
+      "coreSoft": 0,
+      "thematic": true,
+      "growthCls": "thm",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.4,
+          "conf": true
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.6,
+          "conf": true
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 0.38,
+          "conf": true
+        }
+      ]
+    },
+    "peg-yok-pahali-fk": {
+      "score10": 3.7,
+      "band": {
+        "l": "Olumsuz",
+        "c": "bear"
+      },
+      "coreSoft": 0,
+      "thematic": false,
+      "growthCls": "bad",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.55,
+          "conf": true
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.5,
+          "conf": true
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 0,
+          "conf": true
+        }
+      ]
+    },
+    "peg-yok-pahali-ama-buyuyor": {
+      "score10": 4,
+      "band": {
+        "l": "Zayıf — temkinli",
+        "c": "bear"
+      },
+      "coreSoft": 0,
+      "thematic": false,
+      "growthCls": "mid",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.58,
+          "conf": true
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.55,
+          "conf": true
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 0,
+          "conf": true
+        }
+      ]
+    },
+    "veri-yok-notr": {
+      "score10": 5,
+      "band": {
+        "l": "Zayıf — temkinli",
+        "c": "bear"
+      },
+      "coreSoft": 3,
+      "thematic": false,
+      "growthCls": "na",
+      "parts": [
+        {
+          "k": "Temel (FA)",
+          "w": 0.4,
+          "v": 0.5,
+          "conf": false
+        },
+        {
+          "k": "Teknik (TA)",
+          "w": 0.3,
+          "v": 0.5,
+          "conf": false
+        },
+        {
+          "k": "Değerleme / fiyat",
+          "w": 0.3,
+          "v": 0.5,
+          "conf": false
+        }
+      ]
+    }
+  },
+  "_meta": {
+    "olusturuldu": "2026-10-11",
+    "node": "v24.14.1"
+  },
+  "_okunan": {
+    "yahoo": 60,
+    "sec": 301,
+    "secBos": 80
+  },
+  "_eksik": []
+}

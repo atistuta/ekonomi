@@ -1,0 +1,29 @@
+{
+  "_not": "Skor paritesi testi referans evreni. 10 BIST + 10 ABD. Bilgi amaçlıdır, yatırım tavsiyesi değildir.",
+  "_secim": "Likit, uzun geçmişli, farklı sektör/rejim karışımı — tek bir piyasa rejimi testi domine etmesin.",
+  "vade": "orta",
+  "bist": [
+    { "sym": "THYAO", "not": "havacılık — yüksek beta, güçlü trend rejimi" },
+    { "sym": "ASELS", "not": "savunma — momentum + büyüme" },
+    { "sym": "EREGL", "not": "demir-çelik — emtia çevrimi, zayıf rejim örneği" },
+    { "sym": "TUPRS", "not": "rafineri — temettü + nakit akışı" },
+    { "sym": "BIMAS", "not": "perakende — defansif, düşük beta" },
+    { "sym": "FROTO", "not": "otomotiv — yüksek marj, ihracat" },
+    { "sym": "SISE", "not": "cam/sanayi — çevrimsel" },
+    { "sym": "KCHOL", "not": "holding — konsolide tablo" },
+    { "sym": "SAHOL", "not": "holding — finans ağırlıklı konsolide" },
+    { "sym": "TCELL", "not": "telekom — istikrarlı nakit akışı" }
+  ],
+  "us": [
+    { "sym": "NVDA", "not": "yarı iletken — aşırı momentum, pahalı değerleme" },
+    { "sym": "MSFT", "not": "yazılım — kalite + istikrar" },
+    { "sym": "AAPL", "not": "donanım/hizmet — yüksek marj" },
+    { "sym": "GOOGL", "not": "reklam/bulut — negatif net borç" },
+    { "sym": "AMZN", "not": "perakende/bulut — düşük net marj, yüksek büyüme" },
+    { "sym": "META", "not": "reklam — serbest nakit akışı güçlü" },
+    { "sym": "AMD", "not": "yarı iletken — oynak kazanç serisi" },
+    { "sym": "TSLA", "not": "otomotiv/enerji — yüksek F/K, oynak" },
+    { "sym": "JPM", "not": "banka — farklı bilanço yapısı (eksik kalem testi)" },
+    { "sym": "XOM", "not": "enerji — emtia çevrimi, temettü" }
+  ]
+}
