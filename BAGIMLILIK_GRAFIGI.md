@@ -130,15 +130,82 @@ karşılığı. Motor kodunun kendisi olduğu gibi kopyalanır.
 
 ---
 
-## 5. Sonraki iş
+## 5. Parite testi sırasında ölçülen ek bağımlılıklar
+
+§4'teki beş arayüz, taşıma için **yazılması gereken** kısım. Aşağıdaki dört nokta ise
+taşıma sırasında **sessizce bozulması en kolay** yerler. Okuyarak değil, ölçülerek
+bulundular: skor paritesi testi (`tests/`) yazılırken motor Node içinde gerçekten
+koşturuldu ve her biri bir hata olarak yüzeye çıktı.
+
+### 5.1 Temel model kurucuları ekran biçimlendiricilerine bağlı
+
+| Model kurucu | Çağırdığı biçimlendirici | Tanım | Tüketim |
+|---|---|---|---|
+| `secFetchModel` (ABD) | `fmtUSD` | `app.js:4523` | `app.js:6160` |
+| `bistFundamentalModel` (BIST) | `fmtTRY` | `app.js:85` | `app.js:5818` |
+
+Kurucular NOT metinlerini bu fonksiyonlarla kuruyor. Biçimlendiriciler skora
+**girmiyor**, ama yoklarsa model hiç kurulamıyor — ölçüldü: `secFetchModel`
+`fmtUSD is not defined` ile patlıyor.
+
+→ **`/api/score` ham sayı döndürmeli.** `tr-TR` / `en-US` biçimlendirmesi istemcide
+kalır. Sunucu `Intl` çıktısı döndürürse para birimi ve ondalık ayracı sunucunun
+yerel ayarına kilitlenir; mobil istemci bunu bir daha düzeltemez.
+
+### 5.2 Üç sabit, üç kopya — tekilleştirilmeden taşınmamalı
+
+| Sabit | Değer | Kopyalar |
+|---|---|---|
+| Değerleme (F/K) kriteri | `weight: 0.10` + bant eşikleri | `app.js:5648`, `:7449`, `:11876` (yalnız ABD; BIST'te yok) |
+| Bileşke harmanı | `0.55 * fa + 0.45 * ta` | `app.js:4781`, `:5256`, `:12023` (sonuncusu `const` olmadan) |
+| Bileşke direkleri | `0.40` FA · `0.30` TA · `0.30` değerleme | `app.js:5139-5141` |
+
+Üç kopyadan ikisini taşıyıp birini ekranda bırakmak, aynı hissenin iki ekranda iki
+farklı skor göstermesi demektir. Üstelik `blended` kullanıcıya **yuvarlanarak**
+gösterildiği için (`Math.round`) böyle bir sapma haftalarca görünmeyebilir —
+parite testi tam hassasiyetli `blended`'ı bu yüzden ayrıca donduruyor.
+
+### 5.3 `computeHolisticScore` → `buildGrowthNote`
+
+Holistik skorlayıcı büyüme notu sınıflandırıcısını (`app.js:5159`) çağırıyor ve
+`growthNote.cls` doğrudan değerleme direğinin yumuşatmasına giriyor. İkisi
+**birlikte** taşınmak zorunda; ayrılırsa "pahalı ama hızlı büyüyor" muafiyeti
+sessizce kaybolur ve her büyüme hissesi değerlemeden ceza yemeye başlar.
+
+### 5.4 `secGet` istisnayı `null`'a yutuyor
+
+Ölçüldü: gerçekten olmayan bir us-gaap etiketi SEC'ten temiz **404** döner. Yani 404
+bir **veri cevabıdır**, taşıma hatası değil. `secGet` ise ikisini de `null` yapıyor.
+
+→ Taşınan sunucu işlevi **404'ü ağ hatasından açıkça ayırmak zorunda.** Yoksa bir SEC
+kesintisi "bu şirkette o kalem yok" diye okunur ve skor sessizce eksik veriyle
+hesaplanır. (Aynı sebeple `tests/capture.mjs` dolu fikstürleri atlar ama `null`
+kayıtları her koşuda yeniden sorar.)
+
+### Satır sayısı: 1.307 mi, 1.405 mi?
+
+İkisi de doğru — farklı şeyi ölçüyorlar:
+
+- **1.307 satır / 52 fn** (§3) = `/api/score`'un **çağrı kapanışı**: motor
+  fonksiyonlarının kendisi. Taşımada hedef bu.
+- **1.405 satır / 9 dilim** (`tests/engine.mjs`) = motoru Node'da **koşturmak için**
+  kesilmesi gereken bitişik kaynak blokları; §5.1'deki biçimlendiriciler ve dilim
+  içinde kalan komşu satırlar da dahil. Yani "bu kadarını kesmeden motor çalışmıyor"
+  sınırı.
+
+---
+
+## 6. Sonraki iş
 
 1. **Metin biçimi kararı** — 40 "gizli sunum" fonksiyonu Türkçe metne `<b>`/`<i>`
    gömüyor; React Native bunu render etmez. Karar bu fazda verilmeli (öneri:
    belirteç dizisi), yoksa 40 fonksiyon iki kez taşınır.
 2. **`/api/score`** — 52 fonksiyon + 5 arayüz. İlk uç bu olmalı: en küçük kapanış,
-   en yüksek değer, diğer bütün uçlar buna dayanıyor.
-3. **Skor paritesi testi** — 20 sembol (10 BIST + 10 ABD) referans anlık görüntüsü;
-   `/api/score` çıktısıyla **fark 0** olmalı. Taşıma bu test geçmeden bitmiş sayılmaz.
+   en yüksek değer, diğer bütün uçlar buna dayanıyor. Aday motor artık
+   `PARITE_APP=... node tests/parity.mjs` ile **canlıya dokunmadan** ölçülebilir.
+3. ~~Skor paritesi testi~~ → **TAMAM** (2026-10-11). `tests/` · 20 sembol + 9 sentetik
+   bileşke vektörü · **fark 0** · negatif kontrol 44 farkla kırmızı yandı.
+   Ayrıntı: **[tests/README.md](tests/README.md)**.
 
 ---
 

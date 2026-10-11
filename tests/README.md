@@ -190,7 +190,7 @@ fikstürleri atlar ama `null` kayıtları her koşuda yeniden sorar — çünkü
 ## Taşıma bulguları (`/api/score` için)
 
 Test yazılırken ölçülen, taşımayı doğrudan etkileyen bağımlılıklar — ayrıntısı
-`BAGIMLILIK_GRAFIGI.md` §4'te:
+`BAGIMLILIK_GRAFIGI.md` §5'te:
 
 1. **Temel model kurucuları ekran biçimlendiricilerine bağlı.** ABD tarafı `fmtUSD`,
    BIST tarafı `fmtTRY` çağırıyor. → `/api/score` **ham sayı** döndürmeli, `tr-TR` /

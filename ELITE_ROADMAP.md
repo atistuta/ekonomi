@@ -52,8 +52,15 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       → **[BAGIMLILIK_GRAFIGI.md](BAGIMLILIK_GRAFIGI.md)** (2026-10-11). Sonuç: 3 arayüz
       çevrilince **taşınabilir 254 fn / 4.579 satır**, ekrana bağlı yalnız 9 fn / 94 satır.
       `/api/score` kapanışı **52 fn / 1.307 satır**. `computeVadeScore` DOM değil, yapılandırma.
-- [ ] **Skor paritesi testi:** 20 sembol (10 BIST + 10 ABD) referans anlık görüntüsü →
+- [x] **Skor paritesi testi:** 20 sembol (10 BIST + 10 ABD) referans anlık görüntüsü →
       `/api/score` çıktısı ile **fark 0** olmalı. Taşıma bu test geçmeden bitmez.
+      → **[tests/README.md](tests/README.md)** (2026-10-11). Sonuç: `node tests/parity.mjs`
+      → **FARK 0**, 29 karşılaştırma noktası (20 sembol + 9 sentetik bileşke vektörü),
+      63 fikstür / 8,5 MB dondurulmuş **ham girdi**, ağa çıkış yok. Motorun kopyası
+      çıkarılmadı — test `app.js`'i her koşuda yeniden dilimliyor (1.405 satır / 9 dilim).
+      **Negatif kontrol:** BIST ROE ağırlığı 0.10→0.20 bozulunca test 44 farkla kırmızı
+      yandı ve sebebi (`fa.criteria[2].weight`) adıyla gösterdi; 10 ABD sembolü
+      etkilenmedi. Aday motor `PARITE_APP=` ile canlıya dokunmadan ölçülebilir.
 - [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
       `theme`, `causal`, `compare`. Vercel KV ile cache.
 - [ ] **Expo projesi** kur: TypeScript + expo-router + Supabase client.
