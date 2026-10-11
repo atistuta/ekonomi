@@ -47,8 +47,11 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
 - [ ] **Metin biçimi kararı (envanterden çıktı, FAZ 1 içinde verilmeli):** 40 motor
       fonksiyonunun Türkçe açıklama metninde `<b>`/`<i>` gömülü — RN bunu render
       etmez. API düz `text` yerine **belirteç dizisi** dönmeli (öneri B).
-- [ ] **Bağımlılık grafiği:** motor fonksiyonları hangi DOM fonksiyonlarını çağırıyor
+- [x] **Bağımlılık grafiği:** motor fonksiyonları hangi DOM fonksiyonlarını çağırıyor
       (`computeVadeScore` gibi sınır vakalarını ayrıştırmak için).
+      → **[BAGIMLILIK_GRAFIGI.md](BAGIMLILIK_GRAFIGI.md)** (2026-10-11). Sonuç: 3 arayüz
+      çevrilince **taşınabilir 254 fn / 4.579 satır**, ekrana bağlı yalnız 9 fn / 94 satır.
+      `/api/score` kapanışı **52 fn / 1.307 satır**. `computeVadeScore` DOM değil, yapılandırma.
 - [ ] **Skor paritesi testi:** 20 sembol (10 BIST + 10 ABD) referans anlık görüntüsü →
       `/api/score` çıktısı ile **fark 0** olmalı. Taşıma bu test geçmeden bitmez.
 - [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,

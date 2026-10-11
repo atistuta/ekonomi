@@ -226,8 +226,9 @@ kopyalamamalı. Aksi halde iki istemci farklı skor üretir.
 
 ## Bu envanterin söylemediği
 
-- **Bağımlılık grafiği** çıkarılmadı (hangi motor fonksiyonu hangi DOM fonksiyonunu
-  çağırıyor). `/api/score` taşınırken bu gerekecek — ilk somut iş bu.
+- ~~**Bağımlılık grafiği** çıkarılmadı~~ → **ÇIKARILDI:** [BAGIMLILIK_GRAFIGI.md](BAGIMLILIK_GRAFIGI.md)
+  (2026-10-11). O belge bu envanterin bir yanlışını da düzeltiyor: `computeVadeScore`
+  DOM'a bağlı değil, yalnız `window.TA_WEIGHTS` okuyor (yapılandırma, ekran değil).
 - `localStorage` bağımlılıkları sayılmadı; portföy/liste durumu native'de
   Supabase + AsyncStorage'a geçecek (FAZ 2 / FAZ 4).
 - Performans ölçümü yok; "hangi fonksiyon yavaş" sorusu FAZ 3'ün işi.
