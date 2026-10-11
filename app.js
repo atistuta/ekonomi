@@ -6331,7 +6331,10 @@
     `).join('');
   }
 
-  // ===== Takvim sekmesi =====
+  // ===== 💰 Temettü Takvimi sekmesi (eski adı: Takvim) =====
+  // Sekme yalnız TEMETTÜ gösterir; bilanço duyuruları 📅 Bilanço sekmesinde.
+  // EARNINGS_KEYWORDS burada KALIR: watchedEarningsRecent() onu "Bugün" panelindeki
+  // son bilanço açıklamaları için kullanıyor — silinirse o panel sessizce boşalır.
   const EARNINGS_KEYWORDS = ['FİNANSAL RAPOR', 'FINANSAL RAPOR', 'BİLANÇO', 'BILANCO',
                               'ARA DÖNEM FAALİYET', 'YILLIK FAALİYET'];
   const DIVIDEND_KEYWORDS = ['KAR PAYI', 'KÂR PAYI', 'TEMETTÜ', 'TEMETTU', 'BEDELSİZ'];
