@@ -40,8 +40,17 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
 
 **Amaç:** motoru API'ye çıkar, Expo projesini ve tasarım sistemini kur.
 
-- [ ] **Motor envanteri:** `app.js` içinde saf motor fonksiyonları (TA, FA, öneri,
+- [x] **Motor envanteri:** `app.js` içinde saf motor fonksiyonları (TA, FA, öneri,
       nedensellik, tematik, karşılaştırma) vs DOM kodu listesi çıkar.
+      → **[MOTOR_ENVANTER.md](MOTOR_ENVANTER.md)** (2026-10-11). Ölçüm: saf motor
+      223 fn / 3.544 satır · ağ 17 fn · **DOM 203 fn / 5.901 satır (atılacak)**.
+- [ ] **Metin biçimi kararı (envanterden çıktı, FAZ 1 içinde verilmeli):** 40 motor
+      fonksiyonunun Türkçe açıklama metninde `<b>`/`<i>` gömülü — RN bunu render
+      etmez. API düz `text` yerine **belirteç dizisi** dönmeli (öneri B).
+- [ ] **Bağımlılık grafiği:** motor fonksiyonları hangi DOM fonksiyonlarını çağırıyor
+      (`computeVadeScore` gibi sınır vakalarını ayrıştırmak için).
+- [ ] **Skor paritesi testi:** 20 sembol (10 BIST + 10 ABD) referans anlık görüntüsü →
+      `/api/score` çıktısı ile **fark 0** olmalı. Taşıma bu test geçmeden bitmez.
 - [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
       `theme`, `causal`, `compare`. Vercel KV ile cache.
 - [ ] **Expo projesi** kur: TypeScript + expo-router + Supabase client.
