@@ -99,7 +99,10 @@ function sliceOne(src, name, from, to) {
 }
 
 // config.js'i (window.TA_WEIGHTS / TA_BENCHMARK) tarayıcı olmadan yükle.
-function loadConfig() {
+// DIŞA VERİLİ: tools/motor-uret.mjs api/_ayar.js'ü bundan üretiyor. İkinci bir
+// uygulama yazılırsa iki ayar okuyucu doğar ve üretim testi kendi kopyasını
+// doğrular — motor metninde olduğu gibi burada da tek kurulum yeri var.
+export function loadConfig() {
   const w = {};
   const src = fs.readFileSync(CFG_PATH, 'utf8');
   // eslint-disable-next-line no-new-func

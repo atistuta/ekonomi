@@ -17,7 +17,7 @@ dondurulmuş "doğru cevap"la karşılaştırma yapar ve kaymayı yol adıyla s�
 node tests/capture.mjs      # 1) ham girdileri ağdan çeker ve dondurur (bir kez)
 node tests/baseline.mjs     # 2) "doğru cevap"ı üretir → tests/baseline.json
 node tests/parity.mjs       # 3) her değişiklikten sonra: FARK 0 olmalı
-node tests/uretim-test.mjs  # 4) api/_motor.js hâlâ app.js'in şu anki hali mi?
+node tests/uretim-test.mjs  # 4) üretilmiş dosyalar kaynaklarının şu anki hali mi?
 ```
 
 Günlük kullanımda **3. ve 4. komut** çalıştırılır. 1 ve 2 bir kez koşar; `capture`
@@ -27,7 +27,7 @@ Beklenen çıktı:
 
 ```
 ✅ FARK 0 — parite tam. 29 karşılaştırma noktası birebir aynı.
-✅ 34 denetim geçti — api/_motor.js app.js ile birebir.
+✅ 55 denetim geçti — api/_motor.js ↔ app.js, api/_ayar.js ↔ config.js birebir.
 ```
 
 Çıkış kodu 0 = geçti, 1 = kaydı.
@@ -49,7 +49,7 @@ Beklenen çıktı:
 | `parity.mjs` | Aynı çıktıyı yeniden üretip `baseline.json` ile karşılaştırır |
 | `metin.mjs` | **Metin biçimi** (FAZ 1/3) — belirteç dizisi ⇄ HTML / RN / düz metin |
 | `metin-test.mjs` | Biçim kanıtı — 46 gerçek cümle bayt bayt geri dönüyor mu |
-| `uretim-test.mjs` | **Üretim kanıtı** — `api/_motor.js` app.js'in **şu anki** hali mi |
+| `uretim-test.mjs` | **Üretim kanıtı** — `_motor.js` + `_ayar.js` kaynaklarının **şu anki** hali mi |
 
 ---
 
@@ -235,18 +235,19 @@ Sunucuda motor `engine.mjs` gibi kurulamaz: Vercel'de `tests/` yayına gönderil
 **tek bir ESM modülüne üretiliyor**:
 
 ```bash
-node tools/motor-uret.mjs            # app.js → api/_motor.js (üret / yenile)
+node tools/motor-uret.mjs            # app.js → _motor.js · config.js → _ayar.js
 node tools/motor-uret.mjs --denetle  # yalnız denetle: fark varsa çıkış 1
-node tests/uretim-test.mjs           # kanıt: 34 denetim
+node tests/uretim-test.mjs           # kanıt: 55 denetim
 ```
 
 | Dosya | Rolü |
 |---|---|
 | `../tools/motor-uret.mjs` | Üretici — `app.js`'i dilimler, `buildMotor(H)` gövdesine sarar |
 | `../api/_motor.js` | **Üretilmiş** motor: 1.405 satır / 9 dilim, 23 sembol, `IMZA` gömülü |
+| `../api/_ayar.js` | **Üretilmiş** ayar: `TA_WEIGHTS` · `TA_BENCHMARK` · `VADELER`, `IMZA_AYAR` gömülü |
 
-`_` önekli dosyaları Vercel uç noktaya çevirmez → `api/_motor.js` bir **rota değil**,
-yalnızca `/api/score`'un içe alacağı modül.
+`_` önekli dosyaları Vercel uç noktaya çevirmez → `api/_motor.js` ve `api/_ayar.js`
+birer **rota değil**, yalnızca `/api/score`'un içe alacağı modüller.
 
 ### Neden kopya değil
 
@@ -269,7 +270,7 @@ değil, aynı metnin ikinci **taşıyıcısı**.
   (`\r\n` → `\n` normalleştirerek), **yazma kararı** ise **bayt bayt**; tek bir
   karşılaştırma kullanılsaydı bir satır sonu düzeltmesi "değişiklik yok" diye atlanırdı.
 
-Ölçülmüş sonuç (2026-10-12) — 34 denetimin özeti:
+Ölçülmüş sonuç (2026-10-12) — 55 denetimin özeti:
 
 ```
 ① Dosya ve biçim           satır sonu tek tip (lf 1483 / crlf 0) · başlık tarihsiz
@@ -281,14 +282,77 @@ değil, aynı metnin ikinci **taşıyıcısı**.
 ⑦ Davranış eşitliği        faInterp 1827 nokta · faBand/taBand 442 nokta ·
                            computeHolisticScore 9/9 vektör (tam sonuç, cümleler dahil)
 ⑧ Olumsuz denetim          N1 metin · N2 eksik sembol · N3 dilim · N4 1e-9 → hepsi reddedildi
+⑨ Ayar taşıyıcısı          api/_ayar.js = config.js el ağırlıkları · DERİN eşitlik ·
+                           sızma denetimi (44 aday değer · 8 yasak ad) · N5 + N6
 
-✅ 34 denetim geçti — api/_motor.js app.js ile birebir.
+✅ 55 denetim geçti — api/_motor.js ↔ app.js, api/_ayar.js ↔ config.js birebir.
 ```
 
 ⑦ burada **cümleleri de** karşılaştırıyor — `baseline.json`'ın bilerek dondurmadığı
 şeyi. Çelişki değil: orada cümle dondurmak FAZ 1/3 belirteç dönüşümünü gereksiz yere
 kırardı, burada ise iki taraf **aynı kaynaktan** türüyor, yani bir fark biçim tercihi
 olamaz — ancak gerçek bir bozulma olabilir.
+
+### Ayar taşıyıcısı — `api/_ayar.js`
+
+Motor sunucuda kurulurken **el ağırlıklarına** ihtiyaç duyuyor: `TA_WEIGHTS` (vade
+başına gösterge ağırlıkları) ve `TA_BENCHMARK` (göreli güç için karşılaştırma
+endeksi). Bunlar `config.js`'te, ama `config.js` bir tarayıcı varlığı — `window.X = …`
+yazıyor, dışa aktarmıyor.
+
+Üç seçenek vardı, ikisi elendi:
+
+| Seçenek | Neden olmadı |
+|---|---|
+| Ağırlıkları `api/score.js`'e **kopyala** | İki doğruluk kaynağı doğar. `config.js`'te bir ağırlık değişir, sunucu eski sayıyla skorlar ve **hiçbir test bunu görmez** — motor kopyası yasağının aynısı. |
+| `config.js`'i uçta **çalışma anında oku** | Vercel'in dosya izleyicisi (node-file-trace) `config.js`'i işleve paketler mi? `import` grafiğinde görünmediği için **belli değil** — ve bu ancak dağıtımdan sonra anlaşılır. Yerelde doğrulanamayan bir kurulum kabul edilmedi. |
+| **Üret** → `api/_ayar.js` | `_motor.js` ile aynı ilke: kopyalanmıyor, `config.js`'ten türetiliyor, her koşuda sürüklenme testinden geçiyor. Yerelde doğrulanabilir. |
+
+Üretici tek: `config.js`'i okuyan `new Function('window', …)` kalıbı `engine.mjs`'te
+**bir kez** duruyor (`loadConfig()`), `tools/motor-uret.mjs` onu içe alıyor. Test de
+aynı işlevi kullanıyor — yani karşılaştırmanın iki tarafı da tek okuyucudan geliyor.
+
+#### Neden metin karşılaştırması yetmiyor — derin eşitlik
+
+Üretici ağırlıkları `JSON.stringify` ile gömüyor. Sürüklenme denetimi dosyayı
+**bellekte yeniden üretip** diskteki ile karşılaştırıyor; bu elle düzenlemeyi yakalar
+ama bir şeyi **yakalamaz**: `JSON.stringify` bir alanı sessizce düşürürse (bir
+`undefined`, bir fonksiyon, bir `NaN`) iki taraf da **aynı eksik metni** üretir ve
+denetim yeşil kalır.
+
+Bu yüzden ⑨ bölümü üretilen modülü **gerçekten yükleyip** (`await import`) çıktısını
+`config.js`'in canlı değerleriyle **derin eşitlikle** karşılaştırıyor — alan alan,
+sayı sayı. `VADELER` sırası da ayrıca denetleniyor: ağırlık sırası skoru etkilemiyor
+ama arayüzdeki vade sekmelerinin sırasını belirliyor.
+
+`N5` bu denetimin boş olmadığını kanıtlıyor: bir el ağırlığına `1e-9` eklenince derin
+eşitlik **kırmızı** yanıyor.
+
+#### Sızma denetimi — ne alınmıyor
+
+`config.js` yalnız ağırlık tutmuyor: bildirim konusu (paylaşılan bir sır gibi
+davranıyor), vekil adresleri ve haber besleme listeleri de orada. Üretilen dosya
+bunların **hiçbirini** taşımıyor; başlıkta bu bilerek yazılı:
+
+```
+Alınmayan: NTFY_TOPIC, MY_PROXY, CORS_PROXY, besleme listeleri.
+```
+
+Denetim bu sözü iki yönden tahsil ediyor ve **kendi kendini sürdürüyor** — izin
+verilen iki anahtar dışındaki **bütün** `window.*` anahtarları çalışma anında
+`config.js`'ten okunuyor, yani yarın oraya yeni bir sır eklenirse testi elle
+güncellemek gerekmiyor:
+
+- **Değerler**: izin verilmeyen her anahtarın içindeki dizeler özyinelemeli
+  toplanıyor, 10 karakterden kısa olanlar atılıyor (hisse kodu gibi parçalar yanlış
+  alarm üretir), izin verilen iki anahtarda da geçenler aday sayılmıyor. Kalan **44
+  aday** üretilen dosyada aranıyor. **Sır değerleri teste yazılmıyor** —
+  `config.js`'ten okunuyor, ve başarısızlık iletisinde de basılmıyor, yalnız
+  **sayısı** bildiriliyor.
+- **Adlar**: **8 yasak anahtar adı** dosyanın **gövdesinde** aranıyor — başlıkta
+  bulunmaları gerekiyor (yukarıdaki satır), gövdede bulunmamaları.
+
+`N6` burada da boşluk denetimi: metne ekilmiş bir sır gerçekten yakalanıyor mu.
 
 ### Üretilmiş motor parite şeridi
 
@@ -308,6 +372,14 @@ sürüklenmede kırmızı yandığı uçtan uca gösterildi: üretilmiş dosyada
 `54` → `55` yapıldı. Test iki yerden **birbirinden bağımsız** yakaladı — ② metin farkı
 (*ilk farklı satır: 912*) ve ⑦ davranış farkı (`taBand(54)`: `"hi"` ≠ `"mid"`) — çıkış
 kodu **1**. Dosya geri yüklendi, imza değişmedi.
+
+Aynı uçtan uca kanıt **ayar dosyası** için de koşuldu — içteki `N5`/`N6` kontrollerine
+güvenilmedi, çünkü onlar testin kendi içinde yaşıyor. `config.js`'teki bildirim konusu
+(değeri çalışma anında okunup, hiçbir yere yazılmadan — yalnız uzunluğu bildirildi)
+`api/_ayar.js`'in sonuna bir yorum satırı olarak ekildi. Test iki yerden
+**birbirinden bağımsız** yakaladı — sürüklenme (*ilk farklı satır: 145*) ve sızma
+denetimi (*1 değer sızmış*) — çıkış kodu **1**. `node tools/motor-uret.mjs` dosyayı
+yeniden üretti, imza (`sha256:75512c5271a89b33`) değişmedi, 55 denetim yeşile döndü.
 
 ---
 

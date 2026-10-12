@@ -76,12 +76,16 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       → **Sürüyor** (2026-10-12). İlk uç `/api/score`. **Taşıyıcı hazır:** motor
       artık `app.js`'ten **üretiliyor** → `api/_motor.js` (1.405 satır / 9 dilim,
       tek ESM modülü, girişi `buildMotor(H)`; `_` öneki Vercel rotasını engelliyor).
+      **El ağırlıkları da aynı ilkeyle üretiliyor** → `api/_ayar.js` (`TA_WEIGHTS` ·
+      `TA_BENCHMARK`, `config.js`'ten türetilmiş; bildirim konusu, vekiller ve
+      besleme listeleri **alınmıyor** — sızma denetimi bunu her koşuda tahsil ediyor).
       Kopya **değil** — `tools/motor-uret.mjs` her seferinde `app.js`'i yeniden
-      dilimliyor, `tests/uretim-test.mjs` (34 denetim) "bu dosya app.js'in ŞU ANKİ
-      hali mi?" diye soruyor. **Kanıt:** üretilmiş motor aynı fikstürlerle **FARK 0**
+      dilimliyor, `tests/uretim-test.mjs` (55 denetim) "bu dosyalar kaynaklarının
+      ŞU ANKİ hali mi?" diye soruyor. **Kanıt:** üretilmiş motor aynı fikstürlerle **FARK 0**
       (`PARITE_MOTOR=uretilmis node tests/parity.mjs`); `taBand` eşiği kurcalanınca
       test metin **ve** davranış farkını yakalayıp çıkış 1 verdi.
-      **Sırada:** `api/score.js` uç noktası + F/K kriterinin üç ekran kopyasının
+      **Sırada:** `api/score.js` uç noktası (`buildMotor` + ayarları içe alıp `H`
+      konağını kurar, ham sayı döndürür) + F/K kriterinin üç ekran kopyasının
       (`app.js:5648/:7449/:11876`) motora devri.
 - [ ] **Expo projesi** kur: TypeScript + expo-router + Supabase client.
 - [ ] **Tasarım sistemi:** renk token (koyu mürekkep `#0F1522` + altın `#D4A24E` +

@@ -223,7 +223,7 @@ kayıtları her koşuda yeniden sorar.)
    öneki Vercel'in dosyayı rotaya çevirmesini engelliyor.
    Kopya **değil**: **[tools/motor-uret.mjs](tools/motor-uret.mjs)** her seferinde
    `app.js`'i yeniden dilimliyor, **[tests/uretim-test.mjs](tests/uretim-test.mjs)**
-   (34 denetim) "bu dosya app.js'in ŞU ANKİ hali mi?" sorusunu soruyor — elle
+   (55 denetim) "bu dosyalar kaynaklarının ŞU ANKİ hali mi?" sorusunu soruyor — elle
    düzenleme ya da app.js kayması testi kırmızı yakıyor.
    **Kanıt:** parite artık iki şeritte koşuyor ve ikisi de aynı `baseline.json`'a
    karşı **FARK 0** veriyor — `node tests/parity.mjs` (bellekte dilimlenmiş) ve
@@ -231,8 +231,28 @@ kayıtları her koşuda yeniden sorar.)
    Negatif kontrol: üretilmiş dosyada `taBand` eşiği 54→55 bozulunca test hem metin
    farkını (satır 912) hem davranış farkını yakalayıp çıkış 1 verdi.
 
+   **Adım 1b — ayar taşıyıcısı → TAMAM** (2026-10-12). Motor sunucuda kurulurken
+   **el ağırlıklarına** ihtiyaç duyuyor (`TA_WEIGHTS`, `TA_BENCHMARK`), ama bunlar
+   `config.js`'te ve `config.js` bir tarayıcı varlığı — `window.X = …` yazıyor,
+   dışa aktarmıyor. Ağırlıkları `api/score.js`'e **kopyalamak** iki doğruluk kaynağı
+   doğuracaktı; `config.js`'i uçta **çalışma anında okumak** ise Vercel'in dosyayı
+   işleve paketleyip paketlemediğine bağlı ve bu yerelde doğrulanamaz. Bu yüzden
+   `_motor.js` ile aynı ilke: **[api/_ayar.js](api/_ayar.js)** da **üretiliyor**.
+   Yalnız o iki anahtarı taşıyor — bildirim konusu, vekil adresleri ve besleme
+   listeleri **alınmıyor**, başlıkta bu bilerek yazılı.
+   Denetim 34'ten **55'e** çıktı: metin sürüklenmesinin yanında **derin eşitlik**
+   (`JSON.stringify` bir alanı sessizce düşürürse iki taraf da aynı eksik metni
+   üretir, yani metin karşılaştırması bunu göremez) ve **sızma denetimi** — izin
+   verilen iki anahtar dışındaki bütün `window.*` değerleri çalışma anında okunup
+   üretilen dosyada aranıyor (44 aday değer, 8 yasak ad), yani yarın `config.js`'e
+   yeni bir sır eklenirse testi elle güncellemek gerekmiyor.
+   **Negatif kontrol uçtan uca koşuldu:** `config.js`'teki bildirim konusu üretilen
+   dosyaya ekilince test iki yerden **birbirinden bağımsız** yakaladı (sürüklenme +
+   sızma) ve çıkış 1 verdi; üretici dosyayı geri yazdı, imza değişmedi.
+
    **Adım 2 — `api/score.js` ucu → sırada.** Yapılacaklar: ESM `export default
-   handler` (diğer beş uçla aynı biçim) + `vercel.json` `functions` girdisi;
+   handler` (diğer beş uçla aynı biçim) — `_motor.js` ve `_ayar.js`'i içe alıp `H`
+   konağını kuran — artı `vercel.json` `functions` girdisi;
    §5.1 gereği **ham sayı** döndürmek (biçimlendirme istemcide kalır); §5.2'deki
    F/K kriterinin **üç ekran kopyasının** motora devri; `COMPOSITE_MATRIX`'in
    2 etiketli satırının belirtece çevrilmesi.

@@ -1,11 +1,19 @@
 #!/usr/bin/env node
 // ===========================================================================
-//  MOTOR ÜRETİCİ — app.js → api/_motor.js
+//  MOTOR ÜRETİCİ — app.js → api/_motor.js, config.js → api/_ayar.js
 // ===========================================================================
 //
 //  NE YAPAR: `app.js`'teki skor motorunu dilimler ve sunucuda koşabilen tek
 //  bir ESM modülü olarak yazar. Üretilen dosya `/api/score`'un (ve sonraki
-//  uçların) içe alacağı motordur.
+//  uçların) içe alacağı motordur. Yanında `config.js`'teki el ağırlıklarını
+//  (`TA_WEIGHTS` + `TA_BENCHMARK`) `api/_ayar.js` olarak yazar — motor bunlar
+//  olmadan koşamaz, `config.js` ise bir tarayıcı varlığı.
+//
+//  NEDEN AYAR DA ÜRETİLİYOR: Vercel işlevin paketine yalnız statik olarak
+//  izlenebilen dosyaları koyar; `config.js`'i çalışma anında `fs` ile okumak
+//  dağıtıma bağlı bir kumar. Üretilen dosya yerelde doğrulanabiliyor.
+//  SIZMA YOK: yalnız bu iki anahtar alınır — `NTFY_TOPIC` ve `MY_PROXY`
+//  ÜRETİLEN DOSYAYA GİRMEZ.
 //
 //  NEDEN GEREKLİ: `tests/engine.mjs` motoru `new Function` ile BELLEKTE kurar
 //  ve bunu yaparken `app.js`'i okur. Vercel'de ikisi de olmaz:
@@ -30,9 +38,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { ROOT, EXPORTS, readApp, engineSource, sliceInfo } from '../tests/engine.mjs';
+import { ROOT, EXPORTS, readApp, engineSource, sliceInfo, loadConfig } from '../tests/engine.mjs';
 
 export const CIKTI = path.join(ROOT, 'api', '_motor.js');
+export const CIKTI_AYAR = path.join(ROOT, 'api', '_ayar.js');
 
 /** Metnin içerik imzası. Üretilen dosyaya gömülür; sürüklenme testi bunu doğrular. */
 export function imzala(metin) {
@@ -109,37 +118,138 @@ export function uretKaynak() {
   return { metin, imza, dilimler, toplam };
 }
 
+/**
+ * api/_ayar.js'in TAM metnini döndür — diske yazmadan.
+ *
+ * Kaynak `config.js`; okuma işi `tests/engine.mjs`'teki `loadConfig()`'e
+ * bırakıldı — motor metninde olduğu gibi burada da tek kurulum yeri var.
+ * Yalnız motorun gerçekten kullandığı iki anahtar alınır; `NTFY_TOPIC`
+ * (bildirim konusu = paylaşılan sır) ve `MY_PROXY` (konak kabuğunun işi)
+ * BİLEREK dışarıda bırakıldı.
+ *
+ * @returns {{metin:string, imza:string, vadeler:string[]}}
+ */
+export function uretAyarKaynak() {
+  const w = loadConfig();
+  const ayar = { TA_WEIGHTS: w.TA_WEIGHTS, TA_BENCHMARK: w.TA_BENCHMARK };
+
+  // JSON gidiş-dönüşü bu iki anahtar için KAYIPSIZ (yalnız dize/sayı/mantıksal/
+  // dizi/nesne var — fonksiyon, tarih, undefined yok). Üretim testi bunu her
+  // koşuda derin eşitlikle doğruluyor, yani sessiz bir kayıp mümkün değil.
+  const govde = JSON.stringify(ayar, null, 2);
+  const imza = imzala(govde);
+  const vadeler = Object.keys(ayar.TA_WEIGHTS);
+
+  // ⚠ BAŞLIK TARİHSİZ (bkz. uretKaynak): tarih yazılsa dosya ertesi gün kendi
+  // kendine "sürüklenmiş" görünür ve test her gün kırmızı yanar.
+  const bas = [
+    '// ===========================================================================',
+    '//  ÜRETİLMİŞTİR — ELLE DÜZENLEMEYİN',
+    '// ===========================================================================',
+    '//',
+    '//  Kaynak : config.js (window.TA_WEIGHTS + window.TA_BENCHMARK)',
+    '//  Yenile : node tools/motor-uret.mjs',
+    '//  Doğrula: node tests/uretim-test.mjs',
+    '//',
+    '//  El ağırlıkları config.js\'te DURUR — tek doğruluk kaynağı orası. Bu dosya',
+    '//  motorun sunucu tarafı için alınmış bir izdüşümü; ağırlık değişecekse',
+    '//  config.js değişir, sonra bu dosya yeniden üretilir.',
+    '//',
+    `//  Vadeler (${vadeler.length}): ${vadeler.join(', ')}`,
+    '//  Alınmayan: NTFY_TOPIC, MY_PROXY, CORS_PROXY, besleme listeleri.',
+    '//',
+    '//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.',
+    '// ===========================================================================',
+    '',
+    `export const IMZA_AYAR = '${imza}';`,
+    '',
+    '/** Vade adları — config.js\'teki sırayla. */',
+    `export const VADELER = ${JSON.stringify(vadeler)};`,
+    '',
+    '/** Teknik skor el ağırlıkları — vade → { blend, interp, adxTf, weights }. */',
+    `export const TA_WEIGHTS = ${JSON.stringify(ayar.TA_WEIGHTS, null, 2)};`,
+    '',
+    '/** Göreli Güç karşılaştırma endeksleri (Yahoo sembolü). */',
+    `export const TA_BENCHMARK = ${JSON.stringify(ayar.TA_BENCHMARK, null, 2)};`,
+    '',
+  ].join('\n');
+
+  return { metin: bas, imza, vadeler };
+}
+
 // --- CLI ------------------------------------------------------------------
+/**
+ * Üretilmiş bir dosyanın diskteki haliyle karşılaştırması.
+ *
+ *   ayni     → satır sonuna DUYARSIZ. Taze klonda core.autocrlf dosyayı CRLF'e
+ *              çevirir; bu bir sürüklenme DEĞİL → DENETİM bunu kullanır.
+ *   ayniBayt → bayt bayt. YAZMA kararı bunu kullanır, yoksa bir satır sonu
+ *              düzeltmesi "değişiklik yok" diye atlanır.
+ */
+function karsilastir(yol, metin) {
+  const norm = (s) => s.replace(/\r\n/g, '\n');
+  const varOlan = fs.existsSync(yol) ? fs.readFileSync(yol, 'utf8') : null;
+  return {
+    varOlan,
+    ayni: varOlan !== null && norm(varOlan) === norm(metin),
+    ayniBayt: varOlan === metin,
+  };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const denetle = process.argv.includes('--denetle');
-  const { metin, imza, dilimler, toplam } = uretKaynak();
-  const norm = (s) => s.replace(/\r\n/g, '\n');
-  const varOlan = fs.existsSync(CIKTI) ? fs.readFileSync(CIKTI, 'utf8') : null;
-  const ayni = varOlan !== null && norm(varOlan) === norm(metin);
-  // DENETİM satır sonuna duyarsız (taze klonda core.autocrlf dosyayı CRLF'e
-  // çevirir — bu bir sürüklenme DEĞİL), YAZMA kararı ise bayt bayt: yoksa
-  // satır sonu düzeltmesi "değişiklik yok" diye atlanır.
-  const ayniBayt = varOlan === metin;
+  const motor = uretKaynak();
+  const ayar = uretAyarKaynak();
+
+  const isler = [
+    {
+      ad: 'api/_motor.js', yol: CIKTI, metin: motor.metin, imza: motor.imza,
+      ozet: `${motor.toplam} satır / ${motor.dilimler.length} dilim`,
+      kaynak: 'app.js',
+    },
+    {
+      ad: 'api/_ayar.js', yol: CIKTI_AYAR, metin: ayar.metin, imza: ayar.imza,
+      ozet: `${ayar.vadeler.length} vade (${ayar.vadeler.join(', ')})`,
+      kaynak: 'config.js',
+    },
+  ];
 
   if (denetle) {
-    if (!ayni) {
-      console.log(varOlan === null ? 'YOK: api/_motor.js üretilmemiş.' : 'SÜRÜKLENME: api/_motor.js app.js ile aynı değil.');
+    let kotu = 0;
+    for (const i of isler) {
+      const k = karsilastir(i.yol, i.metin);
+      if (k.ayni) {
+        console.log(`✅ ${i.ad} güncel — ${i.imza}, ${i.ozet}.`);
+        continue;
+      }
+      console.log(k.varOlan === null
+        ? `YOK: ${i.ad} üretilmemiş.`
+        : `SÜRÜKLENME: ${i.ad} ${i.kaynak} ile aynı değil.`);
+      kotu++;
+    }
+    if (kotu) {
       console.log('Düzelt: node tools/motor-uret.mjs');
       process.exit(1);
     }
-    console.log(`✅ api/_motor.js güncel — ${imza}, ${toplam} satır / ${dilimler.length} dilim.`);
     process.exit(0);
   }
 
-  if (ayniBayt) {
-    console.log(`değişiklik yok — ${imza}, ${toplam} satır / ${dilimler.length} dilim.`);
-  } else {
-    fs.mkdirSync(path.dirname(CIKTI), { recursive: true });
-    fs.writeFileSync(CIKTI, metin);   // metin uretKaynak()'ta LF'e çekildi — api/proxy.js örneği
-    console.log(`${varOlan === null ? 'üretildi' : 'yenilendi'}: api/_motor.js`);
-    console.log(`  imza   : ${imza}`);
-    console.log(`  motor  : ${toplam} satır / ${dilimler.length} dilim`);
-    console.log(`  dosya  : ${(metin.match(/\n/g) || []).length} satır, ${Buffer.byteLength(metin, 'utf8')} bayt`);
+  for (const i of isler) {
+    const k = karsilastir(i.yol, i.metin);
+    if (k.ayniBayt) {
+      console.log(`değişiklik yok: ${i.ad} — ${i.imza}, ${i.ozet}.`);
+      continue;
+    }
+    fs.mkdirSync(path.dirname(i.yol), { recursive: true });
+    fs.writeFileSync(i.yol, i.metin);   // metin LF'e çekildi — api/proxy.js örneği
+    // DÜRÜST ETİKET: taze klonda core.autocrlf dosyayı CRLF yapar; yazma kararı
+    // bayt bayt olduğu için dosya LF'e geri çekilir. İÇERİK değişmediyse bunu
+    // "yenilendi" diye bildirmek yanıltıcı olur.
+    const etiket = k.varOlan === null ? 'üretildi' : (k.ayni ? 'satır sonu düzeltildi' : 'yenilendi');
+    console.log(`${etiket}: ${i.ad}`);
+    console.log(`  imza   : ${i.imza}`);
+    console.log(`  içerik : ${i.ozet}`);
+    console.log(`  dosya  : ${(i.metin.match(/\n/g) || []).length} satır, ${Buffer.byteLength(i.metin, 'utf8')} bayt`);
   }
   console.log('Doğrula: node tests/uretim-test.mjs');
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');

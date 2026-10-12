@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ===========================================================================
-//  ÜRETİM TESTİ — api/_motor.js, app.js'in ŞU ANKİ hali mi?
+//  ÜRETİM TESTİ — api/_motor.js ve api/_ayar.js, kaynaklarının ŞU ANKİ hali mi?
 // ===========================================================================
 //
 //  NEDEN VAR: `tests/engine.mjs` motoru kopyalamayı yasaklar — "motor
@@ -10,7 +10,7 @@
 //  "dosya = app.js'in şu anki hali mi?" sorusunu sorar. Bu test kırmızıysa
 //  dosya bir KOPYADIR ve /api/score'un ölçtüğü şey hiçbir şeydir.
 //
-//  NE ÖLÇER (8 bölüm)
+//  NE ÖLÇER (9 bölüm)
 //    ① dosya ve biçim      — var mı, satır sonu karışık mı, başlık tarihsiz mi
 //    ② sürüklenme          — bellekte yeniden üret, diskteki ile karşılaştır
 //    ③ imza                — gömülü IMZA = taze hesaplanan; imzala() duyarlı
@@ -21,6 +21,8 @@
 //                            sayıları veriyor. Ağ YOK: saf fonksiyonlar +
 //                            run.mjs'teki 9 sentetik bütünsel vektör.
 //    ⑧ olumsuz denetimler  — testin kendisi boş değil mi (4 kontrol)
+//    ⑨ ayar taşıyıcısı     — api/_ayar.js = config.js el ağırlıkları mı;
+//                            DERİN eşitlik, sızma denetimi, 2 olumsuz kontrol
 //
 //  ⑦ NEDEN TAM KARŞILAŞTIRMA: baseline.json kurulmuş cümleleri DONDURMAZ
 //  (biçim FAZ 1/3'te belirteç dizisine geçiyor). Burada durum farklı: iki
@@ -46,10 +48,12 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
-  SLICES, EXPORTS, readApp, engineSource, sliceInfo, makeHost,
+  SLICES, EXPORTS, readApp, engineSource, sliceInfo, makeHost, loadConfig,
 } from './engine.mjs';
 import { HOLISTIC_CASES } from './run.mjs';
-import { CIKTI, imzala, uretKaynak } from '../tools/motor-uret.mjs';
+import {
+  CIKTI, CIKTI_AYAR, imzala, uretKaynak, uretAyarKaynak,
+} from '../tools/motor-uret.mjs';
 
 // --- küçük koşum defteri --------------------------------------------------
 let gecen = 0;
@@ -67,7 +71,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — api/_motor.js app.js ile birebir.`);
+  console.log(`✅ ${gecen} denetim geçti — api/_motor.js ↔ app.js, api/_ayar.js ↔ config.js birebir.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -108,7 +112,7 @@ function derinFark(a, b, yol = '') {
 /** ⑥ ve ⑧'in PAYLAŞTIĞI yüklem: motor yüzeyinde eksik sembol var mı? */
 const eksikSembol = (api) => EXPORTS.filter((k) => !api || api[k] === undefined);
 
-console.log('ÜRETİM TESTİ — api/_motor.js = app.js (şu anki hali)');
+console.log('ÜRETİM TESTİ — api/_motor.js = app.js · api/_ayar.js = config.js');
 console.log('═'.repeat(70));
 
 // ===========================================================================
@@ -291,5 +295,125 @@ const kaydirilmis = JSON.parse(JSON.stringify(ornek));
 kaydirilmis.score10 = (kaydirilmis.score10 ?? 0) + 1e-9;
 ok('N4 · 1e-9 kaydırılmış sonuç ⑦d karşılaştırmasında yakalanır',
   derinFark(JSON.parse(JSON.stringify(ornek)), kaydirilmis, 'holistic') !== null);
+
+// ===========================================================================
+bolum('⑨ Ayar taşıyıcısı — api/_ayar.js, config.js\'in ŞU ANKİ hali mi?');
+// ===========================================================================
+// NEDEN AYRI BİR BÖLÜM: /api/score motoru kurarken el ağırlıklarına ihtiyaç
+// duyuyor, config.js ise bir tarayıcı varlığı (window.*). Ağırlıklar
+// KOPYALANMAZ — config.js tek doğruluk kaynağı kalır, api/_ayar.js ondan
+// ÜRETİLİR. Bu bölüm üreticinin "JSON gidiş-dönüşü kayıpsız" sözünü lafta
+// bırakmayıp DERİN EŞİTLİKLE tahsil eder.
+const ayarVar = fs.existsSync(CIKTI_AYAR);
+ok('api/_ayar.js var', ayarVar, ayarVar ? '' : 'üret: node tools/motor-uret.mjs');
+
+if (ayarVar) {
+  const ayarMetin = fs.readFileSync(CIKTI_AYAR, 'utf8');
+  const cfg = loadConfig();
+
+  const aLf = (ayarMetin.match(/\n/g) || []).length;
+  const aCrlf = (ayarMetin.match(/\r\n/g) || []).length;
+  ok('ayar: satır sonu tek tip (karışık değil)', aCrlf === 0 || aCrlf === aLf, `lf ${aLf} / crlf ${aCrlf}`);
+
+  const ayarImi = 'export const IMZA_AYAR';
+  const aBasSonu = ayarMetin.indexOf(ayarImi);
+  ok('ayar: başlık sınırı bulunabiliyor', aBasSonu > 0, `"${ayarImi}" @ ${aBasSonu}`);
+  const aBaslik = aBasSonu > 0 ? ayarMetin.slice(0, aBasSonu) : ayarMetin;
+
+  ok('ayar: "ELLE DÜZENLEMEYİN" uyarısı başlıkta', aBaslik.includes('ELLE DÜZENLEMEYİN'));
+  ok('ayar: yenileme komutu başlıkta', aBaslik.includes('node tools/motor-uret.mjs'));
+  ok('ayar: doğrulama komutu başlıkta', aBaslik.includes('node tests/uretim-test.mjs'));
+  ok('ayar: yasal uyarı başlıkta', aBaslik.includes('Bilgi amaçlıdır, yatırım tavsiyesi değildir.'));
+  const aTarih = aBaslik.match(/\b20\d\d-\d\d-\d\d\b/);
+  ok('ayar: başlık tarihsiz (kendi kendine sürüklenemez)', !aTarih, aTarih ? `bulundu: ${aTarih[0]}` : '');
+
+  // --- sürüklenme ve imza ---------------------------------------------------
+  const tazeAyar = uretAyarKaynak();
+  const ayarEsit = norm(ayarMetin) === norm(tazeAyar.metin);
+  ok('ayar: bellekte yeniden üretilen metin diskteki ile aynı', ayarEsit,
+    ayarEsit ? `${(norm(tazeAyar.metin).match(/\n/g) || []).length} satır`
+      : `ilk farklı satır: ${ilkFarkliSatir(norm(ayarMetin), norm(tazeAyar.metin))} → düzelt: node tools/motor-uret.mjs`);
+
+  const aImzaEsl = ayarMetin.match(/export const IMZA_AYAR = '([^']+)';/);
+  ok('ayar: IMZA_AYAR gömülü', !!aImzaEsl, aImzaEsl ? aImzaEsl[1] : 'bulunamadı');
+  if (aImzaEsl) {
+    ok('ayar: gömülü IMZA_AYAR = taze hesaplanan', aImzaEsl[1] === tazeAyar.imza,
+      `${aImzaEsl[1]} ↔ ${tazeAyar.imza}`);
+  }
+
+  // --- modül yükü ve DERİN EŞİTLİK -----------------------------------------
+  let ayarMod = null; let ayarHata = '';
+  try { ayarMod = await import(pathToFileURL(CIKTI_AYAR).href); } catch (e) { ayarHata = e.message; }
+  ok('ayar: ESM olarak yükleniyor', ayarMod !== null, ayarHata);
+
+  if (ayarMod) {
+    ok('ayar: üç sembol doğru türde',
+      Array.isArray(ayarMod.VADELER)
+      && !!ayarMod.TA_WEIGHTS && typeof ayarMod.TA_WEIGHTS === 'object'
+      && !!ayarMod.TA_BENCHMARK && typeof ayarMod.TA_BENCHMARK === 'object',
+      `VADELER ${ayarMod.VADELER?.length} · TA_WEIGHTS ${Object.keys(ayarMod.TA_WEIGHTS || {}).length} vade`);
+
+    // İŞİN KALBİ: üretilen dosya ile config.js aynı sayıları taşıyor mu?
+    // Metin karşılaştırması bunu ispat etmez — JSON.stringify bir alanı
+    // sessizce düşürürse iki taraf da aynı metni üretir ve sürüklenme
+    // denetimi yeşil kalır. Derin eşitlik o sessiz kaybı kapatıyor.
+    const wFark = derinFark(cfg.TA_WEIGHTS, ayarMod.TA_WEIGHTS, 'TA_WEIGHTS');
+    ok('ayar: TA_WEIGHTS config.js ile DERİN eşit (JSON kaybı yok)', wFark === null,
+      wFark || `${Object.keys(cfg.TA_WEIGHTS).length} vade karşılaştırıldı`);
+    const bFark = derinFark(cfg.TA_BENCHMARK, ayarMod.TA_BENCHMARK, 'TA_BENCHMARK');
+    ok('ayar: TA_BENCHMARK config.js ile DERİN eşit', bFark === null,
+      bFark || JSON.stringify(ayarMod.TA_BENCHMARK));
+
+    const vFark = derinFark(Object.keys(ayarMod.TA_WEIGHTS), ayarMod.VADELER, 'VADELER');
+    ok('ayar: VADELER = Object.keys(TA_WEIGHTS)', vFark === null, vFark || ayarMod.VADELER.join(', '));
+    const vFark2 = derinFark(Object.keys(cfg.TA_WEIGHTS), ayarMod.VADELER, 'VADELER');
+    ok('ayar: VADELER config.js\'teki SIRAYLA aynı', vFark2 === null, vFark2 || '');
+
+    // N5: yukarıdaki derin eşitlik gerçekten hassas mı?
+    const kaymis = JSON.parse(JSON.stringify(ayarMod.TA_WEIGHTS));
+    const ilkVade = ayarMod.VADELER[0];
+    const ilkAgirlik = Object.keys(kaymis[ilkVade]?.weights || {})[0];
+    if (ilkAgirlik) kaymis[ilkVade].weights[ilkAgirlik] += 1e-9;
+    ok('N5 · 1e-9 kaydırılmış el ağırlığı derin eşitlikte yakalanır',
+      !!ilkAgirlik && derinFark(cfg.TA_WEIGHTS, kaymis, 'TA_WEIGHTS') !== null,
+      ilkAgirlik ? `${ilkVade}.weights.${ilkAgirlik}` : 'ağırlık alanı bulunamadı');
+  }
+
+  // --- SIZMA DENETİMİ ------------------------------------------------------
+  // config.js'teki BÜTÜN window.* anahtarları taranır, izin verilen ikisi
+  // dışında. Kendi kendini sürdürür: config.js'e yarın yeni bir sır eklenirse
+  // bu denetim onu da kapsar, testi elle güncellemek gerekmez.
+  // Sır DEĞERLERİ bu dosyaya YAZILMAZ — config.js'ten okunur ve başarısızlık
+  // iletisinde de basılmaz, yalnız sayısı bildirilir.
+  const IZIN = ['TA_WEIGHTS', 'TA_BENCHMARK'];
+  const dizele = (v) => {
+    if (typeof v === 'string') return [v];
+    if (Array.isArray(v)) return v.flatMap(dizele);
+    if (v && typeof v === 'object') return Object.values(v).flatMap(dizele);
+    return [];
+  };
+  const izinliMetin = JSON.stringify({ TA_WEIGHTS: cfg.TA_WEIGHTS, TA_BENCHMARK: cfg.TA_BENCHMARK });
+  const yasakAdlar = Object.keys(cfg).filter((k) => !IZIN.includes(k));
+  // 10 bayttan kısa dizeler atlanır (hisse kodu gibi parçalar yanlış alarm
+  // üretir); izin verilen iki anahtarda da geçen bir dize aday sayılmaz.
+  const adaylar = [...new Set(yasakAdlar.flatMap((k) => dizele(cfg[k])))]
+    .filter((s) => s.length >= 10 && !izinliMetin.includes(s));
+  const sizanSayi = adaylar.filter((s) => ayarMetin.includes(s)).length;
+  ok('ayar: config.js sırları ve besleme listeleri üretilen dosyada YOK', sizanSayi === 0,
+    sizanSayi ? `${sizanSayi} değer sızmış — bkz. tools/motor-uret.mjs` : `${adaylar.length} aday değer tarandı`);
+
+  // Anahtar ADLARI başlıkta BİLEREK yazılı ("Alınmayan: NTFY_TOPIC, ..."),
+  // gövdede olmamalı.
+  const aGovde = aBasSonu > 0 ? ayarMetin.slice(aBasSonu) : ayarMetin;
+  const sizanAd = yasakAdlar.filter((k) => aGovde.includes(k));
+  ok('ayar: yasak anahtar adları GÖVDEDE yok', sizanAd.length === 0,
+    sizanAd.length ? sizanAd.join(', ') : `${yasakAdlar.length} ad tarandı`);
+
+  // N6: sızma denetimi gerçekten bir şey arıyor mu?
+  const ekiliMetin = adaylar.length ? `${ayarMetin}\n// ${adaylar[0]}\n` : ayarMetin;
+  ok('N6 · ekilmiş bir sır sızma denetimini KIRMIZI yakar',
+    adaylar.length > 0 && adaylar.some((s) => ekiliMetin.includes(s)),
+    adaylar.length ? 'ekildi ve yakalandı' : 'aday yok — denetim boş olurdu');
+}
 
 bitir();
