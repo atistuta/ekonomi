@@ -8,12 +8,16 @@
     "MRVL.US": -1,
     "LITE.US": -3,
     "COHR.US": -2,
-    "FN.US": -2,
+    "FN.US": -1,
     "TER.US": -1,
     "MP.US": -2,
     "ARM.US": -1,
     "GLW.US": -1,
     "REMX.US": -1,
-    "ARKG.US": -1
+    "ARKG.US": -1,
+    "SPCX.US": -1,
+    "FTNT.US": 0,
+    "GFI.US": 0,
+    "AMAT.US": -1
   }
 }
