@@ -125,12 +125,57 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       çağrı sırası olarak eklenecek, cümle kurma istemcide kalacak (HAM SAYI
       kuralı). Aynı commit'te kapatılacak açık uç: `tests/capture.mjs`'in kendi
       UA/başlık kopyası `api/_ag.js` ile tek kaynağa indirilmeli.
-- [ ] **Expo projesi** kur: TypeScript + expo-router + Supabase client.
-- [ ] **Tasarım sistemi:** renk token (koyu mürekkep `#0F1522` + altın `#D4A24E` +
-      yeşil/mercan sinyal), tipografi (2 ağırlık), spacing, `tabular-nums`.
-- [ ] Çekirdek komponentler: `Card`, `Pill/Badge`, `ScoreGauge`, `TickerRow`,
-      `SectorChip`, `Disclaimer`, `Skeleton`.
-- [ ] 5-sekmeli **tab navigasyon iskeleti** (boş ekranlar + disclaimer footer).
+- [x] **Expo projesi** kuruldu (2026-10-14, `mobile/`): TypeScript + expo-router +
+      Supabase client. expo ~57.0.28 · react-native 0.86.3 · react 19.2.3 ·
+      expo-router ~57.0.26 · typescript ~6.0.3. **Elle eklenen TEK paket**
+      `@supabase/supabase-js` ^2.117.3 — UI/ikon/state/grafik kütüphanesi
+      kurulmadı (her bağımlılık bir bakım borcu). `mobile/` `.vercelignore`da:
+      web dağıtımına girmiyor. Ayrıntı ve gerekçeler `mobile/MOBIL_NOTLAR.md`.
+      **Supabase anahtarı YOK ve uydurulmadı** — `supabase.ts` çökmüyor, dürüst
+      "yapılandırılmadı" durumu döndürüyor; `.env.example` üç değişkeni **boş**
+      listeliyor ve `service_role`un neden orada yer almayacağını yazıyor.
+- [x] **Tasarım sistemi** kuruldu: `mobile/src/theme/` (colors · typography ·
+      layout · signal). Web paletinden native'e eşleme **MOBIL_NOTLAR.md**'de
+      tablo halinde: `--bg #0a0e1a`→`#0F1522`, `--gold #fbbf24`→`#D4A24E`,
+      `--green #22d39a`→`#3FBF8F`, `--red #ff5e7e`→`#EF7060`; mor `--accent`
+      **bilerek taşınmadı** (altın tek vurgu rengi olsun diye). Komponentlerde
+      sabit hex yok, `tabular-nums` tek yerde, açık tema token yapısı hazır.
+      **Renk körlüğü yapısal:** `signal.ts`'in `signalOf()`'u tek nesnede
+      `{tone, arrow, word, a11yLabel}` döndürüyor — "yalnız renk" kullanmak için
+      fonksiyonun dışına çıkmak gerekir (kural koda gömüldü, yoruma kalmadı).
+- [x] **Çekirdek komponentler** (7 + 1): `Card`, `Pill/Badge`, `ScoreGauge`,
+      `TickerRow`, `SectorChip`, `Disclaimer`, `Skeleton` — hepsi Analiz
+      sekmesindeki vitrinde **gözle görüldü**. 8.'si `ScreenShell`: disclaimer'ı
+      her ekranın dibine **yapısal** koyuyor (`DISCLAIMER_TEXT` sabiti), yani
+      "her ekrana eklemeyi unutma" diye bir kural kalmadı.
+      **"Veri yok" ≠ "ölçemedim"** istemci tarafında da ayrı: `types.ts`
+      `kesintiSayisi()` / `olcumEksik()`; vitrinde ScoreGauge ikisini ayrı
+      gösteriyor (`72/100` ile `—/100 ölçülemedi`).
+- [x] **5-sekmeli tab navigasyon iskeleti**: `mobile/src/app/(tabs)/` —
+      Listeler · Bugün · Keşfet · Analiz · Arama, **web'deki sırayla birebir**.
+      Beş yol da açıldı, sekme çubuğundan tıklama geziniyor, `tr-TR` biçimleme
+      doğru (`$182,40` · `₺61,85` · `▲ +2,14%` · `▼ −1,37%` U+2212, boşta `—`),
+      konsolda hata yok, 375×812 ve masaüstünde düzen bozulmuyor.
+      **Uydurma veri yok:** semboller `ÖRNEK.A/B/C`, kartlar `İSKELET`/`ÖRNEK`
+      rozetli — iskelet olduğu ekranda görünüyor.
+      **YEŞİL OLMAYANLAR (örtülmedi):** ① tüm görsel ölçüm
+      **react-native-web** üzerinde — simülatör/emülatör koşulmadı, iOS/Android
+      derlemesi denenmedi, yani hiçbir şey gerçek native'de doğrulanmadı.
+      ② `npx tsc --noEmit` temiz (exit 0), ama `npx expo-doctor` **19/21**: iki
+      düşen denetim de Expo sunucusuna bağlanıyor (ağ kaynaklı, proje kusuru
+      değil — erişim varken 20/21 geçmişti), yine de "21/21" denemez.
+      ③ sekme ikonları **emoji** (vektör set yeni bağımlılık demekti); web'de
+      sekme metni emojiyi iki kez çiziyor — react-navigation artefaktı, kozmetik.
+      ④ uygulama ikonu/splash görseli hâlâ **Expo şablonunun sanatı**; Android
+      `adaptiveIcon.backgroundColor` şablon değerinde kaldı. ⑤ `expo lint`
+      koşulmadı (`mobile/`da eslint config yok; koşmak "yalnız şablon + Supabase"
+      kuralını delerdi). ⑥ Şablondan gelip kullanılmayan paketler
+      (`@expo/ui`, `expo-glass-effect`, `expo-symbols`, `expo-image`,
+      `expo-device`, `expo-web-browser`) **silinmedi** — reanimated/
+      gesture-handler/screens/safe-area expo-router'ın çalışma zamanı
+      bağımlılığı, diğerlerini sökmek SDK-uyum denetimini ve kilit dosyasını
+      riske atardı; FAZ 2'de ölçerek ayıklanabilir.
+      ⑦ **Veri bağlama, kimlik doğrulama, test altyapısı yok** — FAZ 2.
 
 ## FAZ 2 — Çekirdek ekranlar
 
