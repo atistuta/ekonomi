@@ -574,13 +574,18 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
   // ② Yerel kopya DİRİLTİLMEDİ. Yorumlar çıkarılıyor: gerekçe metninde
   // `const PAZARLAR` geçmesi suç değil, KODDA geçmesi suç.
   const YASAK = [
-    [/export\s+const\s+AZAMI_SEMBOL\s*=/, 'AZAMI_SEMBOL sabiti'],
+    // `export` ÖNEKİ İSTEĞE BAĞLI: dışa aktarılmayan bir yerel kopya da
+    // diriltmedir. Bu desen bir zaman `export const` şart koşuyordu; düz
+    // `const AZAMI_SEMBOL = …` yazan bir mutasyon ⑤e②'yi SESSİZ GEÇTİ
+    // (⑤a/⑥a/⑤e③ yakaladı, ama bu tarama yakalamalıydı). Diğer beş desen
+    // zaten düz `const`/`function` arıyor — asimetri kasıtlı değildi.
+    [/(?:export\s+)?const\s+AZAMI_SEMBOL\s*=/, 'AZAMI_SEMBOL sabiti'],
     [/const\s+PAZARLAR\s*=/, 'PAZARLAR'],
     [/const\s+VARSAYILAN_VADE\s*=/, 'VARSAYILAN_VADE'],
     [/const\s+AZAMI_SORGU\s*=/, 'AZAMI_SORGU'],
     [/const\s+SEMBOL_BICIM\s*=/, 'SEMBOL_BICIM'],
     [/function\s+temizleSembol\s*\(/, 'temizleSembol()'],
-    [/export\s+function\s+ayristir\s*\(/, 'ayristir() gövdesi'],
+    [/(?:export\s+)?function\s+ayristir\s*\(/, 'ayristir() gövdesi'],   // aynı sebep
   ];
   for (const [ad, yol] of UCLAR) {
     const kod = kodu(yol);
