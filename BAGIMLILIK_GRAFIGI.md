@@ -250,7 +250,24 @@ kayıtları her koşuda yeniden sorar.)
    dosyaya ekilince test iki yerden **birbirinden bağımsız** yakaladı (sürüklenme +
    sızma) ve çıkış 1 verdi; üretici dosyayı geri yazdı, imza değişmedi.
 
-   **Adım 2 — `api/score.js` ucu → sırada.** Yapılacaklar: ESM `export default
+   **Adım 1c — girdi kapısı taşıyıcısı → TAMAM** (2026-10-14). Taşıyıcılar artık
+   **beş** ve ikiye ayrılıyor: **ÜRETİLEN** `_motor.js` + `_ayar.js` (elle
+   düzenlenmez, `node tools/motor-uret.mjs` yazar, `uretim-test` bekçiliyor) ve
+   **ELLE YAZILAN** `_ag.js` (canlı ağ + konak + sayaç + süre tavanı),
+   `_akis.js` (çağrı sırası) ve **[api/_girdi.js](api/_girdi.js)** (girdi kapısı:
+   `AZAMI_SEMBOL` · `PAZARLAR` · `VARSAYILAN_VADE` · `AZAMI_SORGU` ·
+   `SEMBOL_BICIM` · `ayristir()` · `temizleSembol()`). Gerekçe ÖLÇÜLDÜ: aynı
+   doğrulama bölgesi üç uçta **61 kod satırı / 2.401 karakter** birebir kopyaydı;
+   yorumlar çıkarıldığında kod aynı çıktığı için parametrelenecek fark yoktu.
+   Kilit metin karşılaştırmasından **kimlik** denetimine çıktı (`uc-test` ⑤e,
+   12 denetim): üç uç aynı fonksiyon NESNESİNİ içe alıyor, ayrışma fiziksel
+   olarak mümkün değil. Mutasyonla sınandı (yerel sabit diriltme → 6 kırmızı;
+   fonksiyonu sarma → 4 kırmızı).
+
+   **Adım 2 — `api/score.js` ucu → sırada.** (Bu madde uçlar inmeden önce
+   yazıldı; `score` · `recommend` · `analyze` 2026-10-14'te indi, henüz
+   DAĞITILMADI — ayrıntı ve ölçümler `ELITE_ROADMAP.md` FAZ 1/5'te.)
+   Yapılacaklar: ESM `export default
    handler` (diğer beş uçla aynı biçim) — `_motor.js` ve `_ayar.js`'i içe alıp `H`
    konağını kuran — artı `vercel.json` `functions` girdisi;
    §5.1 gereği **ham sayı** döndürmek (biçimlendirme istemcide kalır); §5.2'deki

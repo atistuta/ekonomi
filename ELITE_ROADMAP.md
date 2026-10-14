@@ -211,13 +211,12 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       **AÇIK KALAN → KAPANDI (2026-10-14, aşağıdaki süre tavanı maddesi):**
       bozuk ağda TEK ÇAĞRI 76,3 sn sürüyordu; fren artık sembol İÇİNDE de
       duruyor ve aynı koşum **50,0 sn**.
-      **Üçüncü KOPYA borcu:** doğrulama bölgesi artık üç dosyada. `api/_girdi.js`
-      taşıyıcısına geçmek DAĞITILMIŞ iki ucu değiştirmek demek, o yüzden karar
-      kullanıcıya bırakıldı; borç `api/analyze.js` başlığında ve `uc-test` ⑤e
-      yorumunda yazılı.
+      **Üçüncü KOPYA borcu → KAPANDI (2026-10-14, aşağıdaki girdi kapısı
+      maddesi):** doğrulama bölgesi `api/_girdi.js`e taşındı, üç uç aynı
+      fonksiyon nesnesini içe alıyor.
       **Sırada: dördüncü uç** — `theme` (tematik keşif; `api/theme.js` VAR ama
-      eski şeritten, dört taşıyıcının üstünde durmuyor), ardından `causal` ve
-      `compare` + `pulse` (⚡ Nabız). Aynı dört taşıyıcı, aynı kural: SAYI
+      eski şeritten, beş taşıyıcının üstünde durmuyor), ardından `causal` ve
+      `compare` + `pulse` (⚡ Nabız). Aynı beş taşıyıcı, aynı kural: SAYI
       motora, CÜMLE çağrı noktasına. KV önbelleği ölçülmeden eklenmeyecek.
 - [x] **SÜRE TAVANI — ölçülen açık kapatıldı** (2026-10-14, FAZ 1/5-F):
       üç ucun ORTAK açığıydı; `maxDuration` 60 aşılıyordu, istemci gövdesiz
@@ -250,6 +249,41 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       **Bekçi:** `uc-test` ⑦ (ölçekli, milisaniyelerde biter, kapıda koşar) ·
       `tests/sure.mjs` (üretim sabitleriyle ~50 sn/uç, ELLE, kapı dörtlüsünün
       DIŞINDA). `uc-test` 160 → **176 denetim**.
+- [x] **GİRDİ KAPISI — ÜÇ KOPYA borcu kapandı** (2026-10-14, FAZ 1/5-G):
+      beşinci taşıyıcı `api/_girdi.js` (**ELLE YAZILMIŞTIR**, üretilmiş
+      değil — `_motor.js`/`_ayar.js` üretilmiş, `_ag.js`/`_akis.js`/`_girdi.js`
+      elle). `_` öneki Vercel'de yol açılmasını engelliyor.
+      **Önce ÖLÇÜM:** doğrulama bölgesi (sınırlar + `ayristir` +
+      `temizleSembol`) üç dosyada **61 kod satırı / 2.401 karakter**, yorumlar
+      çıkarıldığında **birebir aynı** → parametrelenecek fark YOKTU, taşıma
+      kör yapılmadı. En ucuz an: üç uç da henüz **yayında değildi**
+      (`origin/main`de yoklar), sözleşme donmamıştı.
+      **Ne taşındı:** `AZAMI_SEMBOL` · `PAZARLAR` · `VARSAYILAN_VADE` ·
+      `AZAMI_SORGU` · `SEMBOL_BICIM` · `ayristir()` · `temizleSembol()`.
+      **Ne BİLEREK kaldı:** modül düzeyi konak/motor kurulumu (`canliAg` +
+      `buildMotor`) — o sıcak lambda durumu, uç başına, doğrulama değil.
+      **Tuzak (önce KIRMIZI):** `export { X } from './mod.js'` TEK BAŞINA
+      yetmiyor — yeniden dışa aktarır ama YEREL BAĞLAMA yaratmaz; handler
+      `ayristir`i çağırdığı için `ReferenceError: ayristir is not defined`
+      ile kırmızı yandı. Üç uçta `import` + `export` birlikte, gerekçe kodda.
+      **Kilit METİNDEN KİMLİĞE çıktı:** eski ⑤e üç dosyanın bölgesini METİN
+      olarak karşılaştırıyordu (2 denetim: N9 + ⑤e). Kopya kalkınca metin
+      karşılaştırması anlamsız — üç BOŞ ayıklama "eşit" çıkar, tam olarak
+      N9'un engellediği sessiz yeşil. Yerine **12 denetim**: ① statik
+      `import` denetimi · ② 7 desenli "yerel kopya DİRİLMEDİ" taraması
+      (yorumlar çıkarılarak: gerekçede `const PAZARLAR` geçmesi suç değil) ·
+      ③ `ayristir` AYNI FONKSİYON NESNESİ + `AZAMI_SEMBOL` kimliği +
+      **19 girdili vektör eşitliği** (sarmayı yakalar) · ④ taşıyıcı saflığı
+      (yalnız `_ayar.js`, ağ yok, HAM SAYI). Denetim sayısı **176 → 186**
+      (−2 eski metin denetimi, +12 kimlik denetimi).
+      **MUTASYON SINANDI (ölçülen):** ⓐ `score.js`e yerel
+      `AZAMI_SEMBOL = 5` dirildi → **6 KIRMIZI** (⑤e② "DİRİLEN:
+      AZAMI_SEMBOL sabiti" + ⑤e③ kimlik + ⑤a/⑥a/①/② eşitlik); geri alındı,
+      186 yeşil. ⓑ `recommend.js` taşıyıcının `ayristir`ini SARDI (3
+      sembolde kırpan sarmalayıcı) → **4 KIRMIZI** (⑤e③ kimlik + ⑤e③ vektör
+      eşitliği + ⑤b + ⑥b); geri alındı, 186 yeşil. ⓑ'yi ESKİ metin kilidi
+      YAKALAYAMAZDI — hiçbir sabit yeniden tanımlanmıyor; kimlik denetimi
+      bu yüzden metinden güçlü.
 - [x] **Expo projesi** kuruldu (2026-10-14, `mobile/`): TypeScript + expo-router +
       Supabase client. expo ~57.0.28 · react-native 0.86.3 · react 19.2.3 ·
       expo-router ~57.0.26 · typescript ~6.0.3. **Elle eklenen TEK paket**

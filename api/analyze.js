@@ -32,11 +32,12 @@
 //  omurgasını — bileşke konumlama + bütüncül skor — karşılıyor. Tez,
 //  Bilanço ve Temettü ayrı veri ayaklarına bağlı ve bu adımın dışında.
 //
-//  DÖRT PARÇA, BEŞİNCİ TAŞIYICI YOK:
+//  BEŞ PARÇA, ALTINCI TAŞIYICI YOK:
 //      api/_motor.js  buildMotor(H)                 motorun kendisi
 //      api/_ayar.js   TA_WEIGHTS · TA_BENCHMARK     el ağırlıkları
 //      api/_ag.js     canliAg()                     canlı ağ + konak + sayaç
 //      api/_akis.js   analyzeOne()                  çağrı sırası
+//      api/_girdi.js  ayristir() · AZAMI_SEMBOL     girdi kapısı + sınırlar
 //  Burada eşik, ağırlık ya da çarpan YOK: üç direğin ağırlıkları
 //  (0.40/0.30/0.30), bant eşikleri ve büyüme eğimi motorda yazılı. Bir sayı
 //  buraya yazılırsa parite testi onu GÖRMEZ (baseline.json yalnız akışı
@@ -58,15 +59,20 @@
 //  sabit bir `false` "tematik değil" diye okunur — oysa gerçek
 //  "bilmiyorum". §5.4'ün `yok`/`kesinti` ayrımının aynısı.
 //
-//  KAPI /api/score VE /api/recommend İLE BİREBİR AYNI — ve bu ÜÇÜNCÜ
-//  KOPYADIR. Sınırlar, `SEMBOL_BICIM`, `ayristir()`, `temizleSembol()` ve
-//  modül düzeyi kurulum üç dosyada aynı metin. api/recommend.js:37 "üçüncü
-//  bir uç aynı kapıya ihtiyaç duyduğu gün kopya değil TAŞIYICI doğru cevap
-//  olur" diye yazıyordu; o gün geldi. Beşinci taşıyıcıyı (api/_girdi.js)
-//  açmak İKİ YAYINDA OLAN ucu değiştirmek demek, bu adımın kapsamı değil
-//  ve kullanıcının kararı — bu yüzden kopya sürdürüldü ve
-//  tests/uc-test.mjs ⑤e kilidi ÜÇ YOLLU karşılaştırmaya çıkarıldı.
-//  BORÇ KAYDEDİLDİ, atlanmadı.
+//  KAPI /api/score VE /api/recommend İLE AYNI — ve bu ÜÇÜNCÜ KOPYA ARTIK
+//  YOK. Burada "beşinci taşıyıcıyı açmak İKİ YAYINDA OLAN ucu değiştirmek
+//  demek, bu adımın kapsamı değil; BORÇ KAYDEDİLDİ, atlanmadı" yazıyordu.
+//  Borç 2026-10-14'te KAPANDI ve en ucuz anda kapandı: üç uç da HENÜZ
+//  yayında değildi (origin/main'de yoklar), yani sözleşme donmadan önce.
+//  Sınırlar + `SEMBOL_BICIM` + `ayristir()` + `temizleSembol()` artık
+//  `api/_girdi.js`te; üç uç AYNI fonksiyon nesnesini içe alıyor. Modül
+//  düzeyi kurulum (canliAg + buildMotor) BİLEREK üç uçta KALDI — o sıcak
+//  lambda durumu, doğrulama değil.
+//
+//  Taşıma KÖR YAPILMADI: üç bölge yorumlardan arındırılıp karşılaştırıldı,
+//  KOD birebir aynı çıktı (ölçüm: 61 kod satırı / 2.401 krk), bu yüzden
+//  parametrelenecek bir fark YOKTU. tests/uc-test.mjs ⑤e kilidi metin
+//  karşılaştırmasından KİMLİK denetimine çıkarıldı (2 → 12 denetim).
 //
 //  KONAK NEDEN MODÜL DÜZEYİNDE: /api/score'daki gerekçenin aynısı — motor
 //  kapanışı secCikMap ve secModelCache önbelleklerini taşıyor. DİKKAT: bu
@@ -106,7 +112,7 @@
 // ===========================================================================
 
 import { buildMotor, IMZA } from './_motor.js';
-import { TA_WEIGHTS, TA_BENCHMARK, VADELER, IMZA_AYAR } from './_ayar.js';
+import { TA_WEIGHTS, TA_BENCHMARK, IMZA_AYAR } from './_ayar.js';
 import { canliAg, bosSayac, sayacTam } from './_ag.js';
 import { analyzeOne } from './_akis.js';
 
@@ -168,15 +174,25 @@ const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 //  dosyada sayıların DEĞİŞMEMESİ gerekiyor: ayrışırlarsa aynı sorgu üç uçta
 //  farklı kabul edilir. uc-test ⑤e üç dosyayı birlikte bekçiliyor.
 // ---------------------------------------------------------------------
-
-export const AZAMI_SEMBOL = 8;
-const PAZARLAR = ['US', 'BIST'];
-const VARSAYILAN_VADE = 'orta';
-const AZAMI_SORGU = 128; // api/theme.js'in `too_long` eşiğiyle aynı fikir
-
-// Sembol biçimi api/watchlist.js cleanList() ile AYNI — iki uç aynı sembol
-// kümesini kabul etmeli, yoksa listeye eklenen bir sembol skorlanamaz.
-const SEMBOL_BICIM = /^[A-Z][A-Z0-9.\-]{0,7}$/;
+//  SINIRLAR + GİRDİ KAPISI → `api/_girdi.js` (beşinci taşıyıcı)
+//
+//  Bu dosyada ARTIK KOPYA YOK. Sınırlar (AZAMI_SEMBOL · AZAMI_SORGU ·
+//  PAZARLAR · VARSAYILAN_VADE · SEMBOL_BICIM), `ayristir()` ve
+//  `temizleSembol()` taşıyıcıda; burada yalnız YENİDEN DIŞA AKTARILIYOR,
+//  çünkü tests/uc-test.mjs ucun kendi yüzeyinden okuyor ve istemcinin
+//  gördüğü yüzey değişmemeli.
+//
+//  Gerekçeler (niye 8, niye 128) taşıyıcının başlığında uzun uzun yazılı —
+//  üç dosyaya kopyalanmıyor. Sürüklenme kilidi: uc-test ⑤e artık metin
+//  karşılaştırması değil KİMLİK denetimi yapıyor (üç uç aynı fonksiyon
+//  nesnesini dışa aktarıyor + hiçbiri yerel kopya diriltmedi).
+// ---------------------------------------------------------------------
+//  DİKKAT — `export { ... } from` YETMEZ: o biçim yalnız yeniden dışa
+//  aktarır, YEREL BAĞLAMA yaratmaz; handler `ayristir`i çağırdığı için
+//  içe alma ayrıca gerekiyor. (Bu hata yazılırken uc-test ③'te
+//  `ReferenceError: ayristir is not defined` ile KIRMIZI yandı.)
+import { AZAMI_SEMBOL, ayristir } from './_girdi.js';
+export { AZAMI_SEMBOL, ayristir };
 
 // ---------------------------------------------------------------------
 //  Modül düzeyi kurulum — istek başına DEĞİL (başlıktaki gerekçe).
@@ -204,72 +220,6 @@ try {
   ENG._bench = AG.H.window.TA_BENCHMARK;
 } catch (e) {
   KURULUM_HATASI = e;
-}
-
-// ---------------------------------------------------------------------
-//  Girdi ayrıştırma — AĞA ÇIKMAZ, bu yüzden ayrı ve dışa aktarılmış:
-//  tests/uc-test.mjs doğrulamayı fikstür ya da ağ olmadan sınayabiliyor.
-//  (Vercel yalnız `default` dışa aktarmayı yönlendiriyor; fazladan adlı
-//  dışa aktarma rotayı etkilemiyor.)
-// ---------------------------------------------------------------------
-export function ayristir(q = {}) {
-  const hata = (http, govde) => ({ hata: { http, govde } });
-
-  const ham = String(q.symbols ?? q.symbol ?? '').trim();
-  if (!ham) return hata(400, { error: 'symbols_yok', azami: AZAMI_SEMBOL });
-  if (ham.length > AZAMI_SORGU) return hata(400, { error: 'too_long', azami: AZAMI_SORGU });
-
-  const vade = String(q.vade ?? VARSAYILAN_VADE).trim();
-  if (!VADELER.includes(vade)) return hata(400, { error: 'bad_vade', izinli: VADELER });
-
-  const gPazar = String(q.market ?? '').trim().toUpperCase();
-  if (gPazar && !PAZARLAR.includes(gPazar)) return hata(400, { error: 'bad_market', izinli: PAZARLAR });
-
-  const parcalar = ham.split(',').map((s) => s.trim()).filter(Boolean);
-  if (!parcalar.length) return hata(400, { error: 'symbols_bos' });
-  // Kırpmak YERİNE reddediyoruz: api/yfin.js slice(0, 12) ile sessizce
-  // kırpıyor, ama orada eksik sembol yalnız bir kıyas satırı düşürüyor.
-  // Burada eksik sembol EKSİK SKOR demek olurdu ve istemci bunu farketmez.
-  if (parcalar.length > AZAMI_SEMBOL) {
-    return hata(400, { error: 'cok_sembol', azami: AZAMI_SEMBOL, istenen: parcalar.length });
-  }
-
-  const rows = [];
-  const gecersiz = [];
-  const gorulen = new Set();
-  for (const p of parcalar) {
-    const r = temizleSembol(p, gPazar || 'US');
-    if (!r) { gecersiz.push(String(p).slice(0, 16)); continue; }
-    const anahtar = r.market + ':' + r.sym;
-    if (gorulen.has(anahtar)) continue; // yineleyi at: aynı sembol iki kez skorlanmaz
-    gorulen.add(anahtar);
-    rows.push(r);
-  }
-  if (gecersiz.length) return hata(400, { error: 'bad_symbol', gecersiz });
-
-  return { rows, vade, market: gPazar || 'US' };
-}
-
-/**
- * Tek sembolü temizle ve pazarını çöz. Dönen `sym` motorun beklediği ÇIPLAK
- * koddur: yahooSymbol() BIST'e '.IS'i kendisi ekliyor (_motor.js:89),
- * fetchIsYatirimMali ise companyCode olarak çıplak kodu istiyor.
- */
-function temizleSembol(ham, varsayilanPazar) {
-  let s = String(ham).toUpperCase().trim();
-  let pazar = varsayilanPazar;
-  const iki = s.split(':');
-  if (iki.length === 2) {
-    if (!PAZARLAR.includes(iki[1])) return null;
-    pazar = iki[1];
-    s = iki[0];
-  } else if (s.endsWith('.IS')) {
-    pazar = 'BIST';
-    s = s.slice(0, -3);
-  }
-  s = s.slice(0, 8);
-  if (!SEMBOL_BICIM.test(s)) return null;
-  return { sym: s, market: pazar };
 }
 
 // Hata ve eksik cevaplar KISA önbelleklenir: bir kesintiyi CDN'e 5 dakika

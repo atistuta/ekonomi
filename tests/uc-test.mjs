@@ -59,6 +59,7 @@ const SCORE_PATH = path.join(ROOT, 'api', 'score.js');
 const RECOMMEND_PATH = path.join(ROOT, 'api', 'recommend.js');
 const ANALYZE_PATH = path.join(ROOT, 'api', 'analyze.js');
 const AKIS_PATH = path.join(ROOT, 'api', '_akis.js');
+const GIRDI_PATH = path.join(ROOT, 'api', '_girdi.js');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
 // --- küçük koşum defteri (tests/uretim-test.mjs ile aynı kalıp) -----------
@@ -285,8 +286,8 @@ bolum('④ statik denetimler — api/score.js metni');
   // ne okur — motor yalnız üretilmiş taşıyıcılardan geliyor.
   ok('app.js / config.js import edilmiyor',
     !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src));
-  ok('yalnız üretilmiş taşıyıcılar + akış import ediliyor',
-    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js']
+  ok('yalnız üretilmiş taşıyıcılar + akış + girdi kapısı import ediliyor',
+    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js', './_girdi.js']
       .every((m) => src.includes(`from '${m}'`)));
 
   // Sayaç motora tek bir sayı dahi GEÇİRMİYOR — yalnız gözlemci.
@@ -481,9 +482,12 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
   ok('⑤d · app.js / config.js import edilmiyor',
     !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(rsrc));
   const tasiyici = rsrc.match(/^import .* from '\.\/_[a-z]+\.js';$/gm) || [];
-  ok('⑤d · yalnız dört taşıyıcı import ediliyor (BEŞİNCİ taşıyıcı yok)',
-    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js'].every((m) => rsrc.includes(`from '${m}'`))
-    && tasiyici.length === 4, `${tasiyici.length} taşıyıcı import`);
+  // DÖRT → BEŞ (2026-10-14): `api/_girdi.js` eklendi. Sayı bilerek SABİT —
+  // altıncı bir taşıyıcı sessizce doğmasın, gerekçesi yazılarak doğsun.
+  ok('⑤d · yalnız BEŞ taşıyıcı import ediliyor (ALTINCI taşıyıcı yok)',
+    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js', './_girdi.js']
+      .every((m) => rsrc.includes(`from '${m}'`))
+    && tasiyici.length === 5, `${tasiyici.length} taşıyıcı import`);
   // api/score.js'i import ETMEZ: ettiği an recommend lambda'sı İKİ motor
   // kurar ve SEC önbellekleri (`secCikMap`/`secModelCache`) ikiye bölünür.
   ok('⑤d · api/score.js import edilmiyor', !/from\s+['"]\.\/score\.js['"]/.test(rsrc));
@@ -524,58 +528,114 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
   ok('N3b · statik arama gerçekten çalışıyor', rsrc.includes('export default async function handler'));
 }
 
-// --- ⑤e KOPYA SÜRÜKLENME KİLİDİ — ARTIK ÜÇ DOSYA -----------------------
-// ÜÇ uç aynı doğrulama metnini taşıyor. Yorumlar ve boş satırlar ÇIKARILIYOR:
-// gerekçeler üç dosyada farklı yazılabilir, DAVRANIŞ farklı yazılamaz.
+// --- ⑤e TAŞIYICI KİMLİK KİLİDİ (eski ÜÇ YÖNLÜ METİN kilidinin yerine) ---
+// NE DEĞİŞTİ VE NİYE: burada eskiden üç ucun doğrulama bölgesi METİN olarak
+// karşılaştırılıyordu (61 kod satırı / 2.401 krk, yorumlar çıkarılarak) ve
+// iki denetim vardı — N9 (ayıklama boş değil) + ⑤e (üçü birebir aynı).
+// O kilit kopyayı ÖLÇÜYORDU ama ortadan KALDIRMIYORDU. Kopya artık YOK:
+// sınırlar + `ayristir` + `temizleSembol` `api/_girdi.js`e (beşinci
+// taşıyıcı) taşındı, üç uç onu içe alıp yeniden dışa aktarıyor.
 //
-// BORÇ, AÇIKÇA YAZILI: bu bölümün eski hali "üçüncü bir uç aynı kapıya
-// ihtiyaç duyduğu gün kopya değil TAŞIYICI doğru cevap olur" diyordu. O gün
-// GELDİ — /api/analyze üçüncü kopyayı açtı. Taşıyıcıya (api/_girdi.js) geçmek
-// hâlen DAĞITILMIŞ iki ucun dosyasını değiştirmek demek; o karar kullanıcının,
-// bu yüzden bu adımda yapılmadı. Borç api/analyze.js başlığında da duruyor.
-// Kilit bu arada ÜÇ YÖNLÜ: ikisi birbiriyle eşleşip üçüncüsü ayrışsa da
-// kırmızı yanar — "çoğunluk doğrudur" diye bir kaçak bırakılmadı.
+// Metin karşılaştırması bu yüzden ANLAMSIZ: ayıklanacak bölge kalmadı ve
+// üç boş dizge "eşit" çıkardı — tam olarak N9'un engellediği sessiz yeşil.
+// Yerine ÜÇ TÜR kimlik denetimi kondu, hepsi metinden GÜÇLÜ:
+//   ① üç uç gerçekten taşıyıcıyı kullanıyor (statik import denetimi),
+//   ② hiçbiri yerel kopya DİRİLTMEDİ (statik düzenli ifade),
+//   ③ üç ucun `ayristir`i AYNI FONKSİYON NESNESİ + vektör eşitliği.
+// ③ en sağlamı: aynı nesneyse ayrışma fiziksel olarak mümkün değil.
+// DENETİM SAYISI ARTTI (2 → 12): tek metin karşılaştırması, kopyanın geri
+// gelebileceği her yolu ayrı ayrı kapatan denetimlere bölündü.
 {
-  const bolge = (src) => {
-    const a = src.indexOf('export const AZAMI_SEMBOL');
-    const b = src.indexOf('function kisaOnbellek(');
-    if (a < 0 || b <= a) return null;
-    return src.slice(a, b).split('\n')
-      .filter((l) => l.trim() && !/^\s*\/\//.test(l) && !/^\s*\*/.test(l) && !/^\s*\/\*\*/.test(l))
-      .join('\n');
-  };
-  const BOLGELER = [
-    ['score', bolge(readFileSync(SCORE_PATH, 'utf8'))],
-    ['recommend', bolge(readFileSync(RECOMMEND_PATH, 'utf8'))],
-    ['analyze', bolge(readFileSync(ANALYZE_PATH, 'utf8'))],
+  const girdi = await import('../api/_girdi.js');
+  // Yorum satırlarını atan okuyucu: bu bölümün BÜTÜN statik denetimleri
+  // KODA bakmak zorunda. Gerekçe metninde `canliAg` ya da `const PAZARLAR`
+  // geçmesi suç değil — bu dosyalar bilerek uzun gerekçe taşıyor; KODDA
+  // geçmesi suç. (Bu yazılırken ⑤e④ tam bu yüzden kırmızı yandı: taşıyıcı
+  // başlığı "konak/motor kurulumu (canliAg + buildMotor) uçlarda KALDI"
+  // diye ANLATIYOR, ağa çıkmıyor.)
+  const kodu = (yol) => readFileSync(yol, 'utf8').split(/\r?\n/)
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  const UCLAR = [
+    ['score', SCORE_PATH, ayristir, AZAMI_SEMBOL],
+    ['recommend', RECOMMEND_PATH, recAyristir, recAzami],
+    ['analyze', ANALYZE_PATH, anaAyristir, anaAzami],
   ];
 
-  // Önce AYIKLAMANIN kendisi çalışıyor mu: üç boş dizge de "eşit" olurdu ve
-  // ⑤e sessizce yeşil yanardı.
-  const ayiklandi = BOLGELER.every(([, b]) => !!b && b.length > 1200
-    && b.includes('export function ayristir(')
-    && b.includes('function temizleSembol('));
-  ok('N9 · doğrulama bölgesi ÜÇ dosyada da ayıklanabildi (boş değil, beklenen içerik var)',
-    ayiklandi, BOLGELER.map(([ad, b]) => `${ad} ${b ? b.length : 0} krk`).join(' · '));
-
-  // Referans score; ötekiler ona göre ölçülüyor. İlk farkı satır satır söyler,
-  // çünkü "eşit değil" tek başına hangi satırın kaydığını göstermiyor.
-  const ref = BOLGELER[0][1];
-  let ilkFark = '';
-  for (const [ad, b] of BOLGELER.slice(1)) {
-    if (!ref || !b || ref === b) continue;
-    const sl = ref.split('\n'); const rl = b.split('\n');
-    for (let i = 0; i < Math.max(sl.length, rl.length); i++) {
-      if (sl[i] !== rl[i]) {
-        ilkFark = `${ad}: satır ${i + 1} — score ${JSON.stringify(sl[i])} · ${ad} ${JSON.stringify(rl[i])}`;
-        break;
-      }
-    }
-    if (ilkFark) break;
+  // ① Taşıyıcı gerçekten kullanılıyor mu. `export { } from` TEK BAŞINA
+  // yetmiyor (yerel bağlama yaratmaz, handler çöker — bu yazılırken
+  // `ReferenceError: ayristir is not defined` ile kırmızı yandı), o yüzden
+  // İÇE ALMA da aranıyor.
+  for (const [ad, yol] of UCLAR) {
+    const src = readFileSync(yol, 'utf8');
+    ok(`⑤e① · ${ad}: girdi kapısını \`_girdi.js\`ten İÇE ALIYOR`,
+      /^import \{[^}]*ayristir[^}]*\} from '\.\/_girdi\.js';$/m.test(src));
   }
-  ok('⑤e · ÜÇ ucun doğrulama bölgesi (sınırlar + ayristir + temizleSembol) BİREBİR aynı',
-    ayiklandi && BOLGELER.every(([, b]) => b === ref),
-    ilkFark || `${ref ? ref.split('\n').length : 0} kod satırı üç dosyada aynı`);
+
+  // ② Yerel kopya DİRİLTİLMEDİ. Yorumlar çıkarılıyor: gerekçe metninde
+  // `const PAZARLAR` geçmesi suç değil, KODDA geçmesi suç.
+  const YASAK = [
+    [/export\s+const\s+AZAMI_SEMBOL\s*=/, 'AZAMI_SEMBOL sabiti'],
+    [/const\s+PAZARLAR\s*=/, 'PAZARLAR'],
+    [/const\s+VARSAYILAN_VADE\s*=/, 'VARSAYILAN_VADE'],
+    [/const\s+AZAMI_SORGU\s*=/, 'AZAMI_SORGU'],
+    [/const\s+SEMBOL_BICIM\s*=/, 'SEMBOL_BICIM'],
+    [/function\s+temizleSembol\s*\(/, 'temizleSembol()'],
+    [/export\s+function\s+ayristir\s*\(/, 'ayristir() gövdesi'],
+  ];
+  for (const [ad, yol] of UCLAR) {
+    const kod = kodu(yol);
+    const dirilen = YASAK.filter(([re]) => re.test(kod)).map(([, n]) => n);
+    ok(`⑤e② · ${ad}: KODDA yerel kopya yok (sınır/ayristir/temizleSembol taşıyıcıda)`,
+      dirilen.length === 0, dirilen.length ? `DİRİLEN: ${dirilen.join(', ')}` : 'temiz');
+  }
+
+  // ③ Kimlik: üçü de taşıyıcının TEK bağlamasını dışa aktarıyor.
+  ok('⑤e③ · üç ucun `ayristir`i AYNI FONKSİYON NESNESİ (kopya fiziksel olarak yok)',
+    ayristir === girdi.ayristir && recAyristir === girdi.ayristir
+    && anaAyristir === girdi.ayristir);
+
+  ok('⑤e③ · üç ucun AZAMI_SEMBOL sınırı taşıyıcıdan geliyor ve aynı',
+    AZAMI_SEMBOL === girdi.AZAMI_SEMBOL && recAzami === girdi.AZAMI_SEMBOL
+    && anaAzami === girdi.AZAMI_SEMBOL, `${AZAMI_SEMBOL}`);
+
+  // Vektör eşitliği: kimlik denetimi birinin `ayristir`i SARMASINI
+  // (ör. kendi sınırını uygulayıp sonra çağırmasını) yakalamayabilir —
+  // davranış da ölçülüyor. Girdiler sınırların HER İKİ yanına basıyor.
+  const VEKTOR = [
+    {}, { symbols: '' }, { symbols: 'AAPL' }, { symbol: 'AAPL' },
+    { symbols: 'AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AVGO' },           // tam sınır
+    { symbols: 'AAPL,MSFT,NVDA,GOOGL,AMZN,META,TSLA,AVGO,AMD' },       // sınır+1
+    { symbols: 'A'.repeat(129) },                                      // AZAMI_SORGU+1
+    { symbols: 'ASELS.IS' }, { symbols: 'ASELS:BIST' }, { symbols: 'BMW:XETRA' },
+    { symbols: 'AAPL', vade: 'kisa' }, { symbols: 'AAPL', vade: 'yok-boyle' },
+    { symbols: 'AAPL', market: 'BIST' }, { symbols: 'AAPL', market: 'NASDAQ' },
+    { symbols: 'AAPL,AAPL' }, { symbols: 'aapl , msft ' }, { symbols: ',,,' },
+    { symbols: '1AAPL' }, { symbols: 'TOOOOOLONGSYM' },
+  ];
+  let ayrisan = '';
+  for (const g of VEKTOR) {
+    const bek = JSON.stringify(ayristir(g));
+    for (const [ad, , fn] of UCLAR.slice(1)) {
+      if (JSON.stringify(fn(g)) !== bek) { ayrisan = `${ad} · girdi ${JSON.stringify(g)}`; break; }
+    }
+    if (ayrisan) break;
+  }
+  ok('⑤e③ · `ayristir()` vektör eşitliği (19 girdi, sınırların iki yanı)',
+    !ayrisan, ayrisan || `${VEKTOR.length} girdi üç uçta aynı`);
+
+  // ④ Taşıyıcının kendi disiplini: girdi kapısı SAF olmalı — ağa çıkmaz,
+  // motor/akış içe almaz. Çıkarsa doğrulama artık fikstürsüz sınanamaz.
+  const gkod = kodu(GIRDI_PATH);
+  const gimport = gkod.match(/^import .* from '\.\/_[a-z]+\.js';$/gm) || [];
+  ok('⑤e④ · `_girdi.js` YALNIZ `_ayar.js` içe alıyor (ağ/motor/akış yok)',
+    gimport.length === 1 && gkod.includes("from './_ayar.js'"),
+    gimport.join(' · ') || 'hiç import yok');
+  ok('⑤e④ · `_girdi.js` ağa çıkmıyor (`fetch`/`canliAg` yok)',
+    !/fetch\s*\(/.test(gkod) && !gkod.includes('canliAg'));
+  // HAM SAYI kuralı taşıyıcıda da geçerli: hata gövdeleri yalnız makine kodu.
+  ok('⑤e④ · `_girdi.js` HAM SAYI (`toFixed`/`Intl`/`toLocaleString` yok)',
+    !gkod.includes('toFixed(') && !/Intl/.test(gkod)
+    && !gkod.includes('toLocaleString'));
 }
 
 // =========================================================================
@@ -720,9 +780,12 @@ ok('⑥a · AZAMI_SEMBOL üç uçta aynı', anaAzami === AZAMI_SEMBOL && anaAzam
   ok('⑥d · app.js / config.js import edilmiyor',
     !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(csrc));
   const tasiyici = csrc.match(/^import .* from '\.\/_[a-z]+\.js';$/gm) || [];
-  ok('⑥d · yalnız dört taşıyıcı import ediliyor (BEŞİNCİ taşıyıcı yok)',
-    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js'].every((m) => csrc.includes(`from '${m}'`))
-    && tasiyici.length === 4, `${tasiyici.length} taşıyıcı import`);
+  // DÖRT → BEŞ (2026-10-14): `api/_girdi.js` eklendi. Sayı bilerek SABİT —
+  // altıncı bir taşıyıcı sessizce doğmasın, gerekçesi yazılarak doğsun.
+  ok('⑥d · yalnız BEŞ taşıyıcı import ediliyor (ALTINCI taşıyıcı yok)',
+    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js', './_girdi.js']
+      .every((m) => csrc.includes(`from '${m}'`))
+    && tasiyici.length === 5, `${tasiyici.length} taşıyıcı import`);
   // Öteki UÇLARI import ETMEZ: ettiği an analyze lambda'sı iki motor kurar
   // ve SEC önbellekleri (`secCikMap`/`secModelCache`) ikiye bölünür.
   ok('⑥d · api/score.js ve api/recommend.js import edilmiyor',
