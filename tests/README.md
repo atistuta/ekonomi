@@ -18,9 +18,10 @@ node tests/capture.mjs      # 1) ham girdileri ağdan çeker ve dondurur (bir ke
 node tests/baseline.mjs     # 2) "doğru cevap"ı üretir → tests/baseline.json
 node tests/parity.mjs       # 3) her değişiklikten sonra: FARK 0 olmalı
 node tests/uretim-test.mjs  # 4) üretilmiş dosyalar kaynaklarının şu anki hali mi?
+node tests/uc-test.mjs      # 5) /api/score kapısı: doğrulama + hata yolu (ağsız)
 ```
 
-Günlük kullanımda **3. ve 4. komut** çalıştırılır. 1 ve 2 bir kez koşar; `capture`
+Günlük kullanımda **3., 4. ve 5. komut** çalıştırılır. 1 ve 2 bir kez koşar; `capture`
 var olan fikstürleri atlar, `baseline` var olan referansın üstüne **yazmaz**.
 
 Beklenen çıktı:
@@ -50,6 +51,7 @@ Beklenen çıktı:
 | `metin.mjs` | **Metin biçimi** (FAZ 1/3) — belirteç dizisi ⇄ HTML / RN / düz metin |
 | `metin-test.mjs` | Biçim kanıtı — 46 gerçek cümle bayt bayt geri dönüyor mu |
 | `uretim-test.mjs` | **Üretim kanıtı** — `_motor.js` + `_ayar.js` kaynaklarının **şu anki** hali mi |
+| `uc-test.mjs` | **Uç kanıtı** — `/api/score` doğrulaması ve hata yolu; AĞA ÇIKMAZ |
 
 ---
 
@@ -237,7 +239,7 @@ Sunucuda motor `engine.mjs` gibi kurulamaz: Vercel'de `tests/` yayına gönderil
 ```bash
 node tools/motor-uret.mjs            # app.js → _motor.js · config.js → _ayar.js
 node tools/motor-uret.mjs --denetle  # yalnız denetle: fark varsa çıkış 1
-node tests/uretim-test.mjs           # kanıt: 55 denetim
+node tests/uretim-test.mjs           # kanıt: 77 denetim (ölçüldü)
 ```
 
 | Dosya | Rolü |

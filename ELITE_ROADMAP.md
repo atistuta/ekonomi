@@ -80,13 +80,33 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       `TA_BENCHMARK`, `config.js`'ten türetilmiş; bildirim konusu, vekiller ve
       besleme listeleri **alınmıyor** — sızma denetimi bunu her koşuda tahsil ediyor).
       Kopya **değil** — `tools/motor-uret.mjs` her seferinde `app.js`'i yeniden
-      dilimliyor, `tests/uretim-test.mjs` (55 denetim) "bu dosyalar kaynaklarının
+      dilimliyor, `tests/uretim-test.mjs` (77 denetim) "bu dosyalar kaynaklarının
       ŞU ANKİ hali mi?" diye soruyor. **Kanıt:** üretilmiş motor aynı fikstürlerle **FARK 0**
       (`PARITE_MOTOR=uretilmis node tests/parity.mjs`); `taBand` eşiği kurcalanınca
       test metin **ve** davranış farkını yakalayıp çıkış 1 verdi.
-      **Sırada:** `api/score.js` uç noktası (`buildMotor` + ayarları içe alıp `H`
-      konağını kurar, ham sayı döndürür) + F/K kriterinin üç ekran kopyasının
-      (`app.js:5648/:7449/:11876`) motora devri.
+      **Uç noktası hazır** (2026-10-14): `api/score.js` — `/api/score?symbols=…&vade=…`
+      bir veya daha çok sembol için **ham** TA/FA/bileşke döndürüyor. Motor mantığı
+      taşımıyor, beş hazır parçayı birleştiriyor (`_motor` · `_ayar` · `_ekran` ·
+      `_ag` · `_akis`). Yeni iki taşıyıcı: `api/_ag.js` (canlı ağ + `H` konağı +
+      adres izin listesi + SEC 125 ms aralığı + `yok`/`kesinti` sayacı) ve
+      `api/_akis.js` (çağrı sırası; `tests/score.mjs` artık onu çağırıyor — tek
+      akış, iki şerit: uçta canlı ağ, testte fikstür).
+      **Ölçülen:** `node tests/uretim-test.mjs` → **77 denetim geçti**;
+      `node tests/parity.mjs` → **FARK 0** (29 karşılaştırma noktası);
+      `node tests/uc-test.mjs` → **58 denetim geçti** (ağsız: girdi doğrulaması,
+      CORS/405/4xx gövdeleri, yığın izi sızdırmama, HAM SAYI kuralı).
+      **Dürüst sınır:** sembol tavanı 8 (istemcinin Karşılaştır tavanıyla aynı),
+      45 sn'lik bütçe freni yeni sembole *başlamadan* bakıyor — başlamış bir
+      sembol kesilemiyor, çünkü zaman aşımları motorun ve konağın içinde. Tek bir
+      BIST sembolü en kötü halde (3 × 7 sn İş Yatırım + mumlar) platform
+      bütçesini yiyebilir; istemci kesilen isteği `kesinti` gibi ele almalı.
+      **Canlı koşu YAPILMADI** — `vercel.json`'daki 1024 MB bellek ÖLÇÜLMEDİ,
+      ilk canlı koşudan sonra ayarlanmalı. Semboller SIRAYLA işleniyor
+      (paralel değil); hız gerekirse ölçülüp ayrıca ele alınacak.
+      **Açık uç:** `tests/capture.mjs` UA/başlık sabitlerinin KENDİ kopyasını
+      tutuyor (satır 61-62, 195-198) — `api/_ag.js` ile tek kaynağa indirilmeli.
+      **Sırada: Commit C** — F/K kriterinin üç ekran kopyasının
+      (`app.js:5648/:7449/:11876`) motora devri ve `api/_ekran.js`'in silinmesi.
 - [ ] **Expo projesi** kur: TypeScript + expo-router + Supabase client.
 - [ ] **Tasarım sistemi:** renk token (koyu mürekkep `#0F1522` + altın `#D4A24E` +
       yeşil/mercan sinyal), tipografi (2 ağırlık), spacing, `tabular-nums`.
