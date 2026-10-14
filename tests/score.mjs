@@ -25,6 +25,18 @@
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
+//
+//  AKIŞ ARTIK BURADA DEĞİL (2026-10-14): scoreTA / scoreFaUS / scoreFaBIST /
+//  composite / scoreOne gövdeleri `api/_akis.js`'e TAŞINDI. Sebep: aynı akışı
+//  /api/score de koşmak zorunda ve .vercelignore tests/ dizinini hariç
+//  tutuyor — akış burada kalsaydı uca KOPYALANACAKTI. O gün parite testi
+//  kendi kopyasını doğrular, sunucudaki sapma görünmez olurdu. Şimdi tersi:
+//  baseline.json sunucunun koşturduğu akışı bekçiliyor.
+//  Bu dosyada KALAN: fikstür tesisatı (çevrimdışı ağ kabuğu, kayıt okuma) ve
+//  akışın test tarafı sarmalayıcısı.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,9 +44,13 @@ import { fileURLToPath } from 'node:url';
 import {
   buildEngine, readSymbols, readRenderConstants, ROOT, TESTS, FIX,
 } from './engine.mjs';
+import {
+  round6, scoreTA, scoreFaUS, scoreFaBIST, composite,
+  scoreOne as akisScoreOne,
+} from '../api/_akis.js';
 
 export { buildEngine, readSymbols, readRenderConstants, ROOT, TESTS, FIX };
-
+export { round6, scoreTA, scoreFaUS, scoreFaBIST, composite };
 export const DIR_YAHOO = path.join(FIX, 'yahoo');
 export const DIR_IS = path.join(FIX, 'isyatirim');
 export const DIR_SEC = path.join(FIX, 'sec');
@@ -117,119 +133,20 @@ export function loadMali(sym) {
   const j = JSON.parse(fs.readFileSync(p, 'utf8'));
   return j && j.rows ? j : null;
 }
-
 // ---------------------------------------------------------------------
-//  TA skoru — getTaScoreFor (app.js:4581) ile BİREBİR aynı yol:
-//  5y/1d sembol mumları + 5y/1d endeks mumları (RAW) → computeVadeScore.
-// ---------------------------------------------------------------------
-export async function scoreTA(eng, sym, market, vade) {
-  const cfg = (eng._weights || {})[vade];
-  if (!cfg || cfg.intraday) return { score: null, why: 'vade gunluk degil' };
-  let daily = null, bench = null;
-  try { daily = (await eng.fetchYahooOHLC(sym, market, '5y', '1d')).candles; }
-  catch (e) { return { score: null, why: 'mum alinamadi: ' + e.message }; }
-  const bsym = (eng._bench || {})[market];
-  if (bsym) {
-    try { bench = (await eng.fetchYahooOHLC(bsym, 'RAW', '5y', '1d')).candles; }
-    catch (e) { bench = null; } // app.js de aynısını yapar: RS devre dışı, skor normalize olur
-  }
-  const r = eng.computeVadeScore(daily, vade, undefined, bench);
-  if (!r) return { score: null, why: 'computeVadeScore null' };
-  return {
-    score: round6(r.score),
-    raw: round6(r.raw),
-    label: r.label,
-    cls: r.cls,
-    regime: r.regime,
-    adx: round6(r.adxVal),
-    bars: daily.length,
-    benchBars: bench ? bench.length : 0,
-    // Kırılım: parite bozulursa HANGİ göstergenin kaydığını söyler.
-    breakdown: (r.breakdown || []).map((b) => ({ key: b.key, score: round6(b.score), weight: round6(b.weight) })),
-  };
-}
-
-// ---------------------------------------------------------------------
-//  FA skoru — ABD: secFetchModel + ekran katmanının F/K kriteri.
-// ---------------------------------------------------------------------
-export async function scoreFaUS(eng, sym, K, net) {
-  let price = null;
-  try { price = (await eng.fetchYahooOHLC(sym, 'US', '1y', '1d')).meta.regularMarketPrice; }
-  catch (e) { price = null; }
-  if (net && net.setSecSymbol) net.setSecSymbol(sym);
-  let sec = null;
-  try { sec = await eng.secFetchModel(sym); } catch (e) { sec = null; }
-  if (!sec) return { score: null, why: 'secFetchModel null', price: null };
-
-  const criteria = sec.criteria.slice();
-  const eps = sec.metrics.eps;
-  let pe = null;
-  if (price != null && eps) {
-    pe = price / eps;
-    const score = pe < 0 ? K.pe.neg : eng.faInterp(pe, K.pe.bp);
-    criteria.push({ key: 'pe', group: 'valuation', weight: K.pe.weight, label: 'Değerleme (F/K)', score, note: '' });
-  }
-  const fa = eng.computeFaScore(criteria);
-  return {
-    score: round6(fa.score), present: round6(fa.present), total: round6(fa.total),
-    price: round6(price), eps: round6(eps), pe: round6(pe),
-    criteria: criteria.map((c) => ({ key: c.key, weight: round6(c.weight), score: round6(c.score) })),
-  };
-}
-
-// ---------------------------------------------------------------------
-//  FA skoru — BIST: İş Yatırım mali tablo → bistFundamentalModel.
-//  DİKKAT: F/K eki YOK (ekran katmanı BIST'te kriter eklemiyor).
-// ---------------------------------------------------------------------
-export async function scoreFaBIST(eng, sym, maliRaw) {
-  let meta = null;
-  try { meta = (await eng.fetchYahooOHLC(sym, 'BIST', '1y', '1d')).meta; }
-  catch (e) { meta = null; }
-  if (!maliRaw) return { score: null, why: 'mali tablo yok', price: null };
-  const mali = eng.parseIsMali(maliRaw);
-  const model = eng.bistFundamentalModel(mali, meta);
-  const fa = eng.computeFaScore(model.criteria);
-  return {
-    score: round6(fa.score), present: round6(fa.present), total: round6(fa.total),
-    price: round6(meta && meta.regularMarketPrice),
-    years: mali.years,
-    criteria: model.criteria.map((c) => ({ key: c.key, weight: round6(c.weight), score: round6(c.score) })),
-  };
-}
-
-// ---------------------------------------------------------------------
-//  Bileşke — app.js:4781 ile aynı: 3×3 konumlama + ağırlıklı harman.
-// ---------------------------------------------------------------------
-export function composite(eng, K, faScore, taScore) {
-  if (faScore == null || taScore == null) return { band: null, why: 'eksik skor' };
-  const fb = eng.faBand(faScore), tb = eng.taBand(taScore);
-  const cell = eng.COMPOSITE_MATRIX[fb + ':' + tb];
-  const blended = K.blend.fa * faScore + K.blend.ta * taScore;
-  return {
-    faBand: fb, taBand: tb,
-    band: cell ? cell.band : null,
-    label: cell ? cell.label : null,
-    blended: round6(blended),
-    blendedShown: Math.round(blended), // kullanıcının gördüğü tam sayı
-  };
-}
-
-// Kayan nokta gürültüsünü dondur: 1e-9 düzeyinde fark "skor değişti" demek değil.
-export function round6(v) {
-  if (v == null || typeof v !== 'number' || !isFinite(v)) return v == null ? null : v;
-  return Math.round(v * 1e6) / 1e6;
-}
-
-// ---------------------------------------------------------------------
-//  Bir sembolün TAM kaydı: TA + FA + bileşke.
+//  Akışın test tarafı sarmalayıcısı.
+//
+//  Gövde `api/_akis.js`'te; burada yalnız BIST mali tablosunun nereden
+//  geleceği bağlanıyor. Taşıyıcı dosya sistemi bilmez (Vercel'de koşacak),
+//  bu yüzden çözücüyü çağıran verir: sunucu canlı fetchIsYatirimMali, test
+//  diskteki kaydı. İmza değişmedi — run.mjs eskisi gibi `{ net }` geçiyor.
 // ---------------------------------------------------------------------
 export async function scoreOne(eng, K, row, vade, opt = {}) {
-  const { sym, market } = row;
-  const ta = await scoreTA(eng, sym, market, vade);
-  const fa = market === 'BIST'
-    ? await scoreFaBIST(eng, sym, opt.mali !== undefined ? opt.mali : loadMali(sym))
-    : await scoreFaUS(eng, sym, K, opt.net);
-  return { sym, market, ta, fa, composite: composite(eng, K, fa.score, ta.score) };
+  return akisScoreOne(eng, K, row, vade, {
+    net: opt.net,
+    // opt.mali açıkça verildiyse (null dahil) ona uy; verilmediyse kayda bak.
+    getMali: async (sym) => (opt.mali !== undefined ? opt.mali : loadMali(sym)),
+  });
 }
 
 // Kendi kendini sınama: `node tests/score.mjs` — yalnız sabit çıkarımını doğrular.

@@ -16,7 +16,11 @@
 
 import { kv } from '@vercel/kv';
 import { XMLParser } from 'fast-xml-parser';
-import calendarData from '../worker/calendar.json';
+// JSON içe alma ESM'de nitelik ister (ölçüldü: type:"module" yok sayılsa bile
+// Node 22+ modül SEZGİSİ bu dosyayı ESM yapıyor → ERR_IMPORT_ATTRIBUTE_MISSING).
+// Statik içe alma KALIYOR: Vercel dosya izleyicisi calendar.json'u ancak böyle
+// pakete koyar; fs ile okunsa dağıtımda dosya eksik kalabilirdi.
+import calendarData from '../worker/calendar.json' with { type: 'json' };
 
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
