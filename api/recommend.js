@@ -79,13 +79,37 @@ import { TA_WEIGHTS, TA_BENCHMARK, VADELER, IMZA_AYAR } from './_ayar.js';
 import { canliAg, bosSayac, sayacTam } from './_ag.js';
 import { recommendOne } from './_akis.js';
 
-// maxDuration 60: /api/score ile aynı — plan katmanı SAF HESAP (ağ isteği
-// eklemiyor), yani bu ucun zaman profili /api/score'unkiyle aynı.
+// maxDuration 60 · memory 512 — İKİSİ DE ÖLÇÜLDÜ (2026-10-14, tests/duman.mjs).
+// Bu blokta daha önce "ÖLÇÜLMEDİ, TAHMİN" yazıyordu: değerler /api/score'dan
+// kopyalanmıştı. Canlı duman testi tahmini sayıyla değiştirdi.
 //
-// vercel.json girdisi (memory 1024 / maxDuration 60) /api/score'dan
-// KOPYALANDI: ÖLÇÜLMEDİ, TAHMİN. Gerekçe: aynı akış, aynı dış istek kümesi,
-// üstüne yalnız birkaç yüz kayan nokta işlemi. Dağıtımdan sonra gerçek
-// bellek tüketimi ölçülüp düzeltilmeli.
+// ÖLÇÜLEN (lokal, Node v24, AAPL+ASELS.IS, tek çağrı):
+//   duvar saati  28.658 sn   (/api/score aynı sorguda 30.630 sn)
+//   tepe heapUsed 17,1 MB    · tepe rss 95,3 MB
+// Tek ABD sembolüyle (BIST ayağı olmadan, tam=true): 7,2 sn · rss 88,3 MB.
+//
+// NEDEN 512 ve 1024 DEĞİL: ölçülen tepe rss 95 MB — 1024 on kat fazlaydı ve
+// hiçbir ölçüme dayanmıyordu. AZAMI_SEMBOL = 8'e doğrusal uzatma: taban
+// 56 MB + 8 × ~19,5 MB ≈ 212 MB. 512 bunun ~2,4 katı, ölçülen tepenin ~5
+// katı. 256'ya inilmedi çünkü (a) tepe değer ÖRNEKLEMEYLE alındı, yani alt
+// sınırdır; (b) BIST mali tablosu bu ölçümde hiç inmedi (aşağıdaki not), o
+// yüzden BIST yolunun bellek tepesi ÖLÇÜLMEDİ; (c) belleği aşan lambda 500
+// döner — fazladan bellek ucuz, çöken uç pahalı.
+//
+// BİLİNEN TAVİZ: Vercel'de bellek kademesi vCPU'yu da ölçekliyor, yani 512
+// daha az CPU demek. Bu iş yükü İO-ağırlıklı (31 SEC isteği 125 ms aralıkla
+// sıraya giriyor = 7,2 sn'nin ~3,9 sn'si saf bekleme), o yüzden CPU
+// darboğaz değil; ama SEC companyfacts JSON ayrıştırması CPU yiyor. Bu taviz
+// GÖRÜLDÜ, atlanmadı; dağıtımdan sonra süre uzarsa ilk bakılacak yer burası.
+//
+// NEDEN maxDuration 60 KALDI: ölçüm değiştirmemeyi haklı çıkardı. Tek ABD
+// sembolü 7,2 sn → AZAMI_SEMBOL = 8 ile ~58 sn, yani BUTCE_MS (45 sn) freni
+// gerçekten devreye girer ve başlamış sembolün bitmesi + serileştirme için
+// 60 sn'ye ihtiyaç var. 30 sn YETMEZ.
+//
+// plan katmanı hakkındaki eski varsayım da DOĞRULANDI: aynı sorguda
+// recommend (28,7 sn) score'dan (30,6 sn) yavaş değil — saf hesap olan plan
+// katmanı ağ gürültüsünün altında kalıyor.
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';

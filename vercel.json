@@ -12,11 +12,11 @@
       "maxDuration": 60
     },
     "api/score.js": {
-      "memory": 1024,
+      "memory": 512,
       "maxDuration": 60
     },
     "api/recommend.js": {
-      "memory": 1024,
+      "memory": 512,
       "maxDuration": 60
     }
   },

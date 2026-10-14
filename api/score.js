@@ -68,9 +68,31 @@ import { TA_WEIGHTS, TA_BENCHMARK, VADELER, IMZA_AYAR } from './_ayar.js';
 import { canliAg, bosSayac, sayacTam } from './_ag.js';
 import { scoreOne } from './_akis.js';
 
-// maxDuration 60: api/poll.js'te 60 sn'nin bu projede kullanılabildiği
-// ölçüldü (vercel.json functions girdisi). 30 sn YETMEZ — tek bir BIST
-// sembolü en kötü halde onu aşıyor (aşağıdaki bütçe hesabı).
+// maxDuration 60 · memory 512 — İKİSİ DE ÖLÇÜLDÜ (2026-10-14, tests/duman.mjs).
+// Önceki gerekçe dolaylıydı ("api/poll.js'te 60 sn kullanılabildiği ölçüldü");
+// artık bu ucun KENDİ sayısı var.
+//
+// ÖLÇÜLEN (lokal, Node v24, tek çağrı):
+//   AAPL tek başına, tam=true : 7,2 sn · tepe heapUsed 18,6 MB · tepe rss 88,3 MB
+//   AAPL + ASELS.IS           : 30,6 sn · tepe heapUsed 18,9 MB · tepe rss 93,4 MB
+// Aradaki ~23 sn BIST ayağının ÖLÜ süresi: fetchIsYatirimMali üç yılı sırayla
+// deniyor, her biri isMs=7000'de düşüyor (ölçüm ağından www.isyatirim.com.tr'ye
+// TCP bağlantısı kurulamadı — UND_ERR_CONNECT_TIMEOUT). Yani 30,6 sn BIST'in
+// ÇALIŞTIĞI haldeki süre değil, ÇALIŞMADIĞI haldeki süre.
+//
+// 60 KALDI, ÇÜNKÜ ÖLÇÜM BUNU İSTİYOR: 7,2 sn/sembol × AZAMI_SEMBOL 8 ≈ 58 sn.
+// BUTCE_MS (45 sn) freni gerçekten devreye girer; başlamış sembolün bitmesi +
+// serileştirme için 60 sn gerekiyor. 30 sn YETMEZ.
+//
+// NEDEN memory 512 (1024 DEĞİL): ölçülen tepe rss 93 MB. 1024 on kat fazlaydı
+// ve hiçbir ölçüme dayanmıyordu. 8 sembole doğrusal uzatma: taban 56 MB +
+// 8 × ~19,5 MB ≈ 212 MB. 512 bunun ~2,4 katı. 256'ya İNİLMEDİ çünkü (a) tepe
+// değer örneklemeyle alındı → ALT SINIR; (b) BIST mali tablosu hiç inmedi, o
+// yolun bellek tepesi ÖLÇÜLMEDİ; (c) belleği aşan lambda 500 döner.
+// TAVİZ GÖRÜLDÜ: Vercel'de bellek kademesi vCPU'yu da ölçekliyor. İş yükü
+// İO-ağırlıklı (31 SEC isteği × 125 ms aralık = 7,2 sn'nin ~3,9 sn'si bekleme),
+// ama companyfacts JSON ayrıştırması CPU yiyor. Dağıtımdan sonra süre uzarsa
+// ilk bakılacak yer burası.
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
@@ -82,10 +104,15 @@ const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 //    ① İstemcinin kendi tavanı 8. Karşılaştır ekranı en çok 8 hisse
 //       alıyor (v69'da 6'dan 8'e çıkarıldı) — tek seferde daha fazlasını
 //       isteyecek bir ekran yok.
-//    ② Zaman bütçesi. Bir sembol TİPİK olarak 3-6 sn: 5y mum + 1y mum +
-//       (ABD) SEC modeli ya da (BIST) mali tablo. Endeks mumları turda bir
-//       kez indiriliyor (_ag.js `birKez`), yani ikinci sembolden sonra bir
-//       istek daha az. 8 × ~5 sn ≈ 40 sn < 45 sn'lik başlatma bütçesi.
+//    ② Zaman bütçesi. ÖLÇÜLDÜ (2026-10-14, tests/duman.mjs): bir ABD sembolü
+//       7,2 sn — 5y mum + 1y mum + SEC modeli (31 SEC isteği, aralarında
+//       125 ms zorunlu bekleme). Eski tahmin "3-6 sn"di, ölçüm onu YUKARI
+//       düzeltti. Endeks mumları turda bir kez indiriliyor (_ag.js `birKez`),
+//       yani ikinci sembolden sonra bir istek daha az. 8 × 7,2 sn ≈ 58 sn,
+//       yani bütçe (45 sn) 8 sembolde GERÇEKTEN dolar ve son semboller
+//       `atlanan`a düşer. Bu bir arıza değil, frenin işini yapması — ama
+//       "8 sembol rahat sığar" varsayımı ÖLÇÜMLE ÇÜRÜDÜ. BIST sembolleri
+//       daha pahalı: mali tablo yolu üç yılı sırayla deniyor.
 //    ③ Yayılma sınırı. Sembol başına en çok ~6 dış istek düşüyor; 8 sembol
 //       ≈ 48 istek. SEC tarafı 125 ms aralıkla sıraya giriyor (_ag.js
 //       SEC_ARALIK_MS) → hız sınırı aşılmıyor. Sınır olmasa tek bir istek
