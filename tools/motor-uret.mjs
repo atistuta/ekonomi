@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ===========================================================================
-//  MOTOR ÜRETİCİ — app.js → _motor.js + _ekran.js, config.js → _ayar.js
+//  MOTOR ÜRETİCİ — app.js → api/_motor.js, config.js → api/_ayar.js
 // ===========================================================================
 //
 //  NE YAPAR: `app.js`'teki skor motorunu dilimler ve sunucuda koşabilen tek
@@ -15,13 +15,14 @@
 //  SIZMA YOK: yalnız bu iki anahtar alınır — `NTFY_TOPIC` ve `MY_PROXY`
 //  ÜRETİLEN DOSYAYA GİRMEZ.
 //
-//  ÜÇÜNCÜ DOSYA — api/_ekran.js (GEÇİCİ): skor motordan çıktıktan SONRA
-//  ekran katmanında iki yerde daha değişiyor — F/K "Değerleme" kriteri kriter
-//  listesine ekleniyor, sonra FA/TA bileşkesi harmanlanıyor. Kullanıcının
-//  GÖRDÜĞÜ sayı bu, dolayısıyla `/api/score` aynı sayıyı döndürmek zorunda.
-//  Sabitler app.js'ten OKUNUYOR (readRenderConstants), elle kopyalanmıyor.
-//  Commit C bu mantığı motorun içine alacak ve app.js'teki üç ekran kopyasını
-//  kaldıracak; o gün bu dosya SİLİNECEK — başlığında da öyle yazıyor.
+//  ÜÇÜNCÜ DOSYA ARTIK YOK (2026-10-14): bir süre `api/_ekran.js` de burada
+//  üretiliyordu — F/K "Değerleme" kriteri ile FA/TA harmanı motorun DIŞINDA,
+//  app.js ekran katmanında üçer kopya halinde duruyordu ve `/api/score`
+//  kullanıcının GÖRDÜĞÜ sayıyı ancak o sabitleri ayrıca taşıyarak
+//  döndürebiliyordu. Commit C ikisini de motora devretti (FA_PE /
+//  faPeCriterion · COMPOSITE_BLEND / compositeBlend), ekran kopyaları
+//  kalktı, taşıyıcı SİLİNDİ. Üretilen dosya sayısı üçten İKİYE düştü;
+//  bir eksilme değil, boşluğun kapanması.
 //
 //  NEDEN GEREKLİ: `tests/engine.mjs` motoru `new Function` ile BELLEKTE kurar
 //  ve bunu yaparken `app.js`'i okur. Vercel'de ikisi de olmaz:
@@ -47,12 +48,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
-  ROOT, EXPORTS, readApp, engineSource, sliceInfo, loadConfig, readRenderConstants,
+  ROOT, EXPORTS, readApp, engineSource, sliceInfo, loadConfig,
 } from '../tests/engine.mjs';
 
 export const CIKTI = path.join(ROOT, 'api', '_motor.js');
 export const CIKTI_AYAR = path.join(ROOT, 'api', '_ayar.js');
-export const CIKTI_EKRAN = path.join(ROOT, 'api', '_ekran.js');
 
 /** Metnin içerik imzası. Üretilen dosyaya gömülür; sürüklenme testi bunu doğrular. */
 export function imzala(metin) {
@@ -188,88 +188,6 @@ export function uretAyarKaynak() {
   return { metin: bas, imza, vadeler };
 }
 
-/**
- * api/_ekran.js'in TAM metnini döndür — diske yazmadan.
- *
- * GEÇİCİ DOSYA. Kaynak yine `app.js`, ama MOTOR DEĞİL: ekran katmanının
- * motor çıktısına uyguladığı iki sabit kümesi. `readRenderConstants()`
- * bunları üç ekran kopyasından okur ve kopyalar AYRIŞMIŞSA patlar — yani
- * bu dosya ancak üç ekran aynı sayıyı üretirken üretilebiliyor.
- *
- *   PE    → F/K "Değerleme" kriteri: ağırlık, pe<0 skoru, kırılım dizisi.
- *           Yalnız ABD/ADR tarafında ekleniyor; BIST'te böyle bir ek YOK.
- *   BLEND → bileşke harmanı: FA payı + TA payı.
- *
- * Commit C bu mantığı motora devredecek; o gün dosya da, bu üretici de
- * kalkar. Başlıktaki uyarı bunu dosyanın kendisine yazıyor.
- *
- * @returns {{metin:string, imza:string, peKopya:number, harmanKopya:number}}
- */
-export function uretEkranKaynak() {
-  const K = readRenderConstants();
-  const ekran = {
-    pe: { weight: K.pe.weight, neg: K.pe.neg, bp: K.pe.bp },
-    blend: { fa: K.blend.fa, ta: K.blend.ta },
-  };
-
-  // JSON gidiş-dönüşü bu küme için KAYIPSIZ: yalnız sayı ve sayı dizileri var.
-  const govde = JSON.stringify(ekran, null, 2);
-  const imza = imzala(govde);
-
-  // Kırılım dizisini TEK satırda yaz: JSON.stringify girintisi 8 çifti
-  // 30+ satıra yayıyor, okunurluğu düşürüyor. Değerler aynı, biçim derli.
-  const bpTxt = '[' + ekran.pe.bp.map((p) => JSON.stringify(p)).join(', ') + ']';
-
-  // ⚠ BAŞLIK TARİHSİZ (bkz. uretKaynak). Kopya sayıları app.js'ten TÜRER →
-  // bir ekran kopyası eklenir ya da silinirse başlık değişir, üretim testi
-  // sürüklenmeyi yakalar.
-  const bas = [
-    '// ===========================================================================',
-    '//  ÜRETİLMİŞTİR — ELLE DÜZENLEMEYİN   ·   GEÇİCİ: Commit C\'de SİLİNECEK',
-    '// ===========================================================================',
-    '//',
-    '//  Kaynak : app.js (ekran katmanı sabitleri — readRenderConstants)',
-    '//  Yenile : node tools/motor-uret.mjs',
-    '//  Doğrula: node tests/uretim-test.mjs',
-    '//',
-    '//  NEDEN VAR: motorun döndürdüğü skor kullanıcının gördüğü skor DEĞİL.',
-    '//  Ekran katmanı araya iki şey sokuyor: F/K "Değerleme" kriterini kriter',
-    '//  listesine ekliyor (yalnız ABD/ADR) ve FA/TA bileşkesini harmanlıyor.',
-    '//  /api/score aynı sayıyı döndürmek zorunda olduğu için sabitler burada.',
-    '//',
-    '//  NEDEN GEÇİCİ: doğru yer burası değil, motorun içi. Commit C kriteri',
-    '//  motora devredip app.js\'teki ekran kopyalarını kaldıracak; o gün bu',
-    '//  dosya SİLİNİR. Kalıcı sanıp üstüne bir şey inşa etmeyin.',
-    '//',
-    `//  F/K kriteri     : ${K.pe.sites} ekran kopyası, hepsi aynı`,
-    `//  Bileşke harmanı : ${K.blend.sites} kopya, hepsi aynı`,
-    '//',
-    '//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.',
-    '// ===========================================================================',
-    '',
-    `export const IMZA_EKRAN = '${imza}';`,
-    '',
-    '/**',
-    ' * F/K "Değerleme" kriteri — app.js ekran katmanından okundu.',
-    ' *   pe   = price / eps',
-    ' *   skor = pe < 0 ? PE.neg : faInterp(pe, PE.bp)',
-    ' * Kriter listesine PE.weight ağırlığıyla, `valuation` grubunda ekleniyor.',
-    ' * BIST\'te bu ek YOK — orada fa = computeFaScore(model.criteria) doğrudan.',
-    ' */',
-    'export const PE = {',
-    `  weight: ${ekran.pe.weight},`,
-    `  neg: ${ekran.pe.neg},`,
-    `  bp: ${bpTxt},`,
-    '};',
-    '',
-    '/** Bileşke harmanı: blended = BLEND.fa * faScore + BLEND.ta * taScore. */',
-    `export const BLEND = { fa: ${ekran.blend.fa}, ta: ${ekran.blend.ta} };`,
-    '',
-  ].join('\n');
-
-  return { metin: bas, imza, peKopya: K.pe.sites, harmanKopya: K.blend.sites };
-}
-
 // --- CLI ------------------------------------------------------------------
 /**
  * Üretilmiş bir dosyanın diskteki haliyle karşılaştırması.
@@ -293,7 +211,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const denetle = process.argv.includes('--denetle');
   const motor = uretKaynak();
   const ayar = uretAyarKaynak();
-  const ekran = uretEkranKaynak();
 
   const isler = [
     {
@@ -305,11 +222,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       ad: 'api/_ayar.js', yol: CIKTI_AYAR, metin: ayar.metin, imza: ayar.imza,
       ozet: `${ayar.vadeler.length} vade (${ayar.vadeler.join(', ')})`,
       kaynak: 'config.js',
-    },
-    {
-      ad: 'api/_ekran.js', yol: CIKTI_EKRAN, metin: ekran.metin, imza: ekran.imza,
-      ozet: `F/K ${ekran.peKopya} kopya · harman ${ekran.harmanKopya} kopya`,
-      kaynak: 'app.js (ekran)',
     },
   ];
 

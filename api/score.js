@@ -7,12 +7,11 @@
 //
 //      api/_motor.js  buildMotor(H)                 motorun kendisi
 //      api/_ayar.js   TA_WEIGHTS · TA_BENCHMARK     el ağırlıkları
-//      api/_ekran.js  PE · BLEND                    ekran katmanı (GEÇİCİ)
 //      api/_ag.js     canliAg()                     canlı ağ + konak + sayaç
 //      api/_akis.js   scoreOne()                    çağrı sırası
 //
 //  Bu dosyada motor mantığı YOK ve olmamalı: her eşik, her ağırlık, her
-//  gösterge yukarıdaki beş dosyadan geliyor. Buraya bir sayı yazılırsa
+//  gösterge yukarıdaki dört dosyadan geliyor. Buraya bir sayı yazılırsa
 //  parite testi onu GÖRMEZ (baseline.json yalnız akışı bekçiliyor) ve
 //  sunucu ile ekran sessizce ayrışır.
 //
@@ -66,7 +65,6 @@
 
 import { buildMotor, IMZA } from './_motor.js';
 import { TA_WEIGHTS, TA_BENCHMARK, VADELER, IMZA_AYAR } from './_ayar.js';
-import { PE, BLEND, IMZA_EKRAN } from './_ekran.js';
 import { canliAg, bosSayac, sayacTam } from './_ag.js';
 import { scoreOne } from './_akis.js';
 
@@ -135,11 +133,6 @@ try {
 } catch (e) {
   KURULUM_HATASI = e;
 }
-
-// Ekran katmanı sabitleri — akışın beklediği biçim. _ekran.js GEÇİCİ:
-// Commit C F/K kriterini motora devredip o dosyayı silecek; o gün burada
-// yalnız bu iki satır değişir.
-const K = { pe: PE, blend: BLEND };
 
 // ---------------------------------------------------------------------
 //  Girdi ayrıştırma — AĞA ÇIKMAZ, bu yüzden ayrı ve dışa aktarılmış:
@@ -256,7 +249,7 @@ export default async function handler(req, res) {
         AG.odakla(sayac);
         let kayit;
         try {
-          kayit = await scoreOne(ENG, K, row, ay.vade, {
+          kayit = await scoreOne(ENG, row, ay.vade, {
             // BIST mali tablosunu akış kendisi çekmiyor — çağıran veriyor.
             // Uçta canlı motor, parite testinde diskteki fikstür.
             getMali: (s) => ENG.fetchIsYatirimMali(s),
@@ -297,9 +290,12 @@ export default async function handler(req, res) {
       atlanan,
       sayac: genel,
       tam,
-      // Hangi motor metni koştu: üç imza da uretim-test.mjs'in doğruladığı
+      // Hangi motor metni koştu: iki imza da uretim-test.mjs'in doğruladığı
       // imzalar. İstemci bir skoru bildirirken bunu yanına yazabilir.
-      surum: { motor: IMZA, ayar: IMZA_AYAR, ekran: IMZA_EKRAN },
+      // `ekran` ALANI KALDIRILDI (2026-10-14): üçüncü taşıyıcı api/_ekran.js
+      // silindi — F/K kriteri ve FA/TA harmanı motora girdi, ayrı bir ekran
+      // imzası diye bir şey kalmadı. İSTEMCİ SÖZLEŞMESİ DEĞİŞİKLİĞİ.
+      surum: { motor: IMZA, ayar: IMZA_AYAR },
       ms: Date.now() - t0,
       uyari: UYARI,
     });

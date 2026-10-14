@@ -14,28 +14,28 @@
 //    util           19 satır
 //    ysym            6 satır
 //    ta            771 satır
-//    fa-core        26 satır
+//    fa-core        63 satır
 //    fmt            15 satır
-//    composite      15 satır
+//    composite      36 satır
 //    holistic      107 satır
 //    fa-bist       154 satır
 //    fa-us         292 satır
-//    TOPLAM       1405 satır
-//  Dışa verilen sembol: 23
+//    TOPLAM       1463 satır
+//  Dışa verilen sembol: 27
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:7049fb1cd9c44c9a';
+export const IMZA = 'sha256:de1078bbe56d32c9';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
   { name: 'util', lines: 19 },
   { name: 'ysym', lines: 6 },
   { name: 'ta', lines: 771 },
-  { name: 'fa-core', lines: 26 },
+  { name: 'fa-core', lines: 63 },
   { name: 'fmt', lines: 15 },
-  { name: 'composite', lines: 15 },
+  { name: 'composite', lines: 36 },
   { name: 'holistic', lines: 107 },
   { name: 'fa-bist', lines: 154 },
   { name: 'fa-us', lines: 292 },
@@ -890,6 +890,43 @@ const navigator = H.dead("navigator");
     if (s >= 36) return { label: 'zayıf', band: 'weak' };
     return { label: 'riskli / temkinli', band: 'risk' };
   }
+  // ===== F/K “Değerleme” kriteri — ekran katmanından motora devredildi =====
+  //
+  //  NE: ABD/ADR temel skorunda kriter listesine eklenen değerleme kalemi.
+  //  pe = canlı fiyat / TTM HBK; skor = pe<0 ? FA_PE.neg : faInterp(pe, FA_PE.bp).
+  //
+  //  NEDEN BURAYA TAŞINDI (2026-10-14): bu kriter ÜÇ EKRAN KOPYASIYDI
+  //  (renderFundamentalUS, fillSpFa, faModelFor). Motor FA skorunu döndürürken
+  //  kriteri bilmiyordu — yani motorun döndürdüğü skor ile kullanıcının
+  //  GÖRDÜĞÜ skor aynı sayı değildi. /api/score o boşluğu geçici bir
+  //  api/_ekran.js taşıyıcısıyla kapatıyordu; kriter motora girdiği gün o
+  //  taşıyıcı gereksizleşti ve SİLİNDİ.
+  //
+  //  NEDEN BOŞ-DEĞER KORUMASI YOK: pe null/NaN ise kriter YİNE eklenir ve
+  //  skoru null olur. computeFaScore null skoru ortalamaya katmaz ama `total`ı
+  //  artırır — ekrandaki “present/total” dürüstlüğü buna dayanır. Buraya
+  //  “pe yoksa ekleme” koruması koymak totalı sessizce düşürür ve eksik veriyi
+  //  görünmez yapar. Koruma ÇAĞIRANA ait: üç çağrı yeri de
+  //  `if (price != null && eps)` kapısının içinde duruyor.
+  //
+  //  BİST'te bu ek YOKTUR — orada kriterler mali tablodan kuruluyor.
+  const FA_PE = {
+    weight: 0.10,
+    neg: 15,
+    bp: [[5, 90], [10, 80], [15, 70], [20, 60], [25, 52], [35, 38], [50, 22], [80, 10]],
+  };
+  /**
+   * F/K kriter nesnesi. `note` ÇAĞIRANA ait — üç ekranın cümlesi farklı,
+   * SKORU aynı; ayrışabilen tek şey metin olsun diye dışarda bırakıldı.
+   */
+  function faPeCriterion(pe, note) {
+    return {
+      key: 'pe', group: 'valuation', weight: FA_PE.weight, label: 'Değerleme (F/K)',
+      score: pe < 0 ? FA_PE.neg : faInterp(pe, FA_PE.bp),
+      note: note || '',
+    };
+  }
+
 
 // ===== dilim: fmt =====
   const fmtTL = (n) => {
@@ -921,6 +958,27 @@ const navigator = H.dead("navigator");
     'lo:mid': { band: 'weak',   label: 'Temel zayıf', txt: 'Temel zayıf, teknik nötr — temel açıdan cazip değil.' },
     'lo:lo':  { band: 'risk',   label: 'Zayıf + zayıf', txt: 'Hem temel hem teknik zayıf — en riskli bileşim. Temkinli / kaçın.' },
   };
+
+  // ===== FA/TA harmanı — ekran katmanından motora devredildi =====
+  //
+  //  NE: bileşke rozetinin altında gösterilen tek sayı.
+  //      blended = COMPOSITE_BLEND.fa * faScore + COMPOSITE_BLEND.ta * taScore
+  //
+  //  NEDEN BURAYA TAŞINDI (2026-10-14): harman ÜÇ EKRAN KOPYASIYDI
+  //  (fillCompositeInto, hisse sayfası, Sonuç planı). Üç kopya = ağırlık
+  //  birinde değişirse diğer ikisi sessizce eski kalır; /api/score ise
+  //  hiçbirini bilmezdi. Artık tek tanım var ve motor onu dışa veriyor.
+  //
+  //  AĞIRLIK NEDEN 0.55/0.45: temel bir tık ağır — teknik hızlı değişir,
+  //  temel yavaş. Bu bir TERCİH, ölçülmüş bir optimum değil; değiştirmek
+  //  istenirse tek yer burası ve parite testi farkı anında gösterir.
+  //
+  //  COMPOSITE_MATRIX ile KARIŞTIRMAYIN: matris 3×3 konumlandırma (bant +
+  //  cümle), bu ise tek sayılık harman. İkisi birbirinin yerine geçmez.
+  const COMPOSITE_BLEND = { fa: 0.55, ta: 0.45 };
+  function compositeBlend(faScore, taScore) {
+    return COMPOSITE_BLEND.fa * faScore + COMPOSITE_BLEND.ta * taScore;
+  }
 
 
 // ===== dilim: holistic =====
@@ -1479,5 +1537,5 @@ const navigator = H.dead("navigator");
   }
 
 
-return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, faBand, taBand, COMPOSITE_MATRIX, computeHolisticScore, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel };
+return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel };
 }

@@ -23,8 +23,9 @@
 //    ⑧ olumsuz denetimler  — testin kendisi boş değil mi (4 kontrol)
 //    ⑨ ayar taşıyıcısı     — api/_ayar.js = config.js el ağırlıkları mı;
 //                            DERİN eşitlik, sızma denetimi, 2 olumsuz kontrol
-//    ⑩ ekran taşıyıcısı    — api/_ekran.js = app.js ekran sabitleri mi;
-//                            DERİN eşitlik + "GEÇİCİ" uyarısı yerinde mi
+//    ⑩ devredilen sabitler — F/K kriteri + FA/TA harmanı artık MOTORDA:
+//                            iki motorda DERİN eşit, kırılım dizisi sağlam,
+//                            silinen api/_ekran.js geri gelmemiş
 //
 //  ⑦ NEDEN TAM KARŞILAŞTIRMA: baseline.json kurulmuş cümleleri DONDURMAZ
 //  (biçim FAZ 1/3'te belirteç dizisine geçiyor). Burada durum farklı: iki
@@ -51,12 +52,11 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
   SLICES, EXPORTS, readApp, engineSource, sliceInfo, makeHost, loadConfig,
-  readRenderConstants,
 } from './engine.mjs';
 import { HOLISTIC_CASES } from './run.mjs';
 import {
-  CIKTI, CIKTI_AYAR, CIKTI_EKRAN, imzala,
-  uretKaynak, uretAyarKaynak, uretEkranKaynak,
+  CIKTI, CIKTI_AYAR, imzala,
+  uretKaynak, uretAyarKaynak,
 } from '../tools/motor-uret.mjs';
 
 // --- küçük koşum defteri --------------------------------------------------
@@ -75,7 +75,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — _motor.js ve _ekran.js ↔ app.js, _ayar.js ↔ config.js birebir.`);
+  console.log(`✅ ${gecen} denetim geçti — _motor.js ↔ app.js, _ayar.js ↔ config.js birebir.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -116,7 +116,7 @@ function derinFark(a, b, yol = '') {
 /** ⑥ ve ⑧'in PAYLAŞTIĞI yüklem: motor yüzeyinde eksik sembol var mı? */
 const eksikSembol = (api) => EXPORTS.filter((k) => !api || api[k] === undefined);
 
-console.log('ÜRETİM TESTİ — _motor.js, _ekran.js = app.js · _ayar.js = config.js');
+console.log('ÜRETİM TESTİ — _motor.js = app.js · _ayar.js = config.js');
 console.log('═'.repeat(70));
 
 // ===========================================================================
@@ -421,117 +421,79 @@ if (ayarVar) {
 }
 
 // ===========================================================================
-bolum('⑩ Ekran taşıyıcısı — api/_ekran.js, app.js\'in ŞU ANKİ ekran sabitleri mi?');
+bolum('⑩ Devredilen ekran sabitleri — F/K kriteri + FA/TA harmanı artık MOTORDA');
 // ===========================================================================
-// NEDEN AYRI BİR BÖLÜM: motorun döndürdüğü skor kullanıcının GÖRDÜĞÜ skor
-// DEĞİL — ekran katmanı araya F/K "Değerleme" kriterini ve FA/TA bileşke
-// harmanını sokuyor. `/api/score` aynı sayıyı döndürmek zorunda olduğu için
-// bu iki sabit kümesi api/_ekran.js'e ÜRETİLİYOR. Bölüm iki şeyi birlikte
-// tahsil ediyor: üretim sürüklenmemiş (metin) VE sayılar app.js ile birebir
-// (derin eşitlik). Biri yeşil öbürü kırmızıysa /api/score yanlış skor verir.
+// BU BÖLÜM NE OLDU: 2026-10-14'e kadar burada "⑩ Ekran taşıyıcısı" vardı —
+// api/_ekran.js diye GEÇİCİ bir üçüncü dosyayı app.js ekran katmanına karşı
+// denetliyordu. Sebep: motorun döndürdüğü skor kullanıcının GÖRDÜĞÜ skor
+// değildi; ekran araya F/K "Değerleme" kriterini ve FA/TA harmanını
+// sokuyordu, üçer kopya halinde. İkisi de motora devredildi (FA_PE /
+// faPeCriterion · COMPOSITE_BLEND / compositeBlend), ekran kopyaları
+// kaldırıldı, taşıyıcı SİLİNDİ.
 //
-// DİKKAT — bu dosya GEÇİCİ: Commit C kriteri motora devredince SİLİNECEK.
-// Bölüm o yüzden "GEÇİCİ" uyarısının başlıkta DURDUĞUNU da denetliyor. Uyarı
-// düşerse dosya kalıcı sanılır ve üstüne bir şey inşa edilir.
-const ekranVar = fs.existsSync(CIKTI_EKRAN);
-ok('api/_ekran.js var', ekranVar, ekranVar ? '' : 'üret: node tools/motor-uret.mjs');
+// NEDEN BÖLÜM KAPATILMADI: taşıyıcı gitti ama o dosyanın tahsil ettiği İKİ
+// SORU hâlâ geçerli ve artık yeni sahibine soruluyor — (a) iki motor aynı
+// sabitleri mi taşıyor, (b) sabitlerin KENDİSİ sağlam mı. Sayı denetimi
+// azaldı çünkü metin sürüklenmesi/imza soruları bu sabitler için ①-③ ve
+// ⑦ zaten soruyor: artık motorun İÇİNDELER.
 
-if (ekranVar) {
-  const ekranMetin = fs.readFileSync(CIKTI_EKRAN, 'utf8');
-  const K = readRenderConstants();
+// 10a — iki motor aynı sabitleri taşıyor mu? (⑦ ile aynı mantık, bu iki
+// sabit ⑦'nin tablolarına girmiyor diye ayrıca yüzleştiriliyor.)
+const peFark = derinFark(dilimli.FA_PE, uretilmis.FA_PE, 'FA_PE');
+ok('FA_PE dilimlenmiş ⟷ üretilmiş DERİN eşit', peFark === null,
+  peFark || `ağırlık ${uretilmis.FA_PE.weight} · pe<0 → ${uretilmis.FA_PE.neg} · ${uretilmis.FA_PE.bp.length} kırılım`);
 
-  const eLf = (ekranMetin.match(/\n/g) || []).length;
-  const eCrlf = (ekranMetin.match(/\r\n/g) || []).length;
-  ok('ekran: satır sonu tek tip (karışık değil)', eCrlf === 0 || eCrlf === eLf, `lf ${eLf} / crlf ${eCrlf}`);
+const blFark = derinFark(dilimli.COMPOSITE_BLEND, uretilmis.COMPOSITE_BLEND, 'COMPOSITE_BLEND');
+ok('COMPOSITE_BLEND dilimlenmiş ⟷ üretilmiş DERİN eşit', blFark === null,
+  blFark || `FA ${uretilmis.COMPOSITE_BLEND.fa} + TA ${uretilmis.COMPOSITE_BLEND.ta}`);
 
-  const ekranImi = 'export const IMZA_EKRAN';
-  const eBasSonu = ekranMetin.indexOf(ekranImi);
-  ok('ekran: başlık sınırı bulunabiliyor', eBasSonu > 0, `"${ekranImi}" @ ${eBasSonu}`);
-  const eBaslik = eBasSonu > 0 ? ekranMetin.slice(0, eBasSonu) : ekranMetin;
+// 10b — kriteri ÜRETEN işlev de aynı nesneyi veriyor mu? Sabit eşitliği
+// yetmez: alan adı/sırası ya da pe<0 dalı kayarsa sabitler aynı kalır ama
+// kriter nesnesi farklı çıkar ve kullanıcı farklı bir skor görür.
+let kritFark = null;
+for (const pe of [-5, 0, 4.9, 15, 22.5, 80, 140]) {
+  const f = derinFark(dilimli.faPeCriterion(pe, ''), uretilmis.faPeCriterion(pe, ''), `faPeCriterion(${pe})`);
+  if (f) { kritFark = f; break; }
+}
+ok('faPeCriterion iki motorda aynı kriter nesnesini veriyor', kritFark === null,
+  kritFark || '7 nokta: -5 · 0 · 4.9 · 15 · 22.5 · 80 · 140');
 
-  ok('ekran: "ELLE DÜZENLEMEYİN" uyarısı başlıkta', eBaslik.includes('ELLE DÜZENLEMEYİN'));
-  ok('ekran: "GEÇİCİ · Commit C silecek" uyarısı başlıkta',
-    eBaslik.includes('GEÇİCİ') && eBaslik.includes('SİLİNECEK'));
-  ok('ekran: yenileme komutu başlıkta', eBaslik.includes('node tools/motor-uret.mjs'));
-  ok('ekran: doğrulama komutu başlıkta', eBaslik.includes('node tests/uretim-test.mjs'));
-  ok('ekran: yasal uyarı başlıkta', eBaslik.includes('Bilgi amaçlıdır, yatırım tavsiyesi değildir.'));
-  const eTarih = eBaslik.match(/\b20\d\d-\d\d-\d\d\b/);
-  ok('ekran: başlık tarihsiz (kendi kendine sürüklenemez)', !eTarih, eTarih ? `bulundu: ${eTarih[0]}` : '');
-
-  // --- sürüklenme ve imza ---------------------------------------------------
-  const tazeEkran = uretEkranKaynak();
-  const ekranEsit = norm(ekranMetin) === norm(tazeEkran.metin);
-  ok('ekran: bellekte yeniden üretilen metin diskteki ile aynı', ekranEsit,
-    ekranEsit ? `${(norm(tazeEkran.metin).match(/\n/g) || []).length} satır`
-      : `ilk farklı satır: ${ilkFarkliSatir(norm(ekranMetin), norm(tazeEkran.metin))} → düzelt: node tools/motor-uret.mjs`);
-
-  const eImzaEsl = ekranMetin.match(/export const IMZA_EKRAN = '([^']+)';/);
-  ok('ekran: IMZA_EKRAN gömülü', !!eImzaEsl, eImzaEsl ? eImzaEsl[1] : 'bulunamadı');
-  if (eImzaEsl) {
-    ok('ekran: gömülü IMZA_EKRAN = taze hesaplanan', eImzaEsl[1] === tazeEkran.imza,
-      `${eImzaEsl[1]} ↔ ${tazeEkran.imza}`);
-  }
-
-  // Başlıktaki kopya sayıları app.js'ten TÜRÜYOR. Bir ekran kopyası eklenir
-  // ya da silinirse sayı değişir; burada başlığın İDDİASI ile app.js'in
-  // GERÇEĞİ yüzleştiriliyor (biçim serbest, sayı değil).
-  const peSatir = eBaslik.match(/F\/K kriteri\s+: (\d+) ekran kopyası/);
-  ok('ekran: başlıktaki F/K kopya sayısı app.js ile tutarlı',
-    !!peSatir && Number(peSatir[1]) === K.pe.sites,
-    peSatir ? `başlık ${peSatir[1]} ↔ app.js ${K.pe.sites}` : 'satır bulunamadı');
-  const blSatir = eBaslik.match(/Bileşke harmanı\s+: (\d+) kopya/);
-  ok('ekran: başlıktaki harman kopya sayısı app.js ile tutarlı',
-    !!blSatir && Number(blSatir[1]) === K.blend.sites,
-    blSatir ? `başlık ${blSatir[1]} ↔ app.js ${K.blend.sites}` : 'satır bulunamadı');
-
-  // --- modül yükü ve DERİN EŞİTLİK -----------------------------------------
-  let ekranMod = null; let ekranHata = '';
-  try { ekranMod = await import(pathToFileURL(CIKTI_EKRAN).href); } catch (e) { ekranHata = e.message; }
-  ok('ekran: ESM olarak yükleniyor', ekranMod !== null, ekranHata);
-
-  if (ekranMod) {
-    ok('ekran: üç sembol doğru türde',
-      typeof ekranMod.IMZA_EKRAN === 'string'
-      && !!ekranMod.PE && typeof ekranMod.PE === 'object'
-      && !!ekranMod.BLEND && typeof ekranMod.BLEND === 'object',
-      `PE ${Object.keys(ekranMod.PE || {}).length} alan · BLEND ${Object.keys(ekranMod.BLEND || {}).length} alan`);
-
-    // İŞİN KALBİ: /api/score'un kullanacağı sayılar app.js'in ŞU ANKİ
-    // sayıları mı? Metin karşılaştırması bunu ispat etmez — bkz. ⑨'un
-    // aynı gerekçesi: JSON sessiz bir alan düşürürse iki taraf da aynı
-    // metni üretir ve sürüklenme denetimi yeşil kalır.
-    const peBekl = { weight: K.pe.weight, neg: K.pe.neg, bp: K.pe.bp };
-    const peFark = derinFark(peBekl, ekranMod.PE, 'PE');
-    ok('ekran: PE app.js ile DERİN eşit (JSON kaybı yok)', peFark === null,
-      peFark || `ağırlık ${K.pe.weight} · pe<0 → ${K.pe.neg} · ${K.pe.bp.length} kırılım`);
-
-    const blBekl = { fa: K.blend.fa, ta: K.blend.ta };
-    const blFark = derinFark(blBekl, ekranMod.BLEND, 'BLEND');
-    ok('ekran: BLEND app.js ile DERİN eşit', blFark === null,
-      blFark || `FA ${K.blend.fa} + TA ${K.blend.ta}`);
-
-    // Harman payları 1'e tamamlanmazsa bileşke 0-100 bandından kayar ve
-    // kullanıcı anlamsız bir sayı görür. app.js bugün 0.55 + 0.45 veriyor.
-    const toplam = ekranMod.BLEND.fa + ekranMod.BLEND.ta;
-    ok('ekran: BLEND payları 1\'e tamamlanıyor', Math.abs(toplam - 1) < 1e-12, `toplam ${toplam}`);
-
-    // Kırılım dizisi biçimi: [x, skor] çiftleri ve x ARTAN. faInterp artan
-    // sıra varsayıyor; sıra bozulursa ara değerleme sessizce yanlış skor
-    // üretir — patlamaz, sadece yanlış olur. En sinsi arıza türü.
-    const bp = ekranMod.PE.bp;
-    const bpBicim = Array.isArray(bp) && bp.length > 1
-      && bp.every((p) => Array.isArray(p) && p.length === 2 && p.every((n) => typeof n === 'number'));
-    ok('ekran: PE.bp [x, skor] çiftlerinden oluşuyor', bpBicim, `${bp?.length} çift`);
-    const bpArtan = bpBicim && bp.every((p, i) => i === 0 || p[0] > bp[i - 1][0]);
-    ok('ekran: PE.bp x ekseni ARTAN (faInterp bunu varsayar)', bpArtan,
-      bpBicim ? bp.map((p) => p[0]).join(' < ') : 'biçim bozuk');
-
-    // N7: PE'nin derin eşitliği gerçekten hassas mı?
-    const bpKaymis = JSON.parse(JSON.stringify(ekranMod.PE));
-    bpKaymis.bp[0][1] += 1e-9;
-    ok('N7 · 1e-9 kaydırılmış kırılım derin eşitlikte yakalanır',
-      derinFark(peBekl, bpKaymis, 'PE') !== null, 'bp[0][1] + 1e-9');
+let harFark = null;
+for (const [fa, ta] of [[0, 0], [72, 58], [100, 0], [0, 100], [45.5, 61.25]]) {
+  if (dilimli.compositeBlend(fa, ta) !== uretilmis.compositeBlend(fa, ta)) {
+    harFark = `${fa}/${ta}: ${dilimli.compositeBlend(fa, ta)} ≠ ${uretilmis.compositeBlend(fa, ta)}`;
+    break;
   }
 }
+ok('compositeBlend iki motorda aynı sayıyı veriyor', harFark === null,
+  harFark || '5 nokta: 0/0 · 72/58 · 100/0 · 0/100 · 45.5/61.25');
 
+// 10c — sabitlerin KENDİSİ sağlam mı? Harman payları 1'e tamamlanmazsa
+// bileşke 0-100 bandından kayar ve kullanıcı anlamsız bir sayı görür.
+const harToplam = uretilmis.COMPOSITE_BLEND.fa + uretilmis.COMPOSITE_BLEND.ta;
+ok('COMPOSITE_BLEND payları 1\'e tamamlanıyor', Math.abs(harToplam - 1) < 1e-12, `toplam ${harToplam}`);
+
+// Kırılım dizisi biçimi: [x, skor] çiftleri ve x ARTAN. faInterp artan sıra
+// varsayıyor; sıra bozulursa ara değerleme sessizce yanlış skor üretir —
+// patlamaz, sadece yanlış olur. En sinsi arıza türü.
+const bp = uretilmis.FA_PE.bp;
+const bpBicim = Array.isArray(bp) && bp.length > 1
+  && bp.every((p) => Array.isArray(p) && p.length === 2 && p.every((n) => typeof n === 'number'));
+ok('FA_PE.bp [x, skor] çiftlerinden oluşuyor', bpBicim, `${bp?.length} çift`);
+const bpArtan = bpBicim && bp.every((p, i) => i === 0 || p[0] > bp[i - 1][0]);
+ok('FA_PE.bp x ekseni ARTAN (faInterp bunu varsayar)', bpArtan,
+  bpBicim ? bp.map((p) => p[0]).join(' < ') : 'biçim bozuk');
+
+// 10d — silinen taşıyıcı geri gelmemiş. Bir üretici ya da elle kopya onu
+// yeniden yazarsa iki sabit kümesi doğar (motor + dosya) ve /api/score
+// hangisini okuduğuna göre sessizce ayrışır. Dosyanın YOKLUĞU bir denetim.
+const ekranKalinti = fs.existsSync(CIKTI.replace(/_motor\.js$/, '_ekran.js'));
+ok('silinen api/_ekran.js geri gelmemiş', !ekranKalinti,
+  ekranKalinti ? 'dosya yeniden doğmuş — sabitler motorda, bu dosya SİLİNMELİ' : 'yok');
+
+// N7: derin eşitlik gerçekten hassas mı? (⑧'in mantığı, bu sabitler için.)
+const bpKaymis = JSON.parse(JSON.stringify(uretilmis.FA_PE));
+bpKaymis.bp[0][1] += 1e-9;
+ok('N7 · 1e-9 kaydırılmış kırılım derin eşitlikte yakalanır',
+  derinFark(dilimli.FA_PE, bpKaymis, 'FA_PE') !== null, 'bp[0][1] + 1e-9');
 bitir();

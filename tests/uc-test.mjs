@@ -271,7 +271,7 @@ bolum('④ statik denetimler — api/score.js metni');
   ok('app.js / config.js import edilmiyor',
     !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src));
   ok('yalnız üretilmiş taşıyıcılar + akış import ediliyor',
-    ['./_motor.js', './_ayar.js', './_ekran.js', './_ag.js', './_akis.js']
+    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js']
       .every((m) => src.includes(`from '${m}'`)));
 
   // Sayaç motora tek bir sayı dahi GEÇİRMİYOR — yalnız gözlemci.

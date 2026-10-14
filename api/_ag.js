@@ -18,7 +18,7 @@
 //  saatlerce kibarca bekleyebilir (fikstür bir kez çekilir); uç noktanın
 //  30-60 sn bütçesi var. Politika çağırana ait, BİLGİ ortak.
 //
-//  BU DOSYA ÜRETİLMİŞ DEĞİL: _motor.js / _ayar.js / _ekran.js app.js'ten
+//  BU DOSYA ÜRETİLMİŞ DEĞİL: _motor.js app.js'ten, _ayar.js config.js'ten
 //  türetilir, bu dosya türetilmez. `node tools/motor-uret.mjs` buna dokunmaz.
 //  Motoru ve ayarı da İÇE ALMAZ: ayar okuma ve motor kurulumu çağırana
 //  (api/score.js) ait. Sebep: parite şeridinin VARSAYILAN hali motoru

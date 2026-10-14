@@ -4505,6 +4505,43 @@
     if (s >= 36) return { label: 'zayıf', band: 'weak' };
     return { label: 'riskli / temkinli', band: 'risk' };
   }
+  // ===== F/K “Değerleme” kriteri — ekran katmanından motora devredildi =====
+  //
+  //  NE: ABD/ADR temel skorunda kriter listesine eklenen değerleme kalemi.
+  //  pe = canlı fiyat / TTM HBK; skor = pe<0 ? FA_PE.neg : faInterp(pe, FA_PE.bp).
+  //
+  //  NEDEN BURAYA TAŞINDI (2026-10-14): bu kriter ÜÇ EKRAN KOPYASIYDI
+  //  (renderFundamentalUS, fillSpFa, faModelFor). Motor FA skorunu döndürürken
+  //  kriteri bilmiyordu — yani motorun döndürdüğü skor ile kullanıcının
+  //  GÖRDÜĞÜ skor aynı sayı değildi. /api/score o boşluğu geçici bir
+  //  api/_ekran.js taşıyıcısıyla kapatıyordu; kriter motora girdiği gün o
+  //  taşıyıcı gereksizleşti ve SİLİNDİ.
+  //
+  //  NEDEN BOŞ-DEĞER KORUMASI YOK: pe null/NaN ise kriter YİNE eklenir ve
+  //  skoru null olur. computeFaScore null skoru ortalamaya katmaz ama `total`ı
+  //  artırır — ekrandaki “present/total” dürüstlüğü buna dayanır. Buraya
+  //  “pe yoksa ekleme” koruması koymak totalı sessizce düşürür ve eksik veriyi
+  //  görünmez yapar. Koruma ÇAĞIRANA ait: üç çağrı yeri de
+  //  `if (price != null && eps)` kapısının içinde duruyor.
+  //
+  //  BİST'te bu ek YOKTUR — orada kriterler mali tablodan kuruluyor.
+  const FA_PE = {
+    weight: 0.10,
+    neg: 15,
+    bp: [[5, 90], [10, 80], [15, 70], [20, 60], [25, 52], [35, 38], [50, 22], [80, 10]],
+  };
+  /**
+   * F/K kriter nesnesi. `note` ÇAĞIRANA ait — üç ekranın cümlesi farklı,
+   * SKORU aynı; ayrışabilen tek şey metin olsun diye dışarda bırakıldı.
+   */
+  function faPeCriterion(pe, note) {
+    return {
+      key: 'pe', group: 'valuation', weight: FA_PE.weight, label: 'Değerleme (F/K)',
+      score: pe < 0 ? FA_PE.neg : faInterp(pe, FA_PE.bp),
+      note: note || '',
+    };
+  }
+
   const FA_GROUPS = [
     ['profitability', 'Kârlılık'],
     ['growth', 'Büyüme'],
@@ -4624,6 +4661,27 @@
     'lo:mid': { band: 'weak',   label: 'Temel zayıf', txt: 'Temel zayıf, teknik nötr — temel açıdan cazip değil.' },
     'lo:lo':  { band: 'risk',   label: 'Zayıf + zayıf', txt: 'Hem temel hem teknik zayıf — en riskli bileşim. Temkinli / kaçın.' },
   };
+
+  // ===== FA/TA harmanı — ekran katmanından motora devredildi =====
+  //
+  //  NE: bileşke rozetinin altında gösterilen tek sayı.
+  //      blended = COMPOSITE_BLEND.fa * faScore + COMPOSITE_BLEND.ta * taScore
+  //
+  //  NEDEN BURAYA TAŞINDI (2026-10-14): harman ÜÇ EKRAN KOPYASIYDI
+  //  (fillCompositeInto, hisse sayfası, Sonuç planı). Üç kopya = ağırlık
+  //  birinde değişirse diğer ikisi sessizce eski kalır; /api/score ise
+  //  hiçbirini bilmezdi. Artık tek tanım var ve motor onu dışa veriyor.
+  //
+  //  AĞIRLIK NEDEN 0.55/0.45: temel bir tık ağır — teknik hızlı değişir,
+  //  temel yavaş. Bu bir TERCİH, ölçülmüş bir optimum değil; değiştirmek
+  //  istenirse tek yer burası ve parite testi farkı anında gösterir.
+  //
+  //  COMPOSITE_MATRIX ile KARIŞTIRMAYIN: matris 3×3 konumlandırma (bant +
+  //  cümle), bu ise tek sayılık harman. İkisi birbirinin yerine geçmez.
+  const COMPOSITE_BLEND = { fa: 0.55, ta: 0.45 };
+  function compositeBlend(faScore, taScore) {
+    return COMPOSITE_BLEND.fa * faScore + COMPOSITE_BLEND.ta * taScore;
+  }
 
   async function fillComposite(symbol, market, faScore, req) {
     return fillCompositeInto(document.getElementById('faComposite'), symbol, market, faScore, () => faAlive(req), false);
@@ -4778,7 +4836,7 @@
       return;
     }
     const m = COMPOSITE_MATRIX[faBand(faScore) + ':' + taBand(ta.score)] || COMPOSITE_MATRIX['mid:mid'];
-    const blended = 0.55 * faScore + 0.45 * ta.score;
+    const blended = compositeBlend(faScore, ta.score);
     const faCls = faScore >= 60 ? 'bull' : faScore < 45 ? 'bear' : 'neutral';
     const gauge = (label, val, cls, sub) => `
       <div class="fa-comp-leg">
@@ -5253,7 +5311,7 @@
     let compHTML = '';
     if (taMid) {
       const m = COMPOSITE_MATRIX[faBand(faScore) + ':' + taBand(taMid.score)] || COMPOSITE_MATRIX['mid:mid'];
-      const blended = 0.55 * faScore + 0.45 * taMid.score;
+      const blended = compositeBlend(faScore, taMid.score);
       const faCls = faScore >= 60 ? 'bull' : faScore < 45 ? 'bear' : 'neutral';
       // Momentum override: teknik trend güçlü ama temel skor zayıf (çoğu zaman yüksek
       // değerleme). Kullanıcıyı "pahalı ⇒ kaçın" yanılgısından koruyan uyarı.
@@ -5639,13 +5697,11 @@
       if (price != null && eps) {
         pe = price / eps;
         if (ni && eps) mcap = price * (ni / eps); // pay ≈ TTM net kâr / TTM HBK
-        let score, note;
-        if (pe < 0) { score = 15; note = `F/K negatif — şirket son 12 ayda (TTM) zarar açıklıyor (HBK ${eps.toFixed(2)}); kârlılık yok.`; }
-        else {
-          score = faInterp(pe, [[5, 90], [10, 80], [15, 70], [20, 60], [25, 52], [35, 38], [50, 22], [80, 10]]);
-          note = `F/K ${pe.toFixed(1)} (canlı fiyat / TTM HBK) — ${pe < 15 ? 'değer bölgesi / düşük büyüme beklentisi' : pe <= 25 ? 'makul seviye' : pe <= 40 ? 'yüksek, güçlü büyüme fiyatlanıyor' : 'çok yüksek, pahalı'}.`;
-        }
-        criteria.push({ key: 'pe', group: 'valuation', weight: 0.10, label: 'Değerleme (F/K)', score, note });
+        // SKOR motorda (faPeCriterion); burada yalnız kullanıcıya gösterilen cümle kuruluyor.
+        const note = pe < 0
+          ? `F/K negatif — şirket son 12 ayda (TTM) zarar açıklıyor (HBK ${eps.toFixed(2)}); kârlılık yok.`
+          : `F/K ${pe.toFixed(1)} (canlı fiyat / TTM HBK) — ${pe < 15 ? 'değer bölgesi / düşük büyüme beklentisi' : pe <= 25 ? 'makul seviye' : pe <= 40 ? 'yüksek, güçlü büyüme fiyatlanıyor' : 'çok yüksek, pahalı'}.`;
+        criteria.push(faPeCriterion(pe, note));
       }
       const tiles = [
         { label: 'Son Fiyat', val: price != null ? '$' + price.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : '—' },
@@ -7445,9 +7501,9 @@
           let pe = null, mcap = null;
           if (price != null && eps) {
             pe = price / eps; if (ni && eps) mcap = price * (ni / eps);
-            const score = pe < 0 ? 15 : faInterp(pe, [[5, 90], [10, 80], [15, 70], [20, 60], [25, 52], [35, 38], [50, 22], [80, 10]]);
-            criteria.push({ key: 'pe', group: 'valuation', weight: 0.10, label: 'Değerleme (F/K)', score,
-              note: pe < 0 ? `F/K negatif — son 12 ayda (TTM) zarar (HBK ${eps.toFixed(2)}).` : `F/K ${pe.toFixed(1)} (canlı fiyat / TTM HBK).` });
+            criteria.push(faPeCriterion(pe, pe < 0
+              ? `F/K negatif — son 12 ayda (TTM) zarar (HBK ${eps.toFixed(2)}).`
+              : `F/K ${pe.toFixed(1)} (canlı fiyat / TTM HBK).`));
           }
           if (eps != null) valuation = { curSym: '$', eps, pe, price, dcfIn: usDcfIn(sec, price, eps) };
           tiles = [
@@ -11872,8 +11928,7 @@
           let pe = null;
           if (price != null && eps) {
             pe = price / eps;
-            const score = pe < 0 ? 15 : faInterp(pe, [[5, 90], [10, 80], [15, 70], [20, 60], [25, 52], [35, 38], [50, 22], [80, 10]]);
-            criteria.push({ key: 'pe', group: 'valuation', weight: 0.10, label: 'Değerleme (F/K)', score, note: '' });
+            criteria.push(faPeCriterion(pe, ''));
           }
           const fa = computeFaScore(criteria);
           const valuation = (eps != null) ? { curSym: '$', eps, pe, price, dcfIn: usDcfIn(sec, price, eps) } : null;
@@ -12020,7 +12075,7 @@
         let blended = null, compLabel = '—', compBand = 'mixed', compTxt = '';
         if (faScore != null) {
           const m = COMPOSITE_MATRIX[faBand(faScore) + ':' + taBand(res.score)] || COMPOSITE_MATRIX['mid:mid'];
-          blended = 0.55 * faScore + 0.45 * res.score;
+          blended = compositeBlend(faScore, res.score);
           compLabel = m.label; compBand = m.band; compTxt = m.txt;
         }
         const pe = (fam.valuation && fam.valuation.pe != null) ? fam.valuation.pe

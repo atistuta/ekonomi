@@ -15,7 +15,7 @@
 // =====================================================================
 
 import {
-  buildEngine, readSymbols, readRenderConstants, makeOfflineFetch,
+  buildEngine, readSymbols, makeOfflineFetch,
   scoreOne, round6,
 } from './score.mjs';
 
@@ -66,7 +66,6 @@ export const HOLISTIC_CASES = [
 ];
 
 export async function runAll(opt = {}) {
-  const K = readRenderConstants();
   const net = makeOfflineFetch();
   const eng = buildEngine({ fetch: net.fetch, fetchVia: net.fetchVia });
   const { rows, vade } = readSymbols();
@@ -74,7 +73,7 @@ export async function runAll(opt = {}) {
   const symbols = {};
   const skipped = [];
   for (const row of rows) {
-    const r = await scoreOne(eng, K, row, vade, { net });
+    const r = await scoreOne(eng, row, vade, { net });
     symbols[row.sym] = r;
     if (r.ta.score == null || r.fa.score == null) {
       skipped.push(`${row.sym} (ta=${r.ta.score} fa=${r.fa.score}${r.fa.why ? ' · ' + r.fa.why : ''}${r.ta.why ? ' · ' + r.ta.why : ''})`);
@@ -103,9 +102,13 @@ export async function runAll(opt = {}) {
   return {
     _not: 'Skor paritesi referansı. Elle DÜZENLENMEZ — `node tests/baseline.mjs` ile yenilenir. Bilgi amaçlıdır, yatırım tavsiyesi değildir.',
     vade,
+    // Sabitler MOTORDAN okunuyor (2026-10-14). Önceden readRenderConstants()
+    // app.js ekran katmanından regex ile çıkarıyordu; kriter ve harman
+    // motora devredildiği gün kaynak da motor oldu. Alan ADLARI ve
+    // DEĞERLERİ bilerek aynı bırakıldı — baseline.json'u kaydırmamak için.
     sabitler: {
-      pe: { weight: K.pe.weight, neg: K.pe.neg, bp: K.pe.bp },
-      blend: { fa: K.blend.fa, ta: K.blend.ta },
+      pe: { weight: eng.FA_PE.weight, neg: eng.FA_PE.neg, bp: eng.FA_PE.bp },
+      blend: { fa: eng.COMPOSITE_BLEND.fa, ta: eng.COMPOSITE_BLEND.ta },
       benchmark: eng._bench,
     },
     dilimler: eng._slices,

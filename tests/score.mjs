@@ -7,21 +7,17 @@
 //  iki kopya olursa, parite testi iki kopyanın birbirine uyduğunu
 //  doğrular — motora dair hiçbir şey söylemez.
 //
-//  ÖNEMLİ BULGU (2026-10-11, ölçülmüş): kullanıcının gördüğü ABD temel
-//  skoru secFetchModel'in SAF çıktısı DEĞİL. Ekran katmanında (app.js
-//  5648 / 7449 / 11876 — üç kopya) canlı fiyattan türetilen bir
-//  "Değerleme (F/K)" kriteri kriter listesine EKLENİYOR:
-//      pe = price / eps
-//      score = pe < 0 ? 15 : faInterp(pe, [...])
-//      weight 0.10, group 'valuation'
-//  BIST'te böyle bir ek YOK — fa = computeFaScore(model.criteria) doğrudan.
-//  Parite testi kullanıcının GÖRDÜĞÜ sayıyı korumak zorunda olduğu için
-//  bu eki dahil ediyoruz; ama sabitleri elle yazmıyoruz: app.js'ten
-//  REGEX ile okuyup üç kopyanın aynı olduğunu doğruluyoruz (readRenderConstants
-//  — gövdesi tests/engine.mjs'te; api/score.js de aynı çıkarımı kullanacak, bu
-//  yüzden testin değil DİLİMLEYİCİNİN yanında duruyor).
-//  → Taşıma gereği: /api/score bu kriteri KENDİSİ sahiplenmeli, üç ekran
-//    kopyası kalmamalı. (BAGIMLILIK_GRAFIGI.md §4'e işlendi.)
+//  O BULGU KAPANDI (2026-10-14): 2026-10-11'de ölçülmüştü ki kullanıcının
+//  gördüğü ABD temel skoru secFetchModel'in SAF çıktısı DEĞİL — ekran
+//  katmanı (app.js'te ÜÇ kopya) canlı fiyattan türetilen bir "Değerleme
+//  (F/K)" kriterini listeye ekliyordu, ve aynı şekilde FA/TA harmanı da
+//  üç ekran kopyasıydı. Motorun döndürdüğü skor ile kullanıcının GÖRDÜĞÜ
+//  skor aynı sayı değildi. İkisi de artık MOTORDA (eng.faPeCriterion ·
+//  eng.compositeBlend); ekran kopyaları kaldırıldı, sabitleri app.js'ten
+//  regex ile çıkaran readRenderConstants() ve geçici api/_ekran.js
+//  taşıyıcısı SİLİNDİ. Parite bu taşımada FARK 0 verdi — yani kullanıcının
+//  gördüğü sayı değişmedi, yalnız tek bir yere taşındı.
+//  BIST'te böyle bir ek YOKTU ve yok: fa = computeFaScore(model.criteria).
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
@@ -42,14 +38,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  buildEngine, readSymbols, readRenderConstants, ROOT, TESTS, FIX,
+  buildEngine, readSymbols, ROOT, TESTS, FIX,
 } from './engine.mjs';
 import {
   round6, scoreTA, scoreFaUS, scoreFaBIST, composite,
   scoreOne as akisScoreOne,
 } from '../api/_akis.js';
 
-export { buildEngine, readSymbols, readRenderConstants, ROOT, TESTS, FIX };
+export { buildEngine, readSymbols, ROOT, TESTS, FIX };
 export { round6, scoreTA, scoreFaUS, scoreFaBIST, composite };
 export const DIR_YAHOO = path.join(FIX, 'yahoo');
 export const DIR_IS = path.join(FIX, 'isyatirim');
@@ -141,21 +137,20 @@ export function loadMali(sym) {
 //  bu yüzden çözücüyü çağıran verir: sunucu canlı fetchIsYatirimMali, test
 //  diskteki kaydı. İmza değişmedi — run.mjs eskisi gibi `{ net }` geçiyor.
 // ---------------------------------------------------------------------
-export async function scoreOne(eng, K, row, vade, opt = {}) {
-  return akisScoreOne(eng, K, row, vade, {
+export async function scoreOne(eng, row, vade, opt = {}) {
+  return akisScoreOne(eng, row, vade, {
     net: opt.net,
     // opt.mali açıkça verildiyse (null dahil) ona uy; verilmediyse kayda bak.
     getMali: async (sym) => (opt.mali !== undefined ? opt.mali : loadMali(sym)),
   });
 }
 
-// Kendi kendini sınama: `node tests/score.mjs` — yalnız sabit çıkarımını doğrular.
+// Kendi kendini sınama: `node tests/score.mjs` — motorun sabitlerini yazar.
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const K = readRenderConstants();
-  console.log(`F/K kriteri: ${K.pe.sites} ekran kopyasi, HEPSI AYNI`);
-  console.log(`  agirlik ${K.pe.weight} · pe<0 skoru ${K.pe.neg} · kirilim ${JSON.stringify(K.pe.bp)}`);
-  console.log(`Bileske: ${K.blend.sites} kopya, HEPSI AYNI — FA %${K.blend.fa * 100} + TA %${K.blend.ta * 100}`);
   const e = buildEngine();
+  console.log(`F/K kriteri MOTORDA: agirlik ${e.FA_PE.weight} · pe<0 skoru ${e.FA_PE.neg}`);
+  console.log(`  kirilim ${JSON.stringify(e.FA_PE.bp)}`);
+  console.log(`Bileske harmani MOTORDA: FA ${e.COMPOSITE_BLEND.fa} + TA ${e.COMPOSITE_BLEND.ta} (toplam ${e.COMPOSITE_BLEND.fa + e.COMPOSITE_BLEND.ta})`);
   console.log(`faBand(72)=${e.faBand(72)} taBand(50)=${e.taBand(50)} hucre=${e.COMPOSITE_MATRIX['hi:mid'].band}`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
 }

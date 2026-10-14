@@ -17,15 +17,21 @@
 //  sapma görünmez. Bu yüzden akış burada duruyor ve TEST onu içe alıyor —
 //  baseline.json böylece sunucunun koşturduğu akışı da bekçiliyor.
 //
-//  BU DOSYA ÜRETİLMİŞ DEĞİL: _motor.js / _ayar.js / _ekran.js app.js'ten
+//  BU DOSYA ÜRETİLMİŞ DEĞİL: _motor.js app.js'ten, _ayar.js config.js'ten
 //  türetilir, bu dosya türetilmez. `node tools/motor-uret.mjs` buna
 //  dokunmaz; elle düzenlenir ve pariteyle korunur.
 //
-//  NE BİLMEZ: ağ, dosya sistemi, DOM, Node yerleşikleri. Yalnız iki şeyle
+//  NE BİLMEZ: ağ, dosya sistemi, DOM, Node yerleşikleri. Yalnız TEK şeyle
 //  konuşur —
 //      eng  → buildMotor(H) çıktısı; eng._weights / eng._bench kurulu olmalı
-//      K    → ekran katmanı sabitleri { pe: {weight,neg,bp}, blend: {fa,ta} }
-//             sunucuda api/_ekran.js'ten, testte readRenderConstants()'tan
+//
+//  İKİNCİ ARGÜMAN GİTTİ (2026-10-14): bir süre `K` adında ikinci bir
+//  argüman daha vardı — F/K kriterinin ve FA/TA harmanının sabitleri,
+//  sunucuda api/_ekran.js'ten, testte readRenderConstants()'tan. İkisi de
+//  motora devredildiği gün (eng.faPeCriterion · eng.compositeBlend) o
+//  argümanın taşıyacağı bir şey kalmadı: akış artık sabit TAŞIMIYOR,
+//  yalnız motoru çağırıyor. Sabiti dışardan geçirmek "aynı motor, farklı
+//  eşik" kazasının kapısıydı; kapandı.
 //
 //  HAM SAYI KURALI: burada hiçbir şey `Intl` ile biçimlenmez. Biçimlendirme
 //  istemciye ait (BAGIMLILIK_GRAFIGI.md §5.1) — sunucu biçimlerse para
@@ -75,10 +81,10 @@ export async function scoreTA(eng, sym, market, vade) {
 }
 
 // ---------------------------------------------------------------------
-//  FA skoru — ABD: secFetchModel + ekran katmanının F/K kriteri.
-//  F/K eki GEÇİCİ olarak burada: doğru yeri motorun içi (Commit C).
+//  FA skoru — ABD: secFetchModel + motorun F/K kriteri.
+//  F/K eki artık MOTORDA (eng.faPeCriterion) — ekran da aynısını çağırıyor.
 // ---------------------------------------------------------------------
-export async function scoreFaUS(eng, sym, K, net) {
+export async function scoreFaUS(eng, sym, net) {
   let price = null;
   try { price = (await eng.fetchYahooOHLC(sym, 'US', '1y', '1d')).meta.regularMarketPrice; }
   catch (e) { price = null; }
@@ -92,8 +98,8 @@ export async function scoreFaUS(eng, sym, K, net) {
   let pe = null;
   if (price != null && eps) {
     pe = price / eps;
-    const score = pe < 0 ? K.pe.neg : eng.faInterp(pe, K.pe.bp);
-    criteria.push({ key: 'pe', group: 'valuation', weight: K.pe.weight, label: 'Değerleme (F/K)', score, note: '' });
+    // `note` boş: uç nokta ham sayı döndürür, cümle istemcinin işi.
+    criteria.push(eng.faPeCriterion(pe, ''));
   }
   const fa = eng.computeFaScore(criteria);
   return {
@@ -105,7 +111,7 @@ export async function scoreFaUS(eng, sym, K, net) {
 
 // ---------------------------------------------------------------------
 //  FA skoru — BIST: İş Yatırım mali tablo → bistFundamentalModel.
-//  DİKKAT: F/K eki YOK (ekran katmanı BIST'te kriter eklemiyor).
+//  DİKKAT: F/K eki YOK (BIST'te kriterler mali tablodan kuruluyor).
 // ---------------------------------------------------------------------
 export async function scoreFaBIST(eng, sym, maliRaw) {
   let meta = null;
@@ -126,11 +132,11 @@ export async function scoreFaBIST(eng, sym, maliRaw) {
 // ---------------------------------------------------------------------
 //  Bileşke — app.js:4781 ile aynı: 3×3 konumlama + ağırlıklı harman.
 // ---------------------------------------------------------------------
-export function composite(eng, K, faScore, taScore) {
+export function composite(eng, faScore, taScore) {
   if (faScore == null || taScore == null) return { band: null, why: 'eksik skor' };
   const fb = eng.faBand(faScore), tb = eng.taBand(taScore);
   const cell = eng.COMPOSITE_MATRIX[fb + ':' + tb];
-  const blended = K.blend.fa * faScore + K.blend.ta * taScore;
+  const blended = eng.compositeBlend(faScore, taScore);
   return {
     faBand: fb, taBand: tb,
     band: cell ? cell.band : null,
@@ -149,14 +155,13 @@ export function composite(eng, K, faScore, taScore) {
 //  kalınca testin canlı ağa sızma yolu da kapanmış oluyor.
 //
 //  @param {object} eng   buildMotor(H) çıktısı (_weights / _bench kurulu)
-//  @param {object} K     ekran sabitleri { pe, blend }
 //  @param {{sym:string, market:string}} row
 //  @param {string} vade  'kisa' | 'orta' | 'uzun'  ('gunici' intraday → TA null)
 //  @param {object} [opt]
 //  @param {(sym:string)=>Promise<object|null>} [opt.getMali] BIST mali tablo çözücü
 //  @param {{setSecSymbol?:Function}} [opt.net] SEC kabuğuna sembolü bildirir (test)
 // ---------------------------------------------------------------------
-export async function scoreOne(eng, K, row, vade, opt = {}) {
+export async function scoreOne(eng, row, vade, opt = {}) {
   const { sym, market } = row;
   const ta = await scoreTA(eng, sym, market, vade);
   let fa;
@@ -164,7 +169,7 @@ export async function scoreOne(eng, K, row, vade, opt = {}) {
     const mali = opt.getMali ? await opt.getMali(sym) : null;
     fa = await scoreFaBIST(eng, sym, mali);
   } else {
-    fa = await scoreFaUS(eng, sym, K, opt.net);
+    fa = await scoreFaUS(eng, sym, opt.net);
   }
-  return { sym, market, ta, fa, composite: composite(eng, K, fa.score, ta.score) };
+  return { sym, market, ta, fa, composite: composite(eng, fa.score, ta.score) };
 }

@@ -54,7 +54,7 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       (`v` vurgu / `e` etiket / `s` sayı — sayı yuvası mobilde `tabular-nums` ister),
       `<em>` → `d` (soluk) çünkü bu projede `font-style: normal` (`styles.css:710`).
       **Ölçüm maddenin "40 fonksiyon" varsayımını düzeltti:** skor motoru neredeyse
-      etiketsiz — 1.405 satırlık 9 dilimde **2 satır / 4 etiket**, ikisi de statik
+      etiketsiz — o günkü 1.405 satırlık 9 dilimde **2 satır / 4 etiket**, ikisi de statik
       `COMPOSITE_MATRIX` verisi. Cümle kurma işi `/api/analyze` + `/api/recommend`'e
       ait, `/api/score`'a değil.
 - [x] **Bağımlılık grafiği:** motor fonksiyonları hangi DOM fonksiyonlarını çağırıyor
@@ -67,32 +67,47 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       → **[tests/README.md](tests/README.md)** (2026-10-11). Sonuç: `node tests/parity.mjs`
       → **FARK 0**, 29 karşılaştırma noktası (20 sembol + 9 sentetik bileşke vektörü),
       63 fikstür / 8,5 MB dondurulmuş **ham girdi**, ağa çıkış yok. Motorun kopyası
-      çıkarılmadı — test `app.js`'i her koşuda yeniden dilimliyor (1.405 satır / 9 dilim).
+      çıkarılmadı — test `app.js`'i her koşuda yeniden dilimliyor (1.463 satır / 9 dilim).
       **Negatif kontrol:** BIST ROE ağırlığı 0.10→0.20 bozulunca test 44 farkla kırmızı
       yandı ve sebebi (`fa.criteria[2].weight`) adıyla gösterdi; 10 ABD sembolü
       etkilenmedi. Aday motor `PARITE_APP=` ile canlıya dokunmadan ölçülebilir.
 - [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
       `theme`, `causal`, `compare`. Vercel KV ile cache.
       → **Sürüyor** (2026-10-12). İlk uç `/api/score`. **Taşıyıcı hazır:** motor
-      artık `app.js`'ten **üretiliyor** → `api/_motor.js` (1.405 satır / 9 dilim,
+      artık `app.js`'ten **üretiliyor** → `api/_motor.js` (1.463 satır / 9 dilim,
       tek ESM modülü, girişi `buildMotor(H)`; `_` öneki Vercel rotasını engelliyor).
       **El ağırlıkları da aynı ilkeyle üretiliyor** → `api/_ayar.js` (`TA_WEIGHTS` ·
       `TA_BENCHMARK`, `config.js`'ten türetilmiş; bildirim konusu, vekiller ve
       besleme listeleri **alınmıyor** — sızma denetimi bunu her koşuda tahsil ediyor).
       Kopya **değil** — `tools/motor-uret.mjs` her seferinde `app.js`'i yeniden
-      dilimliyor, `tests/uretim-test.mjs` (77 denetim) "bu dosyalar kaynaklarının
+      dilimliyor, `tests/uretim-test.mjs` (64 denetim) "bu dosyalar kaynaklarının
       ŞU ANKİ hali mi?" diye soruyor. **Kanıt:** üretilmiş motor aynı fikstürlerle **FARK 0**
       (`PARITE_MOTOR=uretilmis node tests/parity.mjs`); `taBand` eşiği kurcalanınca
       test metin **ve** davranış farkını yakalayıp çıkış 1 verdi.
       **Uç noktası hazır** (2026-10-14): `api/score.js` — `/api/score?symbols=…&vade=…`
       bir veya daha çok sembol için **ham** TA/FA/bileşke döndürüyor. Motor mantığı
-      taşımıyor, beş hazır parçayı birleştiriyor (`_motor` · `_ayar` · `_ekran` ·
-      `_ag` · `_akis`). Yeni iki taşıyıcı: `api/_ag.js` (canlı ağ + `H` konağı +
+      taşımıyor, dört hazır parçayı birleştiriyor (`_motor` · `_ayar` · `_ag` ·
+      `_akis`). Yeni iki taşıyıcı: `api/_ag.js` (canlı ağ + `H` konağı +
       adres izin listesi + SEC 125 ms aralığı + `yok`/`kesinti` sayacı) ve
       `api/_akis.js` (çağrı sırası; `tests/score.mjs` artık onu çağırıyor — tek
       akış, iki şerit: uçta canlı ağ, testte fikstür).
-      **Ölçülen:** `node tests/uretim-test.mjs` → **77 denetim geçti**;
-      `node tests/parity.mjs` → **FARK 0** (29 karşılaştırma noktası);
+      **Boşluk kapandı (Commit C, 2026-10-14):** motorun döndürdüğü FA skoru ile
+      kullanıcının **gördüğü** skor artık aynı sayı. Ekran katmanı araya iki şey
+      sokuyordu — F/K "Değerleme" kriteri (`app.js`'te **üç** kopya) ve FA/TA
+      harmanı (yine **üç** kopya). İkisi de motora devredildi (`FA_PE` /
+      `faPeCriterion` · `COMPOSITE_BLEND` / `compositeBlend`; dışa verilen sembol
+      23 → **27**), app.js'teki altı kopya tek tanıma indi, geçici üçüncü taşıyıcı
+      `api/_ekran.js` **silindi** (üretilen dosya 3 → **2**) ve `api/_akis.js`'in
+      sabit taşıyan ikinci argümanı (`K`) kalktı. **İSTEMCİ SÖZLEŞMESİ:**
+      `/api/score` yanıtındaki `surum.ekran` alanı **kaldırıldı** — `surum` artık
+      `{ motor, ayar }`. Motor metni büyüdü (`fa-core` 26 → 63, `composite`
+      15 → 36 satır) ama **skor değişmedi**: parite bunun kanıtı.
+      **Ölçülen:** `node tests/uretim-test.mjs` → **64 denetim geçti**
+      (`_ekran.js` bölümü gidince 77 → 64; devredilen sabitler artık motorda
+      denetleniyor — iki motorda derin eşitlik, `FA_PE.bp` artan, harman 1'e
+      tamamlanıyor, silinen dosya geri gelmemiş);
+      `node tests/parity.mjs` → **FARK 0** (29 karşılaştırma noktası), üretilmiş
+      motor şeridinde de (`PARITE_MOTOR=uretilmis`) **FARK 0**;
       `node tests/uc-test.mjs` → **58 denetim geçti** (ağsız: girdi doğrulaması,
       CORS/405/4xx gövdeleri, yığın izi sızdırmama, HAM SAYI kuralı).
       **Dürüst sınır:** sembol tavanı 8 (istemcinin Karşılaştır tavanıyla aynı),
@@ -105,8 +120,11 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       (paralel değil); hız gerekirse ölçülüp ayrıca ele alınacak.
       **Açık uç:** `tests/capture.mjs` UA/başlık sabitlerinin KENDİ kopyasını
       tutuyor (satır 61-62, 195-198) — `api/_ag.js` ile tek kaynağa indirilmeli.
-      **Sırada: Commit C** — F/K kriterinin üç ekran kopyasının
-      (`app.js:5648/:7449/:11876`) motora devri ve `api/_ekran.js`'in silinmesi.
+      **Sırada: ikinci uç** — `/api/recommend`. Aynı dört taşıyıcının üstüne
+      oturacak; `app.js`'teki öneri/fırsat katmanı dilimlenip `_akis.js`'e bir
+      çağrı sırası olarak eklenecek, cümle kurma istemcide kalacak (HAM SAYI
+      kuralı). Aynı commit'te kapatılacak açık uç: `tests/capture.mjs`'in kendi
+      UA/başlık kopyası `api/_ag.js` ile tek kaynağa indirilmeli.
 - [ ] **Expo projesi** kur: TypeScript + expo-router + Supabase client.
 - [ ] **Tasarım sistemi:** renk token (koyu mürekkep `#0F1522` + altın `#D4A24E` +
       yeşil/mercan sinyal), tipografi (2 ağırlık), spacing, `tabular-nums`.
