@@ -135,21 +135,27 @@ import { analyzeOne } from './_akis.js';
 // aynı kademe; üç ucun aynı kademede olması ayrıca ÖLÇÜLEBİLİRLİK avantajı
 // (dağıtımdan sonra süre farkı görülürse bellek değişken olmayacak).
 //
-// NEDEN maxDuration 60: tek sembol 7,4 sn → 8 sembol ≈ 59 sn, yani BUTCE_MS
-// (45 sn) freni gerçekten devreye girer ve başlamış sembolün bitmesi +
-// serileştirme için 60 sn'ye ihtiyaç var. 30 sn YETMEZ.
+// NEDEN maxDuration 60: tek sembol 7,4 sn → 8 sembol ≈ 59 sn, yani süre
+// freni (_ag.js TUR_BUTCE_MS 45 sn) gerçekten devreye girer ve başlamış
+// sembolün bitmesi + serileştirme için 60 sn'ye ihtiyaç var. 30 sn YETMEZ.
 //
-// ÖLÇÜLEN AMA ÇÖZÜLMEYEN (dürüstlük notu): aynı ölçüm AAPL+ASELS.IS ile
-// bozuk ağda koşulduğunda TEK ÇAĞRI 76,3 sn sürdü (sec 31 istek / 27
-// KESİNTİ). BUTCE_MS freni çalıştı — ASELS `atlanan`a düştü ve `tam:false`
-// döndü — ama 76,3 sn > 60 sn, yani Vercel o lambda'yı KESERDİ. Sebep:
-// BUTCE_MS yalnız SEMBOLLER ARASINDA bakılıyor, bir sembolün içindeki 31
-// SEC isteğinin her biri api/_ag.js'te 10 sn'lik kendi zaman aşımına sahip
-// (_ag.js:187) ve bunların toplamına üst sınır YOK. Bu açık ÜÇ UCUN DA
-// açığı, bu adımda doğmadı ve burada kapatılmadı: kapatmak ya ortak
-// doğrulama bölgesindeki BUTCE_MS'i ya da _ag.js'in zaman aşımlarını
-// değiştirmek demek — ikisi de bu adımın kapsamı dışında, üç ucu birlikte
-// ilgilendiren ayrı bir karar.
+// ÖLÇÜLEN AÇIK — ARTIK KAPALI: burada eskiden çözülmemiş bir süre açığı
+// yazılıydı. AAPL+ASELS.IS bozuk ağda koşulduğunda TEK ÇAĞRI 76,3 sn sürdü
+// (sec 31 istek / 27 KESİNTİ); fren çalıştı (ASELS `atlanan`a düştü,
+// `tam:false` döndü) ama 76,3 > 60, yani Vercel lambda'yı KESERDİ ve
+// istemci gövdesiz 504 görürdü. Sebep: eşik yalnız SEMBOLLER ARASINDA
+// bakılıyordu; bir sembolün içindeki 31 isteğin her biri kendi zaman
+// aşımına sahipti ve TOPLAMINA üst sınır yoktu.
+//
+// KAPATILDI (ölçümle): önce açık belirlenimci olarak YENİDEN ÜRETİLDİ
+// (tests/sure.mjs, ağsız kara delik → 76,0 sn, canlı 76,3 sn ile tutarlı),
+// sonra api/_ag.js'e tur başına MUTLAK SON TARİH kondu (TUR_TAVAN_MS
+// 50000 · her isteğin penceresi kalan süreye kısılıyor, kalan süre eşiğin
+// altındaysa ağa HİÇ çıkılmıyor). Aynı koşum sonrasında ÜÇ UÇTA DA 50,0 sn.
+// Eşik tek yerde: üç uç sayı taşımıyor, `AG.butceDoldu()` soruyor.
+// Sözleşme: tavana çarpmak arıza DEĞİL — 200 döner, `tam: false` olur,
+// sayaç `kesinti` artar; `score: null` + `tam: true` ile karıştırılmamalı.
+// Bekçi: uc-test ⑦ (ölçekli, kapıda) · tests/sure.mjs (üretim sabitleri, elle).
 export const config = { runtime: 'nodejs', maxDuration: 60 };
 
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
@@ -157,14 +163,13 @@ const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 // ---------------------------------------------------------------------
 //  SINIRLAR — /api/score ve /api/recommend ile AYNI; gerekçeler ilkinde
 //  uzun uzun yazılı (api/score.js:78). Kısaca: AZAMI_SEMBOL = 8 istemcinin
-//  Karşılaştır tavanı; BUTCE_MS bir GARANTİ DEĞİL, bir fren (kontrol yeni
-//  sembole BAŞLAMADAN önce yapılıyor, başlamış sembol kesilemiyor). Bu
+//  Karşılaştır tavanı. SÜRE eşiği burada YOK: `api/_ag.js` taşıyor
+//  (TUR_BUTCE_MS · TUR_TAVAN_MS), bu uç `AG.butceDoldu()` soruyor. Bu
 //  dosyada sayıların DEĞİŞMEMESİ gerekiyor: ayrışırlarsa aynı sorgu üç uçta
 //  farklı kabul edilir. uc-test ⑤e üç dosyayı birlikte bekçiliyor.
 // ---------------------------------------------------------------------
 
 export const AZAMI_SEMBOL = 8;
-const BUTCE_MS = 45000;
 const PAZARLAR = ['US', 'BIST'];
 const VARSAYILAN_VADE = 'orta';
 const AZAMI_SORGU = 128; // api/theme.js'in `too_long` eşiğiyle aynı fikir
@@ -310,7 +315,7 @@ export default async function handler(req, res) {
     const atlanan = [];
     try {
       for (const row of ay.rows) {
-        if (Date.now() - t0 > BUTCE_MS) { atlanan.push(row.sym); continue; }
+        if (AG.butceDoldu()) { atlanan.push(row.sym); continue; }
         // Sembol başına AYRI sayaç: hangi sembolde ölçemediğimiz görünsün.
         const sayac = bosSayac();
         AG.odakla(sayac);

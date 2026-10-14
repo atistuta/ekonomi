@@ -798,5 +798,149 @@ ok('⑥a · AZAMI_SEMBOL üç uçta aynı', anaAzami === AZAMI_SEMBOL && anaAzam
     !dkod.includes('toFixed(') && !/\bIntl\b/.test(dkod));
 }
 
+// =========================================================================
+bolum('⑦ SÜRE TAVANI — sembol İÇİNDE de duran fren');
+// =========================================================================
+// BU BÖLÜM NE: tests/sure.mjs'in CI'da koşabilen, saniyenin altında biten
+// ikizi. O dosya ÜRETİM sabitleriyle koşuyor (tavan 50 sn → koşum 50 sn) ve
+// bu yüzden kapı dörtlüsüne giremiyor; burada aynı fren MİLİSANİYELERE
+// küçültülüp sınanıyor (`canliAg({ tavanMs, butceMs })`).
+//
+// NİYE VAR: ölçüm bir açık buldu (tests/duman.mjs canlı, tests/sure.mjs
+// belirlenimci) — AAPL+ASELS.IS için TEK ÇAĞRI 76,0 sn sürdü, `maxDuration`
+// 60 aşıldı, Vercel lambda'yı KESERDİ. Sebep: `BUTCE_MS` yalnız SEMBOLLER
+// ARASINDA bakılıyordu; sembol içindeki isteklerin TOPLAMINA üst sınır
+// yoktu. Düzeltme `api/_ag.js`e MUTLAK SON TARİH koydu. Bu bölüm o son
+// tarihin gerçekten kestiğini ve SÖZLEŞMEYE uyduğunu ölçüyor.
+//
+// AĞ YASAĞI: tek bir paket dışarı çıkmaz. `globalThis.fetch` bir KARA DELİK
+// ile değiştiriliyor (hiç çözülmez, yalnız iptal sinyaline uyar — gerçek
+// fetch de öyle yapıyor) ve bölüm sonunda GERİ KONUYOR. Kara delik iptale
+// uymazsa `cek()` sonsuza kilitlenirdi; yani bu bir kolaylık değil, gerçeğe
+// benzeme koşulu.
+{
+  const { canliAg, bosSayac, sayacTam, TUR_BUTCE_MS, TUR_TAVAN_MS } =
+    await import('../api/_ag.js');
+
+  // --- ⑦a sayı TEK yerde mi -------------------------------------------
+  // Asıl kazanç bu: eşik üç uca kopyalanmadı. Bir uca elle `BUTCE_MS`
+  // yazan biri bu denetimi kırmızı yakar.
+  ok('⑦a · süre eşikleri `api/_ag.js`ten dışa aktarılıyor (tek sayı yeri)',
+    TUR_BUTCE_MS === 45000 && TUR_TAVAN_MS === 50000,
+    `butce ${TUR_BUTCE_MS} · tavan ${TUR_TAVAN_MS}`);
+
+  // TAVAN > BÜTÇE olmak ZORUNDA: 45'ten sonra yeni sembole başlanmıyor,
+  // kalan 5 sn BAŞLAMIŞ sembolün toparlanmasına kalıyor. Eşit olsalardı
+  // 45. sn'de başlayan sembol anında tavana çarpar, boşuna kesinti üretirdi.
+  ok('⑦a · TUR_TAVAN_MS > TUR_BUTCE_MS (başlamış sembole toparlanma payı)',
+    TUR_TAVAN_MS > TUR_BUTCE_MS, `${TUR_TAVAN_MS} > ${TUR_BUTCE_MS}`);
+
+  // Tavan `maxDuration`ın ALTINDA olmalı, yoksa fren kesilme anında döner.
+  // Üç ucun `config.maxDuration`ı okunuyor — sayı burada ikinci kez yazılmıyor.
+  for (const [ad, cfg] of [['score', config], ['recommend', recConfig], ['analyze', anaConfig]]) {
+    ok(`⑦a · ${ad}: TUR_TAVAN_MS < maxDuration (serileştirmeye pay var)`,
+      TUR_TAVAN_MS < cfg.maxDuration * 1000,
+      `${TUR_TAVAN_MS} ms < ${cfg.maxDuration} sn`);
+  }
+
+  // Uçlarda eşik SAYISI kalmadı: `butceDoldu()` çağrılıyor, sayı taşınmıyor.
+  for (const [ad, p] of [['score', SCORE_PATH], ['recommend', RECOMMEND_PATH], ['analyze', ANALYZE_PATH]]) {
+    const src = readFileSync(p, 'utf8');
+    const kodSatir = src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+    ok(`⑦a · ${ad}: KODDA kendi BUTCE_MS sabiti yok (taşıyıcıya soruyor)`,
+      !/const\s+BUTCE_MS\s*=/.test(kodSatir) && kodSatir.includes('AG.butceDoldu()'));
+  }
+
+  // --- ⑦b KARA DELİK AĞ: fren gerçekten kesiyor mu ---------------------
+  const gercekFetch = globalThis.fetch;
+  let acilanIstek = 0;
+  globalThis.fetch = (url, o = {}) => {
+    acilanIstek++;
+    return new Promise((_coz, reddet) => {
+      const iptal = () => { const e = new Error('aborted'); e.name = 'AbortError'; reddet(e); };
+      const s = o.signal;
+      if (s) { if (s.aborted) { iptal(); return; } s.addEventListener('abort', iptal, { once: true }); }
+    });
+  };
+
+  try {
+    // Ölçekli kurulum: tavan 300 ms, her istek 5 sn istiyor. Tavan OLMASAYDI
+    // tek istek 5 sn sürerdi; tavan varsa toplam ~300 ms'de biter.
+    // İstek sayısı 6: ölçülen gerçek koşumun (tests/sure.mjs) açtığı sayı.
+    const TAVAN = 300;
+    const AG2 = canliAg({
+      taWeights: {}, taBenchmark: {},
+      yahooMs: 5000, secMs: 5000, isMs: 5000,
+      tavanMs: TAVAN, butceMs: 200,
+    });
+
+    AG2.yeniTur();
+    const sayac = bosSayac();
+    AG2.odakla(sayac);
+    const t0 = Date.now();
+    // Altı Yahoo isteği SIRAYLA — tavan olmasa 6 × 5 sn = 30 sn.
+    for (let i = 0; i < 6; i++) {
+      try { await AG2.H.fetch(`https://query1.finance.yahoo.com/v8/finance/chart/T${i}`); }
+      catch { /* fren ya da zaman aşımı; ikisi de `kesinti` */ }
+    }
+    const gecenMs = Date.now() - t0;
+    AG2.odakla(null);
+
+    ok('⑦b · tavan sembol İÇİNDE kesiyor (6 sıralı istek, her biri 5 sn isterdi)',
+      gecenMs < TAVAN * 3, `${gecenMs} ms < ${TAVAN * 3} ms (tavansız ≈ 30.000 ms)`);
+
+    // Tavandan sonra ağa HİÇ çıkılmıyor: soket bile açılmıyor.
+    ok('⑦b · tavandan sonra ağa hiç çıkılmıyor (6 istekten yalnız bir kısmı soket açtı)',
+      acilanIstek > 0 && acilanIstek < 6, `${acilanIstek}/6 soket açıldı`);
+
+    // --- ⑦c SÖZLEŞME: tavan = `kesinti`, 404 = `yok` ------------------
+    // Ölçemediğimiz şey SESSİZ SIFIR değil. Altı istek de kesinti sayılmalı
+    // (zaman aşımına düşen ilk istek + tavanın kestiği beşi).
+    ok('⑦c · tavana çarpan istek `kesinti` sayılıyor (sessiz sıfır yok)',
+      sayac.yahoo.kesinti === 6, `yahoo istek ${sayac.yahoo.istek} · kesinti ${sayac.yahoo.kesinti}`);
+
+    // SAYAÇ AYRIMI KORUNDU: tavan `yok`a dokunmuyor. 404 bir VERİ cevabı
+    // ("o kalem yok"), tavan ise ÖLÇEMEDİM. Fren bu ikisini karıştırırsa
+    // istemci "düşük skor" ile "ölçemedim"i ayırt edemez.
+    ok('⑦c · tavan `yok` sayacını kirletmiyor (404 = veri cevabı ayrı kaldı)',
+      sayac.sec.yok === 0);
+
+    // `tam:false` = ÖLÇEMEDİM. Tavana çarpmak bir ARIZA değil; uç 200
+    // dönmeye devam eder, ama bu bayrak düşer.
+    ok('⑦c · kesinti varken sayacTam false (= "ölçemedim", "veri yok" değil)',
+      sayacTam(sayac) === false);
+
+    // --- ⑦d SEMBOLLER ARASI fren ayrı ve çalışıyor --------------------
+    // `butceMs: -1` — SIFIR DEĞİL. Son tarih `t0 + butceMs` ve karşılaştırma
+    // `Date.now() > butce`; sıfırla son tarih tam `t0` olur ve aynı
+    // milisaniye içinde "dolmuş" SAYILMAZ. Ölçerken bu denetim kırmızı
+    // yandı: hata frende değil, varsayımdaydı — dolu olması için son tarih
+    // GEÇMİŞTE olmalı. Üretimde (45000) `>` ile `>=` farkı yok, o yüzden
+    // taşıyıcıya dokunulmadı; düzeltme testin kendisine yazıldı.
+    const AG3 = canliAg({ taWeights: {}, taBenchmark: {}, tavanMs: 9999, butceMs: -1 });
+    AG3.yeniTur();
+    ok('⑦d · butceDoldu() semboller arası freni veriyor (geçmiş son tarih → dolu)',
+      AG3.butceDoldu() === true);
+
+    const AG4 = canliAg({ taWeights: {}, taBenchmark: {}, tavanMs: 9999, butceMs: 9999 });
+    AG4.yeniTur();
+    ok('⑦d · taze turda bütçe DOLU DEĞİL (fren yanlış yere basmıyor)',
+      AG4.butceDoldu() === false && AG4.tavanDoldu() === false && AG4.kalanMs() > 0,
+      `kalan ${AG4.kalanMs()} ms`);
+
+    // `yeniTur()` saati de sıfırlıyor: ikinci istek birincinin dolmuş
+    // tavanını DEVRALMAZ. Sıcak lambda'da bu hata her isteği boş döndürürdü.
+    const AG5 = canliAg({ taWeights: {}, taBenchmark: {}, tavanMs: 40, butceMs: 40 });
+    AG5.yeniTur();
+    await new Promise((r) => setTimeout(r, 70));
+    const dolduMu = AG5.tavanDoldu();
+    AG5.yeniTur(); // yeni istek
+    ok('⑦d · yeniTur() süre saatini SIFIRLIYOR (sıcak lambda ikinci isteği boş dönmez)',
+      dolduMu === true && AG5.tavanDoldu() === false && AG5.butceDoldu() === false);
+  } finally {
+    globalThis.fetch = gercekFetch; // kara delik bölümle sınırlı
+  }
+}
+
 
 bitir();

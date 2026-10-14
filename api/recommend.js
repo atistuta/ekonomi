@@ -103,9 +103,10 @@ import { recommendOne } from './_akis.js';
 // GÖRÜLDÜ, atlanmadı; dağıtımdan sonra süre uzarsa ilk bakılacak yer burası.
 //
 // NEDEN maxDuration 60 KALDI: ölçüm değiştirmemeyi haklı çıkardı. Tek ABD
-// sembolü 7,2 sn → AZAMI_SEMBOL = 8 ile ~58 sn, yani BUTCE_MS (45 sn) freni
-// gerçekten devreye girer ve başlamış sembolün bitmesi + serileştirme için
-// 60 sn'ye ihtiyaç var. 30 sn YETMEZ.
+// sembolü 7,2 sn → AZAMI_SEMBOL = 8 ile ~58 sn, yani süre freni (_ag.js
+// TUR_BUTCE_MS 45 sn) gerçekten devreye girer ve başlamış sembolün bitmesi +
+// serileştirme için 60 sn'ye ihtiyaç var. 30 sn YETMEZ. Tavan (TUR_TAVAN_MS
+// 50 sn) 60'ın ALTINDA: bu uç artık kesilmeden önce cevap döndürüyor.
 //
 // plan katmanı hakkındaki eski varsayım da DOĞRULANDI: aynı sorguda
 // recommend (28,7 sn) score'dan (30,6 sn) yavaş değil — saf hesap olan plan
@@ -117,13 +118,12 @@ const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 // ---------------------------------------------------------------------
 //  SINIRLAR — /api/score'un sınırlarıyla AYNI; gerekçeler orada uzun uzun
 //  yazılı (api/score.js:78). Kısaca: AZAMI_SEMBOL = 8 istemcinin Karşılaştır
-//  tavanı, 8 × ~5 sn ≈ 40 sn < 45 sn bütçe; BUTCE_MS bir GARANTİ DEĞİL, bir
-//  fren (kontrol yeni sembole BAŞLAMADAN önce yapılıyor, başlamış sembol
-//  kesilemiyor). Bu dosyada sayıların DEĞİŞMEMESİ gerekiyor: ayrışırlarsa
-//  aynı sorgu iki uçta farklı kabul edilir. uc-test ⑤e bunu bekçiliyor.
+//  tavanı. SÜRE eşiği burada YOK: `api/_ag.js` taşıyor (TUR_BUTCE_MS ·
+//  TUR_TAVAN_MS), bu uç `AG.butceDoldu()` soruyor. Bu dosyada sayıların
+//  DEĞİŞMEMESİ gerekiyor: ayrışırlarsa aynı sorgu iki uçta farklı kabul
+//  edilir. uc-test ⑤e bunu bekçiliyor.
 // ---------------------------------------------------------------------
 export const AZAMI_SEMBOL = 8;
-const BUTCE_MS = 45000;
 const PAZARLAR = ['US', 'BIST'];
 const VARSAYILAN_VADE = 'orta';
 const AZAMI_SORGU = 128; // api/theme.js'in `too_long` eşiğiyle aynı fikir
@@ -269,7 +269,7 @@ export default async function handler(req, res) {
     const atlanan = [];
     try {
       for (const row of ay.rows) {
-        if (Date.now() - t0 > BUTCE_MS) { atlanan.push(row.sym); continue; }
+        if (AG.butceDoldu()) { atlanan.push(row.sym); continue; }
         // Sembol başına AYRI sayaç: hangi sembolde ölçemediğimiz görünsün.
         const sayac = bosSayac();
         AG.odakla(sayac);

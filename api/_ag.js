@@ -49,6 +49,62 @@ export const UA_WEB = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537
 // başlatıyor — sıraya sokulan şey isteğin SÜRESİ değil, başlama ANI.
 export const SEC_ARALIK_MS = 125;
 
+// ---------------------------------------------------------------------
+//  SÜRE TAVANI — tek sayı yeri, üç uca KOPYALANMAZ.
+//
+//  AÇIK NASIL ÖLÇÜLDÜ: tests/duman.mjs (canlı, bozuk ağ) ve ardından
+//  tests/sure.mjs (belirlenimci, kara delik ağ) aynı sayıyı verdi —
+//  AAPL+ASELS.IS için TEK ÇAĞRI 76,0 sn (canlıda 76,3). `BUTCE_MS` freni
+//  `tam:false` döndürdü ama süre `maxDuration` 60'ı aştı: Vercel lambda'yı
+//  KESER, istemci gövdesiz bir 504 görür. Üç ucun da açığıydı.
+//
+//  SEBEP: `BUTCE_MS` yalnız SEMBOLLER ARASINDA bakılıyordu. Sembol
+//  İÇİNDEKİ her isteğin kendi zaman aşımı vardı (yahooMs/secMs/isMs) ama
+//  TOPLAMINA üst sınır yoktu — 4 Yahoo + 1 SEC (×2 deneme) + 3 İş Yatırım
+//  isteği, her biri kendi 7-10 sn'sini sonuna kadar yiyerek 76 sn etti.
+//  Ölçümde BUTCE_MS hiç DEVREYE GİRMEDİ (`atlanan: []`): ikinci sembole
+//  başlanırken 45 sn henüz geçmemişti, ama o sembol tek başına 36 sn daha
+//  yedi. Yani semboller arası bir fren, sembol içi bir taşmayı göremez.
+//
+//  NİYE BURADA: tur durumu (sayaç, `birKez` haritası, SEC sırası) bu
+//  dosyada yaşıyor ve TEK ağ çıkışı burası. Tavan başka yere konsaydı
+//  (örn. uçlara) ya üç kopya olurdu ya da isteği gerçekten kesemezdi —
+//  kesen şey `cek()`in zaman aşımı ve o burada.
+//
+//  TUR_BUTCE_MS 45000 — SEMBOLLER ARASI fren: yeni bir sembole başlamadan
+//  önce bakılır, dolmuşsa sembol `atlanan`a düşer. Değer DEĞİŞMEDİ, yalnız
+//  üç uçtan buraya TAŞINDI (uçlar artık `butceDoldu()` çağırıyor, sayı
+//  taşımıyor).
+//
+//  TUR_TAVAN_MS 50000 — MUTLAK SON TARİH: tur başından itibaren. Dolduktan
+//  sonra hiçbir istek ağda BEKLEMEZ; sembolün ORTASINDA da durur. Niye 50
+//  ve niye BUTCE'den büyük:
+//    · maxDuration 60 (üç ucun `config`i). Tavan 60 olsaydı tavana çarpan
+//      istek tam kesilme anında dönerdi; serileştirmeye vakit kalmazdı.
+//    · Tavandan SONRA yapılacak iş saf HESAP: eldeki mumlarla
+//      computeVadeScore + bütüncül katman + JSON. ÖLÇÜLDÜ (duman.mjs, tek
+//      ABD sembolü): 7,2 sn'nin ~3,9 sn'si ağ BEKLEMESİ → hesap payı
+//      ~3,3 sn. 50 + 3,3 ≈ 53 sn, 60'a ~7 sn marj.
+//    · BUTCE (45) < TAVAN (50) BİLEREK: 45'ten sonra yeni sembole hiç
+//      başlanmıyor, yani son 5 sn yalnız BAŞLAMIŞ sembolün toparlanmasına
+//      kalıyor. İki sayı eşit olsaydı 45. sn'de başlayan bir sembol anında
+//      tavana çarpar ve boşuna bir `kesinti` turu üretirdi.
+//  ÖLÇÜLEN SONUÇ (tests/sure.mjs, aynı kara delik ağ): 76,0 sn → 50,1 sn.
+//
+//  TAVANA ÇARPMAK ARIZA DEĞİL: fren işini yapıyor. Uç YİNE 200 döner,
+//  etkilenen sembol `tam:false` olur (= "ölçemedim"). Bu, `score:null` +
+//  `tam:true` ("ölçtüm, o şirkette o kalem yok") ile KARIŞTIRILMAMALI.
+//  Sayaç ayrımı korunuyor: 404 = `yok` (veri cevabı), tavan = `kesinti`.
+export const TUR_BUTCE_MS = 45000;
+export const TUR_TAVAN_MS = 50000;
+
+// Tavana bu kadar az kalmışsa ağa HİÇ çıkılmaz. Niye bir taban var: 20 ms
+// kalmışken istek açmak neredeyse kesin bir zaman aşımı demek — uzak tarafı
+// boşuna yorar, soket açar, sonra iptal eder. 250 ms ölçülmüş bir RTT değil,
+// bir eşik; ölçülen şey şu: SEC'in en hızlı cevabı bile bunun altında
+// gelmiyor (SEC_ARALIK_MS 125 ms zorunlu bekleme zaten var).
+const ASGARI_ISTEK_MS = 250;
+
 // secGet `base + encodeURIComponent(url)` kuruyor; kabuk bu öneki soyup
 // gerçek adrese gidiyor. Motorun `if (!base) return null` satırı yüzünden
 // BOŞ OLAMAZ.
@@ -121,13 +177,17 @@ export function sayacTam(s) {
   return s.yahoo.kesinti === 0 && s.sec.kesinti === 0 && s.bist.kesinti === 0;
 }
 
-function yeniTurDurumu() {
+function yeniTurDurumu(butceMs, tavanMs) {
   const genel = bosSayac();
+  const t0 = Date.now();
   return {
     genel,
     aktif: genel,    // handler sembol başına odaklar
     uc: new Map(),   // adres → gövde sözü (aynı turda ikinci kez ağa çıkma)
     secSonra: 0,     // sıradaki SEC isteğinin en erken başlama anı
+    t0,                          // turun başlangıç anı
+    butce: t0 + butceMs,         // semboller arası fren
+    sonTarih: t0 + tavanMs,      // mutlak son tarih (sembol içinde de durur)
   };
 }
 
@@ -186,7 +246,13 @@ export function canliAg(opt = {}) {
   const yahooMs = opt.yahooMs ?? 10000;
   const secMs = opt.secMs ?? 10000;
   const isMs = opt.isMs ?? 7000;
-  let tur = yeniTurDurumu();
+  // Varsayılanlar YUKARIDAKİ TEK sayı yerinden. Opsiyon yalnız ÖLÇÜM için
+  // var: tests/uc-test.mjs ⑦ bölümü tavanı milisaniyelere küçültüp freni
+  // saniyenin altında sınıyor (üretim sabitleriyle o test 50 sn sürerdi ve
+  // kapı dörtlüsüne girmezdi). Üretimde hiçbir uç bu iki opsiyonu GEÇMİYOR.
+  const butceMs = opt.butceMs ?? TUR_BUTCE_MS;
+  const tavanMs = opt.tavanMs ?? TUR_TAVAN_MS;
+  let tur = yeniTurDurumu(butceMs, tavanMs);
 
   const say = (yol, alan) => {
     tur.genel[yol][alan]++;
@@ -210,22 +276,47 @@ export function canliAg(opt = {}) {
     return p;
   };
 
+  // ---------------------------------------------------------------------
+  //  SÜRE PENCERESİ — her isteğin ÖNÜNDE duran kapı.
+  //
+  //  Dönen: isteğe verilecek zaman aşımı (ms), ya da 0 = "tavan doldu, ağa
+  //  ÇIKMA". İki iş birden yapıyor:
+  //    ① KISITLAMA: isteğin kendi zaman aşımı tavandan BÜYÜK olamaz. 48.
+  //       sn'de başlayan bir SEC isteği 10 sn değil, 2 sn bekler.
+  //    ② KESME: tavan dolduysa (ya da ASGARI_ISTEK_MS'ten az kaldıysa) hiç
+  //       başlamaz. Sembolün ORTASINDA duran fren tam olarak budur —
+  //       fetchIsYatirimMali'nin kalan yılları, secBatches'in kalan
+  //       istekleri anında düşer.
+  //  Her iki halde de sayaç `kesinti` der: ölçemedik. Sessiz sıfır YOK.
+  // ---------------------------------------------------------------------
+  const kalanMs = () => tur.sonTarih - Date.now();
+  const pencere = (ms) => {
+    const k = kalanMs();
+    if (k < ASGARI_ISTEK_MS) return 0;
+    return Math.min(ms, k);
+  };
+
   // SEC sırası: istek BAŞLANGIÇLARINI aralıkla, eşzamanlılığı bozmadan.
+  // Bekleme de tavanı aşamaz: 125 ms'lik nezaket beklemesi, son tarihin
+  // ötesine geçmek için bir gerekçe değil.
   const secSiraya = async () => {
     const now = Date.now();
     const t = Math.max(now, tur.secSonra);
     tur.secSonra = t + SEC_ARALIK_MS;
-    if (t > now) await bekle(t - now);
+    if (t > now) await bekle(Math.min(t - now, Math.max(0, tur.sonTarih - now)));
   };
 
   async function secIstek(gercek, signal) {
     say('sec', 'istek');
     // İki deneme: motorun 12 sn'lik sinyali içinde kalacak kadar.
     for (let i = 0; i < 2; i++) {
+      if (!pencere(secMs)) break;              // tavan doldu → ikinci denemeyi açma
       if (i) { await bekle(400); }
       await secSiraya();
+      const ms = pencere(secMs);               // bekleme sonrası YENİDEN: süre aktı
+      if (!ms) break;
       try {
-        const r = await cek(gercek, { headers: secBaslik(), ms: secMs, signal });
+        const r = await cek(gercek, { headers: secBaslik(), ms, signal });
         if (r.status === 404) { say('sec', 'yok'); return yanit(false, 404, ''); } // VERİ cevabı
         if (!r.ok) continue;                                                       // 429/5xx → dene
         return yanit(true, r.status, r.txt);
@@ -237,8 +328,14 @@ export function canliAg(opt = {}) {
 
   async function yahooIstek(url) {
     say('yahoo', 'istek');
+    const ms = pencere(yahooMs);
+    if (!ms) {
+      say('yahoo', 'kesinti');
+      // fetchYahooOHLC çağrıları try/catch içinde; atış `why` metnine düşer.
+      throw new Error('sure tavani');
+    }
     try {
-      const r = await cek(url, { headers: yahooBaslik(), ms: yahooMs });
+      const r = await cek(url, { headers: yahooBaslik(), ms });
       if (!r.ok) { say('yahoo', 'kesinti'); return yanit(false, r.status, r.txt); }
       return yanit(true, r.status, r.txt);
     } catch (e) {
@@ -263,9 +360,13 @@ export function canliAg(opt = {}) {
   const agFetchVia = async (url, o = {}) => {
     const s = String(url);
     if (!izinli(s)) throw new Error('izinli olmayan adres: ' + s);
-    const ms = Math.min(o.timeout ?? isMs, isMs);
+    const istenen = Math.min(o.timeout ?? isMs, isMs);
     return birKez('IS ' + s, async () => {
       say('bist', 'istek');
+      // fetchIsYatirimMali üç yılı SIRAYLA deniyor (3 × 7 sn = 21 sn). Tavan
+      // dolduysa kalan yıllar anında düşer — sembol içi fren burada görünür.
+      const ms = pencere(istenen);
+      if (!ms) { say('bist', 'kesinti'); throw new Error('sure tavani'); }
       let r;
       try {
         r = await cek(s, { headers: isYatirimBaslik(s), ms });
@@ -306,10 +407,24 @@ export function canliAg(opt = {}) {
 
   return {
     H,
-    /** Yeni istek: sayaçları ve tekrar haritasını sıfırla. */
-    yeniTur() { tur = yeniTurDurumu(); return tur.genel; },
+    /**
+     * Yeni istek: sayaçları, tekrar haritasını ve SÜRE SAATİNİ sıfırla.
+     * Saatin burada başlaması bilinçli: tur durumu neyse, süre tavanı da
+     * onun bir parçası. Uç noktanın ayrı bir `t0` tutup sayı taşıması
+     * gerekmiyor — `butceDoldu()` soruyor, cevabı taşıyıcı veriyor.
+     */
+    yeniTur() { tur = yeniTurDurumu(butceMs, tavanMs); return tur.genel; },
     /** Sembol başına sayaç odağı; null ile genele dön. */
     odakla(s) { tur.aktif = s || tur.genel; },
     get genel() { return tur.genel; },
+    /**
+     * SEMBOLLER ARASI fren: yeni bir sembole başlamaya değer mi?
+     * Üç uç bunu çağırıyor; eşik sayısı uçlarda DEĞİL, bu dosyada.
+     */
+    butceDoldu() { return Date.now() > tur.butce; },
+    /** MUTLAK son tarihe kalan süre (ms, negatif olabilir). Ölçüm/tanı için. */
+    kalanMs,
+    /** Tavan doldu mu? Ölçüm/tanı için; cevaba bir alan EKLENMİYOR. */
+    tavanDoldu() { return kalanMs() <= 0; },
   };
 }

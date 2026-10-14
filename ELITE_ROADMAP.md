@@ -208,14 +208,9 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       61 kod satırı / 2.401 karakter üç dosyada birebir); `uretim-test` →
       **73**; `parity` → **FARK 0** (29 nokta), `PARITE_MOTOR=uretilmis`
       şeridinde de **FARK 0** — **skor değişmedi**, kapı budur.
-      **AÇIK KALAN (dürüstlük notu):** aynı duman testi bozuk ağda TEK
-      ÇAĞRIDA 76,3 sn sürdü (31 SEC isteğinin 27'si kesinti). `BUTCE_MS`
-      freni çalıştı (`tam:false`) ama 76,3 sn > `maxDuration` 60 — Vercel o
-      lambda'yı KESERDİ. Sebep: `BUTCE_MS` yalnız SEMBOLLER ARASINDA
-      bakılıyor; bir sembolün içindeki isteklerin her birinin kendi 10 sn'lik
-      zaman aşımı var (`api/_ag.js`) ama TOPLAMINA üst sınır yok. Bu açık
-      **ÜÇ UCUN DA** açığı, bu adımda doğmadı ve burada kapatılmadı —
-      kapatmak ortak doğrulama bölgesini ya da `_ag.js`'i değiştirmek demek.
+      **AÇIK KALAN → KAPANDI (2026-10-14, aşağıdaki süre tavanı maddesi):**
+      bozuk ağda TEK ÇAĞRI 76,3 sn sürüyordu; fren artık sembol İÇİNDE de
+      duruyor ve aynı koşum **50,0 sn**.
       **Üçüncü KOPYA borcu:** doğrulama bölgesi artık üç dosyada. `api/_girdi.js`
       taşıyıcısına geçmek DAĞITILMIŞ iki ucu değiştirmek demek, o yüzden karar
       kullanıcıya bırakıldı; borç `api/analyze.js` başlığında ve `uc-test` ⑤e
@@ -224,6 +219,37 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       eski şeritten, dört taşıyıcının üstünde durmuyor), ardından `causal` ve
       `compare` + `pulse` (⚡ Nabız). Aynı dört taşıyıcı, aynı kural: SAYI
       motora, CÜMLE çağrı noktasına. KV önbelleği ölçülmeden eklenmeyecek.
+- [x] **SÜRE TAVANI — ölçülen açık kapatıldı** (2026-10-14, FAZ 1/5-F):
+      üç ucun ORTAK açığıydı; `maxDuration` 60 aşılıyordu, istemci gövdesiz
+      504 görürdü.
+      **① Önce KIRMIZI:** açık belirlenimci olarak yeniden üretildi —
+      `tests/sure.mjs` (ağsız; `globalThis.fetch` yerine iptale uyan bir KARA
+      DELİK). Bozuk ağ beklenmedi. Ölçülen: **76,0 sn** (canlı
+      `tests/duman.mjs` 76,3 sn ile tutarlı → araç sadık). Aynı koşum
+      `atlanan: []` gösterdi: `BUTCE_MS` o senaryoda HİÇ ateşlenmemişti —
+      semboller arası fren, sembol İÇİNDEKİ aşımı göremez.
+      **② Sonra tavan:** `api/_ag.js`e tur başına **MUTLAK SON TARİH**
+      (`TUR_TAVAN_MS` 50000, `TUR_BUTCE_MS` 45000). Tur durumu (`yeniTur`)
+      zaten oradaydı, ağa çıkan TEK yer orası ve `cek()`in zaman aşımı da
+      orada — sayı bu yüzden motora/taşıyıcıya kondu, **üç uca
+      KOPYALANMADI**: uçlar `const BUTCE_MS` taşımıyor, `AG.butceDoldu()`
+      soruyor. Her istek penceresi kalan süreye KISILIYOR; kalan süre
+      `ASGARI_ISTEK_MS`in altındaysa ağa HİÇ çıkılmıyor (soket açılmıyor).
+      Niye 50 < 60: tavandan sonrası saf hesap, ölçülen ≈3,3 sn → 50+3,3≈53,
+      ~7 sn pay. Niye BÜTÇE < TAVAN: 45'ten sonra yeni sembole başlanmaz,
+      kalan 5 sn BAŞLAMIŞ sembolün toparlanmasına kalır.
+      **Ölçülen SONUÇ:** aynı belirlenimci koşum **76,0 sn → 50,0 sn**, ÜÇ
+      UÇTA DA (`score` · `recommend` · `analyze`). HTTP **200** korundu,
+      etkilenen sembol `tam: false`, sayaçlar `yahoo 4/4kes · sec 1/0yok/1kes
+      · bist 3/3kes`. Kara delik ağında açılan istek **9 → 6**: üç istek
+      soket açılmadan reddedildi, yani sembol içi fren GÖRÜNÜR.
+      **Sözleşme:** tavana çarpmak **arıza değil**, frenin işini yapması.
+      `tam:false` (= "ölçemedim") ile `score:null` + `tam:true` (= "ölçtüm,
+      veri yok") KARIŞTIRILMIYOR; 404 hâlâ `yok` (veri cevabı), tavan
+      `kesinti`. Sessiz sıfır yok.
+      **Bekçi:** `uc-test` ⑦ (ölçekli, milisaniyelerde biter, kapıda koşar) ·
+      `tests/sure.mjs` (üretim sabitleriyle ~50 sn/uç, ELLE, kapı dörtlüsünün
+      DIŞINDA). `uc-test` 160 → **176 denetim**.
 - [x] **Expo projesi** kuruldu (2026-10-14, `mobile/`): TypeScript + expo-router +
       Supabase client. expo ~57.0.28 · react-native 0.86.3 · react 19.2.3 ·
       expo-router ~57.0.26 · typescript ~6.0.3. **Elle eklenen TEK paket**

@@ -118,18 +118,22 @@ const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 //       SEC_ARALIK_MS) → hız sınırı aşılmıyor. Sınır olmasa tek bir istek
 //       yüzlerce dış isteği başlatabilirdi.
 //
-//  BUTCE_MS = 45000 · DÜRÜST SINIRI: bu bir garanti DEĞİL, bir frendir.
-//  Kontrol yeni bir sembole BAŞLAMADAN önce yapılıyor; başlamış bir sembol
-//  kesilemiyor, çünkü zaman aşımları motorun ve konağın içinde (_ag.js:
-//  yahooMs 10000 · secMs 10000 · isMs 7000, fetchIsYatirimMali üç yılı
-//  SIRAYLA deniyor → 3 × 7 = 21 sn). En kötü halde TEK bir sembol 45-55 sn
-//  yiyebilir; o zaman platform isteği keser ve istemci hiç cevap almaz.
-//  Bunu uçta çözmek motora ya da konağa dokunmayı gerektirirdi (ikisi de
-//  bu adımın kapsamı dışında) — bu yüzden sınır yazılı, kapsamı değil.
-//  İstemci kesilen isteği `kesinti` ile AYNI şekilde ele almalı.
+//  SÜRE FRENİ BURADA DEĞİL — `api/_ag.js`te (TUR_BUTCE_MS 45000 ·
+//  TUR_TAVAN_MS 50000). Bu uç sayı TAŞIMIYOR, `AG.butceDoldu()` soruyor.
+//  Eşik üç uca kopyalanmış olsaydı biri değişip ikisi kalabilirdi.
+//
+//  Burada eskiden "en kötü halde TEK bir sembol 45-55 sn yiyebilir, platform
+//  isteği keser, istemci hiç cevap almaz — uçta çözmek kapsam dışı" yazıyordu.
+//  O açık ÖLÇÜLDÜ ve KAPATILDI: semboller arası fren bir sembolün İÇİNDEKİ
+//  aşımı göremiyordu. Ölçüm (tests/sure.mjs, belirlenimci): tek çağrı
+//  76,0 sn → maxDuration 60 AŞILIYORDU. _ag.js'e tur başına MUTLAK SON TARİH
+//  konduktan sonra aynı koşum 50,0 sn. Fren artık sembol içinde de duruyor.
+//  Sözleşme: tavana çarpmak arıza değil — uç yine 200 döner, etkilenen
+//  sembol `tam: false` olur (= "ölçemedim"), sayaç `kesinti` artar. Bu,
+//  `score: null` + `tam: true` ("ölçtüm, veri yok") ile KARIŞTIRILMAMALI.
+//  Bekçi: uc-test ⑦ (hızlı, ölçekli) · tests/sure.mjs (üretim sabitleri, elle).
 // ---------------------------------------------------------------------
 export const AZAMI_SEMBOL = 8;
-const BUTCE_MS = 45000;
 const PAZARLAR = ['US', 'BIST'];
 const VARSAYILAN_VADE = 'orta';
 const AZAMI_SORGU = 128; // api/theme.js'in `too_long` eşiğiyle aynı fikir
@@ -270,7 +274,7 @@ export default async function handler(req, res) {
     const atlanan = [];
     try {
       for (const row of ay.rows) {
-        if (Date.now() - t0 > BUTCE_MS) { atlanan.push(row.sym); continue; }
+        if (AG.butceDoldu()) { atlanan.push(row.sym); continue; }
         // Sembol başına AYRI sayaç: hangi sembolde ölçemediğimiz görünsün.
         const sayac = bosSayac();
         AG.odakla(sayac);
