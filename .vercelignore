@@ -18,3 +18,8 @@ total motor fikir/
 # cagrilmaz. DIKKAT: api/ HARIC TUTULMUYOR -> api/_motor.js motorun sunucu
 # tarafi tasiyicisi, /api/score onu ice alacak. (bkz. tools/motor-uret.mjs)
 tools/
+
+# Native uygulama = AYRI urun (RN/Expo, App Store/Play magazalari). Vercel
+# yalniz web PWA'yi + /api motorunu yayinliyor; mobile/ altindaki hicbir
+# dosya tarayiciya servis EDILMIYOR. Depoda kalir, deploy'a girmez.
+mobile/

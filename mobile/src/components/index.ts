@@ -1,0 +1,25 @@
+// =====================================================================
+//  KOMPONENT GİRİŞİ — tek içe aktarma noktası         (FAZ 1 / native)
+// ---------------------------------------------------------------------
+//  NE: Çekirdek komponentleri tek yerden dışa açar.
+//
+//  NEDEN: ekranlar `@/components` yazar, dosya yolu yazmaz. Bir komponent
+//  taşındığında ya da ikiye bölündüğünde (ör. FAZ 2'de ScoreGauge'ın
+//  SVG sürümü) değişen tek dosya bu olur; ekranların hiçbiri
+//  dokunulmaz.
+//
+//  NEDEN `*` DEĞİL AD AD: yıldızla açmak, şablondan kalma ya da yarım
+//  bir dosyayı kazayla kamuya açar. Burada listede olmayan şey dışarıya
+//  çıkmaz — yüzey bilinçli.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+export { Card, type CardProps } from './Card';
+export { Disclaimer, DISCLAIMER_TEXT, type DisclaimerProps } from './Disclaimer';
+export { Badge, Pill, type PillProps } from './Pill';
+export { ScoreGauge, type ScoreGaugeProps } from './ScoreGauge';
+export { ScreenShell, type ScreenShellProps } from './ScreenShell';
+export { SectorChip, type SectorChipProps } from './SectorChip';
+export { Skeleton, SkeletonRow, SkeletonText, type SkeletonProps } from './Skeleton';
+export { ROW_HEIGHT, TickerRow, type TickerRowProps } from './TickerRow';
