@@ -496,4 +496,155 @@ const bpKaymis = JSON.parse(JSON.stringify(uretilmis.FA_PE));
 bpKaymis.bp[0][1] += 1e-9;
 ok('N7 · 1e-9 kaydırılmış kırılım derin eşitlikte yakalanır',
   derinFark(dilimli.FA_PE, bpKaymis, 'FA_PE') !== null, 'bp[0][1] + 1e-9');
+
+// ===========================================================================
+bolum('⑪ Devredilen plan katmanı — momentum · banda yakınlık · risk/ödül MOTORDA');
+// ===========================================================================
+// BU BÖLÜM NE: 2026-10-14'te (D1) ÜÇ saf hesap ekran katmanından motora indi —
+// momentumInfo, buyZoneProximity, planRiskReward. Gerekçe ⑩'un aynısı: motor
+// `levels` üretiyor ama PLANI üretmiyordu, yani /api/recommend kullanıcının
+// GÖRDÜĞÜ planı döndüremezdi.
+//
+// Tahsil edilen İKİ soru:
+//   (a) iki motor aynı SAYIYI mı veriyor,
+//   (b) motordan çıkan yüzey HAM SAYI mı — emoji / toFixed / para birimi YOK.
+// (b) boş bir formalite değil: buyZoneProximity'nin eski `txt` alanı tam olarak
+// bunu ihlal ediyordu ('🟢 …' + `${dAtr.toFixed(1)}×ATR`). Bir gün biri "kolay
+// olsun" diye onu geri koyarsa, uç nokta Türkçe HTML yayınlamaya başlar ve
+// native istemci kendi dilinde cümle kurma hakkını kaybeder.
+//
+// NEDEN ⑦'YE EKLENMEDİ: ⑦ tablo/bant süpürmesi (sayı → sayı). Bunlar `levels`
+// NESNESİ alıyor, yani kendi vektör tablosunu gerektiriyor.
+
+// Temel seviye vektörü: fiyat 100, alım bandı 92-96, satış bandı 118-124,
+// SMA50 94, SMA200 85, ATR 3, 2×ATR stop 88. Her vektör bundan SAPAR.
+const planSeviye = (o) => Object.assign({
+  price: 100, target: 130, stop: 88, rr: 2, poc: 98, atr: 3,
+  buyZone: [92, 96], sellZone: [118, 124], zMult: 1, sellKind: 'sell',
+  sma50: 94, sma200: 85, anchorKind: 'sma50', anchorSrc: 'daily',
+}, o || {});
+
+const PLAN_VEKTOR = [
+  ['tipik-yukselis', planSeviye()],
+  ['fiyat-bantta', planSeviye({ price: 94 })],
+  ['fiyat-bant-alti', planSeviye({ price: 90 })],
+  ['banda-yakin-1atr', planSeviye({ price: 98 })],
+  ['banda-uzak', planSeviye({ price: 112 })],
+  ['atr-yok', planSeviye({ atr: null })],
+  ['atr-sifir', planSeviye({ atr: 0 })],
+  ['fiyat-yok', planSeviye({ price: null })],
+  ['bant-yok', planSeviye({ buyZone: null })],
+  ['bant-tek-kenar', planSeviye({ buyZone: [92, null] })],
+  ['satis-yok', planSeviye({ sellZone: null })],
+  ['satis-tek-kenar', planSeviye({ sellZone: [null, 120] })],
+  ['satis-ters', planSeviye({ sellZone: [124, 118] })],
+  ['kat-esitligi', planSeviye({ sma50: 94, buyZone: [94, 96] })],
+  ['tek-kat-sma200', planSeviye({ sma50: null, buyZone: [null, 96] })],
+  ['kat-yok-stop-var', planSeviye({ sma50: 120, sma200: 130, buyZone: [120, 125] })],
+  ['kat-yok-stop-yok', planSeviye({ sma50: 120, sma200: 130, buyZone: [120, 125], stop: 140 })],
+  ['uzun-ufuk-target', planSeviye({ sellKind: 'target' })],
+  ['sma-dizilimi-ters', planSeviye({ sma50: 84, sma200: 94 })],
+  ['seviye-yok', null],
+];
+// momentumInfo skor + ADX kapılarına bakıyor; dört köşe de süpürülür.
+const PLAN_RES = [
+  ['guclu-trend', { score: 70, adxVal: 30 }],
+  ['zayif-adx', { score: 70, adxVal: 10 }],
+  ['dusuk-skor', { score: 40, adxVal: 30 }],
+  ['adx-yok', { score: 70, adxVal: null }],
+];
+const PLAN_VADE = ['gunici', 'kisa', 'orta', 'uzun', 'bilinmeyen'];
+
+// 11a — momentumInfo: vektör × res × vade, TAM sonuç karşılaştırması.
+let momFark = null; let momNokta = 0;
+for (const [vad, lv] of PLAN_VEKTOR) {
+  for (const [rad, rv] of PLAN_RES) {
+    for (const vk of PLAN_VADE) {
+      const res = { ...rv, levels: lv };
+      const f = derinFark(dilimli.momentumInfo(res, vk), uretilmis.momentumInfo(res, vk),
+        `momentumInfo[${vad}/${rad}/${vk}]`);
+      if (f) { momFark = f; break; }
+      momNokta++;
+    }
+    if (momFark) break;
+  }
+  if (momFark) break;
+}
+ok('momentumInfo iki motorda birebir', momFark === null, momFark || `${momNokta} nokta`);
+
+// 11b — buyZoneProximity.
+let proxFark = null; let proxNokta = 0;
+for (const [vad, lv] of PLAN_VEKTOR) {
+  const f = derinFark(dilimli.buyZoneProximity({ levels: lv }), uretilmis.buyZoneProximity({ levels: lv }),
+    `buyZoneProximity[${vad}]`);
+  if (f) { proxFark = f; break; }
+  proxNokta++;
+}
+ok('buyZoneProximity iki motorda birebir', proxFark === null, proxFark || `${proxNokta} vektör`);
+
+// 11c — planRiskReward.
+let rrFark = null; let rrNokta = 0;
+for (const [vad, lv] of PLAN_VEKTOR) {
+  const f = derinFark(dilimli.planRiskReward(lv), uretilmis.planRiskReward(lv), `planRiskReward[${vad}]`);
+  if (f) { rrFark = f; break; }
+  rrNokta++;
+}
+ok('planRiskReward iki motorda birebir', rrFark === null, rrFark || `${rrNokta} vektör`);
+
+// 11d — HAM SAYI KURALI (BAGIMLILIK_GRAFIGI §5.1): plan katmanından çıkan her
+// dize SABİT KÜMEDEN olmalı. Serbest metin = biçimlenmiş cümle sızıntısı.
+const PLAN_ETIKET = new Set(['below', 'in', 'near', 'far',
+  'sma50', 'swingLow', 'sma200', 'atrStop', 'sell', 'target']);
+const dizeTopla = (v, yol, cikti) => {
+  if (typeof v === 'string') { cikti.push([yol, v]); return cikti; }
+  if (v && typeof v === 'object') for (const k of Object.keys(v)) dizeTopla(v[k], `${yol}.${k}`, cikti);
+  return cikti;
+};
+const kacak = [];
+for (const [vad, lv] of PLAN_VEKTOR) {
+  dizeTopla(uretilmis.buyZoneProximity({ levels: lv }), `prox[${vad}]`, kacak);
+  dizeTopla(uretilmis.planRiskReward(lv), `rr[${vad}]`, kacak);
+  for (const vk of PLAN_VADE) dizeTopla(uretilmis.momentumInfo({ score: 70, adxVal: 30, levels: lv }, vk), `mom[${vad}/${vk}]`, kacak);
+}
+const yabanci = kacak.filter(([, v]) => !PLAN_ETIKET.has(v));
+ok('plan katmanı yalnız SABİT KÜMELİ etiket döndürüyor (emoji/toFixed/₺ yok)',
+  yabanci.length === 0,
+  yabanci.length ? yabanci.slice(0, 3).map(([y, v]) => `${y}=${JSON.stringify(v)}`).join(' · ')
+    : `${kacak.length} dize denetlendi, hepsi kümede`);
+
+// 11e — eski `txt` alanı geri gelmemiş. ⑩d'nin mantığı: bir alanın YOKLUĞU
+// bir denetimdir. `txt` geri gelirse uç nokta Türkçe cümle yayınlar.
+const proxOrnek = uretilmis.buyZoneProximity({ levels: PLAN_VEKTOR[0][1] }) || {};
+ok('buyZoneProximity sonucunda `txt` alanı YOK (cümle sunum katmanında)',
+  !('txt' in proxOrnek), Object.keys(proxOrnek).join(', '));
+
+// 11f — EŞİTLİK KURALI kilidi: iki kat aynı seviyedeyse ilk sıra (sma50)
+// kazanır. Eski Math.max kopyası aynı SAYIYI verirdi ama hangi katın
+// kazandığını söylemiyordu; etiket yeni, bu yüzden davranışı çivilenir.
+const katEsit = uretilmis.planRiskReward(planSeviye({ sma50: 94, buyZone: [94, 96] }));
+ok('kat eşitliğinde brkKind = sma50 (KATLAR sırası: sma50 → swingLow → sma200)',
+  katEsit && katEsit.brkKind === 'sma50' && katEsit.brkPrimary === 94,
+  katEsit ? `${katEsit.brkKind} @ ${katEsit.brkPrimary}` : 'sonuç yok');
+
+// 11g — boş-değer sözleşmesi (app.js'te gerekçesi yazılı, üçü BİLEREK ayrı).
+const bosMom = uretilmis.momentumInfo(null, 'orta');
+const RR_ALAN = ['sellUpPct', 'sellKind', 'brkPrimary', 'brkKind', 'brkPct', 'brkMajor', 'atrStop', 'rrRatio'];
+const rrBos = uretilmis.planRiskReward(planSeviye({ sma50: 120, sma200: 130, buyZone: [120, 125], stop: 140, sellZone: null }));
+const rrAlanTam = rrBos && RR_ALAN.every((k) => k in rrBos);
+ok('boş-değer sözleşmesi: momentumInfo→{active:false} · buyZoneProximity→null · planRiskReward→null',
+  bosMom && bosMom.active === false
+  && uretilmis.buyZoneProximity(null) === null
+  && uretilmis.planRiskReward(null) === null,
+  `momentumInfo(null)=${JSON.stringify(bosMom)}`);
+ok('planRiskReward alanları cevapsızken de VAR (null = "ölçtüm, cevap yok")',
+  rrAlanTam && rrBos.brkPct === null && rrBos.rrRatio === null,
+  rrAlanTam ? `${RR_ALAN.length} alan, brkKind=${JSON.stringify(rrBos.brkKind)}` : 'alan eksik');
+
+// N8: ⑪c'nin derin karşılaştırması gerçekten hassas mı?
+const rrOrnek = uretilmis.planRiskReward(PLAN_VEKTOR[0][1]);
+const rrKaymis = JSON.parse(JSON.stringify(rrOrnek));
+rrKaymis.rrRatio = (rrKaymis.rrRatio ?? 0) + 1e-9;
+ok('N8 · 1e-9 kaydırılmış rrRatio ⑪c karşılaştırmasında yakalanır',
+  derinFark(JSON.parse(JSON.stringify(rrOrnek)), rrKaymis, 'planRiskReward') !== null,
+  `rrRatio ${rrOrnek.rrRatio} + 1e-9`);
 bitir();

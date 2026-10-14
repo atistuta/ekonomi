@@ -13,26 +13,26 @@
 //  Dilimler (9):
 //    util           19 satır
 //    ysym            6 satır
-//    ta            771 satır
+//    ta            892 satır
 //    fa-core        63 satır
 //    fmt            15 satır
 //    composite      36 satır
 //    holistic      107 satır
 //    fa-bist       154 satır
 //    fa-us         292 satır
-//    TOPLAM       1463 satır
-//  Dışa verilen sembol: 27
+//    TOPLAM       1584 satır
+//  Dışa verilen sembol: 30
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:de1078bbe56d32c9';
+export const IMZA = 'sha256:9e8bfcf997578279';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
   { name: 'util', lines: 19 },
   { name: 'ysym', lines: 6 },
-  { name: 'ta', lines: 771 },
+  { name: 'ta', lines: 892 },
   { name: 'fa-core', lines: 63 },
   { name: 'fmt', lines: 15 },
   { name: 'composite', lines: 36 },
@@ -858,6 +858,127 @@ const navigator = H.dead("navigator");
              levels: { price, target, stop, rr, poc: vpD ? vpD.poc : null, atr, buyZone, sellZone, zMult, sellKind: longHorizon ? 'target' : 'sell', sma50: s50, sma200: s200, anchorKind, anchorSrc } };
   }
 
+  // ===== PLAN KATMANI: momentum rejimi · banda yakınlık · risk/ödül =====
+  //
+  //  NE: computeVadeScore'un döndürdüğü `levels` üzerinde çalışan ÜÇ SAF hesap.
+  //  Hiçbiri skoru DEĞİŞTİRMEZ — "bu skorun fiyat planı şu an nerede duruyor"
+  //  sorusunu SAYIYLA cevaplar.
+  //
+  //  NEDEN BURAYA TAŞINDI (2026-10-14): üçü de ekran katmanındaydı — momentumInfo
+  //  ve buyZoneProximity app.js'in sunum bölgesinde (eski satır 4875 / 4909),
+  //  risk/ödül çekirdeği ise computeCompareVerdict'in İÇİNDE gömülüydü. Motor
+  //  seviyeleri üretiyor ama PLANI üretmiyordu; yani /api/recommend kullanıcının
+  //  GÖRDÜĞÜ planı döndüremezdi. Commit C'nin kalıbı: SAYI motora iner, CÜMLE
+  //  çağrı noktasında kalır.
+  //
+  //  HAM SAYI KURALI (BAGIMLILIK_GRAFIGI §5.1): buradan çıkan hiçbir alan
+  //  biçimlenmiş metin değildir — emoji yok, toFixed yok, para birimi yok, Intl
+  //  yok. Sabit kümeli etiketler (state / cls / brkKind / sellKind) kuraldan
+  //  muaftır: bunlar makine kodu, cümle değil — motorun mevcut `cls` ve `label`
+  //  alanlarıyla aynı cins.
+  //
+  //  NEDEN BOŞ-DEĞER DAVRANIŞI ÜÇÜNDE AYRI (bilerek seçildi):
+  //    momentumInfo     → `{ active: false }` döner, null DEĞİL.
+  //    buyZoneProximity → null döner.
+  //    planRiskReward   → yalnız `levels` yoksa null; aksi halde alanları null
+  //                       olabilen NESNE döner.
+  //  Sebep: momentumInfo'nun ALTI çağrı noktası da doğrudan `mom.active` okuyor —
+  //  null dönseydi her biri ayrıca `mom &&` kapısı yazmak zorunda kalırdı ve biri
+  //  unutulunca ekran patlardı; üstelik "rejim yok" ile "ölçemedim" ayrımı burada
+  //  gereksiz: ikisinde de momentum girişi önerilmez, kullanıcıya giden cevap aynı.
+  //  buyZoneProximity'nin çağrı noktaları zaten `prox ? … : ''` kapısıyla yazılmış:
+  //  null = "gösterilecek bir şey yok" ve kapı hazır. planRiskReward ise UCA
+  //  gidiyor; orada `brkPct: null` ile alanın HİÇ OLMAMASI aynı şey değildir —
+  //  ilki "ölçtüm, cevap yok", ikincisi "eski sözleşme / alan kaldırılmış" diye
+  //  okunur. İstemci bu ayrımı görebilsin diye alan DAİMA var, değeri null olur.
+  //  Koruma ÇAĞIRANA ait (faPeCriterion'daki gerekçenin aynısı).
+  // ===== Momentum / trend-devam rejimi =====
+  // Sorun: "Güçlü alış" bölgesi hep fiyatın ALTINDAKİ desteğe çapalanır. Güçlü bir
+  // yükseliş trendinde fiyat oraya geri gelmez → hisse "pahalı" görünse de ralliye
+  // devam eder ve derin alım bölgesini bekleyen fırsatı kaçırır. Bu fonksiyon, hâlâ
+  // hesapladığımız sinyallerden (skor + SMA dizilimi + ADX + alım bölgesine uzaklık)
+  // bir "trend güçlü" rejimi tespit eder ve fiyata YAKIN, kademeli bir momentum
+  // girişi bölgesi önerir. Yön/kesinlik iddiası değil; fırsat maliyetini azaltmak için.
+  function momentumInfo(res, vadeKey) {
+    if (!res || !res.levels) return { active: false };
+    const L = res.levels, p = L.price, bz = L.buyZone;
+    if (p == null) return { active: false };
+    const bzTop = (bz && bz[1] != null) ? bz[1] : null;
+    const trendAligned = (L.sma50 != null && p > L.sma50) && (L.sma200 == null || L.sma50 >= L.sma200);
+    const adx = res.adxVal;
+    const strongTrend = adx != null && adx >= 22;      // ADX ≥ 22 → yönlü/güçlü trend
+    const bullish = res.score >= 56;                    // en az "AL eğilimi"
+    const gapPct = bzTop != null ? (p - bzTop) / p : 0; // fiyat, güçlü-alış tavanının ne kadar üstünde?
+    const gapTh = { gunici: 0.02, kisa: 0.03, orta: 0.05, uzun: 0.08 }[vadeKey] || 0.04;
+    const active = bullish && trendAligned && strongTrend && gapPct >= gapTh;
+    if (!active) return { active: false, trendAligned, adx, gapPct };
+    const atr = L.atr != null ? L.atr : p * 0.02;
+    const pull = { gunici: 0.5, kisa: 0.6, orta: 1.0, uzun: 1.5 }[vadeKey] || 0.8;
+    return { active: true, zone: [p - pull * atr, p], gapPct, adx, sma50: L.sma50, sma200: L.sma200 };
+  }
+
+  // ===== Alım bölgesine anlık YAKINLIK (ham sayı: ATR cinsinden uzaklık) =====
+  // Alım bandı bilinçli olarak fiyatın ALTINDAKİ desteğe çapalanır ("ideal bekleme"
+  // noktası). Bu yüzden "fiyat ŞU AN bandın içinde mi?" neredeyse hiçbir zaman doğru
+  // çıkmaz — kullanıcı onlarca hisse tarasa da yalnız ⚡ momentum işaretini görür.
+  // Bu fonksiyon SKORU/BANDI DEĞİŞTİRMEZ; sadece mevcut fiyatın banda ATR-ölçekli
+  // uzaklığını dürüstçe sınıflar ki "şu an neredeyiz" okunabilsin:
+  //   in/below → fiyat bandın içinde/altında (ideal alım / hedeften ucuz)
+  //   near     → banda ≤1×ATR mesafede — normal bir geri çekilmede alım aralığına iner
+  //   far      → banda >1×ATR uzakta — belirgin geri çekilme gerekir (ya da güçlü trend)
+  // Türkçe cümle BURADA DEĞİL: eski `txt` alanı sunum katmanındaki
+  // buyZoneProximityHtml(prox)'a geçti — emoji + toFixed motora giremez.
+  function buyZoneProximity(res) {
+    if (!res || !res.levels) return null;
+    const L = res.levels, p = L.price, bz = L.buyZone;
+    if (p == null || !bz || bz[0] == null || bz[1] == null) return null;
+    const atr = (L.atr != null && L.atr > 0) ? L.atr : p * 0.02;
+    const buyLo = bz[0], buyHi = bz[1];
+    const dAtr = (p - buyHi) / atr; // fiyat bandın kaç ATR üstünde
+    if (p <= buyHi * 1.001) return { state: p < buyLo * 0.999 ? 'below' : 'in', cls: 'in', dAtr };
+    if (dAtr <= 1.0) return { state: 'near', cls: 'near', dAtr };
+    return { state: 'far', cls: 'far', dAtr };
+  }
+
+  // ===== Risk/Ödül çekirdeği: kâr-al mesafesi ÷ negatif-kırılma mesafesi =====
+  // Kâr-al / satış bölgesi — zaten hesaplı sellZone (direnç/hedef + ATR bandı). Kesin
+  // tepe değil; momentumun tarihsel olarak yorulduğu bölge. sellKind: 'target' (uzun
+  // ufuk) | 'sell'.
+  // Negatif kırılma (DENGELİ confluence): fiyatın altındaki en YAKIN yapısal destek
+  // (SMA50 / swing-low çapası) = ilk savunma; SMA200 = ana trend çizgisi; 2×ATR stop =
+  // risk çıkışı. Bu bir tahmin DEĞİL, koşullu tetikleyicidir: "bu seviye altına
+  // kapanış olursa trend bozulur".
+  // brkKind SABİT KÜME: 'sma50' | 'swingLow' | 'sma200' | 'atrStop' | null — serbest
+  // metin değil, çünkü istemci (web + native) buna göre kendi cümlesini kurar.
+  // EŞİTLİK KURALI: iki kat aynı seviyedeyse KATLAR dizisindeki İLK sıra kazanır
+  // (sma50 → swingLow → sma200). Eski Math.max kopyası aynı SAYIYI üretirdi ama hangi
+  // katın kazandığını söylemiyordu; etiket bu yüzden yeni, sayı değil.
+  // Risk/Ödül oranı = kâr-al mesafesi (yukarı %) ÷ negatif-kırılma mesafesi (aşağı %)
+  // = "1 birim risk için kaç birim ödül". Yüksek = asimetrik; <1 = risk ödülden büyük.
+  // NOT: Sadece MESAFE oranıdır, OLASILIK DEĞİL — dar stop yüksek oran verir ama erken
+  // stoplanma ihtimali de yüksektir; momentum + geçmiş isabet ile birlikte okunmalı.
+  function planRiskReward(levels) {
+    if (!levels) return null;
+    const L = levels, px = L.price, bz = L.buyZone, sz = L.sellZone;
+    let sellUpPct = null;
+    if (sz && sz[0] != null && sz[1] != null && sz[1] > sz[0]) { if (px) sellUpPct = (((sz[0] + sz[1]) / 2) / px - 1) * 100; }
+    else if (sz && sz[1] != null) { if (px) sellUpPct = (sz[1] / px - 1) * 100; }
+    const KATLAR = [['sma50', L.sma50], ['swingLow', bz && bz[0]], ['sma200', L.sma200]];
+    let brkPrimary = null, brkKind = null;
+    for (let i = 0; i < KATLAR.length; i++) {
+      const kind = KATLAR[i][0], v = KATLAR[i][1];
+      if (v == null || !(v < px * 0.999)) continue;
+      if (brkPrimary == null || v > brkPrimary) { brkPrimary = v; brkKind = kind; }
+    }
+    const atrStop = (L.stop != null && L.stop < px) ? L.stop : null;
+    if (brkPrimary == null && atrStop != null) { brkPrimary = atrStop; brkKind = 'atrStop'; }
+    const brkMajor = (L.sma200 != null && L.sma200 < px && (brkPrimary == null || L.sma200 < brkPrimary - 1e-9)) ? L.sma200 : null;
+    const brkPct = (brkPrimary != null && px) ? ((brkPrimary / px - 1) * 100) : null;
+    const rrRatio = (sellUpPct != null && brkPct != null && brkPct < 0 && Math.abs(brkPct) > 0.01)
+      ? sellUpPct / Math.abs(brkPct) : null;
+    return { sellUpPct, sellKind: L.sellKind || 'sell', brkPrimary, brkKind, brkPct, brkMajor, atrStop, rrRatio };
+  }
+
   // ===== Sıralı Destek/Direnç Bölgeleri (Ranked S/R Zones — Zeiierman uyarlaması) =====
   // Yaklaşım: pivot tepe/dipleri bul → fiyatça yakın pivotları tek bir "bölgeye" kümele →
   // her bölgeyi DOKUNUŞ sayısı (birincil güç) + hacim + tazelik ile sırala. Fiyatın çok
@@ -1537,5 +1658,5 @@ const navigator = H.dead("navigator");
   }
 
 
-return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel };
+return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel };
 }

@@ -89,6 +89,12 @@ export const EXPORTS = [
   'FA_PE', 'faPeCriterion',
   'faBand', 'taBand', 'COMPOSITE_MATRIX', 'COMPOSITE_BLEND', 'compositeBlend',
   'computeHolisticScore',
+  // Plan katmanı: 2026-10-14'te ekran katmanından devredildi (D1).
+  // momentumInfo + buyZoneProximity app.js'in sunum bölgesindeydi, risk/ödül
+  // çekirdeği computeCompareVerdict'in içine gömülüydü; motor seviyeleri
+  // (levels) üretiyordu ama PLANI üretmiyordu, yani /api/recommend kullanıcının
+  // GÖRDÜĞÜ planı döndüremezdi. Türkçe cümleler çağrı noktasında kaldı.
+  'momentumInfo', 'buyZoneProximity', 'planRiskReward',
   'fetchIsYatirimMali', 'parseIsMali', 'bistFundamentalModel',
   'secGet', 'secResolveCik', 'secFetchModel',
 ];

@@ -1316,6 +1316,127 @@
              levels: { price, target, stop, rr, poc: vpD ? vpD.poc : null, atr, buyZone, sellZone, zMult, sellKind: longHorizon ? 'target' : 'sell', sma50: s50, sma200: s200, anchorKind, anchorSrc } };
   }
 
+  // ===== PLAN KATMANI: momentum rejimi · banda yakınlık · risk/ödül =====
+  //
+  //  NE: computeVadeScore'un döndürdüğü `levels` üzerinde çalışan ÜÇ SAF hesap.
+  //  Hiçbiri skoru DEĞİŞTİRMEZ — "bu skorun fiyat planı şu an nerede duruyor"
+  //  sorusunu SAYIYLA cevaplar.
+  //
+  //  NEDEN BURAYA TAŞINDI (2026-10-14): üçü de ekran katmanındaydı — momentumInfo
+  //  ve buyZoneProximity app.js'in sunum bölgesinde (eski satır 4875 / 4909),
+  //  risk/ödül çekirdeği ise computeCompareVerdict'in İÇİNDE gömülüydü. Motor
+  //  seviyeleri üretiyor ama PLANI üretmiyordu; yani /api/recommend kullanıcının
+  //  GÖRDÜĞÜ planı döndüremezdi. Commit C'nin kalıbı: SAYI motora iner, CÜMLE
+  //  çağrı noktasında kalır.
+  //
+  //  HAM SAYI KURALI (BAGIMLILIK_GRAFIGI §5.1): buradan çıkan hiçbir alan
+  //  biçimlenmiş metin değildir — emoji yok, toFixed yok, para birimi yok, Intl
+  //  yok. Sabit kümeli etiketler (state / cls / brkKind / sellKind) kuraldan
+  //  muaftır: bunlar makine kodu, cümle değil — motorun mevcut `cls` ve `label`
+  //  alanlarıyla aynı cins.
+  //
+  //  NEDEN BOŞ-DEĞER DAVRANIŞI ÜÇÜNDE AYRI (bilerek seçildi):
+  //    momentumInfo     → `{ active: false }` döner, null DEĞİL.
+  //    buyZoneProximity → null döner.
+  //    planRiskReward   → yalnız `levels` yoksa null; aksi halde alanları null
+  //                       olabilen NESNE döner.
+  //  Sebep: momentumInfo'nun ALTI çağrı noktası da doğrudan `mom.active` okuyor —
+  //  null dönseydi her biri ayrıca `mom &&` kapısı yazmak zorunda kalırdı ve biri
+  //  unutulunca ekran patlardı; üstelik "rejim yok" ile "ölçemedim" ayrımı burada
+  //  gereksiz: ikisinde de momentum girişi önerilmez, kullanıcıya giden cevap aynı.
+  //  buyZoneProximity'nin çağrı noktaları zaten `prox ? … : ''` kapısıyla yazılmış:
+  //  null = "gösterilecek bir şey yok" ve kapı hazır. planRiskReward ise UCA
+  //  gidiyor; orada `brkPct: null` ile alanın HİÇ OLMAMASI aynı şey değildir —
+  //  ilki "ölçtüm, cevap yok", ikincisi "eski sözleşme / alan kaldırılmış" diye
+  //  okunur. İstemci bu ayrımı görebilsin diye alan DAİMA var, değeri null olur.
+  //  Koruma ÇAĞIRANA ait (faPeCriterion'daki gerekçenin aynısı).
+  // ===== Momentum / trend-devam rejimi =====
+  // Sorun: "Güçlü alış" bölgesi hep fiyatın ALTINDAKİ desteğe çapalanır. Güçlü bir
+  // yükseliş trendinde fiyat oraya geri gelmez → hisse "pahalı" görünse de ralliye
+  // devam eder ve derin alım bölgesini bekleyen fırsatı kaçırır. Bu fonksiyon, hâlâ
+  // hesapladığımız sinyallerden (skor + SMA dizilimi + ADX + alım bölgesine uzaklık)
+  // bir "trend güçlü" rejimi tespit eder ve fiyata YAKIN, kademeli bir momentum
+  // girişi bölgesi önerir. Yön/kesinlik iddiası değil; fırsat maliyetini azaltmak için.
+  function momentumInfo(res, vadeKey) {
+    if (!res || !res.levels) return { active: false };
+    const L = res.levels, p = L.price, bz = L.buyZone;
+    if (p == null) return { active: false };
+    const bzTop = (bz && bz[1] != null) ? bz[1] : null;
+    const trendAligned = (L.sma50 != null && p > L.sma50) && (L.sma200 == null || L.sma50 >= L.sma200);
+    const adx = res.adxVal;
+    const strongTrend = adx != null && adx >= 22;      // ADX ≥ 22 → yönlü/güçlü trend
+    const bullish = res.score >= 56;                    // en az "AL eğilimi"
+    const gapPct = bzTop != null ? (p - bzTop) / p : 0; // fiyat, güçlü-alış tavanının ne kadar üstünde?
+    const gapTh = { gunici: 0.02, kisa: 0.03, orta: 0.05, uzun: 0.08 }[vadeKey] || 0.04;
+    const active = bullish && trendAligned && strongTrend && gapPct >= gapTh;
+    if (!active) return { active: false, trendAligned, adx, gapPct };
+    const atr = L.atr != null ? L.atr : p * 0.02;
+    const pull = { gunici: 0.5, kisa: 0.6, orta: 1.0, uzun: 1.5 }[vadeKey] || 0.8;
+    return { active: true, zone: [p - pull * atr, p], gapPct, adx, sma50: L.sma50, sma200: L.sma200 };
+  }
+
+  // ===== Alım bölgesine anlık YAKINLIK (ham sayı: ATR cinsinden uzaklık) =====
+  // Alım bandı bilinçli olarak fiyatın ALTINDAKİ desteğe çapalanır ("ideal bekleme"
+  // noktası). Bu yüzden "fiyat ŞU AN bandın içinde mi?" neredeyse hiçbir zaman doğru
+  // çıkmaz — kullanıcı onlarca hisse tarasa da yalnız ⚡ momentum işaretini görür.
+  // Bu fonksiyon SKORU/BANDI DEĞİŞTİRMEZ; sadece mevcut fiyatın banda ATR-ölçekli
+  // uzaklığını dürüstçe sınıflar ki "şu an neredeyiz" okunabilsin:
+  //   in/below → fiyat bandın içinde/altında (ideal alım / hedeften ucuz)
+  //   near     → banda ≤1×ATR mesafede — normal bir geri çekilmede alım aralığına iner
+  //   far      → banda >1×ATR uzakta — belirgin geri çekilme gerekir (ya da güçlü trend)
+  // Türkçe cümle BURADA DEĞİL: eski `txt` alanı sunum katmanındaki
+  // buyZoneProximityHtml(prox)'a geçti — emoji + toFixed motora giremez.
+  function buyZoneProximity(res) {
+    if (!res || !res.levels) return null;
+    const L = res.levels, p = L.price, bz = L.buyZone;
+    if (p == null || !bz || bz[0] == null || bz[1] == null) return null;
+    const atr = (L.atr != null && L.atr > 0) ? L.atr : p * 0.02;
+    const buyLo = bz[0], buyHi = bz[1];
+    const dAtr = (p - buyHi) / atr; // fiyat bandın kaç ATR üstünde
+    if (p <= buyHi * 1.001) return { state: p < buyLo * 0.999 ? 'below' : 'in', cls: 'in', dAtr };
+    if (dAtr <= 1.0) return { state: 'near', cls: 'near', dAtr };
+    return { state: 'far', cls: 'far', dAtr };
+  }
+
+  // ===== Risk/Ödül çekirdeği: kâr-al mesafesi ÷ negatif-kırılma mesafesi =====
+  // Kâr-al / satış bölgesi — zaten hesaplı sellZone (direnç/hedef + ATR bandı). Kesin
+  // tepe değil; momentumun tarihsel olarak yorulduğu bölge. sellKind: 'target' (uzun
+  // ufuk) | 'sell'.
+  // Negatif kırılma (DENGELİ confluence): fiyatın altındaki en YAKIN yapısal destek
+  // (SMA50 / swing-low çapası) = ilk savunma; SMA200 = ana trend çizgisi; 2×ATR stop =
+  // risk çıkışı. Bu bir tahmin DEĞİL, koşullu tetikleyicidir: "bu seviye altına
+  // kapanış olursa trend bozulur".
+  // brkKind SABİT KÜME: 'sma50' | 'swingLow' | 'sma200' | 'atrStop' | null — serbest
+  // metin değil, çünkü istemci (web + native) buna göre kendi cümlesini kurar.
+  // EŞİTLİK KURALI: iki kat aynı seviyedeyse KATLAR dizisindeki İLK sıra kazanır
+  // (sma50 → swingLow → sma200). Eski Math.max kopyası aynı SAYIYI üretirdi ama hangi
+  // katın kazandığını söylemiyordu; etiket bu yüzden yeni, sayı değil.
+  // Risk/Ödül oranı = kâr-al mesafesi (yukarı %) ÷ negatif-kırılma mesafesi (aşağı %)
+  // = "1 birim risk için kaç birim ödül". Yüksek = asimetrik; <1 = risk ödülden büyük.
+  // NOT: Sadece MESAFE oranıdır, OLASILIK DEĞİL — dar stop yüksek oran verir ama erken
+  // stoplanma ihtimali de yüksektir; momentum + geçmiş isabet ile birlikte okunmalı.
+  function planRiskReward(levels) {
+    if (!levels) return null;
+    const L = levels, px = L.price, bz = L.buyZone, sz = L.sellZone;
+    let sellUpPct = null;
+    if (sz && sz[0] != null && sz[1] != null && sz[1] > sz[0]) { if (px) sellUpPct = (((sz[0] + sz[1]) / 2) / px - 1) * 100; }
+    else if (sz && sz[1] != null) { if (px) sellUpPct = (sz[1] / px - 1) * 100; }
+    const KATLAR = [['sma50', L.sma50], ['swingLow', bz && bz[0]], ['sma200', L.sma200]];
+    let brkPrimary = null, brkKind = null;
+    for (let i = 0; i < KATLAR.length; i++) {
+      const kind = KATLAR[i][0], v = KATLAR[i][1];
+      if (v == null || !(v < px * 0.999)) continue;
+      if (brkPrimary == null || v > brkPrimary) { brkPrimary = v; brkKind = kind; }
+    }
+    const atrStop = (L.stop != null && L.stop < px) ? L.stop : null;
+    if (brkPrimary == null && atrStop != null) { brkPrimary = atrStop; brkKind = 'atrStop'; }
+    const brkMajor = (L.sma200 != null && L.sma200 < px && (brkPrimary == null || L.sma200 < brkPrimary - 1e-9)) ? L.sma200 : null;
+    const brkPct = (brkPrimary != null && px) ? ((brkPrimary / px - 1) * 100) : null;
+    const rrRatio = (sellUpPct != null && brkPct != null && brkPct < 0 && Math.abs(brkPct) > 0.01)
+      ? sellUpPct / Math.abs(brkPct) : null;
+    return { sellUpPct, sellKind: L.sellKind || 'sell', brkPrimary, brkKind, brkPct, brkMajor, atrStop, rrRatio };
+  }
+
   // ===== Sıralı Destek/Direnç Bölgeleri (Ranked S/R Zones — Zeiierman uyarlaması) =====
   // Yaklaşım: pivot tepe/dipleri bul → fiyatça yakın pivotları tek bir "bölgeye" kümele →
   // her bölgeyi DOKUNUŞ sayısı (birincil güç) + hacim + tazelik ile sırala. Fiyatın çok
@@ -4872,59 +4993,24 @@
     { key: 'uzun', label: 'Uzun vade', horizon: '≈ 1–3 yıl' },
   ];
 
-  // ===== Momentum / trend-devam rejimi =====
-  // Sorun: "Güçlü alış" bölgesi hep fiyatın ALTINDAKİ desteğe çapalanır. Güçlü bir
-  // yükseliş trendinde fiyat oraya geri gelmez → hisse "pahalı" görünse de ralliye
-  // devam eder ve derin alım bölgesini bekleyen fırsatı kaçırır. Bu fonksiyon, hâlâ
-  // hesapladığımız sinyallerden (skor + SMA dizilimi + ADX + alım bölgesine uzaklık)
-  // bir "trend güçlü" rejimi tespit eder ve fiyata YAKIN, kademeli bir momentum
-  // girişi bölgesi önerir. Yön/kesinlik iddiası değil; fırsat maliyetini azaltmak için.
-  function momentumInfo(res, vadeKey) {
-    if (!res || !res.levels) return { active: false };
-    const L = res.levels, p = L.price, bz = L.buyZone;
-    if (p == null) return { active: false };
-    const bzTop = (bz && bz[1] != null) ? bz[1] : null;
-    const trendAligned = (L.sma50 != null && p > L.sma50) && (L.sma200 == null || L.sma50 >= L.sma200);
-    const adx = res.adxVal;
-    const strongTrend = adx != null && adx >= 22;      // ADX ≥ 22 → yönlü/güçlü trend
-    const bullish = res.score >= 56;                    // en az "AL eğilimi"
-    const gapPct = bzTop != null ? (p - bzTop) / p : 0; // fiyat, güçlü-alış tavanının ne kadar üstünde?
-    const gapTh = { gunici: 0.02, kisa: 0.03, orta: 0.05, uzun: 0.08 }[vadeKey] || 0.04;
-    const active = bullish && trendAligned && strongTrend && gapPct >= gapTh;
-    if (!active) return { active: false, trendAligned, adx, gapPct };
-    const atr = L.atr != null ? L.atr : p * 0.02;
-    const pull = { gunici: 0.5, kisa: 0.6, orta: 1.0, uzun: 1.5 }[vadeKey] || 0.8;
-    return { active: true, zone: [p - pull * atr, p], gapPct, adx, sma50: L.sma50, sma200: L.sma200 };
-  }
-
-  // ===== Alım bölgesine anlık YAKINLIK (yalnız sunum katmanı) =====
-  // Alım bandı bilinçli olarak fiyatın ALTINDAKİ desteğe çapalanır ("ideal biriktirme"
-  // noktası). Bu yüzden "fiyat ŞU AN bandın içinde mi?" neredeyse hiçbir zaman doğru
-  // çıkmaz — kullanıcı onlarca hisse tarasa da yalnız ⚡ momentum işaretini görür.
-  // Bu fonksiyon SKORU/BANDI DEĞİŞTİRMEZ; sadece mevcut fiyatın banda ATR-ölçekli
-  // uzaklığını dürüstçe sınıflar ki "şu an neredeyiz" okunabilsin:
-  //   in/below → fiyat bandın içinde/altında (ideal alım / hedeften ucuz)
-  //   near     → banda ≤1×ATR mesafede — normal bir geri çekilmede alım aralığına iner (uygun bölge)
-  //   far      → banda >1×ATR uzakta — belirgin geri çekilme gerekir (ya da güçlü trendde ⚡ momentum)
-  function buyZoneProximity(res) {
-    if (!res || !res.levels) return null;
-    const L = res.levels, p = L.price, bz = L.buyZone;
-    if (p == null || !bz || bz[0] == null || bz[1] == null) return null;
-    const atr = (L.atr != null && L.atr > 0) ? L.atr : p * 0.02;
-    const buyLo = bz[0], buyHi = bz[1];
-    const dAtr = (p - buyHi) / atr; // fiyat bandın kaç ATR üstünde
-    if (p <= buyHi * 1.001) {
-      const below = p < buyLo * 0.999;
-      return { state: below ? 'below' : 'in', cls: 'in', dAtr,
-               txt: below ? '🟢 Fiyat alım bandının altında — hedeften ucuz'
-                          : '🟢 Fiyat şu an alım bölgesinde' };
-    }
-    if (dAtr <= 1.0) {
-      return { state: 'near', cls: 'near', dAtr,
-               txt: `🟢 Uygun bölge — fiyat banda yakın (~${dAtr.toFixed(1)}×ATR); normal bir geri çekilmede alım aralığına iner` };
-    }
-    return { state: 'far', cls: 'far', dAtr,
-             txt: `🟡 Fiyat banda uzak (~${dAtr.toFixed(1)}×ATR); belirgin bir geri çekilme daha uygun` };
+  // ===== Momentum rejimi + banda yakınlık: SAYI MOTORDA, CÜMLE BURADA =====
+  //  momentumInfo(res, vadeKey) ve buyZoneProximity(res) 2026-10-14'te MOTORA
+  //  taşındı (dilim: `ta`, computeVadeScore'un hemen altı) — /api/recommend
+  //  kullanıcının gördüğü planın AYNI sayılarını döndürebilsin diye. Taşınan şey
+  //  SAYI; burada kalan tek şey yakınlık durumunun Türkçe CÜMLESİ.
+  //  Neden kalıyor: emoji ve toFixed HAM SAYI KURALI gereği motora giremez
+  //  (BAGIMLILIK_GRAFIGI §5.1), üstelik native istemci kendi cümlesini kendi
+  //  dilinde kuracak — sunucudan Türkçe HTML almayacak.
+  //  Eskiden bu cümle buyZoneProximity'nin `txt` alanıydı ve satır 5447 ile 7134'te
+  //  BİREBİR AYNI iki satır olarak sarılıyordu; tek tanım o iki kopyayı da kapatır.
+  function buyZoneProximityHtml(prox) {
+    if (!prox) return '';
+    const d = (prox.dAtr || 0).toFixed(1);
+    const txt = prox.state === 'below' ? '🟢 Fiyat alım bandının altında — hedeften ucuz'
+      : prox.state === 'in' ? '🟢 Fiyat şu an alım bölgesinde'
+      : prox.state === 'near' ? `🟢 Uygun bölge — fiyat banda yakın (~${d}×ATR); normal bir geri çekilmede alım aralığına iner`
+      : `🟡 Fiyat banda uzak (~${d}×ATR); belirgin bir geri çekilme daha uygun`;
+    return `<div class="rp-nowpos ${prox.cls}">${txt}</div>`;
   }
 
   // ===== Çapa niteliği + bant kayması rozeti (yalnız sunum; skoru/bandı DEĞİŞTİRMEZ) =====
@@ -5444,7 +5530,7 @@
       const mom = momentumInfo(res, key);
       const momZone = (mom.active && mom.zone) ? `${fmtP(mom.zone[0])} – ${fmtP(mom.zone[1])}` : '';
       const prox = buyZoneProximity(res);
-      const proxHtml = prox ? `<div class="rp-nowpos ${prox.cls}">${prox.txt}</div>` : '';
+      const proxHtml = buyZoneProximityHtml(prox);
       return `
         <div class="rp-card ${res.cls}">
           <div class="rp-card-h">
@@ -7131,7 +7217,7 @@
       const mom = momentumInfo(res, key);
       const momZone = (mom.active && mom.zone) ? `${fmtP(mom.zone[0])} – ${fmtP(mom.zone[1])}` : '';
       const prox = buyZoneProximity(res);
-      const proxHtml = prox ? `<div class="rp-nowpos ${prox.cls}">${prox.txt}</div>` : '';
+      const proxHtml = buyZoneProximityHtml(prox);
       return `
         <div class="rp-card ${res.cls}">
           <div class="rp-card-h">
@@ -12050,24 +12136,17 @@
         let buyBand = '—';
         if (bz && bz[0] != null && bz[1] != null && bz[1] > bz[0]) buyBand = `${fmtP(bz[0])} – ${fmtP(bz[1])}`;
         else if (bz && bz[0] != null) buyBand = `≤ ${fmtP(bz[0])}`;
-        // Kâr-al / satış bölgesi — zaten hesaplı sellZone (direnç/hedef + ATR bandı). Kesin tepe değil;
-        // momentumun tarihsel olarak yorulduğu bölge. sellKind: 'target' (uzun ufuk) | 'sell'.
+        // Kâr-al / satış bölgesi · negatif kırılma · Risk/Ödül: SAYILAR MOTORDA
+        // (planRiskReward, 2026-10-14 — gerekçe ve confluence kuralı orada yazılı).
+        // Burada kalan tek şey kullanıcıya gösterilecek METİN: fmtP tr-TR biçimlemesi
+        // ekran katmanına aittir, HAM SAYI KURALI gereği motora giremez.
         const sz = L.sellZone;
-        let sellBand = '—', sellUpPct = null;
-        if (sz && sz[0] != null && sz[1] != null && sz[1] > sz[0]) { sellBand = `${fmtP(sz[0])} – ${fmtP(sz[1])}`; if (L.price) sellUpPct = (((sz[0] + sz[1]) / 2) / L.price - 1) * 100; }
-        else if (sz && sz[1] != null) { sellBand = `≈ ${fmtP(sz[1])}`; if (L.price) sellUpPct = (sz[1] / L.price - 1) * 100; }
-        const sellKind = L.sellKind || 'sell';
-        // Negatif kırılma (DENGELI confluence): fiyat altındaki en yakın yapısal destek
-        // (SMA50 / swing-low anchor) = ilk savunma; SMA200 = ana trend çizgisi; 2×ATR stop = risk çıkışı.
-        // Bu bir tahmin değil, koşullu tetikleyicidir: "bu seviye altına kapanış olursa trend bozulur".
+        const { sellUpPct, sellKind, brkPrimary, brkPct, brkMajor, atrStop, rrRatio } = planRiskReward(L);
+        let sellBand = '—';
+        if (sz && sz[0] != null && sz[1] != null && sz[1] > sz[0]) sellBand = `${fmtP(sz[0])} – ${fmtP(sz[1])}`;
+        else if (sz && sz[1] != null) sellBand = `≈ ${fmtP(sz[1])}`;
         const px = L.price;
-        const floors = [L.sma50, (bz && bz[0]), L.sma200].filter((x) => x != null && x < px * 0.999);
-        const brkPrimary = floors.length ? Math.max.apply(null, floors)
-          : (L.stop != null && L.stop < px ? L.stop : null);
-        const brkMajor = (L.sma200 != null && L.sma200 < px && (brkPrimary == null || L.sma200 < brkPrimary - 1e-9)) ? L.sma200 : null;
-        const atrStop = (L.stop != null && L.stop < px) ? L.stop : null;
         const brkStr = brkPrimary != null ? fmtP(brkPrimary) : '—';
-        const brkPct = (brkPrimary != null && px) ? ((brkPrimary / px - 1) * 100) : null;
         const majorStr = brkMajor != null ? fmtP(brkMajor) : null;
         const atrStopStr = atrStop != null ? fmtP(atrStop) : null;
         const mom = momentumInfo(res, 'orta');
@@ -12091,12 +12170,8 @@
         } else {
           honest = 'Temel skor bu sembolde hesaplanamadı (mali tablo yok) — yalnız teknik + momentum değerlendirmesi geçerli.';
         }
-        // Risk/Ödül belirteci — kâr-al mesafesi (yukarı %) ÷ negatif-kırılma mesafesi (aşağı %).
-        // "1 birim risk için kaç birim ödül". Yüksek = asimetrik, cazip; <1 = risk ödülden büyük.
-        // NOT: Sadece MESAFE oranıdır, olasılık değil — dar stop yüksek oran verir ama erken stoplanma
-        // ihtimali de yüksektir; momentum + geçmiş isabet ile birlikte okunmalı.
-        const rrRatio = (sellUpPct != null && brkPct != null && brkPct < 0 && Math.abs(brkPct) > 0.01)
-          ? sellUpPct / Math.abs(brkPct) : null;
+        // Risk/Ödül oranı (rrRatio) yukarıda planRiskReward'dan geldi — "1 birim risk
+        // için kaç birim ödül". Yalnız MESAFE oranıdır, olasılık değil (gerekçe motorda).
         // 🧭 Temel Uygunluk Skoru (Sonuç ekranıyla ortak motor) + 🌍 konjonktür notu
         const hol = computeHolisticScore({
           faScore, taScore: res.score, levels: L, valuation: fam.valuation,
