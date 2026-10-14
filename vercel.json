@@ -14,6 +14,10 @@
     "api/score.js": {
       "memory": 1024,
       "maxDuration": 60
+    },
+    "api/recommend.js": {
+      "memory": 1024,
+      "maxDuration": 60
     }
   },
   "regions": ["fra1"],
