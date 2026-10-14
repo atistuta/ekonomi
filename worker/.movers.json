@@ -2,15 +2,15 @@
   "date": "2026-10-14",
   "levels": {
     "SNDK.US": -1,
-    "SKHY.US": -1,
+    "SKHY.US": -2,
     "MU.US": -1,
     "SPCX.US": -1,
     "FN.US": -2,
     "AMAT.US": -1,
     "KLAC.US": -1,
     "VST.US": -2,
-    "LITE.US": -2,
-    "TER.US": -2,
+    "LITE.US": -3,
+    "TER.US": -1,
     "ARM.US": -2,
     "SIMO.US": -3,
     "MRVL.US": -2,
@@ -24,11 +24,13 @@
     "GEV.US": -2,
     "TSM.US": -1,
     "NVDA.US": -1,
-    "MP.US": -2,
+    "MP.US": -1,
     "VRT.US": -2,
     "AVGO.US": -1,
     "FCX.US": -1,
     "GLW.US": -1,
-    "REMX.US": -1
+    "REMX.US": -1,
+    "FTNT.US": -1,
+    "ASML.US": -1
   }
 }
