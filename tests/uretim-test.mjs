@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ===========================================================================
-//  ÜRETİM TESTİ — api/_motor.js ve api/_ayar.js, kaynaklarının ŞU ANKİ hali mi?
+//  ÜRETİM TESTİ — üretilen üç dosya, kaynaklarının ŞU ANKİ hali mi?
 // ===========================================================================
 //
 //  NEDEN VAR: `tests/engine.mjs` motoru kopyalamayı yasaklar — "motor
@@ -10,7 +10,7 @@
 //  "dosya = app.js'in şu anki hali mi?" sorusunu sorar. Bu test kırmızıysa
 //  dosya bir KOPYADIR ve /api/score'un ölçtüğü şey hiçbir şeydir.
 //
-//  NE ÖLÇER (9 bölüm)
+//  NE ÖLÇER (10 bölüm)
 //    ① dosya ve biçim      — var mı, satır sonu karışık mı, başlık tarihsiz mi
 //    ② sürüklenme          — bellekte yeniden üret, diskteki ile karşılaştır
 //    ③ imza                — gömülü IMZA = taze hesaplanan; imzala() duyarlı
@@ -23,6 +23,8 @@
 //    ⑧ olumsuz denetimler  — testin kendisi boş değil mi (4 kontrol)
 //    ⑨ ayar taşıyıcısı     — api/_ayar.js = config.js el ağırlıkları mı;
 //                            DERİN eşitlik, sızma denetimi, 2 olumsuz kontrol
+//    ⑩ ekran taşıyıcısı    — api/_ekran.js = app.js ekran sabitleri mi;
+//                            DERİN eşitlik + "GEÇİCİ" uyarısı yerinde mi
 //
 //  ⑦ NEDEN TAM KARŞILAŞTIRMA: baseline.json kurulmuş cümleleri DONDURMAZ
 //  (biçim FAZ 1/3'te belirteç dizisine geçiyor). Burada durum farklı: iki
@@ -49,10 +51,12 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
   SLICES, EXPORTS, readApp, engineSource, sliceInfo, makeHost, loadConfig,
+  readRenderConstants,
 } from './engine.mjs';
 import { HOLISTIC_CASES } from './run.mjs';
 import {
-  CIKTI, CIKTI_AYAR, imzala, uretKaynak, uretAyarKaynak,
+  CIKTI, CIKTI_AYAR, CIKTI_EKRAN, imzala,
+  uretKaynak, uretAyarKaynak, uretEkranKaynak,
 } from '../tools/motor-uret.mjs';
 
 // --- küçük koşum defteri --------------------------------------------------
@@ -71,7 +75,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — api/_motor.js ↔ app.js, api/_ayar.js ↔ config.js birebir.`);
+  console.log(`✅ ${gecen} denetim geçti — _motor.js ve _ekran.js ↔ app.js, _ayar.js ↔ config.js birebir.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -112,7 +116,7 @@ function derinFark(a, b, yol = '') {
 /** ⑥ ve ⑧'in PAYLAŞTIĞI yüklem: motor yüzeyinde eksik sembol var mı? */
 const eksikSembol = (api) => EXPORTS.filter((k) => !api || api[k] === undefined);
 
-console.log('ÜRETİM TESTİ — api/_motor.js = app.js · api/_ayar.js = config.js');
+console.log('ÜRETİM TESTİ — _motor.js, _ekran.js = app.js · _ayar.js = config.js');
 console.log('═'.repeat(70));
 
 // ===========================================================================
@@ -414,6 +418,120 @@ if (ayarVar) {
   ok('N6 · ekilmiş bir sır sızma denetimini KIRMIZI yakar',
     adaylar.length > 0 && adaylar.some((s) => ekiliMetin.includes(s)),
     adaylar.length ? 'ekildi ve yakalandı' : 'aday yok — denetim boş olurdu');
+}
+
+// ===========================================================================
+bolum('⑩ Ekran taşıyıcısı — api/_ekran.js, app.js\'in ŞU ANKİ ekran sabitleri mi?');
+// ===========================================================================
+// NEDEN AYRI BİR BÖLÜM: motorun döndürdüğü skor kullanıcının GÖRDÜĞÜ skor
+// DEĞİL — ekran katmanı araya F/K "Değerleme" kriterini ve FA/TA bileşke
+// harmanını sokuyor. `/api/score` aynı sayıyı döndürmek zorunda olduğu için
+// bu iki sabit kümesi api/_ekran.js'e ÜRETİLİYOR. Bölüm iki şeyi birlikte
+// tahsil ediyor: üretim sürüklenmemiş (metin) VE sayılar app.js ile birebir
+// (derin eşitlik). Biri yeşil öbürü kırmızıysa /api/score yanlış skor verir.
+//
+// DİKKAT — bu dosya GEÇİCİ: Commit C kriteri motora devredince SİLİNECEK.
+// Bölüm o yüzden "GEÇİCİ" uyarısının başlıkta DURDUĞUNU da denetliyor. Uyarı
+// düşerse dosya kalıcı sanılır ve üstüne bir şey inşa edilir.
+const ekranVar = fs.existsSync(CIKTI_EKRAN);
+ok('api/_ekran.js var', ekranVar, ekranVar ? '' : 'üret: node tools/motor-uret.mjs');
+
+if (ekranVar) {
+  const ekranMetin = fs.readFileSync(CIKTI_EKRAN, 'utf8');
+  const K = readRenderConstants();
+
+  const eLf = (ekranMetin.match(/\n/g) || []).length;
+  const eCrlf = (ekranMetin.match(/\r\n/g) || []).length;
+  ok('ekran: satır sonu tek tip (karışık değil)', eCrlf === 0 || eCrlf === eLf, `lf ${eLf} / crlf ${eCrlf}`);
+
+  const ekranImi = 'export const IMZA_EKRAN';
+  const eBasSonu = ekranMetin.indexOf(ekranImi);
+  ok('ekran: başlık sınırı bulunabiliyor', eBasSonu > 0, `"${ekranImi}" @ ${eBasSonu}`);
+  const eBaslik = eBasSonu > 0 ? ekranMetin.slice(0, eBasSonu) : ekranMetin;
+
+  ok('ekran: "ELLE DÜZENLEMEYİN" uyarısı başlıkta', eBaslik.includes('ELLE DÜZENLEMEYİN'));
+  ok('ekran: "GEÇİCİ · Commit C silecek" uyarısı başlıkta',
+    eBaslik.includes('GEÇİCİ') && eBaslik.includes('SİLİNECEK'));
+  ok('ekran: yenileme komutu başlıkta', eBaslik.includes('node tools/motor-uret.mjs'));
+  ok('ekran: doğrulama komutu başlıkta', eBaslik.includes('node tests/uretim-test.mjs'));
+  ok('ekran: yasal uyarı başlıkta', eBaslik.includes('Bilgi amaçlıdır, yatırım tavsiyesi değildir.'));
+  const eTarih = eBaslik.match(/\b20\d\d-\d\d-\d\d\b/);
+  ok('ekran: başlık tarihsiz (kendi kendine sürüklenemez)', !eTarih, eTarih ? `bulundu: ${eTarih[0]}` : '');
+
+  // --- sürüklenme ve imza ---------------------------------------------------
+  const tazeEkran = uretEkranKaynak();
+  const ekranEsit = norm(ekranMetin) === norm(tazeEkran.metin);
+  ok('ekran: bellekte yeniden üretilen metin diskteki ile aynı', ekranEsit,
+    ekranEsit ? `${(norm(tazeEkran.metin).match(/\n/g) || []).length} satır`
+      : `ilk farklı satır: ${ilkFarkliSatir(norm(ekranMetin), norm(tazeEkran.metin))} → düzelt: node tools/motor-uret.mjs`);
+
+  const eImzaEsl = ekranMetin.match(/export const IMZA_EKRAN = '([^']+)';/);
+  ok('ekran: IMZA_EKRAN gömülü', !!eImzaEsl, eImzaEsl ? eImzaEsl[1] : 'bulunamadı');
+  if (eImzaEsl) {
+    ok('ekran: gömülü IMZA_EKRAN = taze hesaplanan', eImzaEsl[1] === tazeEkran.imza,
+      `${eImzaEsl[1]} ↔ ${tazeEkran.imza}`);
+  }
+
+  // Başlıktaki kopya sayıları app.js'ten TÜRÜYOR. Bir ekran kopyası eklenir
+  // ya da silinirse sayı değişir; burada başlığın İDDİASI ile app.js'in
+  // GERÇEĞİ yüzleştiriliyor (biçim serbest, sayı değil).
+  const peSatir = eBaslik.match(/F\/K kriteri\s+: (\d+) ekran kopyası/);
+  ok('ekran: başlıktaki F/K kopya sayısı app.js ile tutarlı',
+    !!peSatir && Number(peSatir[1]) === K.pe.sites,
+    peSatir ? `başlık ${peSatir[1]} ↔ app.js ${K.pe.sites}` : 'satır bulunamadı');
+  const blSatir = eBaslik.match(/Bileşke harmanı\s+: (\d+) kopya/);
+  ok('ekran: başlıktaki harman kopya sayısı app.js ile tutarlı',
+    !!blSatir && Number(blSatir[1]) === K.blend.sites,
+    blSatir ? `başlık ${blSatir[1]} ↔ app.js ${K.blend.sites}` : 'satır bulunamadı');
+
+  // --- modül yükü ve DERİN EŞİTLİK -----------------------------------------
+  let ekranMod = null; let ekranHata = '';
+  try { ekranMod = await import(pathToFileURL(CIKTI_EKRAN).href); } catch (e) { ekranHata = e.message; }
+  ok('ekran: ESM olarak yükleniyor', ekranMod !== null, ekranHata);
+
+  if (ekranMod) {
+    ok('ekran: üç sembol doğru türde',
+      typeof ekranMod.IMZA_EKRAN === 'string'
+      && !!ekranMod.PE && typeof ekranMod.PE === 'object'
+      && !!ekranMod.BLEND && typeof ekranMod.BLEND === 'object',
+      `PE ${Object.keys(ekranMod.PE || {}).length} alan · BLEND ${Object.keys(ekranMod.BLEND || {}).length} alan`);
+
+    // İŞİN KALBİ: /api/score'un kullanacağı sayılar app.js'in ŞU ANKİ
+    // sayıları mı? Metin karşılaştırması bunu ispat etmez — bkz. ⑨'un
+    // aynı gerekçesi: JSON sessiz bir alan düşürürse iki taraf da aynı
+    // metni üretir ve sürüklenme denetimi yeşil kalır.
+    const peBekl = { weight: K.pe.weight, neg: K.pe.neg, bp: K.pe.bp };
+    const peFark = derinFark(peBekl, ekranMod.PE, 'PE');
+    ok('ekran: PE app.js ile DERİN eşit (JSON kaybı yok)', peFark === null,
+      peFark || `ağırlık ${K.pe.weight} · pe<0 → ${K.pe.neg} · ${K.pe.bp.length} kırılım`);
+
+    const blBekl = { fa: K.blend.fa, ta: K.blend.ta };
+    const blFark = derinFark(blBekl, ekranMod.BLEND, 'BLEND');
+    ok('ekran: BLEND app.js ile DERİN eşit', blFark === null,
+      blFark || `FA ${K.blend.fa} + TA ${K.blend.ta}`);
+
+    // Harman payları 1'e tamamlanmazsa bileşke 0-100 bandından kayar ve
+    // kullanıcı anlamsız bir sayı görür. app.js bugün 0.55 + 0.45 veriyor.
+    const toplam = ekranMod.BLEND.fa + ekranMod.BLEND.ta;
+    ok('ekran: BLEND payları 1\'e tamamlanıyor', Math.abs(toplam - 1) < 1e-12, `toplam ${toplam}`);
+
+    // Kırılım dizisi biçimi: [x, skor] çiftleri ve x ARTAN. faInterp artan
+    // sıra varsayıyor; sıra bozulursa ara değerleme sessizce yanlış skor
+    // üretir — patlamaz, sadece yanlış olur. En sinsi arıza türü.
+    const bp = ekranMod.PE.bp;
+    const bpBicim = Array.isArray(bp) && bp.length > 1
+      && bp.every((p) => Array.isArray(p) && p.length === 2 && p.every((n) => typeof n === 'number'));
+    ok('ekran: PE.bp [x, skor] çiftlerinden oluşuyor', bpBicim, `${bp?.length} çift`);
+    const bpArtan = bpBicim && bp.every((p, i) => i === 0 || p[0] > bp[i - 1][0]);
+    ok('ekran: PE.bp x ekseni ARTAN (faInterp bunu varsayar)', bpArtan,
+      bpBicim ? bp.map((p) => p[0]).join(' < ') : 'biçim bozuk');
+
+    // N7: PE'nin derin eşitliği gerçekten hassas mı?
+    const bpKaymis = JSON.parse(JSON.stringify(ekranMod.PE));
+    bpKaymis.bp[0][1] += 1e-9;
+    ok('N7 · 1e-9 kaydırılmış kırılım derin eşitlikte yakalanır',
+      derinFark(peBekl, bpKaymis, 'PE') !== null, 'bp[0][1] + 1e-9');
+  }
 }
 
 bitir();

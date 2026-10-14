@@ -16,6 +16,12 @@
 //  (taşıma katmanı), new Date() yalnız KAYITLI tarihleri ayrıştırırken.
 //  → Bu yüzden parite testi birebir deterministik olabiliyor.
 //
+//  EKRAN SABİTLERİ (2026-10-12): readRenderConstants() de burada. Motorun
+//  kendisi değil ama aynı ilkeyle çalışıyor — app.js'ten OKUYOR, elle
+//  kopyalanmıyor. Hem parite testi hem /api/score aynı çıkarıma ihtiyaç
+//  duyuyor; dilimleyicide durması çözemediğimiz bir döngüyü önlüyor:
+//  üretici → tests/score.mjs → api/score.js → api/_ekran.js (henüz yok).
+//
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
@@ -245,6 +251,68 @@ export function buildEngine(opt = {}) {
   api._bench = host.window.TA_BENCHMARK;
   api._serit = URETILMIS ? 'uretilmis' : 'dilim';
   return api;
+}
+
+// Düz metin geçiş sayısı (regex kaçağını yakalamak için).
+function countAll(src, needle) {
+  let n = 0, i = 0;
+  for (;;) { const k = src.indexOf(needle, i); if (k < 0) return n; n++; i = k + 1; }
+}
+
+// ---------------------------------------------------------------------
+// app.js'teki EKRAN KATMANI sabitlerini kaynaktan oku (elle kopyalama yok).
+// Sabitler kayarsa test "geçmez"; "farklı sabitle ölçmüş" olmaz.
+// ---------------------------------------------------------------------
+export function readRenderConstants() {
+  const src = fs.readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+
+  // --- 1) F/K kriteri: criteria.push({ key: 'pe', group: 'valuation', weight: … })
+  const pushRe = /criteria\.push\(\{\s*key:\s*'pe',\s*group:\s*'valuation',\s*weight:\s*([\d.]+)/g;
+  const sites = [];
+  for (let m; (m = pushRe.exec(src)); ) {
+    const at = m.index;
+    const win = src.slice(Math.max(0, at - 700), at); // push'tan ÖNCEki pencere
+    // EN YAKIN önceki eşleşmeyi al: pencerede birden fazla faInterp olabilir.
+    const last = (re) => { let r = null; for (let x; (x = re.exec(win)); ) r = x; return r; };
+    const bp = last(/faInterp\(pe,\s*(\[\[[^;]*?\]\])\)/g);
+    const neg = last(/pe < 0\s*(?:\?|\)\s*\{\s*score\s*=)\s*(\d+)/g);
+    if (!bp) throw new Error(`F/K kriteri ${at} konumunda: faInterp(pe, …) kırılım dizisi bulunamadi`);
+    if (!neg) throw new Error(`F/K kriteri ${at} konumunda: pe<0 skoru bulunamadi`);
+    sites.push({ at, weight: Number(m[1]), bpTxt: bp[1].replace(/\s+/g, ''), neg: Number(neg[1]) });
+  }
+  if (sites.length < 1) throw new Error("app.js: key:'pe' kriter eklemesi hic bulunamadi — ekran katmani degismis olabilir");
+  const first = sites[0];
+  for (const s of sites) {
+    if (s.weight !== first.weight || s.bpTxt !== first.bpTxt || s.neg !== first.neg)
+      throw new Error(
+        `F/K kriteri KOPYALARI AYRISMIS — ekranlar artik ayni skoru uretmiyor.\n` +
+        `  ${first.at}: w=${first.weight} neg=${first.neg} bp=${first.bpTxt}\n` +
+        `  ${s.at}: w=${s.weight} neg=${s.neg} bp=${s.bpTxt}`);
+  }
+  const peBp = JSON.parse(first.bpTxt);
+
+  // --- 2) Bileşke ağırlıkları: blended = 0.55 * faScore + 0.45 * X.score;
+  // "const" OLMADAN da geçiyor (app.js:12023 → let blended önceden tanımlı).
+  const blRe = /\bblended = ([\d.]+) \* faScore \+ ([\d.]+) \* [A-Za-z_$][\w$.]*\.score;/g;
+  const bls = [];
+  for (let m; (m = blRe.exec(src)); ) bls.push({ at: m.index, fa: Number(m[1]), ta: Number(m[2]) });
+  if (!bls.length) throw new Error('app.js: bileske formulu (blended = … faScore …) bulunamadi');
+  for (const b of bls) {
+    if (b.fa !== bls[0].fa || b.ta !== bls[0].ta)
+      throw new Error(`bileske agirliklari KOPYALAR ARASINDA AYRISMIS: ${bls[0].fa}/${bls[0].ta} vs ${b.fa}/${b.ta} (konum ${b.at})`);
+  }
+  // KAÇAK KONTROLÜ: regex'in gözden kaçırdığı bir harman olmasın.
+  const blAll = countAll(src, '* faScore +');
+  if (blAll !== bls.length)
+    throw new Error(`bileske harmani: dosyada ${blAll} konum var, regex ${bls.length} tanesini yakaladi — biri farkli yazilmis`);
+  const peAll = countAll(src, "key: 'pe'");
+  if (peAll !== sites.length)
+    throw new Error(`F/K kriteri: dosyada ${peAll} konum var, regex ${sites.length} tanesini yakaladi — biri farkli yazilmis`);
+
+  return {
+    pe: { weight: first.weight, neg: first.neg, bp: peBp, sites: sites.length },
+    blend: { fa: bls[0].fa, ta: bls[0].ta, sites: bls.length },
+  };
 }
 
 export function readSymbols() {
