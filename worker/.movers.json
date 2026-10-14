@@ -1,23 +1,11 @@
 {
-  "date": "2026-10-13",
+  "date": "2026-10-14",
   "levels": {
     "SNDK.US": 0,
     "SKHY.US": -1,
     "MU.US": -1,
-    "SIMO.US": -2,
-    "MRVL.US": -1,
-    "LITE.US": -3,
-    "COHR.US": -2,
-    "FN.US": -2,
-    "TER.US": -1,
-    "MP.US": -2,
-    "ARM.US": -1,
-    "GLW.US": -1,
-    "REMX.US": -1,
-    "ARKG.US": -1,
     "SPCX.US": -1,
-    "FTNT.US": 0,
-    "GFI.US": 0,
+    "FN.US": -2,
     "AMAT.US": -2,
     "KLAC.US": -1
   }
