@@ -73,6 +73,12 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       etkilenmedi. Aday motor `PARITE_APP=` ile canlıya dokunmadan ölçülebilir.
 - [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
       `theme`, `causal`, `compare`. Vercel KV ile cache.
+      → **DURUM (2026-10-14): 2/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓. Kalan
+      dört: `analyze`, `theme` (tematik keşif), `causal`, `compare`. Dürüst
+      not: `api/theme.js` dosyası zaten VAR ama **eski şeritten** — dört
+      taşıyıcının (`_motor` · `_ayar` · `_ag` · `_akis`) üstünde durmuyor,
+      bu yüzden bu maddeye sayılmıyor. **Vercel KV önbelleği henüz hiçbir
+      uçta YOK** — bu maddenin ikinci yarısı tamamen açık.
       → **Sürüyor** (2026-10-12). İlk uç `/api/score`. **Taşıyıcı hazır:** motor
       artık `app.js`'ten **üretiliyor** → `api/_motor.js` (1.463 satır / 9 dilim,
       tek ESM modülü, girişi `buildMotor(H)`; `_` öneki Vercel rotasını engelliyor).
@@ -118,13 +124,49 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       **Canlı koşu YAPILMADI** — `vercel.json`'daki 1024 MB bellek ÖLÇÜLMEDİ,
       ilk canlı koşudan sonra ayarlanmalı. Semboller SIRAYLA işleniyor
       (paralel değil); hız gerekirse ölçülüp ayrıca ele alınacak.
-      **Açık uç:** `tests/capture.mjs` UA/başlık sabitlerinin KENDİ kopyasını
-      tutuyor (satır 61-62, 195-198) — `api/_ag.js` ile tek kaynağa indirilmeli.
-      **Sırada: ikinci uç** — `/api/recommend`. Aynı dört taşıyıcının üstüne
-      oturacak; `app.js`'teki öneri/fırsat katmanı dilimlenip `_akis.js`'e bir
-      çağrı sırası olarak eklenecek, cümle kurma istemcide kalacak (HAM SAYI
-      kuralı). Aynı commit'te kapatılacak açık uç: `tests/capture.mjs`'in kendi
-      UA/başlık kopyası `api/_ag.js` ile tek kaynağa indirilmeli.
+      **Açık uç KAPANDI** (2026-10-14): `tests/capture.mjs` artık UA/başlık
+      sabitlerinin kendi kopyasını tutmuyor, `api/_ag.js`'ten içe alıyor
+      (`SEC_ARALIK_MS` · `yahooBaslik` · `secBaslik` · `isYatirimBaslik`).
+      Repo genelinde arama: UA literalleri artık YALNIZ `api/_ag.js`'te.
+      `SEC_TRY = 3` bilerek capture'da kaldı — "ne kadar sabırlı deneriz"
+      POLİTİKA, çağırana ait; paylaşılan şey BİLGİ. **Ölçülmedi:** SEC istek
+      aralığı 120 → **125 ms** oldu (ikisi de 10 istek/sn sınırının altında,
+      fark ölçülmedi, dosyaya yorum olarak yazıldı). `tests/capture.mjs`
+      KOŞULMADI (canlı ağa çıkar, fikstürlerin üzerine yazar) — kanıt,
+      başlıkların eskisiyle **birebir aynı** olması (9/9 karşılaştırma).
+      **İkinci uç İNDİ** (2026-10-14): `api/recommend.js` —
+      `/api/recommend?symbols=…&vade=…` skorun ÜSTÜNE plan katmanı koyuyor:
+      `seviye` (destek/direnç/alım bandı), `yakinlik` (banda uzaklık),
+      `momentum` (trend-devam rejimi), `riskOdul`. **Beşinci taşıyıcı
+      açılmadı** — aynı dört parça.
+      **Önce motora indirildi:** `momentumInfo` · `buyZoneProximity` ·
+      `planRiskReward` (`computeCompareVerdict`'in sayısal çekirdeği) artık
+      `app.js`'in motor diliminde; `_akis.js`'in `planKatmani()`'si yalnız
+      motoru çağırıyor — akışta tek bir eşik veya çarpan yok. CÜMLE çağrı
+      noktasında kaldı (Commit C deseni).
+      **HAM SAYI:** yanıtta `Intl`/`toFixed`/`toLocaleString`/emoji/para
+      simgesi yok; `buyZoneProximity`'nin `txt` alanı (emoji + `toFixed`)
+      motora da girmedi, tele de çıkmıyor.
+      **İSTEMCİ SÖZLEŞMESİ:** `levels.anchorSrc` (serbest Türkçe metin)
+      yanıtta YOK — kaliteyi `anchorKind` (sabit kümeli makine kodu) taşıyor.
+      `/api/score`'un sözleşmesi DEĞİŞMEDİ (`surum` = `{ motor, ayar }`).
+      **Ölçülen:** `node tests/uc-test.mjs` → **106 denetim geçti** (58 → 106:
+      yeni ⑤ bölümü iki ucun yüzeyini, 25 sorgu vektöründe `ayristir()`'ların
+      bayt-eşitliğini, kapıyı ve KOPYA kapının 61 kod satırlık sürüklenme
+      kilidini ölçüyor); `node tests/uretim-test.mjs` → **73 denetim geçti**
+      (64 → 73: motora inen üç fonksiyon artık orada denetleniyor);
+      `node tests/parity.mjs` → **FARK 0** (29 nokta), `PARITE_MOTOR=uretilmis`
+      şeridinde de **FARK 0** — yani **skor değişmedi**, kapı budur.
+      **Canlı koşu YAPILMADI:** `/api/recommend` gerçek ağla **hiç**
+      çalışmadı (dağıtılmadı). `vercel.json`'daki 1024 MB / 60 sn
+      `/api/score`'dan kopyalandı — TAHMİN, ölçülmedi. Doğrulama bölgesi
+      `api/score.js` ile **bilerek kopya** (Vercel'de her uç kendi lambda'sı:
+      kendi motoru, kendi SEC önbelleği, ortak modül durumu YOK); sessiz
+      ayrışmayı `tests/uc-test.mjs` ⑤b/⑤e bekçiliyor.
+      **Sırada: üçüncü uç** — `analyze`, ardından `discover` (tematik keşif)
+      ve `pulse` (⚡ Nabız). Aynı dört taşıyıcı, aynı kural: SAYI motora,
+      CÜMLE çağrı noktasına. Beşinci taşıyıcı hâlâ gerekmiyor; KV önbelleği
+      ölçülmeden eklenmeyecek.
 - [x] **Expo projesi** kuruldu (2026-10-14, `mobile/`): TypeScript + expo-router +
       Supabase client. expo ~57.0.28 · react-native 0.86.3 · react 19.2.3 ·
       expo-router ~57.0.26 · typescript ~6.0.3. **Elle eklenen TEK paket**
