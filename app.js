@@ -10242,6 +10242,11 @@
   // Konjonktür fazını (erken/orta/geç/durgunluk) makro sinyallerden tahmin eder → öne çıkan sektör → hisse.
   let macroInited = false, macroBusy = false;
 
+  // 📉 En son ÖLÇÜLEN piyasa genişliği (evrenin ortalama TA skoru) + ne zaman.
+  // Nabız'ın makro duruşunu FİYAT GERÇEKLİĞİYLE yüzleştirmek için saklanır;
+  // Nabız içinde yeniden hesaplamak tüm evreni yeniden taramak demek olurdu.
+  let macroBreadthSeen = null;
+
   const CYCLE_PHASES = {
     early: { label: 'Erken Döngü / Toparlanma', emoji: '🌱', cls: 'early', sectors: ['banks', 'auto', 'tech'],
       desc: 'Faizler geriliyor, risk iştahı toparlanıyor. Faize duyarlı ve büyüme hisseleri öne çıkar.' },
@@ -10253,12 +10258,60 @@
       desc: 'Büyüme zayıf, güvenli liman talebi yüksek. Savunmacı sektörler ve altın öne çıkar.' },
   };
 
+  // ===== ⚖️ Yön oyunun OLUMSUZLANMASI — web geri dönüşünden düzeltme (2026-10-14) =====
+  // ÖLÇÜLEN HATA: rateDirection yalnız "rate cut"/"faiz indirimi" ifadesinin
+  // GEÇİP geçmediğine bakıyordu — o ifadeye NE YAPILDIĞINA bakmıyordu. Sıcak
+  // TÜFE günü (2026-10-14) manşetleri tam olarak "faiz indirimi umudu ÖLDÜ"
+  // biçiminde olduğu için beş manşetin BEŞİ de güvercin oyu sayıldı:
+  //   rateDir = -0,833 · inflDir = +0,500 · pressure = -0,300 → "🕊️ Gevşeme"
+  // yani piyasa çakılırken sistem güvercin rüzgârı ilan ediyordu.
+  //
+  // ÇÖZÜM: ifadenin ÇEVRESİNDEKİ fiili oku; umut/beklenti ÖLÜYORSA oyu TERS
+  // çevir. Asimetri İKİ YÖNLÜ kapatılır — "rate hike fears fade" de artık
+  // şahin değil GÜVERCİN sayılır; tek yönlü düzeltme yeni bir yanlılık üretirdi.
+  //
+  // NEDEN REGEX, NEDEN LLM DEĞİL: bu katman ANAHTARSIZ çalışmak zorunda
+  // (CAUSAL_LLM.enabled = false, ANTHROPIC_API_KEY yok). LLM çağrısı eklenmedi.
+  // (Bilgi amaçlı sunum katmanı; TA/FA/bileşke skoruna DAHİL DEĞİL.)
+  const FADE_WIN = 72; // ifadenin İKİ yanında taranan karakter sayısı (fiil önde de olabilir, arkada da)
+
+  // Tek başına "umut ölüyor" demeye yeten fiiller/kalıplar (EN). Kısa ve
+  // başka sözcüklerin içinde geçebilecek olanlara sözcük sınırı konuldu.
+  const FADE_HARD = /(dash(?:e[sd])?|dampen|\bdim(?:s|med|ming)?\b|fad(?:e|es|ed|ing)\b|collaps(?:e|es|ed|ing)|evaporat|off[- ]the[- ]table|rul(?:e|es|ed|ing) out|ruled out|less likely|\bunlikely\b|\bdoubts?\b|in doubt|cast doubt|delay(?:s|ed|ing)?\b|push(?:es|ed|ing)? back|pushback|\bretreat|scal(?:e|es|ed)? back|par(?:e|es|ed) back|abandon|shelv(?:e|es|ed)\b|no longer|dwindl|\bwan(?:e|es|ing)\b|vanish|wip(?:e|es|ed) out|eras(?:e|es|ed)\b|\bkill(?:s|ed)?\b|\bdead\b|walk(?:s|ed)? back)/i;
+
+  // ÇİFT ANLAMLI fiiller: "slash RATES" = indirim (güvercin), "slash BETS" =
+  // beklentinin ölümü (şahin). Bu yüzden yalnız bir BEKLENTİ nesnesiyle
+  // birlikte olumsuzlama sayılır — yoksa gerçek indirim haberlerini ters çevirirdik.
+  const FADE_SOFT = /\b(slash|cut back|cutting back|trim|reduc|lower|pull back|par(?:e|ing)|dial back|scrap)\w*\s+(?:\w+\s+){0,3}(bets?|odds|expectations?|hopes?|wagers?|chances?|forecasts?|probabilit|outlook)/i;
+
+  // TR karşılıkları. Diyakritiksiz (ASCII'ye katlanmış) akışlar da geliyor, bu
+  // yüzden ı/i ve ö/o toleranslı yazıldı. "s[öo]nd[üu]" açıkça yazıldı: naif
+  // bir "s[öo]nd" kalıbı "son dönem" ifadesini yanlışlıkla yakalardı.
+  const FADE_TR = /(zay[ıi]fla|s[öo]nd[üu]|s[öo]n[üu]yor|ertele|masadan kalk|rafa kalk|iptal|vazge[çc]|uzakla[şs]|suya d[üu][şs]|umut\w*(?:\s+\w+){0,2}\s*k[ıi]r[ıi]l|(?:beklenti|ihtimal|umut|olas[ıi]l[ıi]k|sinyal|bahis)\w*(?:\s+\w+){0,3}\s*(azal|d[üu][şs]|geril|kayb|yok ol))/i;
+
+  // İfade metinde geçiyor; ÇEVRESİNDE onu öldüren bir fiil var mı?
+  function fadedAround(t, re) {
+    const m = re.exec(t);
+    if (!m) return false;
+    const a = Math.max(0, m.index - FADE_WIN);
+    const w = t.slice(a, m.index + m[0].length + FADE_WIN);
+    return FADE_HARD.test(w) || FADE_SOFT.test(w) || FADE_TR.test(w);
+  }
+
+  const RATE_CUT_RE  = /(rate cut|faiz indir|indirim|lower(?:ed|ing)? rate|gevşe|dovish|faizi düşür)/i;
+  const RATE_HIKE_RE = /(rate hike|faiz artır|artırım|raise(?:d|s)? rate|sıkılaş|hawkish|faizi yüksel)/i;
+
   // Fed başlıklarından faiz yönü sinyali: -1 gevşeme (indirim) .. +1 sıkılaşma (artırım)
-  function rateDirection(items) {
-    const cut = /(rate cut|faiz indir|indirim|lower(?:ed|ing)? rate|gevşe|dovish|faizi düşür)/i;
-    const hike = /(rate hike|faiz artır|artırım|raise(?:d|s)? rate|sıkılaş|hawkish|faizi yüksel)/i;
+  // `wOf` verilirse her başlığın oyu o ağırlıkla sayılır (tazelik ağırlığı — bkz. computePulseMacro).
+  function rateDirection(items, wOf) {
     let c = 0, h = 0;
-    items.forEach((it) => { const t = it.title + ' ' + (it.description || ''); if (cut.test(t)) c++; if (hike.test(t)) h++; });
+    items.forEach((it) => {
+      const t = (it.title || '') + ' ' + (it.description || '');
+      const w = wOf ? wOf(it) : 1;
+      // Olumsuzlanmış indirim ifadesi ŞAHİN oydur; olumsuzlanmış artırım ifadesi GÜVERCİN.
+      if (RATE_CUT_RE.test(t))  { if (fadedAround(t, RATE_CUT_RE))  h += w; else c += w; }
+      if (RATE_HIKE_RE.test(t)) { if (fadedAround(t, RATE_HIKE_RE)) c += w; else h += w; }
+    });
     const tot = c + h;
     return tot ? (h - c) / (tot + 1) : 0;
   }
@@ -10283,6 +10336,8 @@
     const taMap = await scoreSymbolList(uni, force, { taOnly: true });
     const taVals = Object.values(taMap).filter((x) => x).map((x) => x.ta);
     const breadth = taVals.length ? taVals.reduce((a, b) => a + b, 0) / taVals.length : 50;
+    // Nabız'ın fiyat-yalanlama katmanı buradan okur (bkz. pulseMacroReality).
+    if (taVals.length) macroBreadthSeen = { val: breadth, at: Date.now(), n: taVals.length };
     const growth = Math.max(-1, Math.min(1, (breadth - 50) / 20));
 
     // Faz sınıflandırması (şeffaf karar ağacı)
@@ -11377,11 +11432,21 @@
   const PMAC_CLS_TR = { hawk: '🔺 şahin/sıkılaşma', dove: '🕊️ güvercin/gevşeme', neu: '⚖️ nötr' };
 
   // Enflasyon yönü: +1 ısınma (şahin baskı) .. -1 soğuma (güvercin rahatlama)
-  function inflDirection(items) {
-    const up = /(inflation[^.]{0,30}(jump|rise|rises|rose|accelerat|hotter|hot|surge|climb|spike|stick|higher|top)|cpi[^.]{0,20}(jump|rise|rose|hotter|accelerat|higher|top)|yields?[^.]{0,20}(jump|surge|rise|rose|climb|spike|higher)|hotter[- ]than|enflasyon[^.]{0,25}(artt|yüksel|hızlan|ısın|rekor)|faiz[^.]{0,15}yüksel)/i;
-    const down = /(inflation[^.]{0,30}(cool|cools|eas|slow|slows|fall|falls|fell|drop|decline|lower)|cpi[^.]{0,20}(cool|eas|slow|fall|fell|lower)|yields?[^.]{0,20}(fall|fell|drop|ease|decline|lower)|enflasyon[^.]{0,25}(düş|geriled|yavaşla|soğu))/i;
+  // 2026-10-14: "consumer price" eklendi. Ölçülen eksik — up regexi "inflation"
+  // ya da "cpi" kelimesini ŞART koştuğu için "Stocks tumble as consumer prices
+  // accelerate" NÖTR sayılıyordu; aynı olayı anlatan manşet oy vermiyordu.
+  // Simetri için down tarafına da eklendi (tek yönlü ekleme yanlılık üretirdi).
+  // `wOf` verilirse her başlığın oyu o ağırlıkla sayılır (tazelik ağırlığı).
+  const INFL_UP_RE = /(inflation[^.]{0,30}(jump|rise|rises|rose|accelerat|hotter|hot|surge|climb|spike|stick|higher|top)|cpi[^.]{0,20}(jump|rise|rose|hotter|accelerat|higher|top)|consumer price[^.]{0,30}(jump|rise|rises|rose|accelerat|hotter|hot|surge|climb|spike|stick|higher|top)|yields?[^.]{0,20}(jump|surge|rise|rose|climb|spike|higher)|hotter[- ]than|enflasyon[^.]{0,25}(artt|yüksel|hızlan|ısın|rekor)|faiz[^.]{0,15}yüksel)/i;
+  const INFL_DOWN_RE = /(inflation[^.]{0,30}(cool|cools|eas|slow|slows|fall|falls|fell|drop|decline|lower)|cpi[^.]{0,20}(cool|eas|slow|fall|fell|lower)|consumer price[^.]{0,30}(cool|cools|eas|slow|slows|fall|falls|fell|drop|decline|lower)|yields?[^.]{0,20}(fall|fell|drop|ease|decline|lower)|enflasyon[^.]{0,25}(düş|geriled|yavaşla|soğu))/i;
+  function inflDirection(items, wOf) {
     let u = 0, d = 0;
-    items.forEach((it) => { const t = (it.title || '') + ' ' + (it.description || ''); if (up.test(t)) u++; if (down.test(t)) d++; });
+    items.forEach((it) => {
+      const t = (it.title || '') + ' ' + (it.description || '');
+      const w = wOf ? wOf(it) : 1;
+      if (INFL_UP_RE.test(t)) u += w;
+      if (INFL_DOWN_RE.test(t)) d += w;
+    });
     const tot = u + d;
     return tot ? (u - d) / (tot + 1) : 0;
   }
@@ -11425,8 +11490,25 @@
     const inflItems = freshWithin(inflItemsAll, 14);
     const allItems  = fedItems.concat(inflItems);
 
-    const rateDir = rateDirection(fedItems);   // -1 gevşeme .. +1 sıkılaşma (yalnız taze)
-    const inflDir = inflDirection(inflItems);  // -1 soğuma .. +1 ısınma (yalnız taze)
+    // ⏱️ TAZELİK AĞIRLIĞI (2026-10-14, web geri dönüşünden düzeltme)
+    // ÖLÇÜLEN EKSİK: yön matematiği 14 GÜNLÜK pencereye bakıyor, bu yüzden
+    // bugünün TÜFE şoku pencerede yalnız BİR oy oluyordu; `fresh2d` hesaplanıyor
+    // ama YALNIZ metni süslüyordu ("son 2 günde"), ağırlığa hiç girmiyordu.
+    // Faiz ve enflasyon beklentisi saatler içinde yeniden fiyatlanır.
+    //
+    // KATSAYI NEDEN 2,5: 14 günlük pencere yedi adet 48 saatlik kovaya ayrılır.
+    // Taze kovaya 2,5 ağırlık verilince, kovalar eşit sayıda başlık taşırsa o
+    // kova oyların ~%29'unu tutar (2,5 / (2,5 + 6·1)). Yani aynı günkü bir veri
+    // açıklaması bayat ve ILIMLI bir eğilimi çevirmeye yeter, ama tek başına
+    // okumayı ±1'e çivileyemez. 1,0 = eski (hatalı) davranış; 7,0 ≈ "yalnız
+    // bugün" demek olurdu ve 14 günlük pencereyi anlamsızlaştırırdı.
+    const FRESH_H = 48, FRESH_W = 2.5;
+    const wOf = (it) => {
+      const t = Date.parse(it.pubDate);
+      return (!isNaN(t) && Date.now() - t < FRESH_H * 36e5) ? FRESH_W : 1;
+    };
+    const rateDir = rateDirection(fedItems, wOf);   // -1 gevşeme .. +1 sıkılaşma (taze ağırlıklı)
+    const inflDir = inflDirection(inflItems, wOf);  // -1 soğuma .. +1 ısınma (taze ağırlıklı)
     const fresh2d = pulseRecentCount(allItems, 2);
 
     // Birleşik para-politikası baskısı → yön-duyarlı sektör etkisi
@@ -11513,7 +11595,69 @@
     return `Faiz yönü şu an <b>net değil</b>; şahin ve güvercin başlıklar dengede. Faize duyarlı sektörlerde yön netleşene kadar oynaklık normaldir.`;
   }
 
-  function buildPulseMacroHtml(macro, comment) {
+  // ===== 📉 FİYAT YALANLAMA KATMANI — web geri dönüşünden (2026-10-14) =====
+  // ÖLÇÜLEN EKSİK: computePulseMacro %100 METİN tabanlıdır — "piyasalar çakıldı"
+  // bilgisi fonksiyona hiç girmiyordu. Duruş ile fiyatın söylediği TERSSE bunu
+  // kullanıcıya AÇIKÇA söylemek gerekir.
+  //
+  // TASARIM KARARI: duruş SESSİZCE NÖTRLENMEZ. Bilgiyi yok etmek değil,
+  // ÇELİŞKİYİ GÖRÜNÜR kılmak istiyoruz: haber akışı ne okuyor, fiyat ne diyor,
+  // ikisi uyuşuyor mu. (Bilgi amaçlı; TA/FA/bileşke skoruna DAHİL DEĞİL.)
+  //
+  // ── EŞİK ①: evren genişliği — ÖLÇÜLDÜ (2026-10-14, tests/fixtures, 20 sembol)
+  //    tek-sembol TA std sapması 13,05 → ortalamanın (genişliğin) standart
+  //    hatası 13,05/√20 = 2,92. Nötr orta nokta 50. Bu yüzden 45 eşiği nötrün
+  //    ~1,7 standart hatası ALTINDADIR: örnekleme gürültüsünün dışında, ama
+  //    deponun kendi "durgunluk" kapısından (growth ≤ -0,35 → genişlik ≤ 43)
+  //    biraz önce — yani çelişki, faz durgunluk ilan etmeden önce görünür olur.
+  //    Simetrik üst eşik 55 (nötrün ~1,7 std hatası ÜSTÜ).
+  const PMAC_BREADTH_WEAK = 45, PMAC_BREADTH_STRONG = 55;
+  const PMAC_BREADTH_MAXAGE = 30 * 60 * 1000; // bayat genişlik "fiyat gerçekliği" sayılmaz
+  // ── EŞİK ②: Nabız satırları — GEREKÇELENDİRİLDİ, ÖLÇÜLMEDİ. (Canlı gün-içi
+  //    veri çevrimdışı dondurulamadığı için bu eşiğin ampirik dağılımı
+  //    ölçülmemiştir; gerekçesi olasılıksaldır.) Yazı-tura boş hipotezinde
+  //    düşen-sembol payının std sapması 0,5/√n; n=8 için 0,18. Yani %70 payı
+  //    tek başına ~1,1 std, zayıf bir kanıt — bu yüzden SAYI çoğunluğu YETMEZ,
+  //    ayrıca ortalama gün-içi değişimin -%1'in altında olması istenir. Böylece
+  //    tek bir büyük kaybeden ya da sakin-karışık bir gün tetiklemez.
+  const PMAC_ROWS_MIN = 6, PMAC_ROWS_SHARE = 0.70, PMAC_ROWS_CHG = 1.0;
+
+  // Duruş ile fiyat çelişiyor mu? Çelişiyorsa görünür bir uyarı şeridi döndürür.
+  function pulseMacroReality(macro, rows) {
+    if (!macro || !macro.hasData) return '';
+    // Nötr duruş bir YÖN İDDİASI etmiyor — yalanlanacak bir şey yok.
+    const want = macro.cls === 'dove' ? 'strong' : macro.cls === 'hawk' ? 'weak' : null;
+    if (!want) return '';
+
+    const src = [];
+    if (macroBreadthSeen && Date.now() - macroBreadthSeen.at < PMAC_BREADTH_MAXAGE) {
+      const b = macroBreadthSeen.val;
+      const tail = `evrenin ortalama teknik skoru ${Math.round(b)}/100, nötr 50`;
+      if (b <= PMAC_BREADTH_WEAK) src.push({ dir: 'weak', txt: `piyasa genişliği <b>zayıf</b> (${tail})` });
+      else if (b >= PMAC_BREADTH_STRONG) src.push({ dir: 'strong', txt: `piyasa genişliği <b>güçlü</b> (${tail})` });
+    }
+    const rr = (rows || []).filter((r) => r && r.a && typeof r.a.dayChg === 'number');
+    if (rr.length >= PMAC_ROWS_MIN) {
+      const dn = rr.filter((r) => r.a.dayChg < 0).length;
+      const avg = rr.reduce((a, r) => a + r.a.dayChg, 0) / rr.length;
+      const pct = (v) => (v >= 0 ? '+' : '') + v.toFixed(1).replace('.', ',') + '%';
+      if (dn / rr.length >= PMAC_ROWS_SHARE && avg <= -PMAC_ROWS_CHG)
+        src.push({ dir: 'weak', txt: `izlediğin ${rr.length} sembolün <b>${dn}'i bugün ekside</b> (ortalama ${pct(avg)})` });
+      else if ((rr.length - dn) / rr.length >= PMAC_ROWS_SHARE && avg >= PMAC_ROWS_CHG)
+        src.push({ dir: 'strong', txt: `izlediğin ${rr.length} sembolün <b>${rr.length - dn}'i bugün artıda</b> (ortalama ${pct(avg)})` });
+    }
+
+    const conflict = src.filter((s) => s.dir !== want);
+    if (!conflict.length) return '';
+    const reads = macro.cls === 'dove'
+      ? 'gevşeme / risk iştahı' : 'sıkılaşma / faize duyarlıda baskı';
+    return `<div class="pmac-conflict">⚠️ <b>Yön teyit edilmedi:</b> haber akışı <b>${reads}</b> okuyor,
+      ancak ${conflict.map((s) => s.txt).join(' ve ')} — <b>piyasa tersini söylüyor.</b>
+      Duruş yalnız haber METNİNDEN geliyor; fiyat onu onaylamadı. Çelişki kapanana kadar bu yönü
+      tek başına kanıt sayma. Bilgi amaçlıdır, yatırım tavsiyesi değildir.</div>`;
+  }
+
+  function buildPulseMacroHtml(macro, comment, reality) {
     const m = macro;
     const heads = m.headlines.length
       ? m.headlines.map((h) => {
@@ -11548,6 +11692,7 @@
         <span class="pmac-upd" title="Haber/makro katmanı Nabız açıkken 10 dk'da bir kendiliğinden tazelenir.">⟳ ${updTxt}</span>
       </div>
       ${flipHtml}
+      ${reality || ''}
       <div class="pmac-reads"><span class="pmac-read">${m.rateLbl}</span><span class="pmac-read">${m.inflLbl}</span></div>
       <div class="pmac-comment">${comment}</div>
       ${biasChips.length ? `<div class="pmac-biases">${biasChips.join('')}</div>` : ''}
@@ -11649,7 +11794,7 @@
     let pulseMacro = null;
     try { pulseMacro = await computePulseMacro(nf); } catch (_) {}
     if (pulseMacro) {
-      headEl.innerHTML = buildPulseMacroHtml(pulseMacro, pulseMacroComment(pulseMacro, []))
+      headEl.innerHTML = buildPulseMacroHtml(pulseMacro, pulseMacroComment(pulseMacro, []), pulseMacroReality(pulseMacro, []))
         + '<div class="pulse-summary"><span class="pulse-count">🔄 Semboller taranıyor…</span></div>';
     }
 
@@ -11683,7 +11828,7 @@
 
     const movers = rows.filter((r) => r.sudden);
     const notifOn = ('Notification' in window && Notification.permission === 'granted');
-    const macroHtml = pulseMacro ? buildPulseMacroHtml(pulseMacro, pulseMacroComment(pulseMacro, rows)) : '';
+    const macroHtml = pulseMacro ? buildPulseMacroHtml(pulseMacro, pulseMacroComment(pulseMacro, rows), pulseMacroReality(pulseMacro, rows)) : '';
     headEl.innerHTML = macroHtml + `<div class="pulse-summary">
       <span class="pulse-count ${movers.length ? 'hot' : ''}">${movers.length ? '⚡ ' + movers.length + ' ani hareket' : '😴 Şu an ani hareket yok'}</span>
       <button id="pulseNotif" class="pulse-notif-btn ${notifOn ? 'on' : ''}">${notifOn ? '🔔 Bildirim açık' : '🔕 Bildirimi aç'}</button>

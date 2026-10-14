@@ -377,6 +377,11 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
 - [ ] **Maliyet kontrolü:** Haiku modeli + KV cache (6–24s) + kullanıcı/gün limiti.
 - [ ] Premium'a bağla — maliyeti ödeyen, faydalanan kullanıcı olur.
 - [ ] Motor skoruna DOKUNMAZ (yalnız açıklama/keşif katmanı).
+- [ ] **Sürpriz / konsensüs boyutu (bilinen boşluk — 2026-10-14):** ⚡ Makro Nabız
+      "beklenenden sıcak" ayrımını YAPAMIYOR; yalnız manşet yönünü okur. Doğru ölçüm
+      gerçek makro konsensüs verisi ister (TÜFE beklentisi vs gerçekleşen); depoda böyle
+      bir kaynak YOK (hisse tarafındaki Yahoo `earningsTrend` makroyu kapsamaz). Kaynak
+      eklenmedi, konsensüs UYDURULMADI — bilinçli kapsam dışı. Bu faza ait.
 
 ## FAZ 6 — Store'a çıkış
 
@@ -422,3 +427,62 @@ AldınGitti **zaten native'di** (RN/Expo + Supabase, App Store'a çıktı) ama "
 değil" hissetti. Sorun framework değil **execution/cila**'ydı: navigasyon mimarisi,
 liste virtualizasyonu, algılanan hız, mikro-etkileşimler. Bu yüzden FAZ 3 ("elit cila")
 ve kalite kontrol listesi bu planın kalbidir — teknoloji seçimi değil, disiplin.
+
+---
+
+## Web geri bildirim günlüğü (laboratuvar → ürün)
+
+Web PWA artık **geliştirme laboratuvarı**: canlı kullanımda yakalanan hata burada
+ölçülür, düzeltilir, kalıcı testle çivilenir; native istemci bu düzeltilmiş motoru
+devralır. Sıra kullanıcının kararı: **web optimizasyonları yönü belirler, motor/API
+portu sonra gelir.**
+
+### 2026-10-14 · ⚡ Makro Nabız yönü ters okuyordu (app.js ekran katmanı)
+
+**Belirti (canlı web kullanımı):** ABD aylık enflasyonu beklentiden sıcak geldi,
+piyasa çakıldı; Nabız "🕊️ Gevşeme / güvercin rüzgârı" dedi. Enflasyon satırı olayı
+DOĞRU okudu, faiz satırı TAM TERSİNİ okudu, genel duruş yanlış olanı izledi.
+
+**Kök neden (ölçüldü, üretildi):** `rateDirection()` yalnız "rate cut / faiz indirimi"
+ifadesinin GEÇİP geçmediğine bakıyordu, o ifadeye NE YAPILDIĞINA bakmıyordu. Sıcak-TÜFE
+günü manşetleri birebir "rate cut hopes **died**" biçiminde; beşi de güvercin sayıldı.
+Ağırlık hatayı büyütüyordu: `pressure = rateDir*0,6 + inflDir*0,4` — bozuk sinyal 0,6,
+doğru sinyal 0,4.
+
+| | önce (hatalı) | sonra (düzeltilmiş) |
+|---|---|---|
+| `rateDir` | **−0,833** (güvercin) | **+0,833** (şahin) |
+| `inflDir` | +0,500 | +0,571 (`consumer price` eklendi) |
+| `pressure` | **−0,300** → 🕊️ GEVŞEME | **+0,729** → 🦅 SIKILAŞMA |
+
+Eşik ±0,12. Aynı beş manşet, aynı motor; yalnız yön matematiği düzeldi.
+
+**Yapılan üç düzeltme (hepsi ANAHTARSIZ — LLM çağrısı YOK, `CAUSAL_LLM.enabled:false`):**
+
+1. **Olumsuzlama kapısı** (`FADE_HARD` / `FADE_SOFT` / `FADE_TR` + `fadedAround`,
+   ifadenin İKİ yanında ±72 karakter): beklentiyi ÖLDÜREN fiil varsa oy TERS çevrilir.
+   **İki yönlü:** olumsuzlanan indirim şahin, olumsuzlanan artırım ("rate hike fears
+   fade") güvercin — tek yanlı düzeltme yeni yanlılık üretirdi. Çift anlamlı fiiller
+   (`slash`/`lower`/`cut back`) yalnız bir BEKLENTİ nesnesiyle (`bets|odds|hopes|…`)
+   olumsuzlama sayılır; yoksa gerçek indirim haberi ters çevrilirdi.
+2. **Fiyat yalanlama şeridi** (`pulseMacroReality`, `.pmac-conflict`): duruş fiyat
+   gerçekliğiyle ÇELİŞİYORSA kullanıcıya açıkça söylenir ("haber akışı X okuyor, ancak
+   piyasa tersini söylüyor — yön teyit edilmedi"). Duruş **sessizce nötrlenmez** —
+   bilgi yok edilmez, çelişki görünür kılınır. Genişlik eşiği `45` ÖLÇÜLDÜ (çevrim dışı
+   fikstür, 20 sembol: ortalama 57,89 · sembol-başı sd 13,05 · ortalamanın standart
+   hatası 2,92 → 45 ≈ nötr 50'nin 1,7 SE altı, deponun kendi resesyon kapısının hemen
+   üstü). İzlenen-satır eşiği GEREKÇELİ, ölçülmüş DEĞİL (kodda böyle yazılı).
+3. **Tazelik ağırlığı** (`FRESH_H=48s`, `FRESH_W=2,5`): yön matematiği 14 güne bakıyor,
+   bugünün şoku 14 günün bir oyuydu. Son 48 saat 2,5× ağırlıklı (14 gün ≈ yedi 48s
+   kovası → bugün oyların ~%29'u; 1,0 = eski bozuk davranış, 7,0 ≈ "yalnız bugün").
+
+**Kalıcı test:** `tests/nabiz-yon-test.mjs` — ağa çıkmaz, kaynağı app.js'ten DİLİMLER
+(kopyalamaz; kopya test kendi kopyasını doğrular, yani hiçbir şeyi). 40 denetim.
+**Mutasyonla sınandı:** kapı kaldırıldı → 22 denetim KIRMIZI ve hata birebir geri geldi
+(`rateDir −0,833`, `pressure −0,271` → güvercin); kapı geri kondu → 40/40 YEŞİL.
+
+**Skor DEĞİŞMEDİ (kanıtlandı):** bu katman BİLGİ AMAÇLI, motor skoruna dahil değil.
+`node tools/motor-uret.mjs` sonrası `git diff -- api/_motor.js api/_ayar.js` BOŞ;
+dört kapı: üretim 73 ✓ · uç 186 ✓ · parite FARK 0 ✓ · üretilmiş-motor parite FARK 0 ✓.
+
+**Kapsam dışı bırakıldı:** sürpriz/konsensüs boyutu → FAZ 5 (yukarıda, bilinen boşluk).

@@ -2969,6 +2969,13 @@ select.bm-input { cursor: pointer; }
 .pmac-flip em { font-style: normal; opacity: .72; }
 .pmac-upd { font-size: 11px; color: var(--text-dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+/* --- fiyat yalanlama şeridi: haber akışı X diyor, fiyat tersini söylüyor --- */
+.pmac-conflict {
+  margin: 9px 0 2px; padding: 9px 11px; border-radius: 10px; font-size: 12.5px; line-height: 1.55;
+  background: var(--red-soft); border: 1px solid rgba(255,94,126,.34); color: var(--text);
+}
+.pmac-conflict b { color: var(--red); }
+
 /* --- item 3: sektör satırına yapışık "ne iş yapar" şeridi --- */
 .srow.hasbiz { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .sbiz {
