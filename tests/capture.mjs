@@ -51,18 +51,32 @@ import {
   DIR_YAHOO, DIR_IS, DIR_SEC, keySafe, yahooKey,
 } from './score.mjs';
 
+// Başlıklar ve SEC aralığı TEK KAYNAK: api/_ag.js. Uç nokta ile bu dosya
+// AYNI başlıkları kurmak zorunda — iki kopya dursa, SEC bir gün UA
+// politikasını değiştirdiğinde yalnız biri onarılır, diğeri SESSİZCE boş
+// döner ve ekranda "bu şirkette veri yok" diye okunur. (Gerekçe api/_ag.js'in
+// kendi başlığında yazılı.) Paylaşılan şey BİLGİ: uzak taraf ne istiyor.
+// Paylaşılmayan şey SABIR: kaç kez yeniden deneyeceğimiz aşağıda kalıyor.
+import {
+  SEC_ARALIK_MS, yahooBaslik, secBaslik, isYatirimBaslik,
+} from '../api/_ag.js';
+
 // Motora MY_PROXY olarak verilen işaretçi. secGet `base + encodeURIComponent(url)`
 // kurar; kabuk öneki soyup GERÇEK adrese doğrudan gider. (`if (!base) return null`
 // yüzünden boş olamaz.)
 const SENTINEL = 'capture:';
 
 // SEC: iletişim bilgisi İSTEMİYOR — e-postasız UA ölçülmüş HTTP 200 veriyor.
-// Kullanıcının e-posta adresi buraya ASLA konmaz.
-const UA_SEC = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) sabah-bulteni-parite-testi';
-const UA_WEB = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
-
-const SEC_GAP_MS = 120;   // ≈8 istek/sn — SEC sınırı 10/sn
-const SEC_TRY = 3;        // 429/5xx için yeniden deneme
+// Kullanıcının e-posta adresi buraya ASLA konmaz — kural api/_ag.js'te de
+// yazılı ve UA'lar artık ORADAN geliyor (yahooBaslik/secBaslik/isYatirimBaslik).
+//
+// ⚠ DAVRANIŞ DEĞİŞİKLİĞİ — ÖLÇÜLMEDİ: bu dosyada SEC istek aralığı 120 ms
+// yazıyordu, api/_ag.js'te 125 ms (≈8 istek/sn; SEC sınırı 10/sn). Tek
+// kaynağa inerken 125 ms kazandı, yani kayıt koşusu SEC tarafında bir tık
+// yavaşladı. İkisi de sınırın altında ve 120 ms'in daha iyi olduğuna dair
+// bir ölçüm hiç yoktu — ama bu fark da ölçülmedi. Hız sorun olursa iki
+// tarafı birlikte ölçüp api/_ag.js'i düzeltin; kopyayı buraya geri getirmeyin.
+const SEC_TRY = 3;        // 429/5xx için yeniden deneme — SABIR capture'a ait
 
 for (const d of [FIX, DIR_YAHOO, DIR_IS, DIR_SEC]) fs.mkdirSync(d, { recursive: true });
 
@@ -87,7 +101,7 @@ let cur = null;
 let lastSecAt = 0;
 
 async function secThrottle() {
-  const wait = SEC_GAP_MS - (Date.now() - lastSecAt);
+  const wait = SEC_ARALIK_MS - (Date.now() - lastSecAt);
   if (wait > 0) await sleep(wait);
   lastSecAt = Date.now();
 }
@@ -106,7 +120,7 @@ async function recFetch(url) {
     for (let i = 0; i < 3 && !j; i++) {
       if (i) await sleep(800 * i);
       try {
-        const r = await fetch(url, { headers: { 'User-Agent': UA_WEB, Accept: 'application/json' } });
+        const r = await fetch(url, { headers: yahooBaslik() });
         if (!r.ok) continue;
         const o = await r.json();
         if (o && o.chart && o.chart.result) j = o;
@@ -127,7 +141,7 @@ async function recFetch(url) {
       const p = path.join(DIR_SEC, '_tickers.json');
       if (fs.existsSync(p)) return resText(fs.readFileSync(p, 'utf8'));
       await secThrottle();
-      const r = await fetch(real, { headers: { 'User-Agent': UA_SEC } });
+      const r = await fetch(real, { headers: secBaslik() });
       if (!r.ok) throw new Error('ticker listesi alinamadi: HTTP ' + r.status);
       const txt = await r.text();
       const obj = JSON.parse(txt);
@@ -160,7 +174,7 @@ async function recFetch(url) {
       await secThrottle();
       let r;
       try {
-        r = await fetch(real, { headers: { 'User-Agent': UA_SEC } });
+        r = await fetch(real, { headers: secBaslik() });
       } catch (e) {
         why = 'ag: ' + ((e.cause && e.cause.code) || e.name || e.message);
         continue;
@@ -190,15 +204,7 @@ async function recFetch(url) {
 //  gerekmiyor.
 // ---------------------------------------------------------------------
 async function recFetchVia(url, { timeout = 20000 } = {}) {
-  const cc = /companyCode=([A-Z0-9]+)/i.exec(url);
-  const headers = {
-    'User-Agent': UA_WEB,
-    Accept: 'application/json, text/javascript, */*; q=0.01',
-    'X-Requested-With': 'XMLHttpRequest',
-    Referer: cc
-      ? `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=${cc[1]}`
-      : 'https://www.isyatirim.com.tr/',
-  };
+  const headers = isYatirimBaslik(url);
   let last = 'bilinmeyen';
   for (let i = 0; i < 3; i++) {
     if (i) await sleep(1000 * i);
