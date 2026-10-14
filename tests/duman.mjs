@@ -17,6 +17,11 @@
 //  tahminin yerine SAYI koyar: duvar saati, tepe bellek, dönen alan listesi,
 //  tam/kesinti sayaçları.
 //
+//  ÜÇÜNCÜ UÇ (2026-10-14): /api/analyze da buraya eklendi — yeni ucun
+//  vercel.json girdisi KOPYALANMADI, bu dosyayla ÖLÇÜLDÜ. Ölçüm bütüncül
+//  katmanın gerçekten sayı ürettiğini de yazdırıyor (skor10 · band ·
+//  coreSoft · direk conf), yani "200 döndü" ile "analiz üretti" ayrı.
+//
 //  NE ÖLÇER
 //    · duvar saati süresi  — handler çağrısının başı/sonu (maxDuration için)
 //    · tepe heapUsed / rss — çağrı boyunca ÖRNEKLEME ile (memory için)
@@ -26,8 +31,8 @@
 //  NİYE HER UÇ AYRI SÜREÇTE: Vercel'de her fonksiyon kendi lambda'sında
 //  koşar, kendi belleğiyle. İki ucu aynı süreçte ölçmek ikinci ucun tepe
 //  değerine birincinin çöp toplanmamış artığını katar. Ebeveyn süreç her uç
-//  için bir çocuk doğurur (DUMAN_UC=score|recommend), çocuk TEK bir handler
-//  çağrısı yapar ve ölçümü tek satır JSON olarak basar.
+//  için bir çocuk doğurur (DUMAN_UC=score|recommend|analyze), çocuk TEK bir
+//  handler çağrısı yapar ve ölçümü tek satır JSON olarak basar.
 //
 //  NİYE ÖRNEKLEME: Node bir "tepe bellek" sayacı tutmuyor;
 //  process.memoryUsage() anlık değer veriyor. ÖRNEKLEME_MS aralığıyla
@@ -54,7 +59,7 @@
 //      ve o ayrı bir karardır.
 //
 //  KOŞUM
-//      node tests/duman.mjs                  # iki uç
+//      node tests/duman.mjs                  # üç uç
 //      node tests/duman.mjs score            # yalnız biri
 //      DUMAN_SEMBOL=AAPL,ASELS.IS node tests/duman.mjs
 //
@@ -64,7 +69,7 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-const UCLAR = ['score', 'recommend'];
+const UCLAR = ['score', 'recommend', 'analyze'];
 const SEMBOLLER = process.env.DUMAN_SEMBOL || 'AAPL,ASELS.IS';
 const VADE = process.env.DUMAN_VADE || 'orta';
 const ORNEKLEME_MS = 20;
@@ -138,6 +143,17 @@ if (process.env.DUMAN_UC) {
       faScore: s.fa ? s.fa.score : null,
       compositeBand: s.composite ? s.composite.band : null,
       planVar: Object.prototype.hasOwnProperty.call(s, 'plan') ? s.plan != null : null,
+      // Bütüncül katman YALNIZ /api/analyze'de var; öteki iki uçta alan
+      // yok, bu yüzden null = "bu uç böyle bir alan döndürmüyor" demek
+      // (false = "döndürüyor ama üretemedi" ile karıştırılmasın).
+      analizVar: Object.prototype.hasOwnProperty.call(s, 'analiz') ? s.analiz != null : null,
+      faKarar: s.analiz && s.analiz.faKarar ? s.analiz.faKarar.band : null,
+      skor10: s.analiz && s.analiz.butunculluk ? s.analiz.butunculluk.skor10 : null,
+      butunBand: s.analiz && s.analiz.butunculluk && s.analiz.butunculluk.band ? s.analiz.butunculluk.band.c : null,
+      coreSoft: s.analiz && s.analiz.butunculluk ? s.analiz.butunculluk.coreSoft : null,
+      direkConf: s.analiz && s.analiz.butunculluk && Array.isArray(s.analiz.butunculluk.direkler)
+        ? s.analiz.butunculluk.direkler.map((d) => `${d.k}=${d.v}${d.conf ? '' : '(conf:false)'}`).join(' · ')
+        : null,
       sayac: s.sayac || null,
       kayitAlanlari: Object.keys(s).sort(),
     })) : null,
@@ -224,6 +240,11 @@ for (const r of sonuc) {
         `bileske=${s.compositeBand}  plan=${s.planVar}  tam=${s.tam}`);
       if (c) console.log(`        sayac: yahoo ${c.yahoo.istek}/${c.yahoo.kesinti} · ` +
         `sec ${c.sec.istek}/${c.sec.yok}/${c.sec.kesinti} · bist ${c.bist.istek}/${c.bist.kesinti} · tekrar ${c.tekrar}`);
+      if (s.analizVar !== null) {
+        console.log(`        analiz: var=${s.analizVar} faKarar=${s.faKarar} skor10=${s.skor10} ` +
+          `band=${s.butunBand} coreSoft=${s.coreSoft}`);
+        if (s.direkConf) console.log(`        direkler: ${s.direkConf}`);
+      }
       console.log(`        kayit alanlari: ${s.kayitAlanlari.join(', ')}`);
     }
   }

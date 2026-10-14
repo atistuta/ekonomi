@@ -1,25 +1,28 @@
 #!/usr/bin/env node
 // ===========================================================================
-//  UÇ TESTLERİ — /api/score + /api/recommend kapıları   ·   AĞA ÇIKMAZ
+//  UÇ TESTLERİ — score + recommend + analyze kapıları   ·   AĞA ÇIKMAZ
 // ===========================================================================
 //
-//  NEDEN VAR: iki ucun (/api/score · /api/recommend) asıl işi — gerçek skor
-//  ve plan — ağa çıkmadan sınanamaz; onu `tests/parity.mjs` fikstürlerle,
-//  kullanıcı ise canlı koşuyla ölçüyor.
+//  NEDEN VAR: üç ucun (/api/score · /api/recommend · /api/analyze) asıl işi —
+//  gerçek skor, plan ve bütüncül okuma — ağa çıkmadan sınanamaz; onu
+//  `tests/parity.mjs` fikstürlerle, `tests/duman.mjs` ise canlı ağda
+//  (elle, CI dışı) ölçüyor.
 //  Ama uç noktanın KAPI kısmı — hangi girdiyi kabul ettiği, hangi kodla
 //  reddettiği, hata gövdesinde ne sızdırdığı — tamamen saf mantık ve ağa
 //  çıkmadan ölçülebilir. Ölçülmezse sessizce bozulur: bir yazım hatası
 //  `cok_sembol` kontrolünü etkisizleştirip 8 sembol sınırını kaldırabilir
 //  ve bunu kimse farketmez, çünkü cevap yine 200 döner.
 //
-//  NE ÖLÇER (5 bölüm)   ① ② ③ ④ = /api/score   ·   ⑤ = /api/recommend
+//  NE ÖLÇER (6 bölüm)   ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
 //    ① yüzey              — default/ayristir/config yerinde mi
 //    ② ayristir()         — pazar çözümü, yineleme, sınırlar, hata kodları
 //    ③ handler kapısı     — CORS · OPTIONS · 405 · 4xx gövdeleri
 //    ④ statik denetimler  — HAM SAYI kuralı ve sızıntı yasağı metinde
 //    ⑤ /api/recommend     — aynı yüzey/kapı + KOPYA kapının sürüklenme kilidi
+//    ⑥ /api/analyze       — aynı yüzey/kapı + bütüncül katmanın HAM SAYI
+//                           disiplini (serbest Türkçe metin tele çıkmıyor mu)
 //
-//  AĞ YASAĞI — BU TESTİN EN ÖNEMLİ KURALI: HER İKİ ucun handler()'ı
+//  AĞ YASAĞI — BU TESTİN EN ÖNEMLİ KURALI: HER ÜÇ ucun handler()'ı
 //  yalnız ağ'a hiç gitmeyecek isteklerle çağrılır (OPTIONS, GET-dışı, ya da
 //  doğrulamadan DÖNEN geçersiz sorgu). GEÇERLİ bir GET sorgusuyla
 //  çağrılırsa Yahoo/SEC/İş Yatırım'a gerçekten çıkar; test ağ durumuna
@@ -27,11 +30,10 @@
 //  yüzden yalnız `ayristir()` ile — ağ'a dokunmayan saf fonksiyon —
 //  sınanıyor.
 //
-//  NOT: api/score.js'i VE api/recommend.js'i import etmek modül düzeyinde
-//  İKİ AYRI canliAg() + buildMotor() kuruyor (Vercel'de de öyle: her uç kendi
-//  lambda'sı, kendi motoru, kendi SEC önbelleği). Hepsi yalnız kapanış/nesne
-//  kuruyor, TEK bir istek atmıyor — ağ ancak handler bir sembolü skorlarken
-//  açılıyor.
+//  NOT: üç ucu birlikte import etmek modül düzeyinde ÜÇ AYRI canliAg() +
+//  buildMotor() kuruyor (Vercel'de de öyle: her uç kendi lambda'sı, kendi
+//  motoru, kendi SEC önbelleği). Hepsi yalnız kapanış/nesne kuruyor, TEK bir
+//  istek atmıyor — ağ ancak handler bir sembolü skorlarken açılıyor.
 //
 //  KULLANIM
 //    node tests/uc-test.mjs          → çıkış kodu 0 (hepsi geçti) / 1
@@ -47,11 +49,15 @@ import handler, { ayristir, config, AZAMI_SEMBOL } from '../api/score.js';
 import recHandler, {
   ayristir as recAyristir, config as recConfig, AZAMI_SEMBOL as recAzami,
 } from '../api/recommend.js';
+import anaHandler, {
+  ayristir as anaAyristir, config as anaConfig, AZAMI_SEMBOL as anaAzami,
+} from '../api/analyze.js';
 import { VADELER } from '../api/_ayar.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCORE_PATH = path.join(ROOT, 'api', 'score.js');
 const RECOMMEND_PATH = path.join(ROOT, 'api', 'recommend.js');
+const ANALYZE_PATH = path.join(ROOT, 'api', 'analyze.js');
 const AKIS_PATH = path.join(ROOT, 'api', '_akis.js');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
@@ -71,7 +77,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend kapıları ve doğrulamaları yerinde.`);
+  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze kapıları ve doğrulamaları yerinde.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -293,6 +299,43 @@ bolum('④ statik denetimler — api/score.js metni');
 }
 
 // =========================================================================
+// --- ÜÇ UCUN ORTAK AYRISTIR VEKTÖRÜ -------------------------------------
+// ⑤b ve ⑥b aynı listeyi kullanıyor. İki ayrı liste tutulsaydı biri
+// güncellenip öteki unutulurdu ve üçüncü uç yalnız ESKİ girdilerde
+// sınanırdı — kopya sürüklenme kilidinin en sinsi kaçağı bu olurdu.
+const AYRISTIR_VEKTOR = [
+  {},
+  { symbols: '' },
+  { symbols: '   ' },
+  { symbols: 'AAPL' },
+  { symbols: 'aapl' },
+  { symbols: 'THYAO.IS' },
+  { symbols: 'THYAO:BIST,AAPL:US' },
+  { symbols: 'THYAO,ASELS', market: 'bist' },
+  { symbols: 'AAPL,AAPL' },
+  { symbols: 'AAPL,aapl,AAPL:US' },
+  { symbols: 'A,B,C,D,E,F,G,H' },
+  { symbols: 'A,B,C,D,E,F,G,H,I' },
+  { symbols: 'AAPL', vade: 'kisa' },
+  { symbols: 'AAPL', vade: 'uzun' },
+  { symbols: 'AAPL', vade: 'gunici' },
+  { symbols: 'AAPL', vade: 'yillik' },
+  { symbols: 'AAPL', market: 'XETRA' },
+  { symbols: '!!!' },
+  { symbols: 'AAPL,!!!' },
+  { symbols: '1AAPL' },
+  { symbols: 'AAPL:TOKYO' },
+  { symbols: 'VERYLONGSYMBOL' },
+  { symbols: 'X'.repeat(200) },
+  { symbol: 'AAPL' },
+  { symbols: null },
+];
+
+/** Saf fonksiyonu çağır; atan hali de karşılaştırılabilir metne çevir. */
+const cagirSaf = (fn, q) => {
+  try { return JSON.stringify(fn(q)); } catch (e) { return 'ATTI:' + ((e && e.message) || e); }
+};
+
 bolum('⑤ /api/recommend — ikinci uç, AYNI kapı');
 // =========================================================================
 // BU BÖLÜM NE: /api/recommend, /api/score'un döndürdüğü her şeyin ÜSTÜNE
@@ -334,36 +377,6 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
 // cevabı vermeli. Atan (throw) hal de karşılaştırılıyor — biri patlayıp
 // öteki patlamazsa da ayrışma vardır.
 {
-  const AYRISTIR_VEKTOR = [
-    {},
-    { symbols: '' },
-    { symbols: '   ' },
-    { symbols: 'AAPL' },
-    { symbols: 'aapl' },
-    { symbols: 'THYAO.IS' },
-    { symbols: 'THYAO:BIST,AAPL:US' },
-    { symbols: 'THYAO,ASELS', market: 'bist' },
-    { symbols: 'AAPL,AAPL' },
-    { symbols: 'AAPL,aapl,AAPL:US' },
-    { symbols: 'A,B,C,D,E,F,G,H' },
-    { symbols: 'A,B,C,D,E,F,G,H,I' },
-    { symbols: 'AAPL', vade: 'kisa' },
-    { symbols: 'AAPL', vade: 'uzun' },
-    { symbols: 'AAPL', vade: 'gunici' },
-    { symbols: 'AAPL', vade: 'yillik' },
-    { symbols: 'AAPL', market: 'XETRA' },
-    { symbols: '!!!' },
-    { symbols: 'AAPL,!!!' },
-    { symbols: '1AAPL' },
-    { symbols: 'AAPL:TOKYO' },
-    { symbols: 'VERYLONGSYMBOL' },
-    { symbols: 'X'.repeat(200) },
-    { symbol: 'AAPL' },
-    { symbols: null },
-  ];
-  const cagirSaf = (fn, q) => {
-    try { return JSON.stringify(fn(q)); } catch (e) { return 'ATTI:' + ((e && e.message) || e); }
-  };
   let ayrisan = null; let ayrNokta = 0;
   for (const q of AYRISTIR_VEKTOR) {
     const a = cagirSaf(ayristir, q);
@@ -511,14 +524,17 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
   ok('N3b · statik arama gerçekten çalışıyor', rsrc.includes('export default async function handler'));
 }
 
-// --- ⑤e KOPYA SÜRÜKLENME KİLİDİ ----------------------------------------
-// İki uç aynı doğrulama metnini taşıyor. Beşinci bir taşıyıcı (api/_girdi.js)
-// açmak bu adımın kapsamı dışındaydı — bu yüzden kopya SESSİZCE ayrışmasın
-// diye metin olarak karşılaştırılıyor. Yorumlar ve boş satırlar ÇIKARILIYOR:
-// gerekçeler iki dosyada farklı yazılabilir, DAVRANIŞ farklı yazılamaz.
+// --- ⑤e KOPYA SÜRÜKLENME KİLİDİ — ARTIK ÜÇ DOSYA -----------------------
+// ÜÇ uç aynı doğrulama metnini taşıyor. Yorumlar ve boş satırlar ÇIKARILIYOR:
+// gerekçeler üç dosyada farklı yazılabilir, DAVRANIŞ farklı yazılamaz.
 //
-// Üçüncü bir uç aynı kapıya ihtiyaç duyduğu gün bu denetim "kopyayı taşıyıcıya
-// çevir" diye bağıracak — o zaman bu bölüm silinir, yerine tek import gelir.
+// BORÇ, AÇIKÇA YAZILI: bu bölümün eski hali "üçüncü bir uç aynı kapıya
+// ihtiyaç duyduğu gün kopya değil TAŞIYICI doğru cevap olur" diyordu. O gün
+// GELDİ — /api/analyze üçüncü kopyayı açtı. Taşıyıcıya (api/_girdi.js) geçmek
+// hâlen DAĞITILMIŞ iki ucun dosyasını değiştirmek demek; o karar kullanıcının,
+// bu yüzden bu adımda yapılmadı. Borç api/analyze.js başlığında da duruyor.
+// Kilit bu arada ÜÇ YÖNLÜ: ikisi birbiriyle eşleşip üçüncüsü ayrışsa da
+// kırmızı yanar — "çoğunluk doğrudur" diye bir kaçak bırakılmadı.
 {
   const bolge = (src) => {
     const a = src.indexOf('export const AZAMI_SEMBOL');
@@ -528,29 +544,258 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
       .filter((l) => l.trim() && !/^\s*\/\//.test(l) && !/^\s*\*/.test(l) && !/^\s*\/\*\*/.test(l))
       .join('\n');
   };
-  const sb = bolge(readFileSync(SCORE_PATH, 'utf8'));
-  const rb = bolge(readFileSync(RECOMMEND_PATH, 'utf8'));
+  const BOLGELER = [
+    ['score', bolge(readFileSync(SCORE_PATH, 'utf8'))],
+    ['recommend', bolge(readFileSync(RECOMMEND_PATH, 'utf8'))],
+    ['analyze', bolge(readFileSync(ANALYZE_PATH, 'utf8'))],
+  ];
 
-  // Önce AYIKLAMANIN kendisi çalışıyor mu: iki boş dizge de "eşit" olurdu ve
+  // Önce AYIKLAMANIN kendisi çalışıyor mu: üç boş dizge de "eşit" olurdu ve
   // ⑤e sessizce yeşil yanardı.
-  ok('N9 · doğrulama bölgesi ayıklanabildi (boş değil, beklenen içerik var)',
-    !!sb && !!rb && sb.length > 1200 && rb.length > 1200
-    && sb.includes('export function ayristir(') && sb.includes('function temizleSembol(')
-    && rb.includes('export function ayristir(') && rb.includes('function temizleSembol('),
-    `score ${sb ? sb.length : 0} krk · recommend ${rb ? rb.length : 0} krk`);
+  const ayiklandi = BOLGELER.every(([, b]) => !!b && b.length > 1200
+    && b.includes('export function ayristir(')
+    && b.includes('function temizleSembol('));
+  ok('N9 · doğrulama bölgesi ÜÇ dosyada da ayıklanabildi (boş değil, beklenen içerik var)',
+    ayiklandi, BOLGELER.map(([ad, b]) => `${ad} ${b ? b.length : 0} krk`).join(' · '));
 
+  // Referans score; ötekiler ona göre ölçülüyor. İlk farkı satır satır söyler,
+  // çünkü "eşit değil" tek başına hangi satırın kaydığını göstermiyor.
+  const ref = BOLGELER[0][1];
   let ilkFark = '';
-  if (sb && rb && sb !== rb) {
-    const sl = sb.split('\n'); const rl = rb.split('\n');
+  for (const [ad, b] of BOLGELER.slice(1)) {
+    if (!ref || !b || ref === b) continue;
+    const sl = ref.split('\n'); const rl = b.split('\n');
     for (let i = 0; i < Math.max(sl.length, rl.length); i++) {
       if (sl[i] !== rl[i]) {
-        ilkFark = `satır ${i + 1}: score ${JSON.stringify(sl[i])} · recommend ${JSON.stringify(rl[i])}`;
+        ilkFark = `${ad}: satır ${i + 1} — score ${JSON.stringify(sl[i])} · ${ad} ${JSON.stringify(rl[i])}`;
         break;
       }
     }
+    if (ilkFark) break;
   }
-  ok('⑤e · iki ucun doğrulama bölgesi (sınırlar + ayristir + temizleSembol) BİREBİR aynı',
-    !!sb && !!rb && sb === rb, ilkFark || `${sb ? sb.split('\n').length : 0} kod satırı aynı`);
+  ok('⑤e · ÜÇ ucun doğrulama bölgesi (sınırlar + ayristir + temizleSembol) BİREBİR aynı',
+    ayiklandi && BOLGELER.every(([, b]) => b === ref),
+    ilkFark || `${ref ? ref.split('\n').length : 0} kod satırı üç dosyada aynı`);
+}
+
+// =========================================================================
+bolum('⑥ /api/analyze — üçüncü uç, AYNI kapı + bütüncül katman');
+// =========================================================================
+// BU BÖLÜM NE: /api/analyze, /api/recommend'ın döndürdüğü her şeyin ÜSTÜNE
+// bütüncül okumayı (`faKarar` + `butunculluk`) koyuyor — iç içe geçmiş üç
+// uç: scoreOne ⊂ recommendOne ⊂ analyzeOne. Kapısı yine AYNI METİN, yani
+// ÜÇÜNCÜ kopya; sürüklenme kilidi ⑤e'de üç yönlü hale getirildi.
+//
+// ⑥'nın kendine ait asıl işi: bütüncül katman, HAM SAYI kuralının EN
+// kaygan yeri. Motorun `computeHolisticScore`u serbest Türkçe metin de
+// üretiyor (`parts[].note`, `growthNote.txt`, `COMPOSITE_MATRIX[...].txt`
+// gibi) — akış bunları SÖKÜYOR ve tele yalnız sabit kümeli etiket + sayı
+// çıkıyor. Biri "istemcide cümle kurmak zahmetli" diye `...hol` yazarsa uç
+// nokta Türkçe cümle yayınlamaya başlar; ⑥e tam olarak bunu bekçiliyor.
+//
+// AĞ YASAĞI ⑥'da da geçerli: `anaHandler` yalnız OPTIONS / GET-dışı /
+// doğrulamadan DÖNEN sorgularla çağrılıyor. Geçerli girdiler `anaAyristir`
+// ile — ağ'a dokunmayan saf fonksiyon — sınanıyor.
+
+// --- ⑥a yüzey -----------------------------------------------------------
+ok('⑥a · default dışa aktarma bir fonksiyon', typeof anaHandler === 'function', typeof anaHandler);
+ok('⑥a · ayristir() dışa aktarılmış (ağsız sınanabilir)', typeof anaAyristir === 'function', typeof anaAyristir);
+ok('⑥a · config.runtime = nodejs', anaConfig && anaConfig.runtime === 'nodejs', String(anaConfig && anaConfig.runtime));
+// /api/score ve /api/recommend ile AYNI olmalı. Bütüncül katman da SAF
+// HESAP: tests/duman.mjs ölçtü — /api/score'un üstüne yeni AĞ isteği
+// eklemiyor. Zaman profili değişmiyorsa süre tavanı da değişmemeli.
+ok('⑥a · config.maxDuration = 60 (üç uçta aynı)',
+  anaConfig && anaConfig.maxDuration === config.maxDuration
+  && anaConfig.maxDuration === recConfig.maxDuration && anaConfig.maxDuration === 60,
+  `analyze ${anaConfig && anaConfig.maxDuration} · recommend ${recConfig && recConfig.maxDuration} · score ${config && config.maxDuration}`);
+ok('⑥a · AZAMI_SEMBOL üç uçta aynı', anaAzami === AZAMI_SEMBOL && anaAzami === recAzami && anaAzami === 8,
+  `analyze ${anaAzami} · recommend ${recAzami} · score ${AZAMI_SEMBOL}`);
+
+// --- ⑥b ayristir() ÜÇ uçta BİREBİR aynı ---------------------------------
+// ⑤b ile AYNI vektör kullanılıyor (modül düzeyinde, tek liste). İki ayrı
+// liste tutulsaydı biri güncellenip öteki unutulur ve üçüncü uç yalnız ESKİ
+// girdilerde sınanırdı — kopya kilidinin en sinsi kaçağı bu olurdu.
+{
+  let ayrisan = null; let ayrNokta = 0;
+  for (const q of AYRISTIR_VEKTOR) {
+    const a = cagirSaf(ayristir, q);
+    const c = cagirSaf(anaAyristir, q);
+    if (a !== c) { ayrisan = `${JSON.stringify(q)} → score ${a} · analyze ${c}`; break; }
+    ayrNokta++;
+  }
+  ok('⑥b · ayristir() score ile birebir aynı cevap', ayrisan === null,
+    ayrisan || `${ayrNokta} sorgu vektörü`);
+
+  let ayrisan2 = null;
+  for (const q of AYRISTIR_VEKTOR) {
+    const b = cagirSaf(recAyristir, q);
+    const c = cagirSaf(anaAyristir, q);
+    if (b !== c) { ayrisan2 = `${JSON.stringify(q)} → recommend ${b} · analyze ${c}`; break; }
+  }
+  ok('⑥b · ayristir() recommend ile birebir aynı cevap', ayrisan2 === null,
+    ayrisan2 || `${AYRISTIR_VEKTOR.length} sorgu vektörü`);
+
+  // N10: karşılaştırma gerçekten hassas mı — ⑤b'deki N5'in üçüncü uç eşi.
+  ok('N10 · ⑥b karşılaştırması ayrışmayı yakalıyor',
+    cagirSaf(ayristir, { symbols: 'AAPL' }) !== cagirSaf(anaAyristir, { symbols: 'MSFT' }),
+    'farklı girdi farklı çıktı veriyor');
+
+  // Vektörün hepsi reddedilse ⑥b "üçü de her şeyi reddediyor"u da geçerdi.
+  let kabul = 0;
+  for (const q of AYRISTIR_VEKTOR) {
+    try { if (!anaAyristir(q).hata) kabul++; } catch { /* atan hal ⑥b'nin işi */ }
+  }
+  ok('N11 · vektör analyze için de yalnız RET hallerinden oluşmuyor', kabul >= 10, `${kabul} kabul`);
+}
+
+// --- ⑥c handler kapısı (ağsız yollar) -----------------------------------
+{
+  const o = await cagirUc(anaHandler, 'OPTIONS', {});
+  ok('⑥c · OPTIONS → 204, gövde yok', o.kod === 204 && o.bitti === true && o.govde === null,
+    `kod ${o.kod} bitti ${o.bitti}`);
+  ok('⑥c · CORS başlıkları öteki iki uçla aynı küme',
+    o.basliklar['access-control-allow-origin'] === '*'
+    && o.basliklar['access-control-allow-methods'] === 'GET, OPTIONS'
+    && o.basliklar['access-control-max-age'] === '86400',
+    JSON.stringify(o.basliklar));
+
+  const p = await cagirUc(anaHandler, 'POST', {});
+  ok('⑥c · POST → 405 + Allow', p.kod === 405 && p.basliklar.allow === 'GET, OPTIONS',
+    `kod ${p.kod} allow ${p.basliklar.allow}`);
+  ok('⑥c · 405 gövdesi yalnız error + uyari',
+    anahtarlar(p.govde) === 'error,uyari', anahtarlar(p.govde));
+
+  // Geçersiz GET'ler: doğrulamadan DÖNER, ağ açılmaz.
+  const q = await cagirUc(anaHandler, 'GET', {});
+  ok('⑥c · GET symbols yok → 400 symbols_yok', q.kod === 400 && q.govde.error === 'symbols_yok',
+    `${q.kod} ${q.govde && q.govde.error}`);
+  // N7'nin ÜÇÜNCÜ motor için eşi: modül düzeyi kurulum patlamış olsaydı 503
+  // dönerdi, çünkü o kontrol ayristir'dan ÖNCE koşuyor.
+  ok('N12 · /api/analyze modül düzeyi motor kurulumu başarılı (503 değil)', q.kod !== 503, `kod ${q.kod}`);
+
+  const r2 = await cagirUc(anaHandler, 'GET', { symbols: 'AAPL', vade: 'yillik' });
+  const r3 = await cagirUc(anaHandler, 'GET', { symbols: 'A,B,C,D,E,F,G,H,I' });
+  const r4 = await cagirUc(anaHandler, 'GET', { symbols: '!!!' });
+  const r5 = await cagirUc(anaHandler, 'GET', { symbols: 'AAPL', market: 'XETRA' });
+  ok('⑥c · bozuk vade → 400 bad_vade', r2.kod === 400 && r2.govde.error === 'bad_vade',
+    `${r2.kod} ${r2.govde && r2.govde.error}`);
+  ok('⑥c · 9 sembol → 400 cok_sembol', r3.kod === 400 && r3.govde.error === 'cok_sembol',
+    `${r3.kod} ${r3.govde && r3.govde.error}`);
+  ok('⑥c · biçimsiz sembol → 400 bad_symbol', r4.kod === 400 && r4.govde.error === 'bad_symbol',
+    `${r4.kod} ${r4.govde && r4.govde.error}`);
+  ok('⑥c · tanınmayan pazar → 400 bad_market', r5.kod === 400 && r5.govde.error === 'bad_market',
+    `${r5.kod} ${r5.govde && r5.govde.error}`);
+
+  for (const [ad, res] of [['405', p], ['symbols_yok', q], ['bad_vade', r2], ['cok_sembol', r3], ['bad_symbol', r4], ['bad_market', r5]]) {
+    ok(`⑥c · ${ad} gövdesinde uyarı metni var`, res.govde && res.govde.uyari === UYARI,
+      String(res.govde && res.govde.uyari).slice(0, 20));
+  }
+  for (const [ad, res] of [['405', p], ['symbols_yok', q], ['bad_vade', r2], ['bad_symbol', r4]]) {
+    const metin = JSON.stringify(res.govde || {});
+    const sizdi = /at\s+\w+\s*\(|\.js:\d+|[A-Za-z]:\\\\|\/Users\/|node_modules|stack/i.test(metin);
+    ok(`⑥c · ${ad} gövdesi yığın izi/yol sızdırmıyor`, !sizdi, sizdi ? metin.slice(0, 120) : 'temiz');
+  }
+  ok('⑥c · hata yolu Cache-Control: max-age=30',
+    q.basliklar['cache-control'] === 'public, max-age=30', q.basliklar['cache-control']);
+}
+
+// --- ⑥d statik denetimler — api/analyze.js metni -------------------------
+{
+  const csrc = readFileSync(ANALYZE_PATH, 'utf8');
+  const ckod = csrc.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+
+  ok('⑥d · dosya uyarı metnini taşıyor', csrc.includes(UYARI));
+  ok('N13 · yorum ayıklama çalışıyor (başlık düştü)',
+    /\bIntl\b/.test(csrc) && !/\bIntl\b/.test(ckod), 'başlıkta var, kodda yok');
+
+  // HAM SAYI KURALI (BAGIMLILIK_GRAFIGI.md §5.1) — ⑤d ile aynı küme.
+  ok('⑥d · HAM SAYI · `Intl` kullanımı yok', !/\bIntl\b/.test(ckod));
+  ok('⑥d · HAM SAYI · `toFixed(` yok', !ckod.includes('toFixed('));
+  ok('⑥d · HAM SAYI · `toLocaleString` yok', !ckod.includes('toLocaleString'));
+  const emojiVar = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(ckod);
+  ok('⑥d · HAM SAYI · kodda emoji yok', !emojiVar, emojiVar ? 'emoji bulundu' : 'temiz');
+  const paraVar = /[₺€£¥₩%]|×ATR/.test(ckod);
+  ok('⑥d · HAM SAYI · kodda para/yüzde simgesi yok', !paraVar, paraVar ? 'simge bulundu' : 'temiz');
+
+  ok('⑥d · app.js / config.js import edilmiyor',
+    !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(csrc));
+  const tasiyici = csrc.match(/^import .* from '\.\/_[a-z]+\.js';$/gm) || [];
+  ok('⑥d · yalnız dört taşıyıcı import ediliyor (BEŞİNCİ taşıyıcı yok)',
+    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js'].every((m) => csrc.includes(`from '${m}'`))
+    && tasiyici.length === 4, `${tasiyici.length} taşıyıcı import`);
+  // Öteki UÇLARI import ETMEZ: ettiği an analyze lambda'sı iki motor kurar
+  // ve SEC önbellekleri (`secCikMap`/`secModelCache`) ikiye bölünür.
+  ok('⑥d · api/score.js ve api/recommend.js import edilmiyor',
+    !/from\s+['"]\.\/(score|recommend)\.js['"]/.test(csrc));
+
+  // Sayaç motora tek bir sayı dahi GEÇİRMİYOR — yalnız gözlemci.
+  ok('⑥d · sayaç yalnız gözlemci (analyzeOne\'a sayac geçmiyor)',
+    !/analyzeOne\([^)]*sayac/s.test(csrc));
+
+  // Başarısız sembol kaydı HER İKİ üst katman alanını da taşıyor: istemci
+  // `'analiz' in kayit` ile `kayit.analiz` arasında ayrım yapmak zorunda
+  // kalmasın.
+  ok('⑥d · sembol hata kaydında `plan: null` var', /plan:\s*null/.test(ckod));
+  ok('⑥d · sembol hata kaydında `analiz: null` var', /analiz:\s*null/.test(ckod));
+  ok('⑥d · 502 yolunda yalnız makine kodu var',
+    ckod.includes("error: 'analiz_hesaplanamadi'")
+    && !/res\.status\(502\)[\s\S]{0,200}stack/.test(ckod));
+
+  // `surum` BİÇİMİ istemci sözleşmesi: üç uçta aynı iki anahtar. Ayrışırsa
+  // istemci üç uçtan gelen motor sürümünü karşılaştıramaz.
+  ok('⑥d · `surum` biçimi öteki iki uçla aynı ({ motor, ayar })',
+    ckod.includes('surum: { motor: IMZA, ayar: IMZA_AYAR }')
+    && readFileSync(SCORE_PATH, 'utf8').includes('surum: { motor: IMZA, ayar: IMZA_AYAR }')
+    && readFileSync(RECOMMEND_PATH, 'utf8').includes('surum: { motor: IMZA, ayar: IMZA_AYAR }'));
+}
+
+// --- ⑥e bütüncül katmanın HAM SAYI disiplini — api/_akis.js metni -------
+// Bu bölümün çivilediği şey TEK satırlık bir "kolaylık"la bozulabilir:
+// `...hol` yazmak yeterli. O yüzden analizKatmani'nin DİLİMİ ayrı ayıklanıp
+// sınanıyor — planKatmani'nin metni karışmasın.
+{
+  const asrc2 = readFileSync(AKIS_PATH, 'utf8');
+  const i0 = asrc2.indexOf('export function analizKatmani(');
+  const i1 = asrc2.indexOf('export async function analyzeOne(');
+  const dilim = (i0 >= 0 && i1 > i0) ? asrc2.slice(i0, i1) : '';
+  const dkod = dilim.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+
+  // Önce AYIKLAMA çalışıyor mu: boş dilim aşağıdaki bütün "yok" denetimlerini
+  // sessizce yeşil yapardı.
+  ok('N14 · analizKatmani dilimi ayıklanabildi (boş değil)',
+    dilim.length > 600 && dkod.includes('return {'), `${dilim.length} krk`);
+
+  // Bütüncül okuma MOTORDAN geliyor — akış kendi matrisini/eşiğini kurmuyor.
+  ok('⑥e · bütüncül skor motordan (`eng.computeHolisticScore`) çağrılıyor',
+    dkod.includes('eng.computeHolisticScore('));
+  ok('⑥e · FA kararı motordan (`eng.faVerdict`) çağrılıyor',
+    dkod.includes('eng.faVerdict('));
+  // COMPOSITE_MATRIX konumlaması ZATEN composite()'te taşınıyor; burada
+  // tekrarlanırsa aynı sayı iki yerden üretilir ve biri sessizce ayrışır.
+  ok('⑥e · COMPOSITE_MATRIX analizKatmani\'nda TEKRARLANMIYOR',
+    !dkod.includes('COMPOSITE_MATRIX'));
+
+  // SERBEST TÜRKÇE METİN TELE ÇIKMIYOR: `parts[].note` ve `growthNote.txt`
+  // sökülüyor, yalnız sabit kümeli sınıf kodu (`cls`) geçiyor.
+  ok('⑥e · `growthNote.txt` tele konmuyor (yalnız `cls` geçiyor)',
+    dkod.includes('growthNote.cls') && !dkod.includes('growthNote.txt'));
+  ok('⑥e · direk `note` alanı tele konmuyor',
+    !/\.note\b/.test(dkod) && !/\bnote:/.test(dkod));
+  // `direkler` TAM olarak dört alan taşıyor: k · w · v · conf. `...p` yazmak
+  // `note`u sessizce geri getirirdi.
+  ok('⑥e · `direkler` yalnız k · w · v · conf alanlarını taşıyor',
+    /\{\s*k:\s*p\.k,\s*w:\s*round6\(p\.w\),\s*v:\s*round6\(p\.v\),\s*conf:\s*p\.conf,?\s*\}/s.test(dkod)
+    && !/\.\.\.p\b/.test(dkod));
+
+  // Eşik/çarpan akışta DEĞİL (sayı motorda, cümle çağrı noktasında). Tek bir
+  // `skor10 >= 7` bile motoru atlayan İKİNCİ bir karar kuralı demek olur.
+  const esikler = dkod.match(/[<>]=?\s*\d/g) || [];
+  ok('⑥e · analizKatmani sayısal eşik karşılaştırması taşımıyor',
+    esikler.length === 0, esikler.length ? esikler.join(' ') : 'eşik yok');
+
+  // Biçimlendirme de yok: HAM SAYI kuralı akışın bu parçası için de geçerli.
+  ok('⑥e · analizKatmani biçimlendirme yapmıyor (`toFixed`/`Intl` yok)',
+    !dkod.includes('toFixed(') && !/\bIntl\b/.test(dkod));
 }
 
 

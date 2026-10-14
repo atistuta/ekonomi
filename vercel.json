@@ -18,6 +18,10 @@
     "api/recommend.js": {
       "memory": 512,
       "maxDuration": 60
+    },
+    "api/analyze.js": {
+      "memory": 512,
+      "maxDuration": 60
     }
   },
   "regions": ["fra1"],

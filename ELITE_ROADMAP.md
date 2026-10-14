@@ -73,8 +73,8 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       etkilenmedi. Aday motor `PARITE_APP=` ile canlıya dokunmadan ölçülebilir.
 - [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
       `theme`, `causal`, `compare`. Vercel KV ile cache.
-      → **DURUM (2026-10-14): 2/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓. Kalan
-      dört: `analyze`, `theme` (tematik keşif), `causal`, `compare`. Dürüst
+      → **DURUM (2026-10-14): 3/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓ ·
+      `/api/analyze` ✓. Kalan üç: `theme` (tematik keşif), `causal`, `compare`. Dürüst
       not: `api/theme.js` dosyası zaten VAR ama **eski şeritten** — dört
       taşıyıcının (`_motor` · `_ayar` · `_ag` · `_akis`) üstünde durmuyor,
       bu yüzden bu maddeye sayılmıyor. **Vercel KV önbelleği henüz hiçbir
@@ -121,8 +121,9 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       sembol kesilemiyor, çünkü zaman aşımları motorun ve konağın içinde. Tek bir
       BIST sembolü en kötü halde (3 × 7 sn İş Yatırım + mumlar) platform
       bütçesini yiyebilir; istemci kesilen isteği `kesinti` gibi ele almalı.
-      **Canlı koşu YAPILMADI** — `vercel.json`'daki 1024 MB bellek ÖLÇÜLMEDİ,
-      ilk canlı koşudan sonra ayarlanmalı. Semboller SIRAYLA işleniyor
+      **Canlı koşu O GÜN yapılmamıştı** — `vercel.json`'daki 1024 MB bellek
+      TAHMİNDİ. **Sonradan ÖLÇÜLDÜ** (`tests/duman.mjs`, 2026-10-14) ve
+      **512**'ye indi; sayılar aşağıda. Semboller SIRAYLA işleniyor
       (paralel değil); hız gerekirse ölçülüp ayrıca ele alınacak.
       **Açık uç KAPANDI** (2026-10-14): `tests/capture.mjs` artık UA/başlık
       sabitlerinin kendi kopyasını tutmuyor, `api/_ag.js`'ten içe alıyor
@@ -157,16 +158,72 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       (64 → 73: motora inen üç fonksiyon artık orada denetleniyor);
       `node tests/parity.mjs` → **FARK 0** (29 nokta), `PARITE_MOTOR=uretilmis`
       şeridinde de **FARK 0** — yani **skor değişmedi**, kapı budur.
-      **Canlı koşu YAPILMADI:** `/api/recommend` gerçek ağla **hiç**
-      çalışmadı (dağıtılmadı). `vercel.json`'daki 1024 MB / 60 sn
-      `/api/score`'dan kopyalandı — TAHMİN, ölçülmedi. Doğrulama bölgesi
+      **Canlı koşu O GÜN yapılmamıştı**, sonra yapıldı: `tests/duman.mjs`
+      `/api/recommend`'i gerçek ağla çağırdı (sayılar aşağıda).
+      `vercel.json`'daki 1024 MB tahmini ölçümle **512**'ye indi, 60 sn
+      ölçüm sonucu KALDI. Doğrulama bölgesi
       `api/score.js` ile **bilerek kopya** (Vercel'de her uç kendi lambda'sı:
       kendi motoru, kendi SEC önbelleği, ortak modül durumu YOK); sessiz
       ayrışmayı `tests/uc-test.mjs` ⑤b/⑤e bekçiliyor.
-      **Sırada: üçüncü uç** — `analyze`, ardından `discover` (tematik keşif)
-      ve `pulse` (⚡ Nabız). Aynı dört taşıyıcı, aynı kural: SAYI motora,
-      CÜMLE çağrı noktasına. Beşinci taşıyıcı hâlâ gerekmiyor; KV önbelleği
-      ölçülmeden eklenmeyecek.
+      **CANLI DUMAN TESTİ İNDİ** (2026-10-14, `tests/duman.mjs`): iki ucun
+      `handler`'ı sahte `req`/`res` ile, **gerçek ağ üzerinden** çağrıldı.
+      Elle koşulur, CI'da koşmaz, fikstüre yazmaz. **Ölçülen** (AAPL+ASELS.IS,
+      tek çağrı): `/api/score` 30,6 sn · `/api/recommend` 28,7 sn · tepe
+      `heapUsed` 17,1 MB · tepe `rss` **95,3 MB**. Tek ABD sembolüyle 7,2 sn /
+      88,3 MB. **Sonuç:** `vercel.json`'daki tahmin 1024 → **512** (ölçülen
+      tepenin ~5 katı; 256'ya inilmedi çünkü tepe örneklemeyle alındı, yani
+      alt sınır). **Bilinen taviz:** Vercel'de bellek kademesi vCPU'yu da
+      ölçekliyor — bu iş yükü İO-ağırlıklı (7,2 sn'nin ~3,9 sn'si SEC
+      125 ms aralığında saf bekleme), o yüzden CPU darboğaz değil; dağıtımdan
+      sonra süre uzarsa ilk bakılacak yer burası.
+      **ÖLÇÜLEMEYEN:** BIST ayağı (İş Yatırım) o koşuda TCP düzeyinde
+      bağlanamadı — BIST mali tablosu hiç inmedi, **BIST yolunun bellek
+      tepesi hâlâ ÖLÇÜLMEDİ**.
+      **ÜÇÜNCÜ UÇ İNDİ** (2026-10-14): `api/analyze.js` —
+      `/api/analyze?symbols=…&vade=…` planın ÜSTÜNE bütüncül okumayı
+      koyuyor: `faKarar` (FA sözel kararı) + `butunculluk` (0-10 skor, band,
+      üç direk `k`/`w`/`v`/`conf`, `coreSoft`, `buyumeCls`). Üç uç İÇ İÇE:
+      `scoreOne ⊂ recommendOne ⊂ analyzeOne`. **Beşinci taşıyıcı yine
+      açılmadı** — aynı dört parça.
+      **MOTORA TAŞIMA YAPILMADI, çünkü GEREKMEDİ:** önce ölçüldü —
+      `computeHolisticScore` · `faVerdict` · `COMPOSITE_MATRIX` motor
+      diliminde ZATEN vardı ve `app.js`'in iki tüketicisi (`fillResultPlan`,
+      `compareVerdict`) yalnız onları çağırıyordu. Yani bu uç bir ÇAĞRI
+      SIRASI; `app.js`/`config.js` ellenmedi, `tools/motor-uret.mjs` yeniden
+      koşmadı, üretilmiş taşıyıcılar bayt olarak aynı kaldı.
+      **HAM SAYI:** motorun serbest Türkçe metinleri (`parts[].note`,
+      `growthNote.txt`, `COMPOSITE_MATRIX[...].txt`) tele ÇIKMIYOR; yalnız
+      sabit kümeli kod geçiyor (`faKarar.label`, `band.l`/`band.c`,
+      `direkler[].k`, `buyumeCls`). `thematic` alanı BİLEREK dışarıda:
+      sabit `false` göndermek "tematik değil" diye okunurdu, gerçek ise
+      "bilinmiyor".
+      **Ölçülen (canlı, tek ABD sembolü):** duvar saati 7.405 ms (aynı sorguda
+      `/api/score` 7.213 ms) · tepe `rss` 88,3 MB (score ile AYNI) · **0 ek ağ
+      isteği**. Yani bütüncül katman saf hesap: +192 ms (%2,7), +0 MB. Bu,
+      analyze'ın recommend'i SARMASI kararını da doğruluyor — istemci iki uç
+      çağırsa mumlar ve SEC modeli (31 istek) İKİNCİ KEZ inecekti.
+      **Ölçülen (kapılar):** `node tests/uc-test.mjs` → **160 denetim geçti**
+      (106 → 160: yeni ⑥ bölümü üçüncü ucun yüzeyini/kapısını ve bütüncül
+      katmanın HAM SAYI disiplinini ölçüyor; ⑤e kopya kilidi artık ÜÇ YÖNLÜ —
+      61 kod satırı / 2.401 karakter üç dosyada birebir); `uretim-test` →
+      **73**; `parity` → **FARK 0** (29 nokta), `PARITE_MOTOR=uretilmis`
+      şeridinde de **FARK 0** — **skor değişmedi**, kapı budur.
+      **AÇIK KALAN (dürüstlük notu):** aynı duman testi bozuk ağda TEK
+      ÇAĞRIDA 76,3 sn sürdü (31 SEC isteğinin 27'si kesinti). `BUTCE_MS`
+      freni çalıştı (`tam:false`) ama 76,3 sn > `maxDuration` 60 — Vercel o
+      lambda'yı KESERDİ. Sebep: `BUTCE_MS` yalnız SEMBOLLER ARASINDA
+      bakılıyor; bir sembolün içindeki isteklerin her birinin kendi 10 sn'lik
+      zaman aşımı var (`api/_ag.js`) ama TOPLAMINA üst sınır yok. Bu açık
+      **ÜÇ UCUN DA** açığı, bu adımda doğmadı ve burada kapatılmadı —
+      kapatmak ortak doğrulama bölgesini ya da `_ag.js`'i değiştirmek demek.
+      **Üçüncü KOPYA borcu:** doğrulama bölgesi artık üç dosyada. `api/_girdi.js`
+      taşıyıcısına geçmek DAĞITILMIŞ iki ucu değiştirmek demek, o yüzden karar
+      kullanıcıya bırakıldı; borç `api/analyze.js` başlığında ve `uc-test` ⑤e
+      yorumunda yazılı.
+      **Sırada: dördüncü uç** — `theme` (tematik keşif; `api/theme.js` VAR ama
+      eski şeritten, dört taşıyıcının üstünde durmuyor), ardından `causal` ve
+      `compare` + `pulse` (⚡ Nabız). Aynı dört taşıyıcı, aynı kural: SAYI
+      motora, CÜMLE çağrı noktasına. KV önbelleği ölçülmeden eklenmeyecek.
 - [x] **Expo projesi** kuruldu (2026-10-14, `mobile/`): TypeScript + expo-router +
       Supabase client. expo ~57.0.28 · react-native 0.86.3 · react 19.2.3 ·
       expo-router ~57.0.26 · typescript ~6.0.3. **Elle eklenen TEK paket**

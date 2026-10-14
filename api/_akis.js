@@ -290,3 +290,125 @@ export async function recommendOne(eng, row, vade, opt = {}) {
   const { kayit, r } = await kayitHam(eng, row, vade, opt);
   return { ...kayit, plan: planKatmani(eng, r, vade) };
 }
+
+// ---------------------------------------------------------------------
+//  BÜTÜNCÜL (ANALİZ) KATMANI — motorun ÜRETTİĞİ bütüncül okumayı tele koyar.
+//
+//  GÖÇ GEREKMEDİ — ÖNCE DOĞRULANDI (2026-10-14, FAZ 1/5-E). Yazmadan önce
+//  üç yer okundu:
+//    api/_motor.js:1661  dışa aktarım listesinde `faVerdict`,
+//                        `computeHolisticScore`, `COMPOSITE_MATRIX`,
+//                        `COMPOSITE_BLEND`, `compositeBlend`, `faBand`,
+//                        `taBand` ZATEN VAR.
+//    app.js:5432         fillResultPlan  — Sonuç/Yatırım Planı ekranı
+//    app.js:12177        compareVerdict  — Karşılaştır ekranı
+//  İki tüketicinin ikisi de yalnız bu motor işlevlerini çağırıyor; ekranda
+//  kalan tek şey CÜMLE. Dolayısıyla app.js'e ve config.js'e DOKUNULMADI,
+//  tools/motor-uret.mjs yeniden KOŞMADI, motor imzası DEĞİŞMEDİ. Parite
+//  FARK 0 bunun kanıtı. Gereksiz göç en pahalı hata olurdu.
+//
+//  COMPOSITE_MATRIX KONUMLAMASI BURADA TEKRARLANMIYOR: yukarıdaki
+//  `composite()` zaten faBand/taBand/band/label/blended döndürüyor ve
+//  /api/score'un kaydında duruyor. Bu katman yalnız ÜSTÜNE KOYDUĞU şeyi
+//  taşıyor — `faVerdict` rozeti + 0-10 bütüncül skor.
+//
+//  BU İŞLEV HESAP YAPMIYOR: eşik, ağırlık, çarpan taşımıyor. Üç direğin
+//  ağırlıkları (0.40/0.30/0.30), bant eşikleri ve büyüme eğimi motorda
+//  yazılı. Bir sayı buraya yazılırsa parite testi onu GÖRMEZ ve sunucu ile
+//  ekran sessizce ayrışır.
+//
+//  HAM SAYI KURALI (BAGIMLILIK_GRAFIGI.md §5.1) — SÖKÜLEN ÜÇ ALAN:
+//    parts[].note      serbest Türkçe + Math.round + yüzde işareti
+//                      ("Fiyat alım bandının ~yüzde 37 üzerinde — ...")
+//    growthNote.txt    serbest Türkçe + peg.toFixed(2)
+//    COMPOSITE_MATRIX[...].txt   serbest Türkçe + <b>/<i> HTML etiketi
+//  Üçü de `planKatmani`nın `anchorSrc`e yaptığı muameleyi görüyor: SAYI ve
+//  SABİT KÜMELİ KOD geçer, biçimlenmiş cümle geçmez. `growthNote`tan yalnız
+//  `cls` (good|mid|bad|thm|na) kalıyor; cümleyi istemci kuruyor.
+//
+//  GEÇEN SABİT KÜMELİ ETİKETLER: `faKarar.label` (6 değer), `band.l`
+//  (5 değer), `band.c` (bull|neutral|bear), `direkler[].k` (3 değer).
+//  `k`yi makine koduna çevirmek bir EŞLEME TABLOSU gerektirirdi — tablo
+//  burada dursa akış sabit taşımaya başlar, motorda dursa app.js değişir;
+//  `planKatmani`nın `anchorSrc` için verdiği kararın aynısı geçerli.
+//
+//  `thematic` BİLEREK TAŞINMIYOR. Motor onu ancak değerleme verisi
+//  elimizdeyse hesaplayabiliyor (trailingPE/forwardPE/netMargin); bu uç o
+//  verileri geçmediği için `thematic` HER ZAMAN false döner. false ise
+//  "tematik değil" demektir, oysa gerçek "bilmiyorum" — §5.4'ün `yok` ile
+//  `kesinti` ayrımının aynısı. Sabit bir false'u cevap kılığında yollamak
+//  yerine alan hiç konmuyor. `buyumeCls` ise taşınıyor, çünkü onun 'na'
+//  değeri ZATEN "okunamadı" demek: dürüst bir boş-durum kodu.
+//
+//  NEDEN O ÜÇ METRİK GEÇMİYOR: peg · revGrowth · netMargin · forwardPE ·
+//  trailingPE Yahoo quoteSummary (crumb) ayağından geliyor — api/yfin.js'te,
+//  api/_ag.js'in canlı ağ katmanında DEĞİL. Yeni bir ağ ayağı açmak bu
+//  adımın kapsamı dışı. app.js'in iki tüketicisinden biri (fillResultPlan)
+//  da tam olarak aynısını yapıyor: o alanları geçmiyor, motorun kendi
+//  yorumu bunu "Sonuç ekranı bu alanları geçmez" diye yazıyor. Yani bu uç
+//  Sonuç ekranıyla BİREBİR aynı girdiyle koşuyor; eksiklik Karşılaştır
+//  ekranına göredir ve ÖLÇÜLDÜ, atlanmadı.
+//
+//  `valuation` SADELEŞTİRİLDİ, KISITLANMADI: motor `valuation`dan yalnız
+//  `.pe` okuyor (_motor.js:1155, tek kullanım). Bu yüzden `{ pe }` geçmek
+//  app.js'in tam `valuation` nesnesini geçmesiyle DAVRANIŞ OLARAK AYNI.
+//  BIST'te `pe` YOK: `scoreFaBIST` üretmiyor, app.js onu `bistValuation`
+//  ile çözüyor ve o işlev `fetchBistMarketCap` (app.js:6008) ayağına
+//  bağlı — motorda değil. Sonuç: BIST'te F/K bazlı değerleme cezası
+//  uygulanmıyor. Bu BİLİNEN bir eksik, sessiz değil.
+//
+//  @param {object} eng   buildMotor(H) çıktısı
+//  @param {object} kayit kayitHam'ın kaydı (fa.score · ta.score · fa.pe)
+//  @param {object|null} r    computeVadeScore'un HAM dönüşü
+//  @param {object|null} plan planKatmani'nin dönüşü (momentum yeniden
+//                            hesaplanmasın: mum pahalı değil ama çift
+//                            hesap iki doğruluk kaynağı demek)
+// ---------------------------------------------------------------------
+export function analizKatmani(eng, kayit, r, plan) {
+  const faScore = (kayit && kayit.fa) ? kayit.fa.score : null;
+  const taScore = (kayit && kayit.ta) ? kayit.ta.score : null;
+  const pe = (kayit && kayit.fa && kayit.fa.pe != null) ? kayit.fa.pe : null;
+  const hol = eng.computeHolisticScore({
+    faScore,
+    taScore,
+    levels: (r && r.levels) || null,
+    valuation: (pe != null) ? { pe } : null,
+    momActive: !!(plan && plan.momentum && plan.momentum.active),
+  });
+  return {
+    faKarar: eng.faVerdict(faScore),
+    // `butunculluk` NULL OLMUYOR — `plan`dan farklı. Planın ön koşulu var
+    // (levels yoksa plan yoktur); bütüncül skorun yok: motor eksik direği
+    // nötr 50 sayıp `coreSoft` ile KAÇ direğin eksik olduğunu kendisi
+    // söylüyor. Yani boşluk gizlenmiyor, sayıyla bildiriliyor.
+    butunculluk: {
+      skor10: round6(hol.score10),
+      band: hol.band,
+      direkler: (hol.parts || []).map((p) => ({
+        k: p.k, w: round6(p.w), v: round6(p.v), conf: p.conf,
+      })),
+      coreSoft: hol.coreSoft,
+      buyumeCls: hol.growthNote ? hol.growthNote.cls : null,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------
+//  Bir sembolün TAM ANALİZ kaydı: öneri kaydı + bütüncül katman.
+//  `recommendOne`'un döndürdüğü her alan aynı adla ve aynı sırada duruyor;
+//  üstüne tek bir alan ekleniyor (`analiz`). Zincir böylece İÇ İÇE:
+//      scoreOne  ⊂  recommendOne  ⊂  analyzeOne
+//  /api/score'un çözücüsü üç uçta da çalışıyor.
+//
+//  NEDEN PLANI DA TAŞIYOR (üstünü örtmek değil): Karşılaştır ekranı
+//  (app.js:12177) bütüncül skoru planRiskReward ile BİRLİKTE gösteriyor.
+//  `analiz` planı taşımazsa istemci aynı ekran için /api/recommend'i de
+//  çağırmak zorunda kalır — mumlar ve SEC modeli İKİNCİ KEZ inerdi.
+//  Ölçülen maliyet: tek ABD sembolü 7,2 sn ve 31 SEC isteği (duman testi).
+//  Burada ise `kayitHam` sembol başına BİR kez koşuyor.
+// ---------------------------------------------------------------------
+export async function analyzeOne(eng, row, vade, opt = {}) {
+  const { kayit, r } = await kayitHam(eng, row, vade, opt);
+  const plan = planKatmani(eng, r, vade);
+  return { ...kayit, plan, analiz: analizKatmani(eng, kayit, r, plan) };
+}
