@@ -5003,13 +5003,30 @@
   //  dilinde kuracak — sunucudan Türkçe HTML almayacak.
   //  Eskiden bu cümle buyZoneProximity'nin `txt` alanıydı ve satır 5447 ile 7134'te
   //  BİREBİR AYNI iki satır olarak sarılıyordu; tek tanım o iki kopyayı da kapatır.
+  // ===== ATR uzakligini GUN diline ceviren TEK kaynak =====
+  // NEDEN: "0.9×ATR" dogru olcu ama kotu dil. ATR = hissenin ortalama GUNLUK
+  // hareket mesafesi; 0.9×ATR = "siradan bir gunluk dusus neredeyse tam bandin
+  // icine indirir". Yuzde yerine ATR kullaniliyor cunku yuzde hisseler arasi
+  // kiyaslanabilir DEGIL: %2,7 uzaklik, gunluk %3 oynayan hissede ~1 gun,
+  // gunluk %0,8 oynayanda ~3-4 gundur. Ayni sayiyi UC ekran gosteriyor
+  // (hisse sayfasi / Firsatlar / Karsilastir) -> dil TEK YERDEN uretilir,
+  // yoksa uc kopya uc ayri cumle demekti.
+  // pct OPSIYONEL: yalniz Karsilastir'da bandin yuzde uzakligi elde hazir.
+  function atrDaysTxt(dAtr, pct) {
+    const d = Math.abs(Number(dAtr) || 0);
+    const gun = d < 0.75 ? 'yarım günlük' : d > 10 ? '10+ günlük' : `~${Math.round(d)} günlük`;
+    const yz = (pct != null && pct > 0.05)
+      ? ` (%${pct < 10 ? pct.toFixed(1).replace('.', ',') : Math.round(pct)})`
+      : '';
+    return `${gun} düşüş kadar uzak${yz}`;
+  }
+
   function buyZoneProximityHtml(prox) {
     if (!prox) return '';
-    const d = (prox.dAtr || 0).toFixed(1);
     const txt = prox.state === 'below' ? '🟢 Fiyat alım bandının altında — hedeften ucuz'
       : prox.state === 'in' ? '🟢 Fiyat şu an alım bölgesinde'
-      : prox.state === 'near' ? `🟢 Uygun bölge — fiyat banda yakın (~${d}×ATR); normal bir geri çekilmede alım aralığına iner`
-      : `🟡 Fiyat banda uzak (~${d}×ATR); belirgin bir geri çekilme daha uygun`;
+      : prox.state === 'near' ? `🟢 Uygun bölge — fiyat banda ${atrDaysTxt(prox.dAtr)}; normal bir geri çekilmede alım aralığına iner`
+      : `🟡 Fiyat banda ${atrDaysTxt(prox.dAtr)}; belirgin bir geri çekilme daha uygun`;
     return `<div class="rp-nowpos ${prox.cls}">${txt}</div>`;
   }
 
@@ -8687,8 +8704,8 @@
     const map = {
       below: { cls: 'in',   t: '🟢 Alım bandının altında — ucuz' },
       in:    { cls: 'in',   t: '🟢 Fiyat alım bölgesinde' },
-      near:  { cls: 'near', t: `🟢 Banda yakın (~${(prox.dAtr || 0).toFixed(1)}×ATR)` },
-      far:   { cls: 'far',  t: `🟡 Banda uzak (~${(prox.dAtr || 0).toFixed(1)}×ATR)` },
+      near:  { cls: 'near', t: `🟢 Banda ${atrDaysTxt(prox.dAtr)}` },
+      far:   { cls: 'far',  t: `🟡 Banda ${atrDaysTxt(prox.dAtr)}` },
     };
     const m = map[prox.state];
     return m ? `<span class="opp-prox ${m.cls}">${m.t}</span>` : '';
@@ -12527,15 +12544,19 @@
 
       // 🥇 Alım sırası (şu an) — SADECE FİYATA-UZAKLIK KIYASI, tavsiye değil.
       // "Elimdeki parayla hangisi şu an alım aralığında / alım fiyatına en yakın?" sorusunu yanıtlar.
-      // Sıralama anahtarı: fiyat uygun-alım bandının TAVANININ ne kadar ÜSTÜNDE (aboveGap, %).
-      //   • Bandın içinde ya da altında olanlar (aboveGap=0) = "şu an alınabilir" grubu, en üstte.
+      // Sıralama anahtarı: fiyat bandın TAVANININ kaç ORTALAMA GÜNLÜK HAREKET üstünde
+      // (dAtr). ÖNCE yüzdeydi (aboveGap); yüzde hisseler arası kıyaslanabilir değil
+      // (aynı %2,7 oynak hissede ~1 gün, sakin hissede ~3-4 gün) ve rozet metni
+      // dAtr'den geldiği için madalya ile rozet FARKLI cetvel kullanıyordu — görünür
+      // tutarsızlık: "🟢 banda yakın" olan, "▲ %4 uzak" olanın ALTINDA çıkabiliyordu.
+      //   • Bandın içinde ya da altında olanlar (dAtr=0) = "şu an alınabilir" grubu, en üstte.
       //   • Aynı grup içinde Temel Uygunluk (0–10) ile ayrıştırılır (yüksek = önce).
       //   • Bandın üstünde olanlar, tavana ne kadar yakınsa o kadar önde.
       const rankable = verds
         .map((v, ci) => ({ ci, v }))
         .filter((x) => x.v && x.v.ok && x.v.buyHi != null && x.v.px != null);
       rankable.sort((a, b) => {
-        const ka = a.v.aboveGap || 0, kb = b.v.aboveGap || 0;
+        const ka = a.v.dAtr || 0, kb = b.v.dAtr || 0;
         if (Math.abs(ka - kb) > 1e-9) return ka - kb;
         const sa = a.v.suit10 != null ? a.v.suit10 : -1, sb = b.v.suit10 != null ? b.v.suit10 : -1;
         return sb - sa;
@@ -12544,7 +12565,7 @@
       rankable.forEach((x, i) => { rankByCi[x.ci] = i + 1; });
       const rankBestCi = rankable.length ? rankable[0].ci : -1;
       const medal = (r) => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : ('#' + r);
-      g += '<div class="compare-cell compare-mlabel cmp-c0 cmp-mlbl2" title="Yan yana hisseleri, ŞU ANKİ fiyatın uygun-alım bandına uzaklığına göre sıralar (orta vade). Bandın içinde veya altında olanlar \'şu an alınabilir\' sayılır ve en üste gelir; eşitlik Temel Uygunluk skoruyla çözülür. Bandın üstündekiler tavana yakınlığına göre sıralanır. Bu yalnızca FİYAT-UZAKLIK kıyasıdır — olasılık ya da tavsiye değildir; \'düşük fiyat\' düşen bıçak da olabilir. Yatırım tavsiyesi değildir."><span class="cml-t">🥇 Alım sırası <em>(şu an)</em></span><span class="cml-s">fiyata göre: hangisi alım aralığında / en yakın</span></div>';
+      g += '<div class="compare-cell compare-mlabel cmp-c0 cmp-mlbl2" title="Yan yana hisseleri, ŞU ANKİ fiyatın uygun-alım bandına uzaklığına göre sıralar (orta vade). Bandın içinde veya altında olanlar \'şu an alınabilir\' sayılır ve en üste gelir; eşitlik Temel Uygunluk skoruyla çözülür. Bandın üstündekiler tavana yakınlığına göre sıralanır — yakınlık, hissenin kendi ortalama GÜNLÜK hareket mesafesi (ATR) cinsinden ölçülür, yüzdeyle değil: aynı %2,7 uzaklık oynak bir hissede ~1 gün, sakin bir hissede ~3-4 gün demektir. Bu yalnızca FİYAT-UZAKLIK kıyasıdır — olasılık ya da tavsiye değildir; \'düşük fiyat\' düşen bıçak da olabilir. Yatırım tavsiyesi değildir."><span class="cml-t">🥇 Alım sırası <em>(şu an)</em></span><span class="cml-s">fiyata göre: hangisi alım aralığında / en yakın</span></div>';
       verds.forEach((v, ci) => {
         if (v === undefined) { g += '<div class="compare-cell cmp-vrank">…</div>'; return; }
         if (!v || !v.ok || rankByCi[ci] == null) { g += '<div class="compare-cell cmp-vrank">—</div>'; return; }
@@ -12553,8 +12574,8 @@
         let stCls, stTxt;
         if (v.inBuy) { stCls = 'in'; stTxt = '✓ Alım bandında'; }
         else if (v.belowGap > 0.05) { stCls = 'below'; stTxt = `▼ %${Math.round(v.belowGap)} band altı (ucuz)`; }
-        else if (v.nearBuy) { stCls = 'near'; stTxt = `🟢 Uygun bölge (~${v.dAtr.toFixed(1)}×ATR)`; }
-        else if (v.aboveGap > 0.05) { stCls = 'above'; stTxt = `▲ %${Math.round(v.aboveGap)} banda uzak`; }
+        else if (v.nearBuy) { stCls = 'near'; stTxt = `🟢 ${atrDaysTxt(v.dAtr, v.aboveGap)}`; }
+        else if (v.aboveGap > 0.05) { stCls = 'above'; stTxt = `▲ ${atrDaysTxt(v.dAtr, v.aboveGap)}`; }
         else { stCls = 'in'; stTxt = '✓ Alım bandında'; }
         // 🎯 Alım hedefi ("yeşil ışık"): bandın hesaplandığı fiyat — kullanıcı bu banda
         // alarm kurup alım emri verir, aşağıdaki "Kâr-al / satış" bölgesine de satış emri
