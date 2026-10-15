@@ -5014,7 +5014,15 @@
   // pct OPSIYONEL: yalniz Karsilastir'da bandin yuzde uzakligi elde hazir.
   function atrDaysTxt(dAtr, pct) {
     const d = Math.abs(Number(dAtr) || 0);
-    const gun = d < 0.75 ? 'yarım günlük' : d > 10 ? '10+ günlük' : `~${Math.round(d)} günlük`;
+    // COZUNURLUK: gun sayisi ayni zamanda Karsilastir'in SIRALAMA anahtaridir.
+    // Yuvarlamak kusurluydu (olculdu): dAtr 0,80 / 1,00 / 1,30 -> ucu de "~1 gunluk"
+    // yaziyordu, yani siralamayi belirleyen bilgi EKRANDA kayboluyordu; yanindaki
+    // yuzde (%7 / %3,6 / %3,4) ters yonde aktigi icin sira rastgele gorunuyordu.
+    // 3 gunun altinda ondalik yaz -> sira ekranda okunur olsun. 3 gunun ustunde
+    // 0,1 gun ayrimi anlamsiz, tam sayi yeterli.
+    const gun = d > 10 ? '10+ günlük'
+      : d < 3 ? `~${d.toFixed(1).replace('.', ',')} günlük`
+      : `~${Math.round(d)} günlük`;
     const yz = (pct != null && pct > 0.05)
       ? ` (%${pct < 10 ? pct.toFixed(1).replace('.', ',') : Math.round(pct)})`
       : '';
