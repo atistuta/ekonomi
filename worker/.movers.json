@@ -6,7 +6,7 @@
     "IOVA.US": -2,
     "SIMO.US": -1,
     "LITE.US": -1,
-    "COIN.US": -2,
+    "COIN.US": -1,
     "GFI.US": 1,
     "LRCX.US": -1,
     "COHR.US": -2,
@@ -25,7 +25,7 @@
     "AVGO.US": -1,
     "ARM.US": -2,
     "AMLX.US": -1,
-    "SPCX.US": -1,
+    "SPCX.US": 0,
     "KLAC.US": -1,
     "ALB.US": -1,
     "REMX.US": -1
