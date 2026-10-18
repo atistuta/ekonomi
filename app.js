@@ -1189,6 +1189,14 @@
     }
 
     const breakdown = [];
+    // ÖLÇÜLEMEYEN göstergeler: kullanıcının KAPATTIKLARI değil, verisi yetmediği için
+    // hesaplanamayanlar. Ayrım önemli — "kapalı" bir tercih, "ölçülemedi" bir eksiklik.
+    // Ölçüldü (AAPL fikstürü, orta vade): 40 barda 6/9 gösterge, 107 barda 8/9, 200 barda
+    // 9/9 çıkıyor. Motor eksik göstergeyi atlayıp KALANLAR üzerinden yeniden normalize
+    // ediyor (wSum), yani skor üretiliyor ama dar bir tabandan — aynı veride 107 bar 61,6
+    // "AL eğilimi" verirken tam geçmiş 67,0 "GÜÇLÜ AL" veriyor. Skor DEĞİŞMİYOR; yalnız
+    // bu eksiklik artık rapor ediliyor ki ekran dürüst davranabilsin.
+    const eksikGosterge = [];
     let devSum = 0, wSum = 0;
     for (const key of Object.keys(cfg.weights)) {
       if (taScoreIndVis && taScoreIndVis[key] === false) continue; // kullanıcı bu göstergeyi kapatmış
@@ -1198,7 +1206,7 @@
         const v = p[key]; if (v == null) continue;
         s += v * w; tw += w;
       }
-      if (tw === 0) continue;
+      if (tw === 0) { eksikGosterge.push({ key, label: TA_KEY_LABEL[key] || key, weight: cfg.weights[key] }); continue; }
       const indScore = s / tw;
       const wt = cfg.weights[key];
       breakdown.push({ key, label: TA_KEY_LABEL[key] || key, score: indScore, weight: wt });
@@ -1312,7 +1320,30 @@
     }
 
     const regime = regimeByTf[cfg.adxTf] || regimeByTf[cfg.blend[0].tf] || 'neutral';
-    return { score, raw, label, cls, breakdown, adxVal, adxF, cfg, regime,
+    // GEÇMİŞ YETERLİLİĞİ — skora dokunmaz, yalnız rapordur. `bar` = motorun gerçekten
+    // gördüğü mum sayısı; `eksik` = verisi yetmediği için hesaplanamayan göstergeler.
+    // `yeterli` false ise skor dar bir gösterge tabanından geliyor demektir (yeni halka
+    // arzlar: SMA200 için 200, TTM sıkışması için ~200 bar gerekir).
+    const barSayisi = cfg.intraday
+      ? ((tfData[cfg.blend[0].tf] || []).length)
+      : (daily ? daily.length : 0);
+    // EŞİK neden 250: SMA200 ilk değerini 200. barda verir, kıyas gücü (rs) en uzun
+    // 126 günlük bakışı kullanır. 250 bar (≈1 yıl) altında bu iki gösterge ya hiç yok ya
+    // da tek-iki örneklik. Ölçüldü (AAPL + ^GSPC fikstürü, orta vade): 107 barda yalnız
+    // 1 gösterge (%5) DÜŞÜYOR ama skor 60,7 ↔ tam geçmişte 66,5 — yani sapmanın büyüğü
+    // eksik göstergeden değil, ÖLÇÜLEN göstergelerin sığ geçmiş üzerinde hesaplanmasından
+    // geliyor. Bu yüzden uyarı yalnız "eksik var mı"ya değil, bar sayısına da bakar.
+    const GECMIS_YETER_BAR = 250;
+    const gecmis = {
+      bar: barSayisi,
+      eksik: eksikGosterge,
+      olculen: breakdown.length,
+      yeterli: eksikGosterge.length === 0,
+      // `kisa`: gün içi vadeler hariç — onların bar birimi gün değil.
+      kisa: !cfg.intraday && barSayisi < GECMIS_YETER_BAR,
+      yeterBar: GECMIS_YETER_BAR,
+    };
+    return { score, raw, label, cls, breakdown, adxVal, adxF, cfg, regime, gecmis,
              levels: { price, target, stop, rr, poc: vpD ? vpD.poc : null, atr, buyZone, sellZone, zMult, sellKind: longHorizon ? 'target' : 'sell', sma50: s50, sma200: s200, anchorKind, anchorSrc } };
   }
 
@@ -3669,6 +3700,32 @@
     neutral: { txt: '· Nötr rejim',   tip: 'Belirgin trend yok — göstergeler varsayılan yorumla okunuyor.' },
   };
 
+  // ===== "Yeterli geçmiş yok" uyarısı =====
+  // NEDEN VAR: yeni halka arzlarda (ölçüldü: CBRS 107 işlem günü) motor skoru ÜRETMEYE
+  // devam ediyor ama dar bir göstergelerden. Aynı veride 107 bar 60,7 verirken tam geçmiş
+  // 66,5 veriyor — kullanıcıya hiçbir şey söylenmeden. Bu fonksiyon skoru değiştirmez,
+  // gizlemez, "güvenilmez" demez; yalnız TABANI rapor eder. Karar kullanıcınındır.
+  // `gecmis` alanı motordan (computeVadeScore) gelir, ekranda yeniden hesaplanmaz.
+  function taGecmisUyariHtml(g) {
+    if (!g || (!g.kisa && g.yeterli)) return '';
+    const parca = [];
+    if (g.kisa) {
+      const yil = (g.bar / 252);
+      const sure = yil < 1
+        ? `≈ ${Math.round(g.bar / 21)} ay`
+        : `≈ ${yil.toFixed(1)} yıl`;
+      parca.push(`yalnız <b>${g.bar}</b> işlem günü geçmişi var (${sure}) — SMA200 ve kıyas gücü gibi uzun bakışlı göstergeler için <b>${g.yeterBar}</b> gün gerekir`);
+    }
+    if (g.eksik && g.eksik.length) {
+      const adlar = g.eksik.map(e => `${e.label} (%${Math.round(e.weight * 100)})`).join(', ');
+      parca.push(`<b>${g.eksik.length}</b> gösterge ölçülemedi: ${adlar} — skor kalan <b>${g.olculen}</b> gösterge üzerinden normalize edildi`);
+    }
+    return `<div class="ta-gecmis" role="note">
+      <span class="ta-gecmis-t">⚠️ Yeterli geçmiş yok</span>
+      <span class="ta-gecmis-s">${parca.join('. ')}. Skor yine de hesaplandı ama <b>dar bir tabandan</b> geliyor; geçmişi uzun hisselerle aynı güvenle karşılaştırılamaz.</span>
+    </div>`;
+  }
+
   function renderVadeScore(panel, symbol, market, res, vade) {
     const curSym = market === 'BIST' ? '₺' : '$';
     const fmtP = (n) => n == null ? '—' : n.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
@@ -3697,6 +3754,10 @@
     // Rejim rozeti (RSI/Stokastik okuma modunu açıklar)
     const rb = TA_REGIME_BADGE[regime] || TA_REGIME_BADGE.neutral;
     const regimeHTML = `<span class="ta-regime ${regime}" title="${rb.tip}">${rb.txt}</span>`;
+
+    // YETERLİ GEÇMİŞ YOK uyarısı — yeni halka arzlar. Skoru DEĞİŞTİRMEZ, gizlemez;
+    // skorun hangi tabandan geldiğini söyler. Motor `gecmis` alanını ölçerek döndürüyor.
+    const gecHTML = taGecmisUyariHtml(res.gecmis);
 
     // Skor gösterge aç/kapa tablosu: kullanıcı bir göstergeyi skordan çıkarabilir; kalanlar
     // otomatik normalize olur. Kapalılar üstü çizili — geri açılabilir. Bu vadenin göstergeleri.
@@ -3735,6 +3796,7 @@
             <div class="ta-score-scale"><span>0 · SAT</span><span>50</span><span>AL · 100</span></div>
           </div>
         </div>
+        ${gecHTML}
         <div class="ta-score-meta"><b>${cfg.label}</b> · ${cfg.desc} · Karışım: ${blendTxt} · ${adxTxt} · ${regimeHTML}${intradayNote}</div>
         <div class="ta-score-brk-head">Gösterge katkıları <span>(alt-skor · nihai skora puan)</span></div>
         <div class="ta-score-brk">${brkHtml}</div>

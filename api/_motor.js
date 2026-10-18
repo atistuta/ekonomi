@@ -13,26 +13,26 @@
 //  Dilimler (9):
 //    util           19 satır
 //    ysym            6 satır
-//    ta            892 satır
+//    ta            923 satır
 //    fa-core        63 satır
 //    fmt            15 satır
 //    composite      36 satır
 //    holistic      107 satır
 //    fa-bist       154 satır
 //    fa-us         292 satır
-//    TOPLAM       1584 satır
+//    TOPLAM       1615 satır
 //  Dışa verilen sembol: 30
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:9e8bfcf997578279';
+export const IMZA = 'sha256:1435e93c3382a93e';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
   { name: 'util', lines: 19 },
   { name: 'ysym', lines: 6 },
-  { name: 'ta', lines: 892 },
+  { name: 'ta', lines: 923 },
   { name: 'fa-core', lines: 63 },
   { name: 'fmt', lines: 15 },
   { name: 'composite', lines: 36 },
@@ -731,6 +731,14 @@ const navigator = H.dead("navigator");
     }
 
     const breakdown = [];
+    // ÖLÇÜLEMEYEN göstergeler: kullanıcının KAPATTIKLARI değil, verisi yetmediği için
+    // hesaplanamayanlar. Ayrım önemli — "kapalı" bir tercih, "ölçülemedi" bir eksiklik.
+    // Ölçüldü (AAPL fikstürü, orta vade): 40 barda 6/9 gösterge, 107 barda 8/9, 200 barda
+    // 9/9 çıkıyor. Motor eksik göstergeyi atlayıp KALANLAR üzerinden yeniden normalize
+    // ediyor (wSum), yani skor üretiliyor ama dar bir tabandan — aynı veride 107 bar 61,6
+    // "AL eğilimi" verirken tam geçmiş 67,0 "GÜÇLÜ AL" veriyor. Skor DEĞİŞMİYOR; yalnız
+    // bu eksiklik artık rapor ediliyor ki ekran dürüst davranabilsin.
+    const eksikGosterge = [];
     let devSum = 0, wSum = 0;
     for (const key of Object.keys(cfg.weights)) {
       if (taScoreIndVis && taScoreIndVis[key] === false) continue; // kullanıcı bu göstergeyi kapatmış
@@ -740,7 +748,7 @@ const navigator = H.dead("navigator");
         const v = p[key]; if (v == null) continue;
         s += v * w; tw += w;
       }
-      if (tw === 0) continue;
+      if (tw === 0) { eksikGosterge.push({ key, label: TA_KEY_LABEL[key] || key, weight: cfg.weights[key] }); continue; }
       const indScore = s / tw;
       const wt = cfg.weights[key];
       breakdown.push({ key, label: TA_KEY_LABEL[key] || key, score: indScore, weight: wt });
@@ -854,7 +862,30 @@ const navigator = H.dead("navigator");
     }
 
     const regime = regimeByTf[cfg.adxTf] || regimeByTf[cfg.blend[0].tf] || 'neutral';
-    return { score, raw, label, cls, breakdown, adxVal, adxF, cfg, regime,
+    // GEÇMİŞ YETERLİLİĞİ — skora dokunmaz, yalnız rapordur. `bar` = motorun gerçekten
+    // gördüğü mum sayısı; `eksik` = verisi yetmediği için hesaplanamayan göstergeler.
+    // `yeterli` false ise skor dar bir gösterge tabanından geliyor demektir (yeni halka
+    // arzlar: SMA200 için 200, TTM sıkışması için ~200 bar gerekir).
+    const barSayisi = cfg.intraday
+      ? ((tfData[cfg.blend[0].tf] || []).length)
+      : (daily ? daily.length : 0);
+    // EŞİK neden 250: SMA200 ilk değerini 200. barda verir, kıyas gücü (rs) en uzun
+    // 126 günlük bakışı kullanır. 250 bar (≈1 yıl) altında bu iki gösterge ya hiç yok ya
+    // da tek-iki örneklik. Ölçüldü (AAPL + ^GSPC fikstürü, orta vade): 107 barda yalnız
+    // 1 gösterge (%5) DÜŞÜYOR ama skor 60,7 ↔ tam geçmişte 66,5 — yani sapmanın büyüğü
+    // eksik göstergeden değil, ÖLÇÜLEN göstergelerin sığ geçmiş üzerinde hesaplanmasından
+    // geliyor. Bu yüzden uyarı yalnız "eksik var mı"ya değil, bar sayısına da bakar.
+    const GECMIS_YETER_BAR = 250;
+    const gecmis = {
+      bar: barSayisi,
+      eksik: eksikGosterge,
+      olculen: breakdown.length,
+      yeterli: eksikGosterge.length === 0,
+      // `kisa`: gün içi vadeler hariç — onların bar birimi gün değil.
+      kisa: !cfg.intraday && barSayisi < GECMIS_YETER_BAR,
+      yeterBar: GECMIS_YETER_BAR,
+    };
+    return { score, raw, label, cls, breakdown, adxVal, adxF, cfg, regime, gecmis,
              levels: { price, target, stop, rr, poc: vpD ? vpD.poc : null, atr, buyZone, sellZone, zMult, sellKind: longHorizon ? 'target' : 'sell', sma50: s50, sma200: s200, anchorKind, anchorSrc } };
   }
 
