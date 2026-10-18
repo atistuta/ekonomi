@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ===========================================================================
-//  UÇ TESTLERİ — score + recommend + analyze kapıları   ·   AĞA ÇIKMAZ
+//  UÇ TESTLERİ — altı ucun kapıları   ·   AĞA ÇIKMAZ
 // ===========================================================================
 //
 //  NEDEN VAR: üç ucun (/api/score · /api/recommend · /api/analyze) asıl işi —
@@ -13,8 +13,9 @@
 //  `cok_sembol` kontrolünü etkisizleştirip 8 sembol sınırını kaldırabilir
 //  ve bunu kimse farketmez, çünkü cevap yine 200 döner.
 //
-//  NE ÖLÇER (8 bölüm)   ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
-//                       ⑦ = süre freni · ⑧ = theme
+//  NE ÖLÇER (10 bölüm)  ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
+//                       ⑦ = süre freni · ⑧ = theme · ⑨ = compare
+//                       ⑩ = causal
 //    ① yüzey              — default/ayristir/config yerinde mi
 //    ② ayristir()         — pazar çözümü, yineleme, sınırlar, hata kodları
 //    ③ handler kapısı     — CORS · OPTIONS · 405 · 4xx gövdeleri
@@ -28,6 +29,12 @@
 //                           kaynaktan, iç hata metni sızmıyor, ANAHTAR
 //                           loglanmıyor, skor şeridi bulaşmıyor.
 //                           NİYE BURADA: parity.mjs theme'i KORUMAZ.
+//    ⑨ /api/compare       — dördüncü uç: AYNI kapı + `ASGARI_SEMBOL`
+//                           (tek sembol kıyaslanamaz) + alım-bandına
+//                           uzaklık sıralaması uydurma eşik içermiyor mu
+//    ⑩ /api/causal        — beşinci uç: POST kapısı (girdi `AZAMI_SORGU`ya
+//                           sığmıyor), gövde doğrulaması, ve nedensellik
+//                           mantığının MOTORDA kaldığı (uçta kopyası yok)
 //
 //  AĞ YASAĞI — BU TESTİN EN ÖNEMLİ KURALI: HER ÜÇ ucun handler()'ı
 //  yalnız ağ'a hiç gitmeyecek isteklerle çağrılır (OPTIONS, GET-dışı, ya da
@@ -59,6 +66,14 @@ import recHandler, {
 import anaHandler, {
   ayristir as anaAyristir, config as anaConfig, AZAMI_SEMBOL as anaAzami,
 } from '../api/analyze.js';
+import kiyHandler, {
+  ayristir as kiyAyristir, config as kiyConfig, AZAMI_SEMBOL as kiyAzami,
+  ASGARI_SEMBOL, siraAnahtari, siralaKiyas,
+} from '../api/compare.js';
+import nedenHandler, {
+  config as nedenConfig, ayristirGovde,
+  AZAMI_HAREKET, AZAMI_KONSEPT, AZAMI_GOVDE_BAYT,
+} from '../api/causal.js';
 import { VADELER } from '../api/_ayar.js';
 // ⑧ /api/theme — LLM keşif ucu. Modül düzeyinde motor KURMUYOR ve ağa
 // ÇIKMIYOR (yalnız sabit + saf fonksiyon), bu yüzden içe almak bedava.
@@ -74,6 +89,8 @@ const RECOMMEND_PATH = path.join(ROOT, 'api', 'recommend.js');
 const ANALYZE_PATH = path.join(ROOT, 'api', 'analyze.js');
 const AKIS_PATH = path.join(ROOT, 'api', '_akis.js');
 const THEME_PATH = path.join(ROOT, 'api', 'theme.js');
+const COMPARE_PATH = path.join(ROOT, 'api', 'compare.js');
+const CAUSAL_PATH = path.join(ROOT, 'api', 'causal.js');
 const GIRDI_PATH = path.join(ROOT, 'api', '_girdi.js');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
@@ -93,7 +110,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme kapıları ve doğrulamaları yerinde.`);
+  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal kapıları ve doğrulamaları yerinde.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -574,6 +591,10 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
     ['score', SCORE_PATH, ayristir, AZAMI_SEMBOL],
     ['recommend', RECOMMEND_PATH, recAyristir, recAzami],
     ['analyze', ANALYZE_PATH, anaAyristir, anaAzami],
+    // DÖRDÜNCÜ uç (2026-10-18): /api/compare da girdi kapısını taşıyıcıdan
+    // alıyor. Listeye eklenmeseydi kopya kilidi yeni uçta HİÇ koşmazdı —
+    // kilidin en sessiz kaçağı budur.
+    ['compare', COMPARE_PATH, kiyAyristir, kiyAzami],
   ];
 
   // ① Taşıyıcı gerçekten kullanılıyor mu. `export { } from` TEK BAŞINA
@@ -613,6 +634,10 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
   ok('⑤e③ · üç ucun `ayristir`i AYNI FONKSİYON NESNESİ (kopya fiziksel olarak yok)',
     ayristir === girdi.ayristir && recAyristir === girdi.ayristir
     && anaAyristir === girdi.ayristir);
+  ok('⑤e③ · /api/compare ucunun `ayristir`i de AYNI NESNE (dördüncü uç)',
+    kiyAyristir === girdi.ayristir);
+  ok('⑤e③ · /api/compare AZAMI_SEMBOL sınırı da taşıyıcıdan',
+    kiyAzami === girdi.AZAMI_SEMBOL, String(kiyAzami));
 
   ok('⑤e③ · üç ucun AZAMI_SEMBOL sınırı taşıyıcıdan geliyor ve aynı',
     AZAMI_SEMBOL === girdi.AZAMI_SEMBOL && recAzami === girdi.AZAMI_SEMBOL
@@ -1267,6 +1292,382 @@ bolum('⑧ /api/theme — LLM keşif ucu, AYNI kabuk');
     if (gercekAnahtar === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = gercekAnahtar;
   }
+}
+
+
+// =========================================================================
+bolum('⑨ /api/compare — dördüncü uç, AYNI kapı + alım-bandı sıralaması');
+// =========================================================================
+// BU BÖLÜM NE: /api/compare, /api/analyze'ın döndürdüğü HER ŞEYİ aynen
+// döndürüp üstüne tek bir şey ekliyor — `sira`: sembolleri "şu an alım
+// bandına uzaklık"a göre dizen satır. Zincir dört halkalı:
+//     scoreOne ⊂ recommendOne ⊂ analyzeOne ⊂ /api/compare
+// Sıralama app.js:12615'ten BİREBİR alındı; bu uç yeni bir eşik, ağırlık
+// ya da puan UYDURMUYOR. ⑨ bunu bekçiliyor: sıra saf bir okuma mı, yoksa
+// sessizce ikinci bir motor mu olmuş.
+//
+// AĞ YASAĞI ⑨'da EN KRİTİK yerde: iki GEÇERLİ sembolle çağrılırsa uç
+// gerçekten Yahoo/SEC'e çıkar. Bu yüzden handler yalnız OPTIONS / GET-dışı
+// / doğrulamadan DÖNEN sorgularla çağrılıyor; sıralama ise `siralaKiyas`
+// fikstürüyle — ağa dokunmayan saf fonksiyon — ölçülüyor.
+
+// --- ⑨a yüzey ----------------------------------------------------------
+ok('⑨a · default dışa aktarma bir fonksiyon', typeof kiyHandler === 'function', typeof kiyHandler);
+ok('⑨a · config.runtime = nodejs', kiyConfig && kiyConfig.runtime === 'nodejs', String(kiyConfig && kiyConfig.runtime));
+ok('⑨a · config.maxDuration = 60 (analyze ile aynı: aynı ağ turu)',
+  kiyConfig && kiyConfig.maxDuration === anaConfig.maxDuration && kiyConfig.maxDuration === 60,
+  `compare ${kiyConfig && kiyConfig.maxDuration} · analyze ${anaConfig && anaConfig.maxDuration}`);
+ok('⑨a · ASGARI_SEMBOL = 2 (tek sembol KIYASLANAMAZ)', ASGARI_SEMBOL === 2, String(ASGARI_SEMBOL));
+ok('⑨a · ASGARI_SEMBOL < AZAMI_SEMBOL (aralık tutarlı)', ASGARI_SEMBOL < kiyAzami,
+  `${ASGARI_SEMBOL}..${kiyAzami}`);
+ok('⑨a · saf sıralayıcılar dışa aktarılmış (ağsız sınanabilir)',
+  typeof siraAnahtari === 'function' && typeof siralaKiyas === 'function');
+
+// --- ⑨b handler kapısı (ağa ÇIKMAYAN istekler) --------------------------
+{
+  const cagirKiy = async (method, query) => {
+    const res = sahteRes();
+    await kiyHandler({ method, query }, res);
+    return res;
+  };
+
+  const o = await cagirKiy('OPTIONS', {});
+  ok('⑨b · OPTIONS → 204 + end()', o.kod === 204 && o.bitti === true, `kod ${o.kod}`);
+  ok('⑨b · CORS yöntem başlığı GET, OPTIONS',
+    o.basliklar['access-control-allow-methods'] === 'GET, OPTIONS',
+    o.basliklar['access-control-allow-methods']);
+  ok('⑨b · CORS ön-uçuş önbelleği 86400', o.basliklar['access-control-max-age'] === '86400');
+
+  const p = await cagirKiy('POST', {});
+  ok('⑨b · POST → 405 + Allow', p.kod === 405 && p.basliklar.allow === 'GET, OPTIONS',
+    `kod ${p.kod} · allow ${p.basliklar.allow}`);
+
+  const q = await cagirKiy('GET', {});
+  ok('⑨b · symbols yok → 400 symbols_yok', q.kod === 400 && q.govde.error === 'symbols_yok',
+    `kod ${q.kod} · ${q.govde && q.govde.error}`);
+  ok('N12 · modül düzeyi motor kurulumu başarılı (503 değil)', q.kod !== 503, `kod ${q.kod}`);
+
+  // ASGARI kapısı — ⑨'nun kendine ait TEK kapı kuralı. Tek sembol doğrulama
+  // kapısından GEÇİYOR (score/recommend/analyze için geçerli), ama kıyas
+  // ucunda ANLAMSIZ: kendisiyle kıyaslanamaz. Burada 400 dönmezse uç ağa
+  // çıkıp tek satırlık bir "sıralama" üretirdi.
+  const t = await cagirKiy('GET', { symbols: 'AAPL' });
+  ok('⑨b · tek sembol → 400 az_sembol (ağa ÇIKMADAN)',
+    t.kod === 400 && t.govde.error === 'az_sembol', `kod ${t.kod} · ${t.govde && t.govde.error}`);
+  ok('⑨b · az_sembol gövdesi asgariyi ve isteneni bildiriyor',
+    t.govde.asgari === ASGARI_SEMBOL && t.govde.istenen === 1, JSON.stringify(t.govde));
+
+  const r3 = await cagirKiy('GET', { symbols: 'A,B,C,D,E,F,G,H,I' });
+  ok('⑨b · 9 sembol → 400 cok_sembol (taşıyıcı kapısı önce koşuyor)',
+    r3.kod === 400 && r3.govde.error === 'cok_sembol', `${r3.govde && r3.govde.error}`);
+
+  for (const [ad, res] of [['405', p], ['symbols_yok', q], ['az_sembol', t], ['cok_sembol', r3]]) {
+    ok(`⑨b · ${ad} gövdesinde uyarı metni var`, res.govde && res.govde.uyari === UYARI);
+    const metin = JSON.stringify(res.govde || {});
+    const sizdi = /at\s+\w+\s*\(|\.js:\d+|[A-Za-z]:\\\\|\/Users\/|node_modules|stack/i.test(metin);
+    ok(`⑨b · ${ad} gövdesi yığın izi/yol sızdırmıyor`, !sizdi, sizdi ? metin.slice(0, 120) : 'temiz');
+  }
+  ok('⑨b · hata yolu Cache-Control: max-age=30',
+    q.basliklar['cache-control'] === 'public, max-age=30', q.basliklar['cache-control']);
+}
+
+// --- ⑨c sıralama — SAF fikstür, ağ yok ----------------------------------
+{
+  const kayit = (sym, state, dAtr, skor10, rr) => ({
+    sym,
+    market: 'US',
+    plan: { yakinlik: { state, dAtr }, riskOdul: { rrRatio: rr } },
+    analiz: { butunculluk: { skor10 } },
+  });
+
+  ok('⑨c · siraAnahtari: band İÇİ → 0', siraAnahtari({ state: 'in', dAtr: 0.4 }) === 0);
+  ok('⑨c · siraAnahtari: band ALTI (negatif dAtr) → 0 (uzaklık değil, fırsat)',
+    siraAnahtari({ state: 'below', dAtr: -1.7 }) === 0);
+  ok('⑨c · siraAnahtari: band yakını → dAtr', siraAnahtari({ state: 'near', dAtr: 0.6 }) === 0.6);
+  ok('⑨c · siraAnahtari: uzak → dAtr', siraAnahtari({ state: 'far', dAtr: 3.2 }) === 3.2);
+  ok('⑨c · siraAnahtari: yakınlık yok → null (0 DEĞİL)', siraAnahtari(null) === null);
+  ok('⑨c · siraAnahtari: dAtr null → null', siraAnahtari({ state: 'far', dAtr: null }) === null);
+
+  const { sira, siralanamayan } = siralaKiyas([
+    kayit('FAR', 'far', 3.0, 9.0, 2.0),
+    kayit('NEAR', 'near', 0.5, 5.0, 1.1),
+    kayit('IN', 'in', 0.2, 6.0, 1.5),
+    kayit('BELOW', 'below', -1.2, 8.0, 3.0),
+    { sym: 'PLANSIZ', market: 'US', plan: null, analiz: null },
+    { sym: 'YAKINSIZ', market: 'US', plan: { yakinlik: null }, analiz: null },
+  ]);
+
+  ok('⑨c · sıra uzaklığa göre artan', sira.map((x) => x.sym).join(',') === 'BELOW,IN,NEAR,FAR',
+    sira.map((x) => `${x.sym}:${x.dAtr}`).join(' '));
+  ok('⑨c · eşit uzaklıkta bütüncül skor TIE-BREAK (BELOW 8.0 > IN 6.0)',
+    sira[0].sym === 'BELOW' && sira[1].sym === 'IN', `${sira[0].sym} < ${sira[1].sym}`);
+  ok('⑨c · `sira` alanı 1\'den başlayıp artıyor',
+    sira.every((x, i) => x.sira === i + 1), sira.map((x) => x.sira).join(','));
+  ok('⑨c · planı olmayan sembol UYDURULMUYOR, `siralanamayan`a düşüyor',
+    siralanamayan.join(',') === 'PLANSIZ,YAKINSIZ', siralanamayan.join(','));
+  ok('⑨c · sıralanamayan sıraya hiç girmiyor', sira.length === 4, String(sira.length));
+  ok('⑨c · satır yalnız SABİT KÜME kodu + HAM sayı taşıyor',
+    anahtarlar(sira[0]) === 'dAtr,durum,market,rrRatio,sira,skor10,sym', anahtarlar(sira[0]));
+  ok('⑨c · `durum` motorun sabit kümesinden',
+    sira.every((x) => ['in', 'below', 'near', 'far'].includes(x.durum)));
+  ok('⑨c · eksik bütüncül skor `null` (uydurma 0 değil)',
+    siralaKiyas([kayit('X', 'far', 1, null, null)]).sira[0].skor10 === null);
+  ok('⑨c · boş girdiye dayanıyor',
+    siralaKiyas(null).sira.length === 0 && siralaKiyas([]).siralanamayan.length === 0);
+
+  // N13 olumsuz kontrol: sıralama GERÇEKTEN sıralıyor (girdi sırası değil).
+  ok('N13 · sıra girdi sırasının kopyası DEĞİL',
+    sira[0].sym !== 'FAR', `ilk: ${sira[0].sym}`);
+}
+
+// --- ⑨d statik denetimler ----------------------------------------------
+{
+  const src = readFileSync(COMPARE_PATH, 'utf8');
+  const kod = src.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  ok('⑨d · dosya uyarı metnini taşıyor', src.includes(UYARI));
+  ok('N14 · yorum ayıklama çalışıyor (başlık düştü)',
+    /app\.js:12615/.test(src) && !/app\.js:12615/.test(kod), 'başlıkta var, kodda yok');
+  ok('⑨d · HAM SAYI · `Intl` kullanımı yok', !/\bIntl\b/.test(kod));
+  ok('⑨d · HAM SAYI · `toFixed(` yok', !kod.includes('toFixed('));
+  ok('⑨d · HAM SAYI · `toLocaleString` yok', !kod.includes('toLocaleString'));
+  ok('⑨d · hata yolunda `api/compare:` önekli log var',
+    /console\.error\('api\/compare:/.test(kod));
+  ok('⑨d · 502 yalnız makine kodu döndürüyor',
+    /error:\s*'kiyas_hesaplanamadi'/.test(kod) && !/\bdetail\s*:/.test(kod));
+  ok('⑨d · motoru `_motor.js`ten alıyor (ikinci motor kopyası yok)',
+    /from '\.\/_motor\.js'/.test(src) && !/from '\.\.\/app\.js'/.test(src));
+  ok('⑨d · akışı `_akis.js`ten alıyor (scoreOne/recommendOne yeniden yazılmamış)',
+    /analyzeOne/.test(kod) && !/function\s+(scoreOne|recommendOne|analyzeOne)\s*\(/.test(kod));
+  // Sıralamada UYDURULMUŞ eşik olmamalı: app.js'teki tek sayı 1e-9 (kayan
+  // nokta toleransı). Yeni bir "0.75 ATR altı iyi" gibi sabit girerse
+  // ekran ile sunucu sessizce ayrışır.
+  const siraBlok = kod.slice(kod.indexOf('export function siralaKiyas'));
+  const sayilar = (siraBlok.slice(0, siraBlok.indexOf('\n}')).match(/(?<![\w.])-?\d+(?:\.\d+)?(?:e-?\d+)?/gi) || [])
+    .filter((n) => !['0', '1', '-1', '1e-9'].includes(n));
+  ok('⑨d · sıralamada uydurulmuş eşik YOK', sayilar.length === 0, sayilar.join(',') || 'temiz');
+}
+
+// =========================================================================
+bolum('⑩ /api/causal — beşinci uç, haber ⇄ piyasa nedenselliği (POST)');
+// =========================================================================
+// BU BÖLÜM NE: /api/causal, "📉 Günün Nedeni" ekranının SAYISAL çekirdeği.
+// Öteki dört uçtan iki yerde AYRILIYOR ve ikisi de bilerek:
+//   ① POST — girdisi (endeks hareketleri + gündem konseptleri) sorgu
+//      dizgisine SIĞMIYOR, `AZAMI_SORGU=128`i ilk konseptte aşıyor.
+//   ② AĞA HİÇ ÇIKMIYOR — bu yüzden GEÇERLİ bir istekle çağırmak CI'da
+//      güvenli; ⑩ ucun ASIL cevabını da ölçebiliyor (⑨'da yapamadığımız).
+// Mantık bu dosyada DEĞİL: app.js'in nedensellik bölgesi tests/engine.mjs'e
+// onuncu dilim olarak eklenip motor yeniden üretildi. ⑩ kopyanın geri
+// gelmediğini de bekçiliyor.
+
+// --- ⑩a yüzey ----------------------------------------------------------
+ok('⑩a · default dışa aktarma bir fonksiyon', typeof nedenHandler === 'function', typeof nedenHandler);
+ok('⑩a · config.runtime = nodejs', nedenConfig && nedenConfig.runtime === 'nodejs');
+ok('⑩a · config.maxDuration = 10 (ağ turu YOK, 60 kopyalanmadı)',
+  nedenConfig && nedenConfig.maxDuration === 10, String(nedenConfig && nedenConfig.maxDuration));
+ok('⑩a · ayristirGovde() dışa aktarılmış (ağsız sınanabilir)', typeof ayristirGovde === 'function');
+ok('⑩a · sınırlar sayı ve pozitif',
+  AZAMI_HAREKET > 0 && AZAMI_KONSEPT > 0 && AZAMI_GOVDE_BAYT > 0,
+  `${AZAMI_HAREKET} · ${AZAMI_KONSEPT} · ${AZAMI_GOVDE_BAYT}`);
+
+// --- ⑩b method kapısı — GET DEĞİL ---------------------------------------
+{
+  const cagirNeden = async (method, body) => {
+    const res = sahteRes();
+    await nedenHandler({ method, body }, res);
+    return res;
+  };
+
+  const o = await cagirNeden('OPTIONS');
+  ok('⑩b · OPTIONS → 204 + end()', o.kod === 204 && o.bitti === true, `kod ${o.kod}`);
+  ok('⑩b · CORS yöntem başlığı POST, OPTIONS (öteki dört uçtan AYRI)',
+    o.basliklar['access-control-allow-methods'] === 'POST, OPTIONS',
+    o.basliklar['access-control-allow-methods']);
+  ok('⑩b · CORS köken başlığı *', o.basliklar['access-control-allow-origin'] === '*');
+  ok('⑩b · Content-Type başlığı ön-uçuşta izinli',
+    /Content-Type/i.test(o.basliklar['access-control-allow-headers'] || ''),
+    o.basliklar['access-control-allow-headers']);
+
+  const g = await cagirNeden('GET');
+  ok('⑩b · GET → 405 (bu uç POST)', g.kod === 405 && g.govde.error === 'method_not_allowed',
+    `kod ${g.kod}`);
+  ok('⑩b · 405 Allow başlığı POST, OPTIONS', g.basliklar.allow === 'POST, OPTIONS', g.basliklar.allow);
+  ok('⑩b · hata yolu Cache-Control: max-age=30',
+    g.basliklar['cache-control'] === 'public, max-age=30', g.basliklar['cache-control']);
+  ok('N15 · modül düzeyi motor kurulumu başarılı (503 değil)', g.kod !== 503, `kod ${g.kod}`);
+}
+
+// --- ⑩c gövde doğrulaması — ağsız vektörler -----------------------------
+{
+  const KINDLER = ['equity_tech', 'equity_us', 'equity_tr', 'gold'];
+  const hata = (b) => { const r = ayristirGovde(b, KINDLER); return r.hata ? r.hata.govde.error : null; };
+
+  ok('⑩c · gövde yok → govde_yok', hata(null) === 'govde_yok', String(hata(null)));
+  ok('⑩c · dizi gövde → govde_yok', hata([]) === 'govde_yok');
+  ok('⑩c · hareketler dizi değil → hareketler_yok', hata({ gundem: [] }) === 'hareketler_yok');
+  ok('⑩c · gundem dizi değil → gundem_yok', hata({ hareketler: [] }) === 'gundem_yok');
+  ok('⑩c · bilinmeyen endeks türü → bad_kind (sessiz 0 skor DEĞİL)',
+    hata({ hareketler: [{ kind: 'kripto', pct: 1, notable: 1 }], gundem: [] }) === 'bad_kind');
+  ok('⑩c · pct sayı değil → bad_pct',
+    hata({ hareketler: [{ kind: 'gold', pct: 'çok', notable: 1 }], gundem: [] }) === 'bad_pct');
+  ok('⑩c · notable yok → bad_notable (eşik UYDURULMUYOR)',
+    hata({ hareketler: [{ kind: 'gold', pct: 1 }], gundem: [] }) === 'bad_notable');
+  ok('⑩c · negatif notable → bad_notable',
+    hata({ hareketler: [{ kind: 'gold', pct: 1, notable: -1 }], gundem: [] }) === 'bad_notable');
+  ok('⑩c · konsept anahtarsız → konsept_key_yok',
+    hata({ hareketler: [], gundem: [{ sectors: [] }] }) === 'konsept_key_yok');
+  ok('⑩c · hareket tavanı → cok_hareket (kırpma YOK)',
+    hata({ hareketler: Array.from({ length: AZAMI_HAREKET + 1 }, () => ({ kind: 'gold', pct: 1, notable: 1 })), gundem: [] })
+      === 'cok_hareket');
+  ok('⑩c · konsept tavanı → cok_konsept (kırpma YOK)',
+    hata({ hareketler: [], gundem: Array.from({ length: AZAMI_KONSEPT + 1 }, (_, i) => ({ key: 'k' + i })) })
+      === 'cok_konsept');
+  ok('⑩c · tam tavan hâlâ kabul',
+    hata({ hareketler: Array.from({ length: AZAMI_HAREKET }, () => ({ kind: 'gold', pct: 1, notable: 1 })), gundem: [] })
+      === null);
+
+  // Normalleştirme: motorun okumadığı alanlar TAŞINMIYOR, okudukları hayatta.
+  const n = ayristirGovde({
+    hareketler: [{ kind: 'equity_tech', pct: 1.8, notable: 0.8, fazla: 'x' }],
+    gundem: [{
+      key: 'ai',
+      label: 'Yapay zekâ',
+      emoji: '🤖',
+      sectors: [['ai', 'up'], ['bozuk'], 'metin'],
+      risk: 'on',
+      tone: 0.4,
+      heat: 'hot',
+      heads: [{ title: 'Manşet', link: 'http://x', ageH: 3 }, { title: 'yaşsız' }],
+    }],
+  }, KINDLER);
+  ok('⑩c · hareket motor biçimine çevriliyor (`cfg.kind`/`cfg.notable`)',
+    n.rows[0].cfg.kind === 'equity_tech' && n.rows[0].cfg.notable === 0.8 && n.rows[0].pct === 1.8,
+    JSON.stringify(n.rows[0]));
+  ok('⑩c · hareketteki fazla alan atılıyor', anahtarlar(n.rows[0]) === 'cfg,pct');
+  ok('⑩c · konseptten yalnız motorun OKUDUĞU alanlar geçiyor',
+    anahtarlar(n.ag.items[0]) === 'heads,heat,key,risk,sectors,tone', anahtarlar(n.ag.items[0]));
+  ok('⑩c · başlık/emoji taşınmıyor (tele geri dönmeyecekler)',
+    n.ag.items[0].label === undefined && n.ag.items[0].emoji === undefined);
+  ok('⑩c · bozuk sektör çifti eleniyor', n.ag.items[0].sectors.length === 1,
+    JSON.stringify(n.ag.items[0].sectors));
+  ok('⑩c · manşetten yalnız `ageH` okunuyor, yaşsız manşet eleniyor',
+    n.ag.items[0].heads.length === 1 && anahtarlar(n.ag.items[0].heads[0]) === 'ageH',
+    JSON.stringify(n.ag.items[0].heads));
+  const vars1 = ayristirGovde({ hareketler: [], gundem: [{ key: 'k', risk: 'belki', heat: 'volkanik' }] }, KINDLER);
+  ok('⑩c · bilinmeyen risk/heat güvenli varsayılana düşüyor',
+    vars1.ag.items[0].risk === null && vars1.ag.items[0].heat === 'cool',
+    JSON.stringify(vars1.ag.items[0]));
+  ok('N16 · doğrulama GERÇEKTEN geçiriyor (boş test değil)', !n.hata && n.rows.length === 1);
+}
+
+// --- ⑩d gerçek cevap — AĞA ÇIKMADIĞI İÇİN ölçülebiliyor ------------------
+{
+  const res = sahteRes();
+  await nedenHandler({
+    method: 'POST',
+    body: {
+      hareketler: [
+        { kind: 'equity_tech', pct: 1.8, notable: 0.8 },   // belirgin
+        { kind: 'gold', pct: 0.1, notable: 0.8 },          // belirgin DEĞİL
+      ],
+      gundem: [
+        { key: 'ai', sectors: [['ai', 'up'], ['semis', 'up']], risk: 'on', tone: 0.4, heat: 'hot', heads: [{ ageH: 3 }] },
+        { key: 'savas', sectors: [['defense', 'up']], risk: 'off', tone: -0.5, heat: 'warm', heads: [{ ageH: 20 }] },
+      ],
+    },
+  }, res);
+
+  ok('⑩d · geçerli POST → 200', res.kod === 200, `kod ${res.kod}`);
+  ok('⑩d · gövde alanları sabit', anahtarlar(res.govde) === 'baglar,degerlendirilen,eslesen,ms,surum,uyari',
+    anahtarlar(res.govde));
+  ok('⑩d · uyarı metni gövdede', res.govde.uyari === UYARI);
+  ok('⑩d · belirgin hareket gündemle eşleşti', res.govde.baglar.length === 1,
+    JSON.stringify(res.govde.baglar.map((b) => b.kind)));
+  ok('⑩d · eşiğin ALTINDAKİ hareket düşüyor (uydurma bağ yok)',
+    !res.govde.baglar.some((b) => b.kind === 'gold'));
+  ok('⑩d · `degerlendirilen` istenen hareket sayısı, `eslesen` bağ sayısı',
+    res.govde.degerlendirilen === 2 && res.govde.eslesen === 1,
+    `${res.govde.degerlendirilen}/${res.govde.eslesen}`);
+  ok('⑩d · bağ yalnız kind + HAM pct + links taşıyor',
+    anahtarlar(res.govde.baglar[0]) === 'kind,links,pct', anahtarlar(res.govde.baglar[0]));
+  ok('⑩d · link yalnız konsept ANAHTARI + HAM skor + sektör kodları',
+    anahtarlar(res.govde.baglar[0].links[0]) === 'key,sektorler,skor',
+    anahtarlar(res.govde.baglar[0].links[0]));
+  ok('⑩d · `why` SERBEST TÜRKÇESİ tele ÇIKMIYOR',
+    !JSON.stringify(res.govde).includes('risk iştahı')
+    && !JSON.stringify(res.govde).includes('riskten kaçış'));
+  ok('⑩d · skor HAM sayı (biçimlenmiş dize değil)', typeof res.govde.baglar[0].links[0].skor === 'number');
+  ok('⑩d · motor + ayar imzası bildiriliyor',
+    /^sha256:/.test(res.govde.surum.motor) && /^sha256:/.test(res.govde.surum.ayar),
+    JSON.stringify(res.govde.surum));
+  ok('⑩d · gövdeye bağlı cevap CDN\'de paylaşılmıyor (no-store)',
+    res.basliklar['cache-control'] === 'no-store', res.basliklar['cache-control']);
+
+  // Dürüst sessizlik: eşleşme yoksa 200 + BOŞ liste, uydurma bağ değil.
+  const bos = sahteRes();
+  await nedenHandler({ method: 'POST', body: { hareketler: [{ kind: 'gold', pct: 0.1, notable: 2 }], gundem: [] } }, bos);
+  ok('⑩d · eşleşme yok → 200 + boş `baglar` (hata DEĞİL)',
+    bos.kod === 200 && bos.govde.baglar.length === 0 && bos.govde.eslesen === 0, `kod ${bos.kod}`);
+
+  // Bozuk JSON dizgesi — Vercel'in ayrıştıramadığı gövde.
+  const bozuk = sahteRes();
+  await nedenHandler({ method: 'POST', body: '{yarım' }, bozuk);
+  ok('⑩d · bozuk JSON → 400 bozuk_json', bozuk.kod === 400 && bozuk.govde.error === 'bozuk_json');
+  const buyuk = sahteRes();
+  await nedenHandler({ method: 'POST', body: 'x'.repeat(AZAMI_GOVDE_BAYT + 1) }, buyuk);
+  ok('⑩d · tavanı aşan gövde → 413 govde_buyuk', buyuk.kod === 413 && buyuk.govde.error === 'govde_buyuk');
+
+  for (const [ad, r] of [['bozuk_json', bozuk], ['govde_buyuk', buyuk]]) {
+    ok(`⑩d · ${ad} gövdesinde uyarı metni var`, r.govde.uyari === UYARI);
+    const metin = JSON.stringify(r.govde || {});
+    const sizdi = /at\s+\w+\s*\(|\.js:\d+|[A-Za-z]:\\\\|\/Users\/|node_modules|stack/i.test(metin);
+    ok(`⑩d · ${ad} gövdesi yığın izi/yol sızdırmıyor`, !sizdi, sizdi ? metin.slice(0, 120) : 'temiz');
+  }
+}
+
+// --- ⑩e statik denetimler — mantık MOTORDA kalmalı -----------------------
+{
+  const src = readFileSync(CAUSAL_PATH, 'utf8');
+  const kod = src.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  ok('⑩e · dosya uyarı metnini taşıyor', src.includes(UYARI));
+  ok('N17 · yorum ayıklama çalışıyor (başlık düştü)',
+    /HAM SAYI KURALI/.test(src) && !/HAM SAYI KURALI/.test(kod), 'başlıkta var, kodda yok');
+  ok('⑩e · HAM SAYI · `Intl` kullanımı yok', !/\bIntl\b/.test(kod));
+  ok('⑩e · HAM SAYI · `toFixed(` yok', !kod.includes('toFixed('));
+  ok('⑩e · HAM SAYI · `toLocaleString` yok', !kod.includes('toLocaleString'));
+  ok('⑩e · hata yolunda `api/causal:` önekli log var',
+    /console\.error\('api\/causal:/.test(kod));
+  ok('⑩e · 502 yalnız makine kodu döndürüyor',
+    /error:\s*'neden_hesaplanamadi'/.test(kod) && !/\bdetail\s*:/.test(kod));
+
+  // KOPYA YASAĞI — ⑩'un en pahalı denetimi. Mantık motorda; uçta yeniden
+  // yazılırsa app.js ile sessizce ayrışan ikinci bir nedensellik doğar.
+  ok('⑩e · `causalAlign` uçta YENİDEN YAZILMAMIŞ',
+    !/function\s+causalAlign\s*\(/.test(kod));
+  ok('⑩e · `computeCausalLinks` uçta YENİDEN YAZILMAMIŞ',
+    !/function\s+computeCausalLinks\s*\(/.test(kod));
+  ok('⑩e · `CAUSAL_INDEX_AFFINITY` tablosu uçta KOPYALANMAMIŞ',
+    !/CAUSAL_INDEX_AFFINITY\s*=/.test(kod));
+  ok('⑩e · üçü de MOTORDAN okunuyor (`ENG.`)',
+    /ENG\.computeCausalLinks\(/.test(kod) && /ENG\.CAUSAL_INDEX_AFFINITY/.test(kod));
+  ok('⑩e · gürültü eşiği (1.6) uçta DİRİLMEMİŞ', !/1\.6/.test(kod));
+  ok('⑩e · app.js / config.js import edilmiyor',
+    !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src));
+
+  // Motor gerçekten taşıyor mu — statik denetimin olumsuz kontrolü.
+  const motorSrc = readFileSync(path.join(ROOT, 'api', '_motor.js'), 'utf8');
+  ok('N18 · motor nedensellik dilimini GERÇEKTEN taşıyor',
+    /function\s+computeCausalLinks\s*\(/.test(motorSrc)
+    && /CAUSAL_INDEX_AFFINITY\s*=/.test(motorSrc));
+  ok('⑩e · motor dışa aktarım listesinde üç sembol de var',
+    /return \{[^}]*CAUSAL_INDEX_AFFINITY[^}]*causalAlign[^}]*computeCausalLinks[^}]*\}/.test(motorSrc));
+
+  // DOM ve LLM dilimin DIŞINDA kaldı: motora sızmamalı.
+  ok('⑩e · motora DOM sızmadı (`renderCausalLinks` yok)',
+    !/renderCausalLinks/.test(motorSrc));
+  ok('⑩e · motora LLM çağrısı sızmadı (`causalExplainLLM` yok)',
+    !/causalExplainLLM/.test(motorSrc));
+  ok('⑩e · uçta ANTHROPIC anahtarı geçmiyor', !/ANTHROPIC|apiKey/.test(src));
 }
 
 

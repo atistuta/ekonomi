@@ -73,8 +73,34 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       etkilenmedi. Aday motor `PARITE_APP=` ile canlıya dokunmadan ölçülebilir.
 - [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
       `theme`, `causal`, `compare`. Vercel KV ile cache.
-      → **DURUM (2026-10-18): 4/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓ ·
-      `/api/analyze` ✓ · `/api/theme` ✓. Kalan iki: `causal`, `compare`.
+      → **DURUM (2026-10-18): 6/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓ ·
+      `/api/analyze` ✓ · `/api/theme` ✓ · `/api/compare` ✓ · `/api/causal` ✓.
+      **Son iki uç İNDİ** (2026-10-18), ikisi de AYNI kabukta (method kapısı +
+      `Allow`, `AZAMI_SORGU`/`AZAMI_SEMBOL` `_girdi.js`ten, `max-age=30` hata
+      yolu, gövdede `uyari`, iç hata metni yok + `console.error`).
+      ① **`/api/compare`** — zincirin dördüncü halkası
+      (`scoreOne ⊂ recommendOne ⊂ analyzeOne ⊂ compare`): analyze'ın
+      döndürdüğü her şey + `sira` (alım bandına uzaklık sıralaması,
+      `app.js:12615`ten BİREBİR, yeni eşik UYDURULMADI). Kendine ait tek yeni
+      kural `ASGARI_SEMBOL = 2` (tek sembol kıyaslanamaz).
+      ② **`/api/causal`** — haber ⇄ piyasa nedenselliği. **VARSAYIM: POST** —
+      girdisi (endeks hareketleri + gündem konseptleri) `AZAMI_SORGU=128`e
+      ilk konseptte sığmıyor; bu yüzden tek uç olarak `POST, OPTIONS`.
+      Ağa HİÇ çıkmıyor (`maxDuration` 10, 60 kopyalanmadı).
+      **Mantık uçta DEĞİL:** app.js'in nedensellik bölgesi `tests/engine.mjs`e
+      **onuncu dilim** olarak eklenip `tools/motor-uret.mjs` ile motor yeniden
+      üretildi (`CAUSAL_INDEX_AFFINITY` · `causalAlign` · `computeCausalLinks`;
+      `imza sha256:1435e93c3382a93e → sha256:0654972f8af6435b`, 1.683 satır).
+      DOM (`renderCausalLinks`) ve LLM (`causalExplainLLM`) dilimin DIŞINDA
+      kaldı — denetimle bekçileniyor. `causalAlign`ın `why` serbest Türkçesi
+      HAM SAYI kuralı gereği tele çıkmıyor; istemci cümleyi `key`den kuruyor.
+      **Bekçi:** `tests/uc-test.mjs` ⑨ + ⑩ bölümleri, **259 → 383 denetim
+      (+124)**, ağa çıkmıyor. **Negatif kontrol:** `ASGARI_SEMBOL` 2→1
+      yapılınca 3 denetim kırmızı (ve uç gerçekten ağa çıktı — kapının CI'yı
+      çevrimdışı tutan şey olduğu ölçüldü); `notable` doğrulaması sökülünce
+      2 denetim kırmızı. İkisi de geri alındı.
+      **Skor DEĞİŞMEDİ:** motor imzası değişti ama `parity.mjs` ve
+      `PARITE_MOTOR=uretilmis parity.mjs` ikisi de **FARK 0**.
       **`api/theme.js` motor şeridine alındı** (2026-10-18): dosya zaten
       yayındaydı ama **eski kabuktan** geliyordu. Sekiz sapma ÖLÇÜLDÜ ve
       kapatıldı — ① hiçbir gövdede `uyari` yoktu · ② method kapısı yoktu

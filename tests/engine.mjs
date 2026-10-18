@@ -75,6 +75,13 @@ export const SLICES = [
   ['holistic', '  function computeHolisticScore(o) {', '  function buildConjunctureNote(o) {'],
   ['fa-bist', '  async function fetchIsYatirimMali(symbol) {', '  const bistMcapCache = {};'],
   ['fa-us', '  async function secGet(url, timeout = 12000) {', '  // ===== Genel sekmesi ====='],
+  // Nedensellik (📉 Gunun Nedeni) cekirdegi: CAUSAL_INDEX_AFFINITY +
+  // causalAlign + computeCausalLinks. OLCULDU (2026-10-18): bu bolgede
+  // document/innerHTML/fetch/localStorage YOK — saf, girdi-cikti. DOM'a
+  // dokunan renderCausalLinks ve LLM stub'i causalExplainLLM dilimin
+  // DISINDA kaldi (bitis imi onlardan once). /api/causal bu yuzden
+  // app.js'teki mantigi YENIDEN YAZMIYOR, motordan cagiriyor.
+  ['causal', '  const CAUSAL_INDEX_AFFINITY = {', '  // Faz B stub — anahtar gelince'],
 ];
 
 // Dilimlerden dışarı verilecek motor sembolleri.
@@ -97,6 +104,11 @@ export const EXPORTS = [
   'momentumInfo', 'buyZoneProximity', 'planRiskReward',
   'fetchIsYatirimMali', 'parseIsMali', 'bistFundamentalModel',
   'secGet', 'secResolveCik', 'secFetchModel',
+  // Nedensellik katmani: 2026-10-18'de /api/causal icin devredildi.
+  // SKORA DOKUNMAZ — composite/vade skorunu ne okur ne yazar; yalniz
+  // "hangi gundem konsepti bu endeks hareketiyle hizali" korelasyon
+  // okumasidir. Turkce cumle yine cagri noktasinda.
+  'CAUSAL_INDEX_AFFINITY', 'causalAlign', 'computeCausalLinks',
 ];
 
 function countOf(src, needle) {

@@ -10,7 +10,7 @@
 //  üretim testi zaten kırmızı yanar. Motor davranışı değişecekse app.js
 //  değişir, sonra bu dosya yeniden üretilir.
 //
-//  Dilimler (9):
+//  Dilimler (10):
 //    util           19 satır
 //    ysym            6 satır
 //    ta            923 satır
@@ -20,13 +20,14 @@
 //    holistic      107 satır
 //    fa-bist       154 satır
 //    fa-us         292 satır
-//    TOPLAM       1615 satır
-//  Dışa verilen sembol: 30
+//    causal         68 satır
+//    TOPLAM       1683 satır
+//  Dışa verilen sembol: 33
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:1435e93c3382a93e';
+export const IMZA = 'sha256:0654972f8af6435b';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
@@ -39,6 +40,7 @@ export const DILIMLER = [
   { name: 'holistic', lines: 107 },
   { name: 'fa-bist', lines: 154 },
   { name: 'fa-us', lines: 292 },
+  { name: 'causal', lines: 68 },
 ];
 
 /**
@@ -1689,5 +1691,74 @@ const navigator = H.dead("navigator");
   }
 
 
-return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel };
+// ===== dilim: causal =====
+  const CAUSAL_INDEX_AFFINITY = {
+    equity_tech: ['tech', 'semis', 'ai', 'software', 'internet', 'cloud', 'crypto'],
+    equity_us:   ['tech', 'semis', 'banks', 'energy', 'industrials', 'health', 'biotech', 'consumer', 'staples', 'defense', 'auto', 'software', 'materials'],
+    equity_tr:   ['banks', 'holding', 'industrials', 'energy', 'retail', 'staples', 'steel', 'airline', 'defense', 'materials'],
+    gold:        ['gold', 'safe', 'rates', 'inflation'],
+  };
+
+  // Faz B kapısı — ANTHROPIC_API_KEY gelince api/explain.js üzerinden doğal-dil yorum.
+  // Şimdilik kapalı: anahtar yokken Faz A (deterministik) tek başına çalışır.
+  const CAUSAL_LLM = { enabled: false, endpoint: '/api/explain' };
+
+  // Bir endeks hareketi ile bir gündem konsepti arasındaki hizalanmayı (olası ilişki gücü) ölç.
+  // Hizalı = konsept, endeksin yakın sektörlerini hareket yönünde itiyor VE risk tonu uyumlu.
+  function causalAlign(cfg, pct, concept) {
+    const aff = CAUSAL_INDEX_AFFINITY[cfg.kind] || [];
+    const up = pct > 0;
+    let score = 0;
+    const why = [];
+    // 1) Sektör yönü hizası: konsept yakın sektörleri yukarı itiyorsa + endeks yukarıysa → hizalı.
+    let secMatch = 0, secOpp = 0, matchedSecs = [];
+    (concept.sectors || []).forEach(([sec, dir]) => {
+      if (!aff.includes(sec)) return;
+      if ((dir === 'up') === up) { secMatch++; matchedSecs.push(sec); }
+      else secOpp++;
+    });
+    if (secMatch) { score += 2 * secMatch; }
+    if (secOpp) { score -= 1.2 * secOpp; }
+    // 2) Risk tonu hizası (hisse: risk-on↑ / risk-off↓; altın: risk-off↑).
+    if (cfg.kind === 'gold') {
+      if (concept.risk === 'off' && up) { score += 1.6; why.push('riskten kaçış'); }
+      if (concept.risk === 'on' && !up) { score += 1.0; }
+    } else {
+      if (concept.risk === 'on' && up) { score += 1.4; why.push('risk iştahı'); }
+      if (concept.risk === 'off' && !up) { score += 1.4; why.push('riskten kaçış'); }
+      if (concept.risk === 'on' && !up) { score -= 0.8; }
+      if (concept.risk === 'off' && up) { score -= 0.8; }
+    }
+    // 3) Haber tonu hareket yönüyle aynı mı (pozitif ton + yükseliş).
+    if (concept.tone != null) {
+      if ((concept.tone > 0.12) === up && Math.abs(concept.tone) > 0.12) score += 0.6;
+    }
+    // 4) Isı & tazelik ağırlığı — sıcak ve yeni gündem daha güçlü tetikleyicidir.
+    const heatW = concept.heat === 'hot' ? 1.4 : concept.heat === 'warm' ? 1.0 : 0.5;
+    const freshH = (concept.heads && concept.heads.length) ? Math.min(...concept.heads.map((h) => h.ageH)) : 48;
+    const freshW = freshH <= 12 ? 1.2 : freshH <= 24 ? 1.0 : freshH <= 48 ? 0.75 : 0.5;
+    score *= heatW * freshW;
+    return { score, matchedSecs, why };
+  }
+
+  // Belirgin hareket eden her endeks için en iyi hizalanan 1-2 gündem konseptini bul.
+  function computeCausalLinks(ag, rows, m) {
+    if (!ag || !ag.items || !ag.items.length || !rows) return [];
+    // Yalnız "belirgin" (notable eşiğini aşan) endeks hareketleri nedensellik adayıdır.
+    const moved = rows.filter((r) => r.pct != null && Math.abs(r.pct) >= r.cfg.notable)
+      .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+    if (!moved.length) return [];
+    return moved.map((r) => {
+      const scored = ag.items.map((concept) => {
+        const a = causalAlign(r.cfg, r.pct, concept);
+        return { concept, ...a };
+      }).filter((x) => x.score >= 1.6) // yalnız anlamlı hizalar (gürültü eşiği)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 2);
+      return { cfg: r.cfg, pct: r.pct, links: scored };
+    }).filter((x) => x.links.length); // haberle eşleşmeyen hareketleri çıkar (dürüstlük)
+  }
+
+
+return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks };
 }
