@@ -13,7 +13,8 @@
 //  `cok_sembol` kontrolünü etkisizleştirip 8 sembol sınırını kaldırabilir
 //  ve bunu kimse farketmez, çünkü cevap yine 200 döner.
 //
-//  NE ÖLÇER (6 bölüm)   ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
+//  NE ÖLÇER (8 bölüm)   ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
+//                       ⑦ = süre freni · ⑧ = theme
 //    ① yüzey              — default/ayristir/config yerinde mi
 //    ② ayristir()         — pazar çözümü, yineleme, sınırlar, hata kodları
 //    ③ handler kapısı     — CORS · OPTIONS · 405 · 4xx gövdeleri
@@ -21,6 +22,12 @@
 //    ⑤ /api/recommend     — aynı yüzey/kapı + KOPYA kapının sürüklenme kilidi
 //    ⑥ /api/analyze       — aynı yüzey/kapı + bütüncül katmanın HAM SAYI
 //                           disiplini (serbest Türkçe metin tele çıkmıyor mu)
+//    ⑦ süre tavanı        — sembol İÇİNDE de duran fren (_ag.js)
+//    ⑧ /api/theme         — LLM keşif ucu AYNI kabukta mı: method kapısı,
+//                           uyarı metni, önbellek sabiti, `AZAMI_SORGU` tek
+//                           kaynaktan, iç hata metni sızmıyor, ANAHTAR
+//                           loglanmıyor, skor şeridi bulaşmıyor.
+//                           NİYE BURADA: parity.mjs theme'i KORUMAZ.
 //
 //  AĞ YASAĞI — BU TESTİN EN ÖNEMLİ KURALI: HER ÜÇ ucun handler()'ı
 //  yalnız ağ'a hiç gitmeyecek isteklerle çağrılır (OPTIONS, GET-dışı, ya da
@@ -53,12 +60,20 @@ import anaHandler, {
   ayristir as anaAyristir, config as anaConfig, AZAMI_SEMBOL as anaAzami,
 } from '../api/analyze.js';
 import { VADELER } from '../api/_ayar.js';
+// ⑧ /api/theme — LLM keşif ucu. Modül düzeyinde motor KURMUYOR ve ağa
+// ÇIKMIYOR (yalnız sabit + saf fonksiyon), bu yüzden içe almak bedava.
+import temaHandler, {
+  config as temaConfig, extractArray, cleanCandidates,
+  AZAMI_SORGU as temaAzamiSorgu, AZAMI_ADAY, LLM_ISTEK_MS,
+} from '../api/theme.js';
+import { AZAMI_SORGU } from '../api/_girdi.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCORE_PATH = path.join(ROOT, 'api', 'score.js');
 const RECOMMEND_PATH = path.join(ROOT, 'api', 'recommend.js');
 const ANALYZE_PATH = path.join(ROOT, 'api', 'analyze.js');
 const AKIS_PATH = path.join(ROOT, 'api', '_akis.js');
+const THEME_PATH = path.join(ROOT, 'api', 'theme.js');
 const GIRDI_PATH = path.join(ROOT, 'api', '_girdi.js');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
@@ -78,7 +93,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze kapıları ve doğrulamaları yerinde.`);
+  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme kapıları ve doğrulamaları yerinde.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -1007,6 +1022,250 @@ bolum('⑦ SÜRE TAVANI — sembol İÇİNDE de duran fren');
       dolduMu === true && AG5.tavanDoldu() === false && AG5.butceDoldu() === false);
   } finally {
     globalThis.fetch = gercekFetch; // kara delik bölümle sınırlı
+  }
+}
+
+
+// =========================================================================
+bolum('⑧ /api/theme — LLM keşif ucu, AYNI kabuk');
+// =========================================================================
+//  NİYE BU BÖLÜM VAR: `tests/parity.mjs` theme'i KORUMAZ — theme skor
+//  şeridinde değil (motor/akış içe almıyor, fikstürü yok). Yani bu ucun
+//  kabuğu ölçülmezse HİÇBİR test onu görmez. ELITE_ROADMAP FAZ 1 "uçları
+//  aynı kabuk disiplinine sok" maddesi tam olarak bunu kapatıyor.
+//
+//  AĞ YASAĞI ⑧'de de geçerli ve burada DAHA SIKI tahsil ediliyor: handler
+//  yalnız ağ'a hiç gitmeyen yollarla çağrılıyor (OPTIONS · GET-dışı ·
+//  q yok · q çok uzun · anahtar yok) ve `globalThis.fetch` bölüm boyunca
+//  PATLAYAN bir sahte ile değiştiriliyor. Bir regresyon bu yollardan
+//  birinde ağ açarsa test kırmızı yanar, sessizce yavaşlamaz.
+{
+  const gercekFetch = globalThis.fetch;
+  const gercekAnahtar = process.env.ANTHROPIC_API_KEY;
+  let agDenemesi = 0;
+  globalThis.fetch = (...a) => { agDenemesi++; throw new Error('⑧ AĞ YASAĞI: ' + String(a[0])); };
+  try {
+    const cagirTema = async (method, query) => {
+      const res = sahteRes();
+      await temaHandler({ method, query }, res);
+      return res;
+    };
+
+    // --- ⑧a yüzey -------------------------------------------------------
+    ok('⑧a · default dışa aktarma bir fonksiyon', typeof temaHandler === 'function', typeof temaHandler);
+    ok('⑧a · config.runtime = nodejs', temaConfig && temaConfig.runtime === 'nodejs',
+      String(temaConfig && temaConfig.runtime));
+    // 30 BİLEREK SABİT: theme tek bir LLM çağrısı yapıyor, skor uçlarının
+    // 60'ına (8 sembol × 7,2 sn) ihtiyacı yok. Sayı değişirse gerekçesi
+    // ÖLÇÜLMÜŞ olmalı — bu denetim onu tartışmaya zorlar.
+    ok('⑧a · config.maxDuration = 30', temaConfig && temaConfig.maxDuration === 30,
+      String(temaConfig && temaConfig.maxDuration));
+    ok('⑧a · saf yardımcılar dışa aktarılmış (ağsız sınanabilir)',
+      typeof extractArray === 'function' && typeof cleanCandidates === 'function');
+
+    // --- ⑧b SINIR TEK KAYNAKTAN (ölçülen sapma ④) -----------------------
+    // theme'de yerel `120`, `_girdi.js`te `128` vardı. Artık tek bağlama.
+    ok('⑧b · AZAMI_SORGU `_girdi.js` ile AYNI NESNE/DEĞER (kopya yok)',
+      temaAzamiSorgu === AZAMI_SORGU && temaAzamiSorgu === 128,
+      `theme ${temaAzamiSorgu} · _girdi ${AZAMI_SORGU}`);
+    ok('⑧b · AZAMI_ADAY adlandırılmış sabit (gömülü 14 değil)', AZAMI_ADAY === 14, String(AZAMI_ADAY));
+    // Süre freni maxDuration'ın ALTINDA olmalı: platform kesmeden önce biz
+    // kesmeliyiz, yoksa istemci HİÇ cevap almaz.
+    ok('⑧b · LLM_ISTEK_MS < maxDuration (fren platformdan önce basıyor)',
+      LLM_ISTEK_MS > 0 && LLM_ISTEK_MS < temaConfig.maxDuration * 1000,
+      `${LLM_ISTEK_MS} ms < ${temaConfig.maxDuration * 1000} ms`);
+
+    // --- ⑧c handler kapısı (ağsız yollar) -------------------------------
+    const o = await cagirTema('OPTIONS', {});
+    ok('⑧c · OPTIONS → 204, gövde yok', o.kod === 204 && o.bitti === true && o.govde === null,
+      `kod ${o.kod}`);
+    ok('⑧c · CORS başlıkları /api/score ile aynı küme',
+      o.basliklar['access-control-allow-origin'] === '*'
+      && o.basliklar['access-control-allow-methods'] === 'GET, OPTIONS'
+      && o.basliklar['access-control-max-age'] === '86400',
+      JSON.stringify(o.basliklar));
+
+    // Ölçülen sapma ②: POST eskiden GET gibi işleniyordu.
+    const p = await cagirTema('POST', { q: 'yapay zeka' });
+    ok('⑧c · POST → 405 + Allow (eskiden GET gibi işleniyordu)',
+      p.kod === 405 && p.basliklar.allow === 'GET, OPTIONS', `${p.kod} ${p.basliklar.allow}`);
+    ok('⑧c · 405 gövdesi yalnız error + uyari', anahtarlar(p.govde) === 'error,uyari',
+      anahtarlar(p.govde));
+    const d = await cagirTema('DELETE', {});
+    ok('⑧c · DELETE → 405 (kapı tek yönteme bakmıyor)', d.kod === 405, `kod ${d.kod}`);
+
+    const q0 = await cagirTema('GET', {});
+    ok('⑧c · q yok → 400 missing_q', q0.kod === 400 && q0.govde.error === 'missing_q',
+      `${q0.kod} ${q0.govde && q0.govde.error}`);
+    const q1 = await cagirTema('GET', { q: '   ' });
+    ok('⑧c · yalnız boşluk → 400 missing_q (trim ediliyor)',
+      q1.kod === 400 && q1.govde.error === 'missing_q', `${q1.kod} ${q1.govde && q1.govde.error}`);
+
+    const q2 = await cagirTema('GET', { q: 'x'.repeat(AZAMI_SORGU + 1) });
+    ok('⑧c · AZAMI_SORGU+1 → 400 too_long', q2.kod === 400 && q2.govde.error === 'too_long',
+      `${q2.kod} ${q2.govde && q2.govde.error}`);
+    ok('⑧c · too_long gövdesi sınırı SAYI olarak bildiriyor', q2.govde.azami === AZAMI_SORGU,
+      String(q2.govde.azami));
+
+    // Anahtar yok → 200 + no_key. Bu bir ARIZA DEĞİL: istemci haber
+    // katmanına düşsün diye dürüst bir durum bildirimi. Ortam değişkeni
+    // BİLEREK siliniyor; aksi halde anahtarı olan bir makinede bu denetim
+    // gerçekten Anthropic'e çıkardı.
+    delete process.env.ANTHROPIC_API_KEY;
+    const nk = await cagirTema('GET', { q: 'nükleer enerji' });
+    ok('⑧c · anahtar yok → 200 + error no_key (hata değil, durum)',
+      nk.kod === 200 && nk.govde.error === 'no_key', `${nk.kod} ${nk.govde && nk.govde.error}`);
+    ok('⑧c · no_key gövdesinde candidates HER ZAMAN dizi',
+      Array.isArray(nk.govde.candidates) && nk.govde.candidates.length === 0);
+    ok('⑧c · no_key gövdesinde `ms` HAM sayı', typeof nk.govde.ms === 'number', typeof nk.govde.ms);
+
+    // Ölçülen sapma ①: hiçbir gövdede uyarı metni YOKTU.
+    for (const [ad, res] of [['405', p], ['missing_q', q0], ['too_long', q2], ['no_key', nk]]) {
+      ok(`⑧c · ${ad} gövdesinde uyarı metni var`, res.govde && res.govde.uyari === UYARI,
+        String(res.govde && res.govde.uyari).slice(0, 20));
+    }
+
+    // Ölçülen sapma ⑤: `detail: e.message` iç hata metnini sızdırıyordu.
+    for (const [ad, res] of [['405', p], ['missing_q', q0], ['too_long', q2], ['no_key', nk]]) {
+      const metin = JSON.stringify(res.govde || {});
+      const sizdi = /at\s+\w+\s*\(|\.js:\d+|[A-Za-z]:\\\\|\/Users\/|node_modules|stack/i.test(metin);
+      ok(`⑧c · ${ad} gövdesi yığın izi/yol sızdırmıyor`, !sizdi, sizdi ? metin.slice(0, 120) : 'temiz');
+      ok(`⑧c · ${ad} gövdesinde \`detail\` alanı yok`, !('detail' in (res.govde || {})));
+    }
+
+    // Ölçülen sapma ③: no_key 60, llm_error 30 — iki farklı sayı vardı.
+    for (const [ad, res] of [['405', p], ['missing_q', q0], ['too_long', q2], ['no_key', nk]]) {
+      ok(`⑧c · ${ad} kısa önbellekli (üç uçla AYNI sabit)`,
+        res.basliklar['cache-control'] === 'public, max-age=30', res.basliklar['cache-control']);
+    }
+
+    // AĞ YASAĞI tahsili: yukarıdaki yolların HİÇBİRİ soket açmadı.
+    ok('⑧c · ağsız yolların hiçbiri fetch çağırmadı', agDenemesi === 0, `${agDenemesi} deneme`);
+
+    // --- ⑧d statik denetimler — api/theme.js metni -----------------------
+    {
+      const src = readFileSync(THEME_PATH, 'utf8');
+      const kod = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+
+      ok('⑧d · dosya uyarı metnini taşıyor', src.includes(UYARI));
+      ok('N8 · yorum ayıklama çalışıyor (başlık düştü)',
+        /\bIntl\b/.test(src) && !/\bIntl\b/.test(kod), 'başlıkta var, kodda yok');
+
+      // HAM SAYI kuralının ASIL ölçtüğü şey: biçimlenmiş sayı. `reason`
+      // serbest metni BİLEREK kalıyor (gerekçe theme.js başlığında) — ama
+      // biçimlenmiş sayı burada da sıfır olmalı.
+      ok('⑧d · HAM SAYI · `Intl` kullanımı yok', !/\bIntl\b/.test(kod));
+      ok('⑧d · HAM SAYI · `toFixed(` yok', !kod.includes('toFixed('));
+      ok('⑧d · HAM SAYI · `toLocaleString` yok', !kod.includes('toLocaleString'));
+
+      // ANAHTAR DİSİPLİNİ — en pahalı sızıntı. Anahtar ne loglanır ne
+      // cevaba konur ne URL'ye girer; yalnız `x-api-key` başlığında.
+      const logSatirlari = kod.split('\n').filter((l) => /console\.(log|error|warn|info)/.test(l));
+      ok('⑧d · ANAHTAR loglanmıyor (console.* satırlarında apiKey/ANTHROPIC yok)',
+        !logSatirlari.some((l) => /apiKey|ANTHROPIC_API_KEY/.test(l)),
+        logSatirlari.length + ' log satırı tarandı');
+      ok('N8 · log taraması boş değil (gerçekten console satırı var)', logSatirlari.length > 0,
+        String(logSatirlari.length));
+      ok('⑧d · ANAHTAR cevap gövdesine konmuyor (res.json içinde apiKey yok)',
+        !/res\.status\([^)]*\)\.json\([^;]*apiKey/s.test(kod));
+      ok('⑧d · ANAHTAR yalnız `x-api-key` başlığında',
+        (kod.match(/apiKey/g) || []).length > 0
+        && /'x-api-key':\s*apiKey/.test(kod));
+      ok('⑧d · ANAHTAR URL\'ye girmiyor (sorgu dizesine eklenmiyor)',
+        !/[?&][^'"\n]*\$\{?apiKey/.test(kod));
+
+      // Ölçülen sapma ⑤ — kodda da yok, yalnız gövdede değil.
+      ok('⑧d · `detail:` alanı koddan sökülmüş', !/\bdetail\s*:/.test(kod));
+
+      // Ölçülen sapma ⑥ — hata yolunda log var.
+      ok('⑧d · hata yolunda `api/theme:` önekli log var (üç uçla aynı kalıp)',
+        /console\.error\('api\/theme:/.test(kod));
+
+      // Ölçülen sapma ⑦ — fetch'te süre freni.
+      ok('⑧d · LLM fetch\'inde AbortSignal freni var', /signal:\s*AbortSignal\.timeout/.test(kod));
+
+      // Ölçülen sapma ④ — sınır içe alınıyor, yerel kopya yok.
+      ok('⑧d · AZAMI_SORGU `_girdi.js`ten içe alınıyor',
+        /^import \{[^}]*AZAMI_SORGU[^}]*\} from '\.\/_girdi\.js';$/m.test(src));
+      ok('⑧d · yerel `AZAMI_SORGU = ` sabiti DİRİLMEMİŞ',
+        !/^\s*(const|let|export const)\s+AZAMI_SORGU\s*=/m.test(kod));
+
+      // ŞERİT AYRIMI: theme SKOR şeridine dokunmaz. Motor/akış/ağ taşıyıcısı
+      // içe alınmaz — alınsaydı LLM ucu skorun bağımlılık ağacına girerdi.
+      for (const m of ['./_motor.js', './_akis.js', './_ag.js', './_ayar.js']) {
+        ok(`⑧d · \`${m}\` içe ALINMIYOR (skor şeridi bulaşmıyor)`, !src.includes(`from '${m}'`));
+      }
+      ok('⑧d · app.js / config.js import edilmiyor',
+        !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src));
+
+      // `api.anthropic.com` YALNIZ burada. `api/_ag.js` (Yahoo/SEC/İş Yatırım
+      // konağı) bu adresi TANIMAMALI — bir gün tanırsa skor şeridi LLM'e
+      // bağlanmış olur ve parite testi bunu göremez.
+      const agSrc = readFileSync(path.join(ROOT, 'api', '_ag.js'), 'utf8');
+      ok('⑧d · `api/_ag.js` `api.anthropic.com` TANIMIYOR',
+        !/anthropic/i.test(agSrc));
+
+      ok('N8 · statik arama gerçekten çalışıyor',
+        src.includes('export default async function handler'));
+    }
+
+    // --- ⑧e saf yardımcılar — ağsız vektörler ---------------------------
+    {
+      // extractArray: prefill '[' ile başladığımız için girdi KAPANIŞSIZ gelir.
+      ok('⑧e · extractArray boş girdi → []', extractArray('').length === 0);
+      ok('⑧e · extractArray null → []', extractArray(null).length === 0);
+      ok('⑧e · extractArray prefill tamamlıyor (kapanış yok)',
+        extractArray('{"symbol":"CEG"}').length === 1);
+      ok('⑧e · extractArray kod çitini temizliyor',
+        extractArray('```json\n{"symbol":"VST"}]\n```').length === 1);
+      ok('⑧e · extractArray bozuk JSON → [] (patlamıyor)',
+        Array.isArray(extractArray('{{{nonsense')) && extractArray('{{{nonsense').length === 0);
+
+      // cleanCandidates: normalize + süzgeç.
+      const ham = [
+        { symbol: 'ceg', market: 'us', name: ' Constellation ', reason: ' Nükleer taban yük ' },
+        { symbol: 'ASELS', market: 'BIST' },            // .IS eklenmeli
+        { symbol: 'THYAO.IS' },                         // pazar sembolden çözülmeli
+        { symbol: 'CEG' },                              // yineleme → atılmalı
+        { symbol: '!!!' },                              // biçimsiz → atılmalı
+        null, 'metin', 42,                              // nesne değil → atılmalı
+      ];
+      const temiz = cleanCandidates(ham);
+      ok('⑧e · cleanCandidates sembolü büyütüyor + kırpıyor',
+        temiz[0].symbol === 'CEG' && temiz[0].name === 'Constellation'
+        && temiz[0].reason === 'Nükleer taban yük', JSON.stringify(temiz[0]));
+      ok('⑧e · BIST adayına `.IS` garantisi', temiz[1].symbol === 'ASELS.IS' && temiz[1].market === 'BIST',
+        JSON.stringify(temiz[1]));
+      ok('⑧e · `.IS` ekinden pazar çözülüyor', temiz[2].symbol === 'THYAO.IS' && temiz[2].market === 'BIST',
+        JSON.stringify(temiz[2]));
+      ok('⑧e · yineleme / biçimsiz / nesne-olmayan eleniyor', temiz.length === 3,
+        `${temiz.length} aday: ` + temiz.map((c) => c.symbol).join(','));
+      ok('⑧e · eksik name/reason `null` (boş dize değil)',
+        temiz[1].name === null && temiz[1].reason === null);
+      ok('⑧e · cleanCandidates dizi olmayan girdiye dayanıyor',
+        cleanCandidates(null).length === 0 && cleanCandidates('x').length === 0);
+
+      // AZAMI_ADAY tavanı gerçekten basıyor mu.
+      const cok = Array.from({ length: 30 }, (_, i) => ({ symbol: 'S' + i, market: 'US' }));
+      ok('⑧e · AZAMI_ADAY tavanı basıyor', cleanCandidates(cok).length === AZAMI_ADAY,
+        `${cleanCandidates(cok).length} / ${AZAMI_ADAY}`);
+
+      // `reason` 140 karakterde kırpılıyor — serbest metin KALIYOR ama
+      // sınırsız değil (theme.js başlığındaki HAM SAYI gerekçesi).
+      const uzun = cleanCandidates([{ symbol: 'X', reason: 'a'.repeat(500) }]);
+      ok('⑧e · `reason` 140 karakterde kırpılıyor', uzun[0].reason.length === 140,
+        String(uzun[0].reason.length));
+      ok('⑧e · `name` 80 karakterde kırpılıyor',
+        cleanCandidates([{ symbol: 'X', name: 'b'.repeat(500) }])[0].name.length === 80);
+
+      // N8 olumsuz kontrol: süzgeç her şeyi atmıyor (boş test değil).
+      ok('N8 · cleanCandidates geçerli adayı GERÇEKTEN geçiriyor',
+        cleanCandidates([{ symbol: 'NVDA' }]).length === 1);
+    }
+  } finally {
+    globalThis.fetch = gercekFetch;
+    if (gercekAnahtar === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = gercekAnahtar;
   }
 }
 

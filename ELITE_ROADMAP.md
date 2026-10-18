@@ -73,12 +73,32 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       etkilenmedi. Aday motor `PARITE_APP=` ile canlıya dokunmadan ölçülebilir.
 - [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
       `theme`, `causal`, `compare`. Vercel KV ile cache.
-      → **DURUM (2026-10-14): 3/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓ ·
-      `/api/analyze` ✓. Kalan üç: `theme` (tematik keşif), `causal`, `compare`. Dürüst
-      not: `api/theme.js` dosyası zaten VAR ama **eski şeritten** — dört
-      taşıyıcının (`_motor` · `_ayar` · `_ag` · `_akis`) üstünde durmuyor,
-      bu yüzden bu maddeye sayılmıyor. **Vercel KV önbelleği henüz hiçbir
-      uçta YOK** — bu maddenin ikinci yarısı tamamen açık.
+      → **DURUM (2026-10-18): 4/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓ ·
+      `/api/analyze` ✓ · `/api/theme` ✓. Kalan iki: `causal`, `compare`.
+      **`api/theme.js` motor şeridine alındı** (2026-10-18): dosya zaten
+      yayındaydı ama **eski kabuktan** geliyordu. Sekiz sapma ÖLÇÜLDÜ ve
+      kapatıldı — ① hiçbir gövdede `uyari` yoktu · ② method kapısı yoktu
+      (POST düpedüz GET gibi işleniyordu) · ③ önbellek iki farklı sayı
+      kullanıyordu (60 / 30 → tek sabit `max-age=30`) · ④ `AZAMI_SORGU`
+      yerel kopyası sürüklenmişti (120 vs `_girdi.js` 128 → içe alındı,
+      tek kaynak) · ⑤ `detail: e.message` iç hata metnini istemciye
+      sızdırıyordu (söküldü, yalnız `console.error`) · ⑥ hata yolunda hiç
+      log yoktu · ⑦ LLM fetch'inde zaman aşımı freni yoktu
+      (`LLM_ISTEK_MS` 20 sn < maxDuration 30 sn) · ⑧ `14` adlandırılmamış
+      gömülü sayıydı (`AZAMI_ADAY`). **`reason` serbest metni BİLEREK
+      KALDI**: HAM SAYI kuralı *sayı biçimleme* kuralıdır, metin yasağı
+      değil — ve bu uçta cümle sayının sunumu değil ucun ÜRÜNÜ; çit
+      metnin kendisine kondu (SYSTEM'de al/sat dili yasak, 140 krk kırpma,
+      gövdede `uyari`). İstemci sözleşmesi KIRILMADI (app.js `themeFetchLLM`
+      yalnız `candidates` + `error` okur). **Bekçi:** `tests/parity.mjs`
+      theme'i KORUMAZ (skor şeridi değil) → `tests/uc-test.mjs` ⑧ bölümü
+      eklendi, **186 → 259 denetim (+73)**, ağa çıkmıyor (`globalThis.fetch`
+      bölüm boyunca patlayan sahte ile değiştiriliyor, 0 deneme ölçüldü).
+      **Negatif kontrol:** method kapısı ve önbellek sabiti kasten bozulunca
+      test 6 farkla kırmızı yandı. **Skor DEĞİŞMEDİ:** `parity.mjs` ve
+      `PARITE_MOTOR=uretilmis parity.mjs` ikisi de **FARK 0**.
+      **Vercel KV önbelleği henüz hiçbir uçta YOK** — bu maddenin ikinci
+      yarısı tamamen açık.
       → **Sürüyor** (2026-10-12). İlk uç `/api/score`. **Taşıyıcı hazır:** motor
       artık `app.js`'ten **üretiliyor** → `api/_motor.js` (1.463 satır / 9 dilim,
       tek ESM modülü, girişi `buildMotor(H)`; `_` öneki Vercel rotasını engelliyor).
