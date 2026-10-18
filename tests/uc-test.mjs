@@ -13,7 +13,7 @@
 //  `cok_sembol` kontrolünü etkisizleştirip 8 sembol sınırını kaldırabilir
 //  ve bunu kimse farketmez, çünkü cevap yine 200 döner.
 //
-//  NE ÖLÇER (10 bölüm)  ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
+//  NE ÖLÇER (11 bölüm)  ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
 //                       ⑦ = süre freni · ⑧ = theme · ⑨ = compare
 //                       ⑩ = causal
 //    ① yüzey              — default/ayristir/config yerinde mi
@@ -35,6 +35,12 @@
 //    ⑩ /api/causal        — beşinci uç: POST kapısı (girdi `AZAMI_SORGU`ya
 //                           sığmıyor), gövde doğrulaması, ve nedensellik
 //                           mantığının MOTORDA kaldığı (uçta kopyası yok)
+//    ⑪ KV ÖNBELLEĞİ       — `api/_onbellek.js`: anahtar girdinin tamamını
+//                           kapsıyor mu, MOTOR İMZASI değişince anahtar
+//                           değişiyor mu (eski skor yeni motorla karışmasın),
+//                           isabet GERÇEKTEN dış istek sayısını düşürüyor mu,
+//                           ve KV YOK / ARIZALI / YAVAŞ üç halinde de uç
+//                           cevap vermeye devam ediyor mu
 //
 //  AĞ YASAĞI — BU TESTİN EN ÖNEMLİ KURALI: HER ÜÇ ucun handler()'ı
 //  yalnız ağ'a hiç gitmeyecek isteklerle çağrılır (OPTIONS, GET-dışı, ya da
@@ -74,7 +80,15 @@ import nedenHandler, {
   config as nedenConfig, ayristirGovde,
   AZAMI_HAREKET, AZAMI_KONSEPT, AZAMI_GOVDE_BAYT,
 } from '../api/causal.js';
-import { VADELER } from '../api/_ayar.js';
+import { VADELER, IMZA_AYAR } from '../api/_ayar.js';
+import { IMZA } from '../api/_motor.js';
+// ⑪ /api/_onbellek.js — KV önbelleği. Modül düzeyinde HİÇBİR ŞEY kurmaz
+// (@vercel/kv yalnız ilk okuma/yazmada dinamik import edilir), bu yüzden
+// içe almak ağa çıkmaz. `kvTak()` sahte KV takan TEST KANCASI.
+import {
+  anahtar, skorGirdisi, oku, yaz, kvTak, kvHazir,
+  ONBELLEK_SURUM, TTL_FIYAT, TTL_TEMA, KV_ISTEK_MS,
+} from '../api/_onbellek.js';
 // ⑧ /api/theme — LLM keşif ucu. Modül düzeyinde motor KURMUYOR ve ağa
 // ÇIKMIYOR (yalnız sabit + saf fonksiyon), bu yüzden içe almak bedava.
 import temaHandler, {
@@ -92,6 +106,7 @@ const THEME_PATH = path.join(ROOT, 'api', 'theme.js');
 const COMPARE_PATH = path.join(ROOT, 'api', 'compare.js');
 const CAUSAL_PATH = path.join(ROOT, 'api', 'causal.js');
 const GIRDI_PATH = path.join(ROOT, 'api', '_girdi.js');
+const ONBELLEK_PATH = path.join(ROOT, 'api', '_onbellek.js');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
 // --- küçük koşum defteri (tests/uretim-test.mjs ile aynı kalıp) -----------
@@ -514,12 +529,17 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
   ok('⑤d · app.js / config.js import edilmiyor',
     !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(rsrc));
   const tasiyici = rsrc.match(/^import .* from '\.\/_[a-z]+\.js';$/gm) || [];
-  // DÖRT → BEŞ (2026-10-14): `api/_girdi.js` eklendi. Sayı bilerek SABİT —
-  // altıncı bir taşıyıcı sessizce doğmasın, gerekçesi yazılarak doğsun.
-  ok('⑤d · yalnız BEŞ taşıyıcı import ediliyor (ALTINCI taşıyıcı yok)',
-    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js', './_girdi.js']
+  // DÖRT → BEŞ (2026-10-14): `api/_girdi.js` eklendi.
+  // BEŞ → ALTI (2026-10-18): `api/_onbellek.js` eklendi — Vercel KV
+  // önbelleği. GEREKÇE: ölçümde bir ABD sembolü 33 dış istek (31 SEC +
+  // 2 Yahoo) ve ~7,2 sn; bu maliyeti tek bir KV okumasına indirmek için
+  // ortak bir taşıyıcı gerekiyordu, alternatifi altı uca kopya mantık
+  // yazmaktı. Sayı yine bilerek SABİT — YEDİNCİ taşıyıcı sessizce
+  // doğmasın, gerekçesi yazılarak doğsun.
+  ok('⑤d · yalnız ALTI taşıyıcı import ediliyor (YEDİNCİ taşıyıcı yok)',
+    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js', './_girdi.js', './_onbellek.js']
       .every((m) => rsrc.includes(`from '${m}'`))
-    && tasiyici.length === 5, `${tasiyici.length} taşıyıcı import`);
+    && tasiyici.length === 6, `${tasiyici.length} taşıyıcı import`);
   // api/score.js'i import ETMEZ: ettiği an recommend lambda'sı İKİ motor
   // kurar ve SEC önbellekleri (`secCikMap`/`secModelCache`) ikiye bölünür.
   ok('⑤d · api/score.js import edilmiyor', !/from\s+['"]\.\/score\.js['"]/.test(rsrc));
@@ -825,12 +845,17 @@ ok('⑥a · AZAMI_SEMBOL üç uçta aynı', anaAzami === AZAMI_SEMBOL && anaAzam
   ok('⑥d · app.js / config.js import edilmiyor',
     !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(csrc));
   const tasiyici = csrc.match(/^import .* from '\.\/_[a-z]+\.js';$/gm) || [];
-  // DÖRT → BEŞ (2026-10-14): `api/_girdi.js` eklendi. Sayı bilerek SABİT —
-  // altıncı bir taşıyıcı sessizce doğmasın, gerekçesi yazılarak doğsun.
-  ok('⑥d · yalnız BEŞ taşıyıcı import ediliyor (ALTINCI taşıyıcı yok)',
-    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js', './_girdi.js']
+  // DÖRT → BEŞ (2026-10-14): `api/_girdi.js` eklendi.
+  // BEŞ → ALTI (2026-10-18): `api/_onbellek.js` eklendi — Vercel KV
+  // önbelleği. GEREKÇE: ölçümde bir ABD sembolü 33 dış istek (31 SEC +
+  // 2 Yahoo) ve ~7,2 sn; bu maliyeti tek bir KV okumasına indirmek için
+  // ortak bir taşıyıcı gerekiyordu, alternatifi altı uca kopya mantık
+  // yazmaktı. Sayı yine bilerek SABİT — YEDİNCİ taşıyıcı sessizce
+  // doğmasın, gerekçesi yazılarak doğsun.
+  ok('⑥d · yalnız ALTI taşıyıcı import ediliyor (YEDİNCİ taşıyıcı yok)',
+    ['./_motor.js', './_ayar.js', './_ag.js', './_akis.js', './_girdi.js', './_onbellek.js']
       .every((m) => csrc.includes(`from '${m}'`))
-    && tasiyici.length === 5, `${tasiyici.length} taşıyıcı import`);
+    && tasiyici.length === 6, `${tasiyici.length} taşıyıcı import`);
   // Öteki UÇLARI import ETMEZ: ettiği an analyze lambda'sı iki motor kurar
   // ve SEC önbellekleri (`secCikMap`/`secModelCache`) ikiye bölünür.
   ok('⑥d · api/score.js ve api/recommend.js import edilmiyor',
@@ -1668,6 +1693,300 @@ ok('⑩a · sınırlar sayı ve pozitif',
   ok('⑩e · motora LLM çağrısı sızmadı (`causalExplainLLM` yok)',
     !/causalExplainLLM/.test(motorSrc));
   ok('⑩e · uçta ANTHROPIC anahtarı geçmiyor', !/ANTHROPIC|apiKey/.test(src));
+}
+
+
+// =========================================================================
+bolum('⑪ KV önbelleği (api/_onbellek.js)');
+// =========================================================================
+//  NİYE BURADA: önbellek, skor şeridinin ÖNÜNE konan bir kapı. Yanlış
+//  yapılırsa parity.mjs bunu GÖRMEZ (o motoru ölçer, ucu değil) ve hata
+//  sessiz olur: yanlış anahtar → bir sembolün skoru başka sembole servis
+//  edilir; eksik imza → eski motorun skoru yeni motorla karışır; sert
+//  bağımlılık → KV düşünce TÜM uçlar düşer. Üçü de 200 dönerek bozulur.
+//
+//  AĞ YASAĞI BURADA DA GEÇERLİ: gerçek KV'ye hiç gidilmiyor — `kvTak()`
+//  ile belleğe sahte bir istemci takılıyor. Ortam değişkenleri de SAHTE
+//  (gerçek bir `KV_REST_API_*` değeri bu dosyaya GİRMEZ) ve bölüm sonunda
+//  eski haline döndürülüyor.
+
+// --- ⑪a anahtar: girdiyi TAM kapsıyor mu --------------------------------
+{
+  const ayOrta = ayristir({ symbols: 'AAPL', vade: 'orta' });
+  const ayUzun = ayristir({ symbols: 'AAPL', vade: 'uzun' });
+  const imza = { motor: IMZA, ayar: IMZA_AYAR };
+  const k = (ay, im = imza) => anahtar('score', skorGirdisi(ay), im);
+
+  ok('⑪a · aynı girdi → AYNI anahtar (belirlenimci)', k(ayOrta) === k(ayOrta));
+  ok('⑪a · anahtar biçimi `ob:<sürüm>:<uç>:<özet>`',
+    new RegExp(`^ob:${ONBELLEK_SURUM}:score:[0-9a-f]{32}$`).test(k(ayOrta)), k(ayOrta));
+
+  // VADE anahtarda: aynı sembolün kısa/orta/uzun skoru AYRI sayıdır.
+  ok('⑪a · vade değişince anahtar değişiyor', k(ayOrta) !== k(ayUzun));
+
+  // SEMBOL anahtarda: yoksa AAPL'in skoru MSFT'e servis edilir.
+  ok('⑪a · sembol değişince anahtar değişiyor',
+    k(ayOrta) !== k(ayristir({ symbols: 'MSFT', vade: 'orta' })));
+
+  // PAZAR anahtarda: aynı harfler iki borsada farklı enstrüman olabilir.
+  ok('⑪a · pazar değişince anahtar değişiyor',
+    anahtar('score', skorGirdisi(ayristir({ symbols: 'ASELS', market: 'BIST' })), imza)
+    !== anahtar('score', skorGirdisi(ayristir({ symbols: 'ASELS', market: 'US' })), imza));
+
+  // SEMBOL SIRASI anahtarda: `sonuclar` ve compare'in `sira`sı GİRDİ
+  // SIRASINI izliyor, yani sıra cevabın parçası — sıralanıp tek anahtara
+  // indirilirse istemci istemediği sırada liste alır.
+  ok('⑪a · sembol sırası anahtarın parçası',
+    anahtar('compare', skorGirdisi(ayristir({ symbols: 'AAPL,MSFT' })), imza)
+    !== anahtar('compare', skorGirdisi(ayristir({ symbols: 'MSFT,AAPL' })), imza));
+
+  // UÇ ADI anahtarda: /api/score ile /api/analyze girdisi AYNI ama cevabı
+  // değil — ayrışmazsa analyze gövdesi score olarak servis edilir.
+  ok('⑪a · uç adı anahtarın parçası',
+    anahtar('score', skorGirdisi(ayOrta), imza)
+    !== anahtar('analyze', skorGirdisi(ayOrta), imza));
+
+  // ALAN SIRASI anahtarı DEĞİŞTİRMEMELİ: girdi nesnesinin alan sırası
+  // tesadüfi; anahtar ona bağlıysa aynı istek iki ayrı girdi olur.
+  ok('⑪a · girdi alan sırası anahtarı değiştirmiyor',
+    anahtar('score', { vade: 'orta', semboller: ['US:AAPL'] }, imza)
+    === anahtar('score', { semboller: ['US:AAPL'], vade: 'orta' }, imza));
+
+  // --- MOTOR SÜRÜMÜ: bu bölümün EN ÖNEMLİ denetimi -------------------
+  //  `node tools/motor-uret.mjs` motoru değiştirdiğinde IMZA değişir.
+  //  Anahtar imzayı taşımazsa ESKİ MOTORUN SKORU yeni motorla karışır ve
+  //  hiçbir test bunu görmez (gövde geçerli, 200 dönüyor).
+  ok('⑪a · MOTOR imzası değişince anahtar değişiyor (eski skor karışmaz)',
+    k(ayOrta) !== k(ayOrta, { motor: 'sha256:degisti', ayar: IMZA_AYAR }));
+  ok('⑪a · AYAR imzası değişince anahtar değişiyor (ağırlıklar değişti)',
+    k(ayOrta) !== k(ayOrta, { motor: IMZA, ayar: 'sha256:degisti' }));
+  ok('⑪a · imza gerçekten anahtarın İÇİNDE (olumsuz kontrol)',
+    anahtar('score', skorGirdisi(ayOrta), {}) !== k(ayOrta));
+}
+
+// --- ⑪b isabet GERÇEKTEN dış istek sayısını düşürüyor mu ----------------
+//  ÖLÇÜM: aynı istek önce önbelleksiz (KV yok) çağrılıyor ve dış istek
+//  DENEMESİ sayılıyor; sonra gövde KV'ye konup tekrar çağrılıyor. İkinci
+//  çağrıda sayaç 0 olmalı. 0 değilse "önbellek var" demek bir şey ifade
+//  etmiyor — KV okunuyor ama ağ yine açılıyor olurdu.
+{
+  const ortamUrl = process.env.KV_REST_API_URL;
+  const ortamTok = process.env.KV_REST_API_TOKEN;
+  const gercekFetch = globalThis.fetch;
+  let agDenemesi = 0;
+
+  try {
+    globalThis.fetch = (...a) => { agDenemesi++; throw new Error('⑪ AĞ YASAĞI: ' + String(a[0])); };
+
+    // (1) KV YOK — ortam değişkeni tanımsız. Uç cevap vermeye devam etmeli.
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+    ok('⑪b · KV ortam değişkeni yokken kvHazir() false', kvHazir() === false);
+    agDenemesi = 0;
+    const kvsiz = await cagirUc(handler, 'GET', { symbols: 'AAPL', vade: 'orta' });
+    const kvsizDeneme = agDenemesi;
+    ok('⑪b · KV YOKKEN uç yine 200 döndü (istek DÜŞMEDİ)', kvsiz.kod === 200, String(kvsiz.kod));
+    ok('⑪b · KV yokken gövde sözleşmesi bozulmadı',
+      anahtarlar(kvsiz.govde) === 'atlanan,istenen,ms,sayac,sonuclar,surum,tam,uyari,vade',
+      anahtarlar(kvsiz.govde));
+    ok('⑪b · KV yokken `X-Onbellek: iska`', kvsiz.basliklar['x-onbellek'] === 'iska',
+      String(kvsiz.basliklar['x-onbellek']));
+    ok('⑪b · önbelleksiz yol GERÇEKTEN ağa çıkmaya çalıştı (ölçülen taban)',
+      kvsizDeneme > 0, `${kvsizDeneme} deneme`);
+    ok('⑪b · ölçülemeyen cevap `tam:false` (önbelleğe YAZILMAYACAK olan)',
+      kvsiz.govde.tam === false);
+
+    // (2) KV VAR + gövde önbellekte → isabet.
+    process.env.KV_REST_API_URL = 'https://ornek.invalid';
+    process.env.KV_REST_API_TOKEN = 'sahte-test-degeri';
+    const depo = new Map();
+    let kvOkuma = 0;
+    kvTak({
+      get: async (key) => { kvOkuma++; return depo.has(key) ? depo.get(key) : null; },
+      set: async (key, v) => { depo.set(key, v); return 'OK'; },
+    });
+
+    const ay = ayristir({ symbols: 'AAPL', vade: 'orta' });
+    const anah = anahtar('score', skorGirdisi(ay), { motor: IMZA, ayar: IMZA_AYAR });
+    const sahteGovde = {
+      vade: 'orta',
+      istenen: 1,
+      sonuclar: [{ sym: 'AAPL', market: 'US', ta: 71, fa: 64, composite: 68 }],
+      atlanan: [],
+      sayac: {},
+      tam: true,
+      surum: { motor: IMZA, ayar: IMZA_AYAR },
+      ms: 7200,
+      uyari: UYARI,
+    };
+    ok('⑪b · `yaz()` sahte KV depoya yazdı', (await yaz(anah, sahteGovde, TTL_FIYAT)) === true);
+    ok('⑪b · `oku()` yazılanı geri verdi',
+      JSON.stringify(await oku(anah)) === JSON.stringify(sahteGovde));
+
+    agDenemesi = 0;
+    const isabet = await cagirUc(handler, 'GET', { symbols: 'AAPL', vade: 'orta' });
+    ok('⑪b · ÖLÇÜM · isabette dış istek denemesi SIFIR',
+      agDenemesi === 0, `önbelleksiz ${kvsizDeneme} deneme → isabette ${agDenemesi}`);
+    ok('⑪b · isabet 200 döndü', isabet.kod === 200, String(isabet.kod));
+    ok('⑪b · isabet `X-Onbellek: isabet`', isabet.basliklar['x-onbellek'] === 'isabet',
+      String(isabet.basliklar['x-onbellek']));
+    // SKORUN DEĞERİ DEĞİŞMEZ: `ms` dışındaki her alan harfi harfine aynı.
+    const { ms: msIsabet, ...isabetKalan } = isabet.govde;
+    const { ms: msKaynak, ...kaynakKalan } = sahteGovde;
+    ok('⑪b · isabet gövdesi `ms` DIŞINDA harfi harfine aynı (skor değişmedi)',
+      JSON.stringify(isabetKalan) === JSON.stringify(kaynakKalan));
+    ok('⑪b · `ms` yeniden ölçüldü (isteğin süresi, skorun parçası değil)',
+      typeof msIsabet === 'number' && msIsabet !== msKaynak, String(msIsabet));
+    ok('⑪b · isabette TAM yol ile AYNI önbellek penceresi ilan edildi',
+      isabet.basliklar['cache-control']
+        === 'public, max-age=300, s-maxage=300, stale-while-revalidate=600',
+      String(isabet.basliklar['cache-control']));
+    ok('⑪b · isabet KV\'den okumayla geldi', kvOkuma >= 1, `${kvOkuma} KV okuması`);
+
+    // (3) ANAHTAR AYRIŞMASI: başka vade İSABET SAYILMAMALI.
+    agDenemesi = 0;
+    const baskaVade = await cagirUc(handler, 'GET', { symbols: 'AAPL', vade: 'uzun' });
+    ok('⑪b · başka vade isabet SAYILMADI (yanlış cevap servis edilmiyor)',
+      baskaVade.basliklar['x-onbellek'] === 'iska' && agDenemesi > 0,
+      `${String(baskaVade.basliklar['x-onbellek'])} · ${agDenemesi} deneme`);
+
+    // (4) KV ARIZALI — her çağrıda patlıyor. Uç cevap vermeye DEVAM etmeli.
+    kvTak({
+      get: async () => { throw new Error('kv patladi'); },
+      set: async () => { throw new Error('kv patladi'); },
+    });
+    agDenemesi = 0;
+    const arizali = await cagirUc(handler, 'GET', { symbols: 'AAPL', vade: 'orta' });
+    ok('⑪b · KV ARIZALIYKEN uç yine 200 döndü', arizali.kod === 200, String(arizali.kod));
+    ok('⑪b · KV arızalıyken `iska` (sessizce önbelleksiz yola düştü)',
+      arizali.basliklar['x-onbellek'] === 'iska');
+    ok('⑪b · KV arızası cevabı DÜŞÜRMEDİ, normal yol işledi',
+      agDenemesi > 0, `${agDenemesi} deneme`);
+
+    // (5) KV YAVAŞ — asla cevap vermiyor. `KV_ISTEK_MS` freni tutmalı,
+    //     yoksa KV'nin yavaşlığı ucun gecikmesine dönüşür (platform keser).
+    kvTak({ get: () => new Promise(() => {}), set: () => new Promise(() => {}) });
+    const tYavas = Date.now();
+    const yavas = await cagirUc(handler, 'GET', { symbols: 'AAPL', vade: 'orta' });
+    const gecenMs = Date.now() - tYavas;
+    ok('⑪b · KV YAVAŞKEN uç yine 200 döndü (asılı kalmadı)', yavas.kod === 200, String(yavas.kod));
+    ok('⑪b · zaman aşımı freni tuttu (KV_ISTEK_MS kadar bekledi, sonsuz değil)',
+      gecenMs >= KV_ISTEK_MS && gecenMs < KV_ISTEK_MS + 20000,
+      `${gecenMs} ms (fren ${KV_ISTEK_MS} ms)`);
+    ok('⑪b · yavaş KV\'ye rağmen normal yol işledi',
+      yavas.basliklar['x-onbellek'] === 'iska');
+
+    // (6) KV geçersiz tip döndürürse isabet SAYILMAMALI.
+    kvTak({ get: async () => ['bozuk'], set: async () => 'OK' });
+    ok('⑪b · KV dizi döndürürse `oku()` null (gövde yerine dizi servis edilmez)',
+      (await oku('ob:test:x')) === null);
+    kvTak({ get: async () => 'metin', set: async () => 'OK' });
+    ok('⑪b · KV metin döndürürse `oku()` null', (await oku('ob:test:x')) === null);
+
+    // (7) `yaz()` arızada FALSE döner — asla fırlatmaz (cevabı düşürmez).
+    kvTak({ get: async () => null, set: async () => { throw new Error('yazma patladi'); } });
+    ok('⑪b · `yaz()` arızada fırlatmıyor, false dönüyor',
+      (await yaz('ob:test:y', { a: 1 }, TTL_FIYAT)) === false);
+    kvTak({ get: () => new Promise(() => {}), set: () => new Promise(() => {}) });
+    ok('⑪b · `yaz()` zaman aşımında false dönüyor',
+      (await yaz('ob:test:y', { a: 1 }, TTL_FIYAT)) === false);
+
+    // (8) Ortam yokken KV'ye HİÇ dokunulmamalı — sert bağımlılık yok.
+    let dokunuldu = 0;
+    kvTak({
+      get: async () => { dokunuldu++; return null; },
+      set: async () => { dokunuldu++; return 'OK'; },
+    });
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+    await oku('ob:test:z');
+    await yaz('ob:test:z', { a: 1 }, TTL_FIYAT);
+    ok('⑪b · ortam değişkeni yokken KV\'ye HİÇ dokunulmadı',
+      dokunuldu === 0, `${dokunuldu} dokunma`);
+  } finally {
+    globalThis.fetch = gercekFetch;
+    kvTak(null);
+    if (ortamUrl === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = ortamUrl;
+    if (ortamTok === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = ortamTok;
+  }
+}
+
+// --- ⑪c statik denetimler — kopya mantık ve sızıntı yasağı --------------
+{
+  const src = readFileSync(ONBELLEK_PATH, 'utf8');
+  const kod = src.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+
+  ok('⑪c · dosya uyarı metnini taşıyor', src.includes(UYARI));
+  ok('N19 · yorum ayıklama çalışıyor (başlık düştü)',
+    /ÖLÇÜLEN/.test(src) && !/ÖLÇÜLEN/.test(kod), 'başlıkta var, kodda yok');
+
+  // SIR SIZINTISI YASAĞI: anahtar/jeton/e-posta hiçbir günlük satırına
+  // GİRMEZ. Günlükler sabit metin — `e.message` bile yok, çünkü @vercel/kv
+  // hata metni jeton taşıyan istek URL'ini içerebilir.
+  const loglar = kod.match(/console\.(error|log|warn)\([^\n]*/g) || [];
+  ok('⑪c · her günlük satırı SABİT metin (değişken enterpolasyonu yok)',
+    loglar.length > 0 && loglar.every((l) => !/\$\{|e\.message|String\(|\+\s*[A-Za-z_]/.test(l)),
+    `${loglar.length} günlük satırı`);
+  ok('⑪c · KV jetonu/URL\'i günlüğe GİRMİYOR',
+    !/console\.[a-z]+\([^)]*KV_REST/.test(kod));
+  ok('⑪c · anahtar (`key`) günlüğe GİRMİYOR',
+    !/console\.[a-z]+\([^)]*\bkey\b/.test(kod));
+  ok('⑪c · e-posta / kullanıcı kimliği hiçbir yerde geçmiyor',
+    !/@gmail|userEmail|mailto:/i.test(src));
+
+  // MOTOR DOKUNULMAZLIĞI: önbellek taşıyıcısı motoru ne import eder ne
+  // çağırır — skoru HESAPLAMAZ, yalnız saklar.
+  ok('⑪c · app.js / config.js import edilmiyor',
+    !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src));
+  ok('⑪c · motor taşıyıcıları import edilmiyor (skor hesaplamıyor)',
+    !/from\s+'\.\/_(motor|ayar|akis|ag)\.js'/.test(kod));
+  ok('⑪c · yalnız node:crypto statik import ediliyor',
+    (kod.match(/^import .*$/gm) || []).length === 1 && /node:crypto/.test(kod));
+  ok('⑪c · @vercel/kv DİNAMİK import (paket yoksa modül yüklenmesi çökmez)',
+    /await import\('@vercel\/kv'\)/.test(kod) && !/^import .*@vercel\/kv/m.test(kod));
+
+  // HAM SAYI KURALI — diğer taşıyıcılarla aynı küme.
+  ok('⑪c · HAM SAYI · `Intl` kullanımı yok', !/\bIntl\b/.test(kod));
+  ok('⑪c · HAM SAYI · `toFixed(` yok', !kod.includes('toFixed('));
+  ok('⑪c · HAM SAYI · `toLocaleString` yok', !kod.includes('toLocaleString'));
+
+  // TTL'ler İLAN EDİLEN pencereyle AYNI olmalı. Ayrışırsa KV, ucun
+  // istemciye söz verdiğinden DAHA ESKİ cevap servis eder.
+  ok('⑪c · TTL_FIYAT = skor şeridinin ilan ettiği 300 sn', TTL_FIYAT === 300, String(TTL_FIYAT));
+  ok('⑪c · TTL_TEMA = theme ucunun ilan ettiği 86400 sn', TTL_TEMA === 86400, String(TTL_TEMA));
+  ok('⑪c · KV zaman aşımı freni ucun süre bütçesine göre KÜÇÜK',
+    KV_ISTEK_MS > 0 && KV_ISTEK_MS <= 1000, `${KV_ISTEK_MS} ms`);
+
+  for (const [ad, yol] of [['score', SCORE_PATH], ['recommend', RECOMMEND_PATH],
+    ['analyze', ANALYZE_PATH], ['compare', COMPARE_PATH]]) {
+    const usrc = readFileSync(yol, 'utf8');
+    ok(`⑪c · ${ad} TTL'yi taşıyıcıdan alıyor (uçta yerel sayı yok)`,
+      /TTL_FIYAT/.test(usrc) && !/\{\s*ex:\s*\d/.test(usrc));
+    ok(`⑪c · ${ad} ilan ettiği max-age=300 ile TTL aynı pencere`,
+      usrc.includes('max-age=300'));
+    // KOPYA YASAĞI: anahtar üretimi / KV çağrısı uçta YENİDEN yazılmamış.
+    ok(`⑪c · ${ad} uçta kopya önbellek mantığı YOK`,
+      !/createHash\(/.test(usrc) && !/@vercel\/kv/.test(usrc) && !/kv\.(get|set)\(/.test(usrc));
+    ok(`⑪c · ${ad} yalnız TAM cevabı yazıyor (kesintiyi dondurmuyor)`,
+      /if \(tam\) await yaz\(/.test(usrc));
+  }
+
+  const tsrc = readFileSync(THEME_PATH, 'utf8');
+  ok('⑪c · theme TTL_TEMA\'yı taşıyıcıdan alıyor',
+    /TTL_TEMA/.test(tsrc) && !/\{\s*ex:\s*\d/.test(tsrc));
+  ok('⑪c · theme yalnız DOLU aday listesini yazıyor',
+    /if \(candidates\.length\) await yaz\(/.test(tsrc));
+  ok('⑪c · theme uçta kopya önbellek mantığı YOK',
+    !/createHash\(/.test(tsrc) && !/kv\.(get|set)\(/.test(tsrc));
+
+  // /api/causal BİLEREK ÖNBELLEKSİZ: ölçümde 0 dış istek (saf hesap) ve
+  // cevabı `no-store`. Önbellek orada kazanç değil, 64 KB gövdeyi özetleme
+  // maliyeti olurdu. Gerekçe yazılmadan değişmesin.
+  const nsrc = readFileSync(CAUSAL_PATH, 'utf8');
+  ok('⑪c · causal önbelleksiz KALDI (ölçüm: 0 dış istek, no-store)',
+    !/_onbellek\.js/.test(nsrc) && /no-store/.test(nsrc));
 }
 
 

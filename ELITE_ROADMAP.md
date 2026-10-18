@@ -38,6 +38,10 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
 
 ## FAZ 1 — Ayrım & iskelet
 
+**DURUM: KAPANDI** (2026-10-18) — son açık madde, uçların Vercel KV
+önbelleği, ölçülerek indi (aşağıdaki KV notu). FAZ 1'de işaretsiz madde
+kalmadı.
+
 **Amaç:** motoru API'ye çıkar, Expo projesini ve tasarım sistemini kur.
 
 - [x] **Motor envanteri:** `app.js` içinde saf motor fonksiyonları (TA, FA, öneri,
@@ -71,7 +75,7 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       **Negatif kontrol:** BIST ROE ağırlığı 0.10→0.20 bozulunca test 44 farkla kırmızı
       yandı ve sebebi (`fa.criteria[2].weight`) adıyla gösterdi; 10 ABD sembolü
       etkilenmedi. Aday motor `PARITE_APP=` ile canlıya dokunmadan ölçülebilir.
-- [ ] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
+- [x] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
       `theme`, `causal`, `compare`. Vercel KV ile cache.
       → **DURUM (2026-10-18): 6/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓ ·
       `/api/analyze` ✓ · `/api/theme` ✓ · `/api/compare` ✓ · `/api/causal` ✓.
@@ -123,8 +127,53 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       **Negatif kontrol:** method kapısı ve önbellek sabiti kasten bozulunca
       test 6 farkla kırmızı yandı. **Skor DEĞİŞMEDİ:** `parity.mjs` ve
       `PARITE_MOTOR=uretilmis parity.mjs` ikisi de **FARK 0**.
-      **Vercel KV önbelleği henüz hiçbir uçta YOK** — bu maddenin ikinci
-      yarısı tamamen açık.
+      **Vercel KV önbelleği İNDİ** (2026-10-18) — maddenin ikinci yarısı da
+      kapandı. **ÖNCE ÖLÇÜLDÜ, sonra yazıldı:** bir ABD sembolü için
+      `/api/score` **33 dış istek** yapıyor (AAPL: 31 SEC EDGAR + 2 Yahoo)
+      ve **~7,2 sn** sürüyor; bir BIST sembolü **5** (3 İş Yatırım + 2 Yahoo);
+      `/api/compare` iki ABD sembolüyle **65**; `/api/theme` **1** ama o tek
+      istek **para ödenen** istek; `/api/causal` **0** (saf hesap). Maliyetin
+      **~%94'ü** SEC/temel tarafı (10 istek/sn → 125 ms aralık).
+      **Altıncı taşıyıcı: `api/_onbellek.js`** — beş uç (`score`,
+      `recommend`, `analyze`, `compare`, `theme`) AYNI fonksiyonu içe alıyor,
+      hiçbir uçta kopya mantık yok. YENİ bir KV kurulumu icat EDİLMEDİ:
+      `api/watchlist.js`in zaten kullandığı `@vercel/kv` +
+      `KV_REST_API_URL`/`KV_REST_API_TOKEN` izlendi (paket zaten bağımlılık).
+      **TTL UYDURULMADI:** her TTL, ucun İLAN ETTİĞİ pencerenin ta kendisi —
+      skor şeridi `TTL_FIYAT = 300 sn` (= `max-age=300, s-maxage=300`),
+      `theme` `TTL_TEMA = 86400 sn` (= `s-maxage=86400`). Böylece KV hiçbir
+      zaman istemci sözleşmesinden ESKİ cevap vermiyor. **Fiyat ile temel
+      aynı tazelikte değil** — ama uzun TTL'li ayrı bir temel katmanı (33
+      isteğin 31'ini silerdi) BİLEREK YAZILMADI: taze fiyat + 6 saatlik
+      bilanço karışımı başka bir `composite` üretebilirdi, bu da
+      "önbellek skoru DEĞİŞTİREMEZ" kuralını ihlal ederdi → FAZ 2 işi
+      (kullanılmayan sabit de bırakılmadı). `causal` BİLEREK önbelleksiz:
+      0 dış istek, kazanacak bir şey yok.
+      **İLKE: KV YOKSA UÇ ÇALIŞIR.** Ortam değişkeni yoksa, KV fırlatırsa,
+      saçma bir nesne dönerse ya da ASILI kalırsa `oku()` `null` dönüyor
+      ve uç önbelleksiz yola düşüyor; istek ASLA düşmüyor. Fren
+      `KV_ISTEK_MS = 300`. Anahtar hem girdinin TAMAMINI hem **motor
+      imzasını** taşıyor (`ob:o1:<uç>:<sha256-32>`), yani
+      `tools/motor-uret.mjs` motoru değiştirdiği an eski girişler
+      kendiliğinden geçersiz — eski skor yeni motorla KARIŞAMAZ. Yalnız
+      `tam:true` gövde yazılıyor (bir kesintiyi 5 dakika dondurmamak için);
+      isabet gövdeyi OLDUĞU GİBİ sunuyor, yalnız `ms` yeniden ölçülüyor.
+      Hiçbir log değişken taşımıyor (sabit Türkçe dizge) → anahtar, token,
+      e-posta hiçbir yere sızmıyor.
+      **Bekçi:** `tests/uc-test.mjs` ⑪ bölümü, **383 → 457 denetim (+74)**,
+      ağa çıkmıyor (sahte KV + sayan sahte `fetch`). Ölçülen: aynı istek
+      önbelleksiz **4 deneme**, isabette **0 deneme**. **Negatif kontrol:**
+      beş kasıtlı kırılma, beşi de yakalandı — ① imza anahtardan çıkarıldı
+      (3 kırmızı) ② KV yoksa `oku()` fırlatıyor, yani SERT bağımlılık (takım
+      çöktü, çıkış 1) ③ zaman aşımı freni 300→5000 ms (1 kırmızı)
+      ④ `tam:false` cevap da yazılıyor (1 kırmızı) ⑤ isabette uydurma 1
+      günlük pencere ilan ediliyor (1 kırmızı). Hepsi geri alındı.
+      **Skor DEĞİŞMEDİ:** `parity.mjs` ve
+      `PARITE_MOTOR=uretilmis parity.mjs` ikisi de **FARK 0**.
+      **Gerekli ortam değişkenleri** (bu işte KURULMADI, zaten
+      `api/watchlist.js` kalıbı): `KV_REST_API_URL` + `KV_REST_API_TOKEN`.
+      Tanımsızken uçlar önbelleksiz ama DOĞRU çalışıyor (denetimle
+      bekçileniyor).
       → **Sürüyor** (2026-10-12). İlk uç `/api/score`. **Taşıyıcı hazır:** motor
       artık `app.js`'ten **üretiliyor** → `api/_motor.js` (1.463 satır / 9 dilim,
       tek ESM modülü, girişi `buildMotor(H)`; `_` öneki Vercel rotasını engelliyor).
@@ -264,6 +313,7 @@ nedensellik ("günün nedeni"), tematik keşif. Bu hazır ve "moat".
       eski şeritten, beş taşıyıcının üstünde durmuyor), ardından `causal` ve
       `compare` + `pulse` (⚡ Nabız). Aynı beş taşıyıcı, aynı kural: SAYI
       motora, CÜMLE çağrı noktasına. KV önbelleği ölçülmeden eklenmeyecek.
+      **→ ÖLÇÜLDÜ ve eklendi** (2026-10-18, yukarıdaki KV notu).
 - [x] **SÜRE TAVANI — ölçülen açık kapatıldı** (2026-10-14, FAZ 1/5-F):
       üç ucun ORTAK açığıydı; `maxDuration` 60 aşılıyordu, istemci gövdesiz
       504 görürdü.

@@ -91,6 +91,10 @@ import { analyzeOne } from './_akis.js';
 import { AZAMI_SEMBOL, ayristir } from './_girdi.js';
 export { AZAMI_SEMBOL, ayristir };
 
+// ÖNBELLEK — altı ucun PAYLAŞTIĞI taşıyıcı; bu dosyada kopya mantık YOK.
+// TTL gerekçesi ve uç başına ÖLÇÜLEN dış istek sayıları orada yazılı.
+import { anahtar, skorGirdisi, oku, yaz, TTL_FIYAT } from './_onbellek.js';
+
 // En az iki sembol: tek sembollü kıyas yok (başlıktaki gerekçe).
 export const ASGARI_SEMBOL = 2;
 
@@ -204,6 +208,27 @@ export default async function handler(req, res) {
   }
 
   const t0 = Date.now();
+
+  // --- ÖNBELLEK OKUMASI (api/_onbellek.js) ---------------------------
+  //  İsabet = ÖLÇÜLEN 65 dış isteğin (AAPL+MSFT; sembol başına 32 + tur başına 1) yerine TEK KV okuması.
+  //  Anahtar MOTOR İMZASINI taşıyor: `node tools/motor-uret.mjs` motoru
+  //  değiştirdiği an eski girdiler kendiliğinden geçersizleşir, eski skor
+  //  yeni motorla KARIŞAMAZ.
+  //  KV yoksa / arızalıysa / yavaşsa `oku()` null döner ve buradan AŞAĞI
+  //  önbelleksiz yola devam ederiz — istek ASLA düşmez.
+  const obAnahtar = anahtar('compare', skorGirdisi(ay), { motor: IMZA, ayar: IMZA_AYAR });
+  const obVurus = await oku(obAnahtar);
+  if (obVurus) {
+    res.setHeader('X-Onbellek', 'isabet');
+    // YALNIZ `tam:true` gövde yazıldığı için isabette pencere de TAM yol
+    // ile aynı — yeni bir eskilik penceresi icat edilmiyor.
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=600');
+    // Gövde OLDUĞU GİBİ servis ediliyor: skorun DEĞERİ değişmez. Yalnız
+    // `ms` yeniden ölçülüyor — o alan İSTEĞİN süresi, skorun parçası değil.
+    res.status(200).json({ ...obVurus, ms: Date.now() - t0 });
+    return;
+  }
+  res.setHeader('X-Onbellek', 'iska');
   try {
     AG.yeniTur();
     const sonuclar = [];
@@ -247,7 +272,7 @@ export default async function handler(req, res) {
     if (tam) res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=600');
     else kisaOnbellek(res);
 
-    res.status(200).json({
+    const govde = {
       vade: ay.vade,
       istenen: ay.rows.length,
       sonuclar,
@@ -259,7 +284,14 @@ export default async function handler(req, res) {
       surum: { motor: IMZA, ayar: IMZA_AYAR },
       ms: Date.now() - t0,
       uyari: UYARI,
-    });
+    };
+
+    // Yalnız TAM cevap önbellekleniyor: `tam:false` "ölçemedim" demek ve
+    // uç o hâlde pencereyi zaten max-age=30'a düşürüyor. Bir kesintiyi
+    // 5 dakika dondurmak, kesinti geçtikten sonra da eski cevabı servis
+    // etmek olurdu. Yazma arızası cevabı DÜŞÜRMEZ (`yaz()` false döner).
+    if (tam) await yaz(obAnahtar, govde, TTL_FIYAT);
+    res.status(200).json(govde);
   } catch (e) {
     console.error('api/compare:', (e && e.stack) || e);
     kisaOnbellek(res);

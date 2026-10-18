@@ -116,6 +116,11 @@
 import { AZAMI_SORGU } from './_girdi.js';
 export { AZAMI_SORGU };
 
+// ÖNBELLEK — altı ucun PAYLAŞTIĞI taşıyıcı (`api/_onbellek.js`); burada
+// kopya mantık YOK. Bu uç ölçümde YALNIZ 1 dış istek yapıyor ama o istek
+// tek PARA ÖDENEN istek: önbellek burada ağ değil MALİYET kazancı.
+import { anahtar, oku, yaz, TTL_TEMA } from './_onbellek.js';
+
 // maxDuration 30 KALDI — değiştirilmedi, çünkü ölçülmüş bir sebep yok ve
 // bu görev davranışı değiştirmiyor. İş yükü tek bir LLM çağrısı; skor
 // uçlarının 60'ına (8 sembol × 7,2 sn) ihtiyaç duymuyor.
@@ -259,6 +264,22 @@ export default async function handler(req, res) {
 
   const t0 = Date.now();
 
+  // --- ÖNBELLEK OKUMASI ----------------------------------------------
+  //  Anahtar girdinin TAMAMINI kapsıyor: sorgu metni + MODEL + aday tavanı.
+  //  Burada motor imzası yok (bu uç skora dokunmaz); sürüm ekseni MODEL adı
+  //  — `THEME_MODEL` değişince eski adaylar kendiliğinden geçersizleşir.
+  //  Anahtar yoksa / KV arızalıysa `oku()` null döner ve aşağıdaki normal
+  //  yol aynen işler — istek ASLA düşmez.
+  const obAnahtar = anahtar('theme', { q: query, model: MODEL, azamiAday: AZAMI_ADAY });
+  const obVurus = await oku(obAnahtar);
+  if (obVurus) {
+    res.setHeader('X-Onbellek', 'isabet');
+    res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=172800');
+    res.status(200).json({ ...obVurus, ms: Date.now() - t0 });
+    return;
+  }
+  res.setHeader('X-Onbellek', 'iska');
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     // Anahtar yoksa istemci haber-tabanlı moda düşsün. Bu bir ARIZA DEĞİL,
@@ -273,7 +294,13 @@ export default async function handler(req, res) {
     const candidates = await askClaude(query, apiKey);
     // Temalar için adaylar yavaş değişir → CDN'de 1 gün tut (maliyet kontrolü).
     res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=172800');
-    res.status(200).json({ query, model: MODEL, candidates, ms: Date.now() - t0, uyari: UYARI });
+    const govde = { query, model: MODEL, candidates, ms: Date.now() - t0, uyari: UYARI };
+    // YALNIZ dolu aday listesi yazılıyor: boş liste "model bir şey bulamadı"
+    // demek ve istemci o durumda haber katmanına düşüyor — onu 1 gün
+    // dondurmak arızayı kalıcılaştırırdı. TTL = ucun İLAN ETTİĞİ pencere
+    // (s-maxage=86400), yani KV hiçbir zaman sözleşmeden eski cevap vermez.
+    if (candidates.length) await yaz(obAnahtar, govde, TTL_TEMA);
+    res.status(200).json(govde);
   } catch (e) {
     // Ayrıntı YALNIZ sunucu günlüğüne — cevapta iç hata metni yok (⑤).
     // Anahtar buraya GİRMİYOR: yalnız hata mesajı yazılıyor, istek gövdesi
