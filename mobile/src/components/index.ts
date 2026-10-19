@@ -25,4 +25,6 @@ export { ScoreGauge, type ScoreGaugeProps } from './ScoreGauge';
 export { ScreenShell, type ScreenShellProps } from './ScreenShell';
 export { SectorChip, type SectorChipProps } from './SectorChip';
 export { Skeleton, SkeletonRow, SkeletonText, type SkeletonProps } from './Skeleton';
+// FAZ 3: sekme çubuğunun vektör ikonları (emoji yerine).
+export { TabIkon, type TabIkonAd, type TabIkonProps } from './TabIkon';
 export { ROW_HEIGHT, TickerRow, type TickerRowProps } from './TickerRow';

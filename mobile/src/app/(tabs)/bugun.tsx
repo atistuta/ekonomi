@@ -28,7 +28,7 @@ import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { fetchCompare, useIstek, useListe, type SiraKayit } from '@/api';
+import { fetchCompare, useHazir, useIstek, useListe, type SiraKayit } from '@/api';
 import { Card, Durum, OlcumNotu, Pill, ScreenShell } from '@/components';
 import { formatScore } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
@@ -44,13 +44,15 @@ const DURUM_METIN: Record<string, string> = {
 export default function BugunScreen() {
   const { colors } = useTheme();
   const liste = useListe();
+  const hazir = useHazir();
 
   const cagri = useCallback(
     (signal: AbortSignal) => fetchCompare(liste, { vade: 'orta', signal }),
     [liste],
   );
   const { durum, veri, hata, yenile } = useIstek(cagri, liste.join(','), {
-    etkin: liste.length > 0,
+    // `hazir`: depo okuması bitmeden motora gitmeyiz (bkz. api/liste.ts).
+    etkin: hazir && liste.length > 0,
   });
 
   const sira: SiraKayit[] = veri?.sira ?? [];

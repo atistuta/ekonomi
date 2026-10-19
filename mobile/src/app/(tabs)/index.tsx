@@ -14,27 +14,41 @@
 //  alanlar. Bu dosyada tek bir eşik, ağırlık ya da formül YOK. Sayılar
 //  yalnız `lib/format.ts` ile BİÇİMLENİYOR (tr-TR), türetilmiyor.
 //
-//  NEDEN FlatList: yol haritası liste ekranlarında sanallaştırma
-//  istiyor. `@shopify/flash-list` KURULU DEĞİL (ÖLÇÜLDÜ: package.json);
-//  bağımlılık eklemek yerine React Native'in içinde gelen, aynı işi
-//  yapan `FlatList` kullanıldı. FlashList'e geçiş yol haritasında AÇIK
-//  bırakıldı — "bitti" denmedi.
+//  NEDEN FlatList VE FlashList DEĞİL (ÖLÇÜLDÜ, KARAR KAPANDI): bu
+//  listenin AZAMİ UZUNLUĞU 8 SATIR — motor sözleşmesinin kendi sınırı
+//  (`AZAMI_SEMBOL = 8`, api/types.ts; uç nokta fazlasını 400 ile
+//  reddediyor, kırpmıyor). `@shopify/flash-list` geri dönüşüm kazancını
+//  ekran dışında KALAN satırlarda veriyor; 8 satırın tamamı zaten ekranda
+//  ya da bir kaydırma payında. Ölçülebilir kazanç yok, karşılığında yeni
+//  bir native bağımlılık + Expo Go dışı derleme borcu var. KURULMADI.
+//  Sınır artarsa (ör. ücretli katmanda 50 sembol) karar yeniden ölçülür.
 //
-//  NEDEN SİLME DÜĞMESİ VAR DA KALICILIK YOK: liste BELLEKTE (bkz.
-//  api/liste.ts). Kalıcılık Supabase senkronuna bağlı ve anahtar yok;
-//  ekran bunu dürüstçe yazıyor.
+//  KALICILIK (FAZ 3, KAPANDI): liste cihazda saklanıyor — `lib/kalici.ts`
+//  (AsyncStorage, web'le aynı `sb:lists` anahtarı/şekli). Uygulama
+//  kapanıp açılınca ya da web lab'da sayfa yenilenince liste YERİNDE
+//  duruyor. Bulut senkronu (Supabase) hâlâ ayrı bir ayak ve anahtarı yok;
+//  ekran bunu ayrı kartta dürüstçe söylüyor.
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
 import { router } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
-import { cikar, fetchRecommend, useIstek, useListe, type RecommendRow } from '@/api';
+import {
+  cikar,
+  fetchRecommend,
+  kayitBudandiMi,
+  useHazir,
+  useIstek,
+  useListe,
+  type RecommendRow,
+} from '@/api';
 import { getSupabase } from '@/api/supabase';
 import { Card, Durum, Dugme, OlcumNotu, Pill, ScreenShell, TickerRow, VeriYok } from '@/components';
 import { formatPrice, formatScore } from '@/lib/format';
+import { depoCalisiyorMu } from '@/lib/kalici';
 import { space, type, useTheme } from '@/theme';
 
 /** Yakınlık durumunun Türkçe karşılığı. SABİT KÜME (motordan: api/_motor.js). */
@@ -48,14 +62,29 @@ const YAKINLIK_METIN: Record<string, string> = {
 export default function ListelerScreen() {
   const { colors } = useTheme();
   const liste = useListe();
+  const hazir = useHazir();
   const senkron = getSupabase();
+  // Depo GERÇEKTEN yazıp okuyabiliyor mu? İddia değil, ölçüm: özel
+  // pencerede / kota dolu cihazda kalıcılık olmaz ve kullanıcı bunu
+  // bilmeli. `null` = henüz ölçülmedi ("yok" ile aynı şey değil).
+  const [depoOk, setDepoOk] = useState<boolean | null>(null);
+  useEffect(() => {
+    let canli = true;
+    void depoCalisiyorMu().then((v) => {
+      if (canli) setDepoOk(v);
+    });
+    return () => {
+      canli = false;
+    };
+  }, []);
 
   const cagri = useCallback(
     (signal: AbortSignal) => fetchRecommend(liste, { vade: 'orta', signal }),
     [liste],
   );
   const { durum, veri, hata, yenile, taze } = useIstek(cagri, liste.join(','), {
-    etkin: liste.length > 0,
+    // `hazir`: depo okuması bitmeden motora gitmeyiz (bkz. api/liste.ts).
+    etkin: hazir && liste.length > 0,
   });
 
   const satirlar: RecommendRow[] = veri?.sonuclar ?? [];
@@ -65,7 +94,11 @@ export default function ListelerScreen() {
       title="Listeler"
       subtitle="Takip ettiğin hisseler — her sayı motor API'den gelir."
       scroll={false}
-      note="Liste bu sürümde cihazda saklanmıyor (bulut senkronu kurulu değil).">
+      note={
+        kayitBudandiMi()
+          ? 'Liste cihazda saklanıyor. Önceki kayıttan okunamayan satırlar atlandı.'
+          : 'Liste cihazda saklanıyor; bulut senkronu kurulu değil.'
+      }>
       <FlatList
         data={satirlar}
         keyExtractor={(r) => r.sym}
@@ -81,7 +114,7 @@ export default function ListelerScreen() {
         ListHeaderComponent={
           <View style={styles.basliklar}>
             <Durum
-              durum={durum}
+              durum={hazir ? durum : 'yukleniyor'}
               hata={hata}
               yenile={yenile}
               iskelet={Math.max(liste.length, 3)}
@@ -110,9 +143,16 @@ export default function ListelerScreen() {
         renderItem={({ item }) => <Satir satir={item} />}
       />
 
-      <Card title="Bulut senkronu">
+      <Card title="Liste nerede saklanıyor?">
         <Text style={[type.small, { color: colors.textDim }]}>
-          {senkron.ok ? 'Senkron yapılandırıldı.' : senkron.message}
+          {depoOk === null
+            ? 'Yerel kayıt ölçülüyor…'
+            : depoOk
+              ? 'Bu cihazda saklanıyor: uygulamayı kapatıp açsan liste yerinde durur.'
+              : 'Bu cihazda saklanamıyor (depoya yazılamadı): liste yalnız bu oturum boyunca durur.'}
+        </Text>
+        <Text style={[type.small, { color: colors.textDim }]}>
+          {senkron.ok ? 'Bulut senkronu yapılandırıldı.' : senkron.message}
         </Text>
       </Card>
     </ScreenShell>

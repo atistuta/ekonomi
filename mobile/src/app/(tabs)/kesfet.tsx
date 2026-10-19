@@ -28,7 +28,7 @@ import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { fetchRecommend, useIstek, useListe, type RecommendRow } from '@/api';
+import { fetchRecommend, useHazir, useIstek, useListe, type RecommendRow } from '@/api';
 import { Card, Durum, OlcumNotu, Pill, ScreenShell, VeriYok } from '@/components';
 import { formatPercent, formatPrice, formatScore } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
@@ -36,13 +36,15 @@ import { space, type, useTheme } from '@/theme';
 export default function KesfetScreen() {
   const { colors } = useTheme();
   const liste = useListe();
+  const hazir = useHazir();
 
   const cagri = useCallback(
     (signal: AbortSignal) => fetchRecommend(liste, { vade: 'orta', signal }),
     [liste],
   );
   const { durum, veri, hata, yenile } = useIstek(cagri, liste.join(','), {
-    etkin: liste.length > 0,
+    // `hazir`: depo okuması bitmeden motora gitmeyiz (bkz. api/liste.ts).
+    etkin: hazir && liste.length > 0,
   });
 
   const satirlar: RecommendRow[] = veri?.sonuclar ?? [];
