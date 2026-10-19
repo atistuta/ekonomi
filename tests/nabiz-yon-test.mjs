@@ -30,8 +30,15 @@
 //  kopyalanırsa test kendi kopyasını doğrular, yani hiçbir şeyi (engine.mjs
 //  ile aynı kural).
 //
-//  KAPSAM: bu katman BİLGİ AMAÇLIDIR ve motor SKORUNA DAHİL DEĞİLDİR —
-//  ölçüldü, bu adların hiçbiri üretilmiş `api/_motor.js` içinde geçmiyor.
+//  KAPSAM: bu katman BİLGİ AMAÇLIDIR ve motor SKORUNA DAHİL DEĞİLDİR.
+//  DÜZELTME (2026-10-19): burada "bu adların hiçbiri üretilmiş
+//  `api/_motor.js` içinde geçmiyor" yazıyordu. ARTIK DOĞRU DEĞİL —
+//  /api/pulse ucu aynı eşikleri ikinci kez yazmasın diye yön matematiği
+//  motora dilimlendi (engine.mjs: 'makro-faz' + 'nabiz-yon').
+//  "Skora dahil değil" kısmı DEĞİŞMEDİ ve ölçülüdür: her iki parite şeridi
+//  dilim eklendikten sonra da FARK 0 verdi, yani composite/vade skorunun
+//  tek hanesi dahi kımıldamadı. Bu dosya app.js'i okumayı sürdürüyor —
+//  motoru değil — çünkü tek doğru kaynak hâlâ app.js.
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 

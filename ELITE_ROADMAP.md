@@ -76,10 +76,11 @@ kalmadı.
       yandı ve sebebi (`fa.criteria[2].weight`) adıyla gösterdi; 10 ABD sembolü
       etkilenmedi. Aday motor `PARITE_APP=` ile canlıya dokunmadan ölçülebilir.
 - [x] Motor mantığını `/api/*` uçlarına böl: `score`, `recommend`, `analyze`,
-      `theme`, `causal`, `compare`. Vercel KV ile cache.
-      → **DURUM (2026-10-18): 6/6 uç indi** — `/api/score` ✓ · `/api/recommend` ✓ ·
-      `/api/analyze` ✓ · `/api/theme` ✓ · `/api/compare` ✓ · `/api/causal` ✓.
-      **Son iki uç İNDİ** (2026-10-18), ikisi de AYNI kabukta (method kapısı +
+      `theme`, `causal`, `compare`, `chart`, `pulse`. Vercel KV ile cache.
+      → **DURUM (2026-10-19): 8 uç indi** — `/api/score` ✓ · `/api/recommend` ✓ ·
+      `/api/analyze` ✓ · `/api/theme` ✓ · `/api/compare` ✓ · `/api/causal` ✓ ·
+      `/api/chart` ✓ · `/api/pulse` ✓.
+      **`compare` + `causal` İNDİ** (2026-10-18), ikisi de AYNI kabukta (method kapısı +
       `Allow`, `AZAMI_SORGU`/`AZAMI_SEMBOL` `_girdi.js`ten, `max-age=30` hata
       yolu, gövdede `uyari`, iç hata metni yok + `console.error`).
       ① **`/api/compare`** — zincirin dördüncü halkası
@@ -105,6 +106,70 @@ kalmadı.
       2 denetim kırmızı. İkisi de geri alındı.
       **Skor DEĞİŞMEDİ:** motor imzası değişti ama `parity.mjs` ve
       `PARITE_MOTOR=uretilmis parity.mjs` ikisi de **FARK 0**.
+      **Yedinci ve sekizinci uç İNDİ** (2026-10-19) — FAZ 2 veri bağlamada
+      ÖLÇÜLEN iki boşluk kapandı. İkisi de aynı kabukta (method kapısı +
+      `Allow`, limitler `_girdi.js`ten, gövdede `uyari`, iç hata metni yok
+      + `console.error`, `AbortSignal` freni). İkisi de skor zincirinin
+      YANINDA durur: skoru ne okur ne yazar — `api/_akis.js` içinde
+      `macroPhase|pulseStance|rateDirection|inflDirection` geçmiyor,
+      denetimle bekçileniyor.
+      ③ **`/api/chart`** — HAM mum serisi (native grafik için). **AD SEÇİMİ:**
+      `/api/ohlc` fazla teknik, `/api/price` tek fiyatı çağrıştırırdı; `chart`
+      istemcideki ihtiyacın adı ve motorun fonksiyon ailesi de
+      `fetchYahooOHLC`/`fetchYahooChart`. GET; `AZAMI_SORGU`, `PAZARLAR` ve
+      `temizleSembol` `_girdi.js`ten **yeniden dışa verilerek** alındı (test
+      aynı NESNE mi diye bakıyor → yerel kopya sürüklenemez). Aralık/adım
+      BEYAZ LİSTE. **Mantık uçta DEĞİL:** `ENG.fetchYahooOHLC` çağrılıyor —
+      **yeni dilim GEREKMEDİ**, seri zaten `ta` diliminin içindeydi; `.IS`
+      ekini de motor koyuyor. Eksik kapanışlı mum SÜZÜLÜYOR, künye beyaz
+      listeyle kırpılıyor (`suzKunye`). **AÇIK (dürüstçe):** endeks grafiği
+      YOK — `^GSPC` ortak `SEMBOL_BICIM`inden geçemiyor; uca özel istisna
+      icat etmek yerine sınır testin içine çivilendi.
+      ④ **`/api/pulse`** — makro duruş + konjonktür fazı. **VARSAYIM: POST**
+      (`/api/causal` ile aynı gerekçe: girdi manşet listesi, `AZAMI_SORGU`ya
+      sığmaz). **0 dış istek** — ve bu tercih değil ÖLÇÜLEN sınır: `_ag.js`in
+      `IZINLI` listesi tam beş host (Yahoo ×2, SEC ×2, İş Yatırım) ve
+      haber/RSS host'u YOK; uç haberi kendisi çekemez, girdiyi istemci verir.
+      Oraya `news.google`/`api.anthropic.com` SOKULMADI.
+      **Mantık uçta DEĞİL:** app.js'in iki saf bölgesi `tests/engine.mjs`e
+      **11. ve 12. dilim** olarak eklendi (`makro-faz` + `nabiz-yon`) ve motor
+      yeniden üretildi (`imza sha256:0654972f8af6435b →
+      sha256:faa38d4cf9408912`, 1.683 → 1.955 satır). Büyüme boyutu ve faz
+      karar ağacı `computeMacro`nun İÇİNDEydi — o fonksiyon ağa çıkıyor ve
+      modül durumu yazıyor, yani dilimlenemez; bu yüzden **saf iki parça**
+      app.js içinde dışarı çıkarıldı (`macroGrowth` + `macroPhase`) ve
+      `computeMacro` artık onları çağırıyor. FORMÜL DEĞİŞMEDİ (eşik ve
+      katsayıların tamamı aynı); iki parite şeridi de bunu doğruluyor.
+      DOM/sunum adları (`renderMacro`, `macroGauge`, `buildPulseMacroHtml`,
+      `renderIndexPulse`, `pulseMacroComment`, `pulseMacroReality`) dilimin
+      DIŞINDA kaldı — denetimle bekçileniyor. **İKİ AYRI YOL BİLEREK AYRI
+      KALDI** (ölçüm): ⚡ Nabız duruşu `rateDirection(taze, wOf)` ile
+      **AĞIRLIKLI**, konjonktür kartı `rateDirection(hepsi)` ile
+      **AĞIRLIKSIZ** çalışıyor — fikstürde 0,714 vs 0,5 farkı ölçüldü. Tek
+      yola indirmek app.js'in iki ekranından birini sessizce değiştirirdi.
+      **Eksik veri UYDURULMUYOR:** genişlik / enflasyon baskısı / risk yoksa
+      `konjonktur: null` ve `eksik` alanı hangi girdinin yokluğunu söyler
+      (yer tutucu 50 konmaz).
+      **TTL'ler ÖLÇÜMDEN, UYDURMA DEĞİL:** `/api/chart` → `TTL_FIYAT = 300`
+      ve ilan edilen pencere de `max-age=300, s-maxage=300` (test iki sayının
+      AYNI olduğunu denetliyor, yani KV ucun sözünden eski cevap veremez).
+      Gün içi aralıklar için düşünülen `TTL_GRAFIK_ICI = 60` **ÇÜRÜTÜLDÜ:**
+      motorun adres kurucusu `_t` kovasını aralığa BAKMADAN 5 dakikada
+      çeviriyor (`_motor.js:105`), yani 60 sn'lik pencere motorun
+      VEREMEDİĞİ bir tazelik vaadi olurdu; gerekçe `api/_onbellek.js`
+      başlığına yazıldı. `/api/pulse` → **`no-store`, önbellek YOK**
+      (`/api/causal` ile birebir aynı gerekçe: 0 dış istek, saf hesap,
+      anahtar POST gövdesinin tamamı olurdu — hesaptan pahalı).
+      **Bekçi:** `tests/uc-test.mjs` ⑫ + ⑬ bölümleri, **457 → 671 denetim
+      (+214)**, ağa HİÇ çıkmıyor (doğrulama yolunda 0 deneme ÖLÇÜLDÜ; gerçek
+      grafik yolu sahte Yahoo yanıtı + sahte KV ile sürülüyor).
+      **Negatif kontrol (üç kez, hepsi geri alındı, `diff` boş):** ① grafiğin
+      ilan ettiği pencere 300→60 yapılınca **3 denetim** kırmızı · ② nabız
+      eksik genişliği uydurunca (`50`) **1 denetim** kırmızı · ③
+      `ENG.pulseStance` yerine uca yerel kopya konunca **6 denetim** kırmızı.
+      **Skor DEĞİŞMEDİ (beş kapı yeşil):** `uretim-test` 73 · `uc-test` 671 ·
+      `nabiz-yon-test` 40 · `parity.mjs` **FARK 0** ·
+      `PARITE_MOTOR=uretilmis parity.mjs` **FARK 0**.
       **`api/theme.js` motor şeridine alındı** (2026-10-18): dosya zaten
       yayındaydı ama **eski kabuktan** geliyordu. Sekiz sapma ÖLÇÜLDÜ ve
       kapatıldı — ① hiçbir gövdede `uyari` yoktu · ② method kapısı yoktu
@@ -446,13 +511,18 @@ Taban adres `EXPO_PUBLIC_API_TABAN` ile değişebiliyor, varsayılan
 `https://day-starter.vercel.app`; **gizli anahtar konmadı**.
 
 - [x] **Bugün (dashboard):** `/api/compare` → motorun yaptığı sıra + bütüncül skor
-      + `siralanamayan` + ölçüm notu. **AÇIK:** konjonktür kartı, piyasa nabzı ve
-      öne çıkan sektör için **uç yok** — yer tutucu sayı konmadı, ekranda eksik
-      dürüstçe yazıyor.
+      + `siralanamayan` + ölçüm notu. **UÇ İNDİ (2026-10-19):** konjonktür
+      kartı ve piyasa nabzı artık `/api/pulse`ten beslenebilir (duruş kodu,
+      faiz/enflasyon yönü, faz, sektör kodları — HAM sayı + makine kodu).
+      **AÇIK: ekranı uca bağlamak** (mobil ayrı iş) ve **öne çıkan sektör** —
+      o, evrenin ortalama teknik skoruna (genişlik) bağlı; uç genişliği
+      kendisi hesaplamıyor, istemci vermedikçe `eksik` diyor.
 - [x] **Analiz:** `/api/analyze` → TA + FA + bileşke (üç gösterge), bütüncül skor
       (0-10) + direkler, plan seviyeleri (alım/kâr-al bandı, hedef, stop, SMA, ATR),
-      risk/ödül oranı, TA gösterge dökümü. **AÇIK: grafik** — fiyat serisi döndüren
-      uç YOK; seriyi istemcide üretmek "motor API'de" kuralını kırardı.
+      risk/ödül oranı, TA gösterge dökümü. **GRAFİK UCU İNDİ (2026-10-19):**
+      `/api/chart` HAM mum serisi döndürüyor (aralık/adım beyaz listeli),
+      seri istemcide ÜRETİLMİYOR. **AÇIK: native çizim** (victory-native /
+      Skia) ve endeks grafiği (`^GSPC` ortak sembol biçiminden geçmiyor).
 - [~] **Listeler:** `/api/recommend` → fiyat + bileşke + bant + banda yakınlık,
       pull-to-refresh, çıkar. **AÇIK: Supabase senkronu** — anahtar yok, sahte
       anahtar üretilmedi; liste şimdilik yalnız BELLEKTE (AsyncStorage kurulu

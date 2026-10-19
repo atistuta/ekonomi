@@ -82,6 +82,13 @@ export const SLICES = [
   // DISINDA kaldi (bitis imi onlardan once). /api/causal bu yuzden
   // app.js'teki mantigi YENIDEN YAZMIYOR, motordan cagiriyor.
   ['causal', '  const CAUSAL_INDEX_AFFINITY = {', '  // Faz B stub — anahtar gelince'],
+  // ⚖️ Makro faz + nabiz yonu: /api/pulse icin 2026-10-19'da devredildi.
+  // OLCULDU: iki bolgede de document/innerHTML/fetch/localStorage/proxy/
+  // setDiag YOK — hepsi girdi-cikti. AGA CIKAN computeMacro ve
+  // computePulseMacro bitis imlerinin DISINDA kaldi; bu yuzden ucun
+  // esikleri YENIDEN YAZMASI gerekmiyor, motordan cagiriyor.
+  ['makro-faz', '  const CYCLE_PHASES = {', '  // Makro nabzını hesapla'],
+  ['nabiz-yon', "  const RATE_SENSITIVE = ['tech'", '  async function computePulseMacro(force) {'],
 ];
 
 // Dilimlerden dışarı verilecek motor sembolleri.
@@ -109,6 +116,13 @@ export const EXPORTS = [
   // "hangi gundem konsepti bu endeks hareketiyle hizali" korelasyon
   // okumasidir. Turkce cumle yine cagri noktasinda.
   'CAUSAL_INDEX_AFFINITY', 'causalAlign', 'computeCausalLinks',
+  // Makro/nabiz katmani: 2026-10-19'da /api/pulse icin devredildi.
+  // SKORA DOKUNMAZ. Turkce cumleler (CYCLE_PHASES.label, PMAC_STANCE_TR)
+  // BILEREK dısarı verilmiyor — HAM SAYI kurali: uc yalniz kod dondurur.
+  'CYCLE_PHASES', 'macroGrowth', 'macroPhase',
+  'FADE_WIN', 'fadedAround', 'rateDirection', 'inflDirection',
+  'RATE_SENSITIVE', 'pulseRecentCount',
+  'PULSE_FRESH_H', 'PULSE_FRESH_W', 'pulseFreshWithin', 'pulseFreshWeight', 'pulseStance',
 ];
 
 function countOf(src, needle) {

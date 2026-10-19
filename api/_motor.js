@@ -10,7 +10,7 @@
 //  üretim testi zaten kırmızı yanar. Motor davranışı değişecekse app.js
 //  değişir, sonra bu dosya yeniden üretilir.
 //
-//  Dilimler (10):
+//  Dilimler (12):
 //    util           19 satır
 //    ysym            6 satır
 //    ta            923 satır
@@ -21,13 +21,15 @@
 //    fa-bist       154 satır
 //    fa-us         292 satır
 //    causal         68 satır
-//    TOPLAM       1683 satır
-//  Dışa verilen sembol: 33
+//    makro-faz      97 satır
+//    nabiz-yon      88 satır
+//    TOPLAM       1868 satır
+//  Dışa verilen sembol: 47
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:0654972f8af6435b';
+export const IMZA = 'sha256:faa38d4cf9408912';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
@@ -41,6 +43,8 @@ export const DILIMLER = [
   { name: 'fa-bist', lines: 154 },
   { name: 'fa-us', lines: 292 },
   { name: 'causal', lines: 68 },
+  { name: 'makro-faz', lines: 97 },
+  { name: 'nabiz-yon', lines: 88 },
 ];
 
 /**
@@ -1760,5 +1764,192 @@ const navigator = H.dead("navigator");
   }
 
 
-return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks };
+// ===== dilim: makro-faz =====
+  const CYCLE_PHASES = {
+    early: { label: 'Erken Döngü / Toparlanma', emoji: '🌱', cls: 'early', sectors: ['banks', 'auto', 'tech'],
+      desc: 'Faizler geriliyor, risk iştahı toparlanıyor. Faize duyarlı ve büyüme hisseleri öne çıkar.' },
+    mid: { label: 'Orta Döngü / Genişleme', emoji: '🚀', cls: 'mid', sectors: ['tech', 'industrials', 'semis', 'software'],
+      desc: 'Büyüme güçlü, koşullar dengeli. Teknoloji, yazılım, sanayi ve çip liderlik eder.' },
+    late: { label: 'Geç Döngü / Aşırı Isınma', emoji: '🔥', cls: 'late', sectors: ['energy', 'industrials', 'gold', 'materials'],
+      desc: 'Enflasyon/emtia baskısı ve para sıkılaşması. Enerji, metal/madencilik ve reel varlıklar korunaklı olur.' },
+    recession: { label: 'Durgunluk / Risk-off', emoji: '🛡️', cls: 'recession', sectors: ['utilities', 'staples', 'gold'],
+      desc: 'Büyüme zayıf, güvenli liman talebi yüksek. Savunmacı sektörler ve altın öne çıkar.' },
+  };
+
+  // ===== ⚖️ Yön oyunun OLUMSUZLANMASI — web geri dönüşünden düzeltme (2026-10-14) =====
+  // ÖLÇÜLEN HATA: rateDirection yalnız "rate cut"/"faiz indirimi" ifadesinin
+  // GEÇİP geçmediğine bakıyordu — o ifadeye NE YAPILDIĞINA bakmıyordu. Sıcak
+  // TÜFE günü (2026-10-14) manşetleri tam olarak "faiz indirimi umudu ÖLDÜ"
+  // biçiminde olduğu için beş manşetin BEŞİ de güvercin oyu sayıldı:
+  //   rateDir = -0,833 · inflDir = +0,500 · pressure = -0,300 → "🕊️ Gevşeme"
+  // yani piyasa çakılırken sistem güvercin rüzgârı ilan ediyordu.
+  //
+  // ÇÖZÜM: ifadenin ÇEVRESİNDEKİ fiili oku; umut/beklenti ÖLÜYORSA oyu TERS
+  // çevir. Asimetri İKİ YÖNLÜ kapatılır — "rate hike fears fade" de artık
+  // şahin değil GÜVERCİN sayılır; tek yönlü düzeltme yeni bir yanlılık üretirdi.
+  //
+  // NEDEN REGEX, NEDEN LLM DEĞİL: bu katman ANAHTARSIZ çalışmak zorunda
+  // (CAUSAL_LLM.enabled = false, ANTHROPIC_API_KEY yok). LLM çağrısı eklenmedi.
+  // (Bilgi amaçlı sunum katmanı; TA/FA/bileşke skoruna DAHİL DEĞİL.)
+  const FADE_WIN = 72; // ifadenin İKİ yanında taranan karakter sayısı (fiil önde de olabilir, arkada da)
+
+  // Tek başına "umut ölüyor" demeye yeten fiiller/kalıplar (EN). Kısa ve
+  // başka sözcüklerin içinde geçebilecek olanlara sözcük sınırı konuldu.
+  const FADE_HARD = /(dash(?:e[sd])?|dampen|\bdim(?:s|med|ming)?\b|fad(?:e|es|ed|ing)\b|collaps(?:e|es|ed|ing)|evaporat|off[- ]the[- ]table|rul(?:e|es|ed|ing) out|ruled out|less likely|\bunlikely\b|\bdoubts?\b|in doubt|cast doubt|delay(?:s|ed|ing)?\b|push(?:es|ed|ing)? back|pushback|\bretreat|scal(?:e|es|ed)? back|par(?:e|es|ed) back|abandon|shelv(?:e|es|ed)\b|no longer|dwindl|\bwan(?:e|es|ing)\b|vanish|wip(?:e|es|ed) out|eras(?:e|es|ed)\b|\bkill(?:s|ed)?\b|\bdead\b|walk(?:s|ed)? back)/i;
+
+  // ÇİFT ANLAMLI fiiller: "slash RATES" = indirim (güvercin), "slash BETS" =
+  // beklentinin ölümü (şahin). Bu yüzden yalnız bir BEKLENTİ nesnesiyle
+  // birlikte olumsuzlama sayılır — yoksa gerçek indirim haberlerini ters çevirirdik.
+  const FADE_SOFT = /\b(slash|cut back|cutting back|trim|reduc|lower|pull back|par(?:e|ing)|dial back|scrap)\w*\s+(?:\w+\s+){0,3}(bets?|odds|expectations?|hopes?|wagers?|chances?|forecasts?|probabilit|outlook)/i;
+
+  // TR karşılıkları. Diyakritiksiz (ASCII'ye katlanmış) akışlar da geliyor, bu
+  // yüzden ı/i ve ö/o toleranslı yazıldı. "s[öo]nd[üu]" açıkça yazıldı: naif
+  // bir "s[öo]nd" kalıbı "son dönem" ifadesini yanlışlıkla yakalardı.
+  const FADE_TR = /(zay[ıi]fla|s[öo]nd[üu]|s[öo]n[üu]yor|ertele|masadan kalk|rafa kalk|iptal|vazge[çc]|uzakla[şs]|suya d[üu][şs]|umut\w*(?:\s+\w+){0,2}\s*k[ıi]r[ıi]l|(?:beklenti|ihtimal|umut|olas[ıi]l[ıi]k|sinyal|bahis)\w*(?:\s+\w+){0,3}\s*(azal|d[üu][şs]|geril|kayb|yok ol))/i;
+
+  // İfade metinde geçiyor; ÇEVRESİNDE onu öldüren bir fiil var mı?
+  function fadedAround(t, re) {
+    const m = re.exec(t);
+    if (!m) return false;
+    const a = Math.max(0, m.index - FADE_WIN);
+    const w = t.slice(a, m.index + m[0].length + FADE_WIN);
+    return FADE_HARD.test(w) || FADE_SOFT.test(w) || FADE_TR.test(w);
+  }
+
+  const RATE_CUT_RE  = /(rate cut|faiz indir|indirim|lower(?:ed|ing)? rate|gevşe|dovish|faizi düşür)/i;
+  const RATE_HIKE_RE = /(rate hike|faiz artır|artırım|raise(?:d|s)? rate|sıkılaş|hawkish|faizi yüksel)/i;
+
+  // Fed başlıklarından faiz yönü sinyali: -1 gevşeme (indirim) .. +1 sıkılaşma (artırım)
+  // `wOf` verilirse her başlığın oyu o ağırlıkla sayılır (tazelik ağırlığı — bkz. computePulseMacro).
+  function rateDirection(items, wOf) {
+    let c = 0, h = 0;
+    items.forEach((it) => {
+      const t = (it.title || '') + ' ' + (it.description || '');
+      const w = wOf ? wOf(it) : 1;
+      // Olumsuzlanmış indirim ifadesi ŞAHİN oydur; olumsuzlanmış artırım ifadesi GÜVERCİN.
+      if (RATE_CUT_RE.test(t))  { if (fadedAround(t, RATE_CUT_RE))  h += w; else c += w; }
+      if (RATE_HIKE_RE.test(t)) { if (fadedAround(t, RATE_HIKE_RE)) c += w; else h += w; }
+    });
+    const tot = c + h;
+    return tot ? (h - c) / (tot + 1) : 0;
+  }
+
+  // ⚖️ SAF ÇIKARMA (2026-10-19) — /api/pulse için.
+  // ÖLÇÜLEN DURUM: büyüme boyutu ve faz karar ağacı `computeMacro`nun
+  // İÇİNDEydi; o fonksiyon AĞA ÇIKIYOR (fetchThemesData + scoreSymbolList)
+  // ve modül durumu yazıyor (macroBreadthSeen), yani motora dilimlenemez.
+  // Ucun aynı karar ağacını YENİDEN YAZMASI ikinci bir kopya doğururdu.
+  // Çözüm: saf olan iki parçayı fonksiyondan ÇIKAR, `computeMacro` onları
+  // ÇAĞIRSIN. FORMÜLLER DEĞİŞMEDİ — eşik ve katsayıların tamamı aynıdır.
+  // (Bilgi amaçlı sunum katmanı; TA/FA/bileşke SKORUNA DAHİL DEĞİL.)
+
+  // Büyüme / piyasa genişliği: evrenin ortalama teknik skoru → -1..+1
+  function macroGrowth(breadth) {
+    return Math.max(-1, Math.min(1, (breadth - 50) / 20));
+  }
+
+  // Faz sınıflandırması (şeffaf karar ağacı). SIRA ANLAMLI: durgunluk
+  // önce bakılır, çünkü zayıf büyüme + yüksek risk birleşimi "geç döngü"
+  // koşullarını da sağlayabilir — sıra bozulursa faz sessizce kayar.
+  function macroPhase(dims) {
+    const d = dims || {};
+    const n = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
+    const rate = n(d.rate), infl = n(d.infl), growth = n(d.growth), risk = n(d.risk);
+    if (growth <= -0.35 || (risk >= 0.5 && growth < 0)) return 'recession';
+    if (infl >= 0.5 || rate >= 0.3 || risk >= 0.5) return 'late';
+    if (rate <= -0.15 && growth < 0.25) return 'early';
+    return 'mid';
+  }
+
+
+// ===== dilim: nabiz-yon =====
+  const RATE_SENSITIVE = ['tech', 'semis', 'reit', 'auto', 'clean', 'biotech', 'space', 'software', 'crypto'];
+
+  // Makro duruş kodu → insan dili (yön değişimi bildirimi için)
+  const PMAC_CLS_TR = { hawk: '🔺 şahin/sıkılaşma', dove: '🕊️ güvercin/gevşeme', neu: '⚖️ nötr' };
+
+  // Duruş KODU → ekranda görünen Türkçe. 2026-10-19'da computePulseMacro'nun
+  // içinden buraya alındı: baskı eşiklerini motora taşırken SERBEST TÜRKÇE
+  // onunla birlikte gitmesin (HAM SAYI kuralı — cümle çağrı noktasında kalır).
+  const PMAC_STANCE_TR = {
+    hawk: { stance: 'Sıkılaşma / şahin baskı', emoji: '🔺' },
+    dove: { stance: 'Gevşeme / güvercin rüzgârı', emoji: '🕊️' },
+    neu:  { stance: 'Nötr / belirsiz yön', emoji: '⚖️' },
+  };
+
+  // Enflasyon yönü: +1 ısınma (şahin baskı) .. -1 soğuma (güvercin rahatlama)
+  // 2026-10-14: "consumer price" eklendi. Ölçülen eksik — up regexi "inflation"
+  // ya da "cpi" kelimesini ŞART koştuğu için "Stocks tumble as consumer prices
+  // accelerate" NÖTR sayılıyordu; aynı olayı anlatan manşet oy vermiyordu.
+  // Simetri için down tarafına da eklendi (tek yönlü ekleme yanlılık üretirdi).
+  // `wOf` verilirse her başlığın oyu o ağırlıkla sayılır (tazelik ağırlığı).
+  const INFL_UP_RE = /(inflation[^.]{0,30}(jump|rise|rises|rose|accelerat|hotter|hot|surge|climb|spike|stick|higher|top)|cpi[^.]{0,20}(jump|rise|rose|hotter|accelerat|higher|top)|consumer price[^.]{0,30}(jump|rise|rises|rose|accelerat|hotter|hot|surge|climb|spike|stick|higher|top)|yields?[^.]{0,20}(jump|surge|rise|rose|climb|spike|higher)|hotter[- ]than|enflasyon[^.]{0,25}(artt|yüksel|hızlan|ısın|rekor)|faiz[^.]{0,15}yüksel)/i;
+  const INFL_DOWN_RE = /(inflation[^.]{0,30}(cool|cools|eas|slow|slows|fall|falls|fell|drop|decline|lower)|cpi[^.]{0,20}(cool|eas|slow|fall|fell|lower)|consumer price[^.]{0,30}(cool|cools|eas|slow|slows|fall|falls|fell|drop|decline|lower)|yields?[^.]{0,20}(fall|fell|drop|ease|decline|lower)|enflasyon[^.]{0,25}(düş|geriled|yavaşla|soğu))/i;
+  function inflDirection(items, wOf) {
+    let u = 0, d = 0;
+    items.forEach((it) => {
+      const t = (it.title || '') + ' ' + (it.description || '');
+      const w = wOf ? wOf(it) : 1;
+      if (INFL_UP_RE.test(t)) u += w;
+      if (INFL_DOWN_RE.test(t)) d += w;
+    });
+    const tot = u + d;
+    return tot ? (u - d) / (tot + 1) : 0;
+  }
+
+  function pulseRecentCount(items, days) {
+    const now = Date.now(), win = days * 24 * 3600 * 1000;
+    return items.filter((it) => { const t = Date.parse(it.pubDate); return !isNaN(t) && now - t < win; }).length;
+  }
+  function relTimeShort(dateStr) {
+    const t = Date.parse(dateStr); if (isNaN(t)) return '';
+    const m = Math.round((Date.now() - t) / 60000);
+    if (m < 60) return m <= 1 ? 'az önce' : m + ' dk önce';
+    const h = Math.round(m / 60); if (h < 24) return h + ' sa önce';
+    return Math.round(h / 24) + ' gün önce';
+  }
+
+  // ⏳ SAF ÇIKARMA (2026-10-19) — /api/pulse için. Üç parça da
+  // `computePulseMacro`nun İÇİNDEydi; o fonksiyon AĞA ÇIKIYOR
+  // (fetchThemesData) ve localStorage okuyor, yani motora dilimlenemez.
+  // Eşikler ve katsayılar DEĞİŞMEDİ (48 sa / 2,5 / 0,6-0,4 / ±0,12).
+  // `now` parametresi yalnız TEST içindir: verilmezse Date.now().
+  const PULSE_FRESH_H = 48, PULSE_FRESH_W = 2.5;
+
+  // Çürüme penceresi: tarihi okunamayan başlık "taze" SAYILMAZ, dışarıda kalır.
+  function pulseFreshWithin(items, days, now) {
+    const t0 = now == null ? Date.now() : now, win = days * 864e5;
+    return (items || []).filter((it) => { const t = Date.parse(it && it.pubDate); return !isNaN(t) && t0 - t < win; });
+  }
+
+  // ⏱️ TAZELİK AĞIRLIĞI. KATSAYI NEDEN 2,5: 14 günlük pencere yedi adet
+  // 48 saatlik kovaya ayrılır. Taze kovaya 2,5 ağırlık verilince, kovalar
+  // eşit sayıda başlık taşırsa o kova oyların ~%29'unu tutar
+  // (2,5 / (2,5 + 6·1)). Yani aynı günkü bir veri açıklaması bayat ve
+  // ILIMLI bir eğilimi çevirmeye yeter, ama tek başına okumayı ±1'e
+  // çivileyemez. 1,0 = eski (hatalı) davranış; 7,0 ≈ "yalnız bugün"
+  // demek olurdu ve 14 günlük pencereyi anlamsızlaştırırdı.
+  function pulseFreshWeight(now) {
+    const t0 = now == null ? Date.now() : now;
+    return (it) => {
+      const t = Date.parse(it && it.pubDate);
+      return (!isNaN(t) && t0 - t < PULSE_FRESH_H * 36e5) ? PULSE_FRESH_W : 1;
+    };
+  }
+
+  // Birleşik para-politikası baskısı → duruş KODU + yön-duyarlı sektör etkisi.
+  // Faiz 0,6 / enflasyon 0,4: faiz yönü doğrudan iskonto oranıdır, enflasyon
+  // ona DOLAYLI etki eder. Eşik ±0,12 → "nötr" bandı bilerek geniş: zayıf
+  // bir okuma sektör eğilimi ilan etmeye yetmez. SERBEST TÜRKÇE YOK —
+  // yalnız `cls` kodu ve sektör kodları döner (bkz. PMAC_STANCE_TR).
+  function pulseStance(rateDir, inflDir) {
+    const r = Number(rateDir) || 0, i = Number(inflDir) || 0;
+    const pressure = r * 0.6 + i * 0.4;
+    if (pressure >= 0.12) return { pressure, cls: 'hawk', biasUp: ['banks'], biasDown: RATE_SENSITIVE.concat(['gold']) };
+    if (pressure <= -0.12) return { pressure, cls: 'dove', biasUp: RATE_SENSITIVE.concat(['gold']), biasDown: [] };
+    return { pressure, cls: 'neu', biasUp: [], biasDown: [] };
+  }
+
+
+return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, CYCLE_PHASES, macroGrowth, macroPhase, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance };
 }

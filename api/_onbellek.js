@@ -57,7 +57,7 @@
 //
 //  SERT KURAL — ÖNBELLEK SKORU DEĞİŞTİRMEZ: her TTL, ucun ZATEN
 //  yayınladığı `Cache-Control` penceresiyle BİREBİR aynı seçildi
-//  (score/recommend/analyze/compare: `max-age=300, s-maxage=300` ·
+//  (score/recommend/analyze/compare/chart: `max-age=300, s-maxage=300` ·
 //  theme: `s-maxage=86400`). Böylece KV, istemci sözleşmesinin ÇOKTAN
 //  izin verdiğinden daha eski hiçbir şey servis edemez — önbellek yeni
 //  bir eskilik penceresi İCAT ETMİYOR, var olanı CDN'den KV'ye
@@ -72,6 +72,23 @@
 //  taşıdığı gün dürüstçe yapılabilir. Bu yüzden burada TEK bir
 //  `TTL_TEMEL` sabiti YOK: kullanılmayan sabit, yapılmamış işi yapılmış
 //  gibi gösterir.
+//
+//  /api/chart DE `TTL_FIYAT` KULLANIYOR — VE AYRI BİR "İÇ GÜN" TTL'si
+//  İCAT EDİLMEDİ (2026-10-19). İlk tasarımda 5m/15m/60m aralıkları için
+//  `TTL_GRAFIK_ICI = 60` düşünülmüştü; ÖLÇÜM bunu çürüttü: motorun
+//  adres kurucusu `_t` kovasını aralığa BAKMADAN 5 dakikada bir
+//  çeviriyor (`_motor.js:105`). Yani 5 dakikalık kovanın İÇİNDE yapılan
+//  ikinci istek üst kaynaktan da daha taze bir mum alamıyor. 60 sn'lik
+//  bir pencere yayınlamak, motorun VEREMEDİĞİ bir tazeliği vaat etmek
+//  olurdu — "ölçemedim"i "ölçtüm" gibi göstermek. Doğrusu tek sayı:
+//  grafik gövdesinin TTL'si de 300, yayınlanan `Cache-Control` da 300.
+//  Gün içi mumları gerçekten 60 sn tazelikle isteyen bir ekran çıkarsa
+//  önce MOTORUN kovası aralığa duyarlı yapılmalı; sıra oradan başlar.
+//
+//  /api/pulse ÖNBELLEKLENMİYOR — /api/causal ile BİREBİR aynı gerekçe:
+//  0 dış istek, saf hesap, girdi istemcinin POST gövdesi (başlıklar).
+//  O gövdeyi anahtara özetlemek yeniden hesaplamaktan pahalı olurdu;
+//  cevabı da `no-store`, yani paylaşılacak pencere yok.
 //
 //  /api/causal ÖNBELLEKLENMİYOR — ölçüm bunu söylüyor: 0 dış istek, saf
 //  hesap, `maxDuration` 10. Üstelik girdisi en çok 64 KB gövde

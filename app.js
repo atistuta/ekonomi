@@ -10403,6 +10403,33 @@
     return tot ? (h - c) / (tot + 1) : 0;
   }
 
+  // ⚖️ SAF ÇIKARMA (2026-10-19) — /api/pulse için.
+  // ÖLÇÜLEN DURUM: büyüme boyutu ve faz karar ağacı `computeMacro`nun
+  // İÇİNDEydi; o fonksiyon AĞA ÇIKIYOR (fetchThemesData + scoreSymbolList)
+  // ve modül durumu yazıyor (macroBreadthSeen), yani motora dilimlenemez.
+  // Ucun aynı karar ağacını YENİDEN YAZMASI ikinci bir kopya doğururdu.
+  // Çözüm: saf olan iki parçayı fonksiyondan ÇIKAR, `computeMacro` onları
+  // ÇAĞIRSIN. FORMÜLLER DEĞİŞMEDİ — eşik ve katsayıların tamamı aynıdır.
+  // (Bilgi amaçlı sunum katmanı; TA/FA/bileşke SKORUNA DAHİL DEĞİL.)
+
+  // Büyüme / piyasa genişliği: evrenin ortalama teknik skoru → -1..+1
+  function macroGrowth(breadth) {
+    return Math.max(-1, Math.min(1, (breadth - 50) / 20));
+  }
+
+  // Faz sınıflandırması (şeffaf karar ağacı). SIRA ANLAMLI: durgunluk
+  // önce bakılır, çünkü zayıf büyüme + yüksek risk birleşimi "geç döngü"
+  // koşullarını da sağlayabilir — sıra bozulursa faz sessizce kayar.
+  function macroPhase(dims) {
+    const d = dims || {};
+    const n = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
+    const rate = n(d.rate), infl = n(d.infl), growth = n(d.growth), risk = n(d.risk);
+    if (growth <= -0.35 || (risk >= 0.5 && growth < 0)) return 'recession';
+    if (infl >= 0.5 || rate >= 0.3 || risk >= 0.5) return 'late';
+    if (rate <= -0.15 && growth < 0.25) return 'early';
+    return 'mid';
+  }
+
   // Makro nabzını hesapla → {phase, dims, breadth, hotThemes}
   async function computeMacro(force) {
     const keys = ['fed', 'oil', 'gold', 'war', 'hormuz'];
@@ -10425,14 +10452,11 @@
     const breadth = taVals.length ? taVals.reduce((a, b) => a + b, 0) / taVals.length : 50;
     // Nabız'ın fiyat-yalanlama katmanı buradan okur (bkz. pulseMacroReality).
     if (taVals.length) macroBreadthSeen = { val: breadth, at: Date.now(), n: taVals.length };
-    const growth = Math.max(-1, Math.min(1, (breadth - 50) / 20));
+    const growth = macroGrowth(breadth);
 
-    // Faz sınıflandırması (şeffaf karar ağacı)
-    let phase;
-    if (growth <= -0.35 || (risk >= 0.5 && growth < 0)) phase = 'recession';
-    else if (infl >= 0.5 || rate >= 0.3 || risk >= 0.5) phase = 'late';
-    else if (rate <= -0.15 && growth < 0.25) phase = 'early';
-    else phase = 'mid';
+    // Faz sınıflandırması: karar ağacı artık macroPhase()'te (motora
+    // dilimlenebilsin diye çıkarıldı). Eşikler ve sıra AYNI.
+    const phase = macroPhase({ rate, infl, growth, risk });
 
     const hotThemes = RADAR_THEMES.filter((t) => td[t.key] && td[t.key].heat.lvl === 'hot').map((t) => t.key);
     return {
@@ -11518,6 +11542,15 @@
   // Makro duruş kodu → insan dili (yön değişimi bildirimi için)
   const PMAC_CLS_TR = { hawk: '🔺 şahin/sıkılaşma', dove: '🕊️ güvercin/gevşeme', neu: '⚖️ nötr' };
 
+  // Duruş KODU → ekranda görünen Türkçe. 2026-10-19'da computePulseMacro'nun
+  // içinden buraya alındı: baskı eşiklerini motora taşırken SERBEST TÜRKÇE
+  // onunla birlikte gitmesin (HAM SAYI kuralı — cümle çağrı noktasında kalır).
+  const PMAC_STANCE_TR = {
+    hawk: { stance: 'Sıkılaşma / şahin baskı', emoji: '🔺' },
+    dove: { stance: 'Gevşeme / güvercin rüzgârı', emoji: '🕊️' },
+    neu:  { stance: 'Nötr / belirsiz yön', emoji: '⚖️' },
+  };
+
   // Enflasyon yönü: +1 ısınma (şahin baskı) .. -1 soğuma (güvercin rahatlama)
   // 2026-10-14: "consumer price" eklendi. Ölçülen eksik — up regexi "inflation"
   // ya da "cpi" kelimesini ŞART koştuğu için "Stocks tumble as consumer prices
@@ -11550,6 +11583,47 @@
     return Math.round(h / 24) + ' gün önce';
   }
 
+  // ⏳ SAF ÇIKARMA (2026-10-19) — /api/pulse için. Üç parça da
+  // `computePulseMacro`nun İÇİNDEydi; o fonksiyon AĞA ÇIKIYOR
+  // (fetchThemesData) ve localStorage okuyor, yani motora dilimlenemez.
+  // Eşikler ve katsayılar DEĞİŞMEDİ (48 sa / 2,5 / 0,6-0,4 / ±0,12).
+  // `now` parametresi yalnız TEST içindir: verilmezse Date.now().
+  const PULSE_FRESH_H = 48, PULSE_FRESH_W = 2.5;
+
+  // Çürüme penceresi: tarihi okunamayan başlık "taze" SAYILMAZ, dışarıda kalır.
+  function pulseFreshWithin(items, days, now) {
+    const t0 = now == null ? Date.now() : now, win = days * 864e5;
+    return (items || []).filter((it) => { const t = Date.parse(it && it.pubDate); return !isNaN(t) && t0 - t < win; });
+  }
+
+  // ⏱️ TAZELİK AĞIRLIĞI. KATSAYI NEDEN 2,5: 14 günlük pencere yedi adet
+  // 48 saatlik kovaya ayrılır. Taze kovaya 2,5 ağırlık verilince, kovalar
+  // eşit sayıda başlık taşırsa o kova oyların ~%29'unu tutar
+  // (2,5 / (2,5 + 6·1)). Yani aynı günkü bir veri açıklaması bayat ve
+  // ILIMLI bir eğilimi çevirmeye yeter, ama tek başına okumayı ±1'e
+  // çivileyemez. 1,0 = eski (hatalı) davranış; 7,0 ≈ "yalnız bugün"
+  // demek olurdu ve 14 günlük pencereyi anlamsızlaştırırdı.
+  function pulseFreshWeight(now) {
+    const t0 = now == null ? Date.now() : now;
+    return (it) => {
+      const t = Date.parse(it && it.pubDate);
+      return (!isNaN(t) && t0 - t < PULSE_FRESH_H * 36e5) ? PULSE_FRESH_W : 1;
+    };
+  }
+
+  // Birleşik para-politikası baskısı → duruş KODU + yön-duyarlı sektör etkisi.
+  // Faiz 0,6 / enflasyon 0,4: faiz yönü doğrudan iskonto oranıdır, enflasyon
+  // ona DOLAYLI etki eder. Eşik ±0,12 → "nötr" bandı bilerek geniş: zayıf
+  // bir okuma sektör eğilimi ilan etmeye yetmez. SERBEST TÜRKÇE YOK —
+  // yalnız `cls` kodu ve sektör kodları döner (bkz. PMAC_STANCE_TR).
+  function pulseStance(rateDir, inflDir) {
+    const r = Number(rateDir) || 0, i = Number(inflDir) || 0;
+    const pressure = r * 0.6 + i * 0.4;
+    if (pressure >= 0.12) return { pressure, cls: 'hawk', biasUp: ['banks'], biasDown: RATE_SENSITIVE.concat(['gold']) };
+    if (pressure <= -0.12) return { pressure, cls: 'dove', biasUp: RATE_SENSITIVE.concat(['gold']), biasDown: [] };
+    return { pressure, cls: 'neu', biasUp: [], biasDown: [] };
+  }
+
   async function computePulseMacro(force) {
     const themes = [
       { key: 'pmFed',  lang: 'tr', q: '(Fed OR Powell OR FOMC OR "Merkez Bankası") (faiz OR "interest rate" OR "rate cut" OR "rate hike" OR "faiz kararı" OR hawkish OR dovish)' },
@@ -11569,12 +11643,9 @@
     // Yön matematiği son ~14 güne, yüksek-etkili başlıklar son ~7 güne göre; tarihi
     // okunamayan (pubDate parse edilemeyen) başlık "taze" SAYILMAZ, dışarıda kalır.
     // (Bilgi amaçlı sunum katmanı; skora/bileşkeye DAHİL DEĞİL.)
-    const freshWithin = (items, days) => {
-      const now = Date.now(), win = days * 864e5;
-      return items.filter((it) => { const t = Date.parse(it.pubDate); return !isNaN(t) && now - t < win; });
-    };
-    const fedItems  = freshWithin(fedItemsAll, 14);
-    const inflItems = freshWithin(inflItemsAll, 14);
+    // Pencere artık pulseFreshWithin()'de (motora dilimlendi) — gün sayıları AYNI.
+    const fedItems  = pulseFreshWithin(fedItemsAll, 14);
+    const inflItems = pulseFreshWithin(inflItemsAll, 14);
     const allItems  = fedItems.concat(inflItems);
 
     // ⏱️ TAZELİK AĞIRLIĞI (2026-10-14, web geri dönüşünden düzeltme)
@@ -11589,27 +11660,17 @@
     // açıklaması bayat ve ILIMLI bir eğilimi çevirmeye yeter, ama tek başına
     // okumayı ±1'e çivileyemez. 1,0 = eski (hatalı) davranış; 7,0 ≈ "yalnız
     // bugün" demek olurdu ve 14 günlük pencereyi anlamsızlaştırırdı.
-    const FRESH_H = 48, FRESH_W = 2.5;
-    const wOf = (it) => {
-      const t = Date.parse(it.pubDate);
-      return (!isNaN(t) && Date.now() - t < FRESH_H * 36e5) ? FRESH_W : 1;
-    };
+    const wOf = pulseFreshWeight();
     const rateDir = rateDirection(fedItems, wOf);   // -1 gevşeme .. +1 sıkılaşma (taze ağırlıklı)
     const inflDir = inflDirection(inflItems, wOf);  // -1 soğuma .. +1 ısınma (taze ağırlıklı)
     const fresh2d = pulseRecentCount(allItems, 2);
 
     // Birleşik para-politikası baskısı → yön-duyarlı sektör etkisi
-    const pressure = rateDir * 0.6 + inflDir * 0.4;
-    let stance, emoji, cls, biasUp = [], biasDown = [];
-    if (pressure >= 0.12) {
-      stance = 'Sıkılaşma / şahin baskı'; emoji = '🔺'; cls = 'hawk';
-      biasDown = RATE_SENSITIVE.concat(['gold']); biasUp = ['banks'];
-    } else if (pressure <= -0.12) {
-      stance = 'Gevşeme / güvercin rüzgârı'; emoji = '🕊️'; cls = 'dove';
-      biasUp = RATE_SENSITIVE.concat(['gold']); biasDown = [];
-    } else {
-      stance = 'Nötr / belirsiz yön'; emoji = '⚖️'; cls = 'neu';
-    }
+    // Baskı ve duruş artık pulseStance()'te (motora dilimlendi); eşikler AYNI.
+    // Türkçe cümle BURADA kalıyor — motora taşınmadı (HAM SAYI kuralı).
+    const st = pulseStance(rateDir, inflDir);
+    const pressure = st.pressure, cls = st.cls, biasUp = st.biasUp, biasDown = st.biasDown;
+    const stance = PMAC_STANCE_TR[cls].stance, emoji = PMAC_STANCE_TR[cls].emoji;
 
     const rateLbl = rateDir >= 0.15 ? '🔺 Faiz: şahin / sıkılaşma sinyali'
                   : rateDir <= -0.15 ? '🕊️ Faiz: güvercin / gevşeme sinyali'
@@ -11627,7 +11688,7 @@
     // yön matematiğinden bağımsız, sadece "bunlar oluyor" bilgisi. Yön okumasında
     // zaten görünen başlıkları (allItems) ele; en yeni 4'ü göster.
     const seenLinks = new Set(allItems.map((it) => it.link));
-    const bigHeadlines = freshWithin(bigItemsAll, 7)
+    const bigHeadlines = pulseFreshWithin(bigItemsAll, 7)
       .filter((it) => it.title && it.link && !seenLinks.has(it.link))
       .sort((a, b) => (Date.parse(b.pubDate) || 0) - (Date.parse(a.pubDate) || 0))
       .slice(0, 4);
