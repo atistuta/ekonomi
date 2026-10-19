@@ -8,11 +8,11 @@
     "scheme": "sabahbulteni",
     "userInterfaceStyle": "dark",
     "ios": {
-      "bundleIdentifier": "com.atistuta.sabahbulteni",
+      "bundleIdentifier": "com.sabahbulteni.app",
       "icon": "./assets/images/icon.png"
     },
     "android": {
-      "package": "com.atistuta.sabahbulteni",
+      "package": "com.sabahbulteni.app",
       "adaptiveIcon": {
         "backgroundColor": "#0F1522",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -39,6 +39,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "owner": "atahanpharma",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "16f82fc4-29d8-4af5-8f27-c626974ec70b"
+      }
     }
   }
 }
