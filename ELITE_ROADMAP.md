@@ -491,9 +491,18 @@ kalmadı.
       `mobile/scripts/ikon-uret.mjs` ile üretildi — bağımlılıksız PNG üretici
       (`node:zlib`), mürekkep #0F1522 + altın #D4A24E, telif/marka taklidi yok;
       şablon `assets/expo.icon/` SİLİNDİ. `npx expo lint` artık koşuyor: **0
-      sorun**. ① ve ② hâlâ açık: native derleme HÂLÂ denenmedi, `expo-doctor`
+      sorun**. ② hâlâ açık: `expo-doctor`
       19/21 (iki hata önceden vardı — RN Directory sunucu yanıtı + 5 Expo yama
       sürümü geride; kapsam dışı olduğu için yükseltilmedi).
+
+      **① KAPANDI (2026-10-19) — İLK NATIVE DERLEME GEÇTİ.** EAS bulut
+      derlemesi, Android `preview` profili, `--non-interactive`:
+      `Status finished`, build `4bc33a4c-5130-4180-a394-09d64179b21d`,
+      SDK 57.0.0, Version 1.0.0, versionCode 1, APK üretildi. Android imza
+      anahtarını EAS kendisi oluşturdu (etkileşim gerekmedi — bunu önceden
+      olası engel olarak işaretlemiştim, gerçekleşmedi).
+      **ÖLÇÜLMEYEN:** APK gerçek cihaza KURULMADI ve AÇILMADI → "derleniyor"
+      kanıtlandı, "çalışıyor" kanıtlanmadı. iOS derlemesi hiç denenmedi.
       **NATIVE DERLEME ÖN KOŞULLARI KURULDU:** `mobile/eas.json` (3 profil —
       development/preview/production, her biri
       `EXPO_PUBLIC_API_TABAN=https://day-starter.vercel.app`, çünkü native
