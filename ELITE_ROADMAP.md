@@ -436,12 +436,61 @@ kalmadı.
 
 **Amaç:** dört ana ekranın native hali, veriyi motor API'den çeker.
 
-- [ ] **Bugün (dashboard):** konjonktür kartı · piyasa nabzı · öne çıkan sektör ·
-      günün fırsatları (yukarıdaki mockup bu ekranın hedefi).
-- [ ] **Analiz:** tek hisse derin dalış — TA + FA + bileşke skor + grafik.
-- [ ] **Listeler:** portföy / izleme listeleri, **Supabase ile cihazlar arası senkron**.
-- [ ] **Arama + Keşfet:** sembol arama + 🔭 tematik keşif + 🤖 radar/gündem.
-- [ ] Her listede **FlashList** (virtualizasyon); skeleton + optimistic + pull-to-refresh.
+**VERİ BAĞLAMA YAPILDI (2026-10-19).** Beş sekmenin tamamı motor uçlarından
+besleniyor; tek API katmanı `mobile/src/api/` (`client.ts` ağ + hata taksonomisi,
+`istek.ts` üç durumun tek gövdesi, `liste.ts` takip listesi, `index.ts` tek giriş).
+**Ekranlarda `fetch` YOK, hesap YOK:** her sayı uçtan geliyor, istemci yalnız
+`lib/format.ts` ile `tr-TR` biçimlendiriyor (eşik, ağırlık, sıralama, harman
+istemcide hiç yok — sıralamayı `/api/compare`nin `sira[]` dizisi yapıyor).
+Taban adres `EXPO_PUBLIC_API_TABAN` ile değişebiliyor, varsayılan
+`https://day-starter.vercel.app`; **gizli anahtar konmadı**.
+
+- [x] **Bugün (dashboard):** `/api/compare` → motorun yaptığı sıra + bütüncül skor
+      + `siralanamayan` + ölçüm notu. **AÇIK:** konjonktür kartı, piyasa nabzı ve
+      öne çıkan sektör için **uç yok** — yer tutucu sayı konmadı, ekranda eksik
+      dürüstçe yazıyor.
+- [x] **Analiz:** `/api/analyze` → TA + FA + bileşke (üç gösterge), bütüncül skor
+      (0-10) + direkler, plan seviyeleri (alım/kâr-al bandı, hedef, stop, SMA, ATR),
+      risk/ödül oranı, TA gösterge dökümü. **AÇIK: grafik** — fiyat serisi döndüren
+      uç YOK; seriyi istemcide üretmek "motor API'de" kuralını kırardı.
+- [~] **Listeler:** `/api/recommend` → fiyat + bileşke + bant + banda yakınlık,
+      pull-to-refresh, çıkar. **AÇIK: Supabase senkronu** — anahtar yok, sahte
+      anahtar üretilmedi; liste şimdilik yalnız BELLEKTE (AsyncStorage kurulu
+      değil, yarım yerel kalıcılık sonra ikinci doğruluk kaynağı olurdu).
+- [x] **Arama + Keşfet:** Arama = tek alan iki düğme — sembol ölç (`/api/recommend`,
+      listeye ekle) ve 🔭 tematik keşif (`/api/theme`). **ÖLÇÜLDÜ:** `/api/theme`
+      üretimde 200 ile `{"candidates":[],"error":"no_key"}` dönüyor (sunucuda
+      `ANTHROPIC_API_KEY` yok) → ekran "sonuç yok" DEMİYOR, "ölçemedim" diyor.
+      Keşfet = motorun `yakinlik` ve `momentum.active` kararlarına göre gruplama.
+      **AÇIK: 🤖 radar/gündem** — uç yok.
+- [~] Liste virtualizasyonu **FlatList** ile (RN'in kendi sanallaştırması);
+      iskelet + pull-to-refresh var. **FlashList ALINMADI:** `@shopify/flash-list`
+      kurulu değil, yalnız bunun için bağımlılık eklenmedi. **Optimistic update
+      AÇIK** (yazma ucu yok; listede ekleme/çıkarma zaten anında).
+
+**Üç durum HER ekranda gerçek** (`components/Durum.tsx`): yükleniyor (iskelet) ·
+hata (yeniden dene) · boş. **"Veri yok ≠ ölçemedim" ayrımı taşınıyor:** `no-data`
+hatasında yeniden-dene düğmesi YOK, `sayac.*.kesinti`/`tam:false` varsa satır altına
+"n dış istek kesildi" notu düşüyor. Her ekranın altında "Bilgi amaçlıdır, yatırım
+tavsiyesi değildir."
+
+**Ölçülen (2026-10-19, canlı uçlar):** `npx tsc --noEmit` temiz · `npx expo lint`
+**0 sorun** · `npx expo-doctor` **19/21** (kalan ikisi: RN Directory sunucusu cevap
+vermedi + 5 paketin yama sürümü geride — `expo`, `expo-router`, `expo-constants`,
+`expo-linking`, `@expo/ui`; SDK 57 içinde yama farkı, bu işte yükseltilmedi).
+Motor kapıları bu işten ETKİLENMEDİ: `uretim-test` 73 ✅ · `uc-test` 457 ✅ ·
+`nabiz-yon-test` 40 ✓ · `parity` **FARK 0** · `PARITE_MOTOR=uretilmis parity`
+**FARK 0**.
+
+**EKRANDA GÖRÜLDÜ (web laboratuvarı, `mobil-web` / 8081, react-native-web):**
+Listeler'de AAPL 343,46 · MSFT 529,05 · NVDA 214,13 · THYAO ₺273,50 · ASELS ₺340,25;
+ABD satırlarında bileşke "—" ve "1 dış istek kesildi" notu (SEC kesintisi — dürüst
+ölçemedim), BIST'te THYAO 51 "mixed", ASELS 69 "good". Analiz'de AAPL TA 68/100
+"GÜÇLÜ AL", bütüncül 6/10, bantlar ve risk/ödül 2,6× dolu. Arama'da SASA.IS → ₺1,67
+bileşke 30 "risk"; "yapay zeka" teması → "ölçemedim: anahtar sunucuda tanımlı değil".
+**NATIVE DERLEME YAPILMADI:** iOS/Android simülatörü ya da gerçek cihaz build'i bu
+işte çalıştırılmadı — **react-native-web native build DEĞİLDİR.** Kimlik doğrulama
+ve test altyapısı da hâlâ açık (FAZ 2 ⑦ maddesi).
 
 ## FAZ 3 — Elit cila (sürekli, bitmeyen)
 

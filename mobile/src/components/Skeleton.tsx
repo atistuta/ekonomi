@@ -21,7 +21,7 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -44,7 +44,10 @@ export type SkeletonProps = {
 
 export function Skeleton({ width = '100%', height = 14, rounded = 'sm', style }: SkeletonProps) {
   const { colors } = useTheme();
-  const pulse = useRef(new Animated.Value(0)).current;
+  // NEDEN `useState` VE `useRef(...).current` DEGIL: ref'in `.current`ini
+  // render sirasinda okumak React 19 kurallarinda yasak (react-hooks/refs);
+  // `useState` ilk degeri bir kez uretir ve render sirasinda okunmasi guvenli.
+  const [pulse] = useState(() => new Animated.Value(0));
 
   // NEDEN WEB'DE NATIVE SURUCU KAPALI: react-native-web'de `RCTAnimation`
   // yok; `useNativeDriver: true` konsola uyari basip JS animasyonuna
@@ -74,7 +77,7 @@ export function Skeleton({ width = '100%', height = 14, rounded = 'sm', style }:
     // Ekran kapanınca döngü durdurulmalı: aksi hâlde arka planda
     // çalışmaya devam eder (pil + uyarı).
     return () => loop.stop();
-  }, [pulse]);
+  }, [pulse, nativeDriver]);
 
   const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 1] });
 

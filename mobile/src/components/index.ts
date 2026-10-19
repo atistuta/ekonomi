@@ -17,6 +17,9 @@
 
 export { Card, type CardProps } from './Card';
 export { Disclaimer, DISCLAIMER_TEXT, type DisclaimerProps } from './Disclaimer';
+export { Dugme, type DugmeProps } from './Dugme';
+// FAZ 2: üç durumun tek gövdesi (yükleniyor · hata · boş) + dürüstlük notu.
+export { Durum, OlcumNotu, VeriYok, type DurumProps, type VeriYokProps } from './Durum';
 export { Badge, Pill, type PillProps } from './Pill';
 export { ScoreGauge, type ScoreGaugeProps } from './ScoreGauge';
 export { ScreenShell, type ScreenShellProps } from './ScreenShell';

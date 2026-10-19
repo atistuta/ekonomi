@@ -54,12 +54,17 @@ export function ScreenShell({
   const insets = useSafeAreaInsets();
 
   const govde = (
-    <View style={styles.icerik}>
+    // NEDEN `scroll=false` İKEN ESNEK: FAZ 2'de liste ekranı kendi
+    // sanallaştırılmış listesini (FlatList) taşıyor. O listenin yüksekliği
+    // olması için esneklik zincirinin kökten içeriğe KESİNTİSİZ inmesi
+    // gerekiyor; `flex` verilmezse liste 0 yükseklikte kalır ve ekran
+    // boş görünür (ÖLÇÜLDÜ: web lab'da boş sayfa).
+    <View style={[styles.icerik, !scroll && styles.icerikEsnek]}>
       <Text style={[styles.baslik, { color: colors.text }]}>{title}</Text>
       {subtitle ? (
         <Text style={[styles.altBaslik, { color: colors.textDim }]}>{subtitle}</Text>
       ) : null}
-      <View style={styles.gorevler}>{children}</View>
+      <View style={[styles.gorevler, !scroll && styles.gorevlerEsnek]}>{children}</View>
       <Disclaimer note={note} />
     </View>
   );
@@ -91,4 +96,7 @@ const styles = StyleSheet.create({
   baslik: { ...type.display },
   altBaslik: { ...type.small, marginTop: space.xs },
   gorevler: { marginTop: space.lg, gap: space.md },
+  icerikEsnek: { flex: 1 },
+  // `minHeight: 0`: iç liste dış kabı taşırmasın (web/flexbox davranışı).
+  gorevlerEsnek: { flex: 1, minHeight: 0 },
 });

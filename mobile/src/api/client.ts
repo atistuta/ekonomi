@@ -38,9 +38,13 @@
 
 import {
   AZAMI_SEMBOL,
+  type AnalyzeResponse,
+  type CompareResponse,
   type Market,
+  type RecommendResponse,
   type ScoreErrorBody,
   type ScoreResponse,
+  type ThemeResponse,
   type Vade,
 } from './types';
 
@@ -336,7 +340,30 @@ export async function fetchScore(
   symbols: string[],
   options: ScoreOptions = {},
 ): Promise<ApiResult<ScoreResponse>> {
+  return sembolUcu<ScoreResponse>('score', symbols, options);
+}
+
+// ---------------------------------------------------------------------
+//  SEMBOL KAPISI — dört uç, TEK kapı
+// ---------------------------------------------------------------------
+//  NEDEN TAŞIYICI: /api/score · /api/recommend · /api/analyze ·
+//  /api/compare dördü de AYNI sorgu ayrıştırmasını kullanıyor
+//  (uç başlıkları: "Sorgu ayrıştırma /api/score ile BİREBİR aynı",
+//  sunucu tarafında `api/_girdi.js ayristir()` TEK fonksiyon nesnesi).
+//  İstemcide dört kopya yazmak, sunucunun 2026-10-14'te sildiği borcu
+//  native tarafta yeniden açmak olurdu: biri 8'i 10 yapınca o uç sessizce
+//  sunucudan ayrışırdı. Tek kapı → ayrışma fiziksel olarak mümkün değil.
+//
+//  NEDEN GÖVDE TÜRÜ PARAMETRE: dört uç iç içe sözleşme (score ⊂
+//  recommend ⊂ analyze ⊂ compare) — kapı aynı, yalnız cevap zenginleşiyor.
+// ---------------------------------------------------------------------
+async function sembolUcu<T>(
+  uc: 'score' | 'recommend' | 'analyze' | 'compare',
+  symbols: string[],
+  options: ScoreOptions = {},
+): Promise<ApiResult<T>> {
   const { vade = 'orta', market, timeoutMs = SCORE_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS[uc];
 
   // Uç noktanın ayrıştırmasıyla aynı temizlik: trim + boşları at.
   const liste = symbols.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
@@ -347,7 +374,7 @@ export async function fetchScore(
       error: {
         kind: 'bad-request',
         message: 'Sembol verilmedi.',
-        endpoint: ENDPOINTS.score,
+        endpoint: path,
         code: 'symbols_yok',
       },
     };
@@ -358,7 +385,7 @@ export async function fetchScore(
       error: {
         kind: 'bad-request',
         message: kodMetni('cok_sembol', AZAMI_SEMBOL, liste.length) ?? 'Çok sembol.',
-        endpoint: ENDPOINTS.score,
+        endpoint: path,
         code: 'cok_sembol',
       },
     };
@@ -371,15 +398,129 @@ export async function fetchScore(
       error: {
         kind: 'bad-request',
         message: 'Sembol listesi çok uzun.',
-        endpoint: ENDPOINTS.score,
+        endpoint: path,
         code: 'too_long',
       },
     };
   }
 
-  return apiGet<ScoreResponse>(ENDPOINTS.score, {
+  return apiGet<T>(path, {
     query: { symbols: ham, vade, market },
     timeoutMs,
     signal,
   });
+}
+
+/**
+ * Öneri çağrısı: GET /api/recommend — skorun her şeyi + `plan`
+ * (seviye · yakınlık · momentum · risk/ödül).
+ *
+ * NEDEN AYRI UÇ VE AYRI TÜR: Listeler/Keşfet ekranlarının gösterdiği
+ * FİYAT bu uçtan geliyor (`plan.seviye.price`). /api/score'un `fa.price`
+ * alanı SEC ayağına bağlı ve ölçülmüş bir gerçek var (2026-10-18, canlı:
+ * NVDA ve AAPL için `sayac.sec.kesinti = 1` → `fa.price = null`), yani
+ * skor ucuyla fiyat göstermek ABD hisselerinde boş satır üretirdi.
+ */
+export async function fetchRecommend(
+  symbols: string[],
+  options: ScoreOptions = {},
+): Promise<ApiResult<RecommendResponse>> {
+  return sembolUcu<RecommendResponse>('recommend', symbols, options);
+}
+
+/**
+ * Analiz çağrısı: GET /api/analyze — önerinin her şeyi + `analiz`
+ * (temel karar rozeti + 0-10 bütüncül skor + üç direk).
+ */
+export async function fetchAnalyze(
+  symbols: string[],
+  options: ScoreOptions = {},
+): Promise<ApiResult<AnalyzeResponse>> {
+  return sembolUcu<AnalyzeResponse>('analyze', symbols, options);
+}
+
+/**
+ * Kıyas çağrısı: GET /api/compare — analizin her şeyi + `sira`
+ * (motorun yaptığı sıralama) + `siralanamayan`.
+ *
+ * NEDEN SIRALAMA İSTEMCİDE DEĞİL: "alım sırası" bir KARAR; anahtarı
+ * `dAtr`, eşitlik bozucusu `skor10` ve bunlar motorda yazılı. Burada
+ * `sonuclar.sort(...)` yazmak, web ile native'in iki ayrı sıra
+ * göstermesi demekti.
+ */
+export async function fetchCompare(
+  symbols: string[],
+  options: ScoreOptions = {},
+): Promise<ApiResult<CompareResponse>> {
+  return sembolUcu<CompareResponse>('compare', symbols, options);
+}
+
+/**
+ * Tema çağrısı: GET /api/theme?q=<tema> — serbest metinden hisse adayı.
+ *
+ * NEDEN SEMBOL KAPISINDAN GEÇMEZ: girdisi sembol değil serbest metin;
+ * sunucu da `ayristir()`i bu uçta BİLEREK çağırmıyor (api/theme.js
+ * yorumu). Yalnız uzunluk sınırı (`AZAMI_SORGU` = 128) paylaşılıyor.
+ *
+ * DİKKAT — 200 ama SONUÇ YOK: ölçüldü (2026-10-18, üretim) ki anahtar
+ * yokken cevap `{ candidates: [], error: 'no_key' }` ve HTTP 200.
+ * Bu yüzden `ok:true` gelse bile ekran `error` alanına bakmak zorunda;
+ * boş listeyi "ilgili hisse yok" diye göstermek YALAN olurdu —
+ * doğrusu "ölçemedim, anahtar yok".
+ */
+export async function fetchTheme(
+  query: string,
+  options: Omit<RequestOptions, 'query'> = {},
+): Promise<ApiResult<ThemeResponse>> {
+  const q = String(query ?? '').trim();
+  if (!q) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Tema yazılmadı.',
+        endpoint: ENDPOINTS.theme,
+        code: 'q_bos',
+      },
+    };
+  }
+  if (q.length > AZAMI_SORGU) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Tema metni çok uzun (en çok ' + AZAMI_SORGU + ' karakter).',
+        endpoint: ENDPOINTS.theme,
+        code: 'too_long',
+      },
+    };
+  }
+  return apiGet<ThemeResponse>(ENDPOINTS.theme, {
+    query: { q },
+    timeoutMs: options.timeoutMs ?? SCORE_TIMEOUT_MS,
+    signal: options.signal,
+  });
+}
+
+/**
+ * Tema ucunun makine kodunu Türkçe cümleye çevirir.
+ *
+ * NEDEN BURADA: `kodMetni` skor kodları için yazıldı; tema kodları
+ * (`no_key`, `llm_error`) ayrı küme. Ekranlar bu eşlemeyi kendi
+ * içlerinde yaparsa iki ekran aynı duruma iki ayrı cümle der.
+ */
+export function temaKodMetni(code: string | null | undefined): string | null {
+  switch (code) {
+    case 'no_key':
+      return 'Tematik keşif anahtarı sunucuda tanımlı değil — ölçüm yapılamadı.';
+    case 'llm_error':
+      return 'Tematik keşif servisi yanıt vermedi — ölçüm yapılamadı.';
+    case 'q_yok':
+    case 'q_bos':
+      return 'Tema yazılmadı.';
+    case 'too_long':
+      return 'Tema metni çok uzun.';
+    default:
+      return null;
+  }
 }

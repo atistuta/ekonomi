@@ -1,50 +1,117 @@
 // =====================================================================
-//  LİSTELER — 1. sekme (iskelet)                      (FAZ 1 / native)
+//  LİSTELER — 1. sekme, MOTORA BAĞLI                  (FAZ 2 / native)
 // ---------------------------------------------------------------------
-//  NE: Takip listelerinin yaşayacağı ekran. Şimdilik BOŞ: veri bağlama
-//  FAZ 2'nin işi.
+//  NE: takip listesindeki semboller için /api/recommend turu: fiyat,
+//  bileşke skor, motorun bandı ve alım bandına yakınlık.
 //
-//  NEDEN BOŞ EKRAN DA OLSA ŞİMDİ VAR: 5 sekmenin sırası ürünün
-//  omurgası (web menüsüyle birebir). Sekmeyi sonra eklemek, yönlendirme
-//  adlarını (`/`, `/bugun`, ...) sonradan değiştirmek demekti; derin
-//  bağlantılar ve FAZ 4 bildirimleri bu adlara tutunacak.
+//  NEDEN /api/recommend, /api/score DEĞİL: ÖLÇÜLDÜ (2026-10-18) ki ABD
+//  sembollerinde `fa.price` SEC kesintisinde `null` kalıyor; fiyatın
+//  güvenilir kaynağı `plan.seviye.price`. Ayrıca sözleşme iç içe:
+//  score ⊂ recommend, yani tek istekle skor + plan geliyor — iki ayrı
+//  tur atmak hem yavaş hem de iki ayrı anlık görüntü demekti.
 //
-//  NEDEN UYDURMA HİSSE YOK: iskelet ekranda "AAPL 192,40" göstermek,
-//  ekran görüntüsünde canlı veri gibi görünür. Bunun yerine ölçülmemiş
-//  durum AÇIKÇA gösteriliyor: Skeleton satırları ve senkron durumunun
-//  dürüst metni.
+//  BURADA HESAP YOK: fiyat, skor, bant, yakınlık — hepsi uçtan gelen
+//  alanlar. Bu dosyada tek bir eşik, ağırlık ya da formül YOK. Sayılar
+//  yalnız `lib/format.ts` ile BİÇİMLENİYOR (tr-TR), türetilmiyor.
+//
+//  NEDEN FlatList: yol haritası liste ekranlarında sanallaştırma
+//  istiyor. `@shopify/flash-list` KURULU DEĞİL (ÖLÇÜLDÜ: package.json);
+//  bağımlılık eklemek yerine React Native'in içinde gelen, aynı işi
+//  yapan `FlatList` kullanıldı. FlashList'e geçiş yol haritasında AÇIK
+//  bırakıldı — "bitti" denmedi.
+//
+//  NEDEN SİLME DÜĞMESİ VAR DA KALICILIK YOK: liste BELLEKTE (bkz.
+//  api/liste.ts). Kalıcılık Supabase senkronuna bağlı ve anahtar yok;
+//  ekran bunu dürüstçe yazıyor.
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { useCallback } from 'react';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
+import { cikar, fetchRecommend, useIstek, useListe, type RecommendRow } from '@/api';
 import { getSupabase } from '@/api/supabase';
-import { Card, Pill, ScreenShell, SkeletonRow } from '@/components';
+import { Card, Durum, Dugme, OlcumNotu, Pill, ScreenShell, TickerRow, VeriYok } from '@/components';
+import { formatPrice, formatScore } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
+
+/** Yakınlık durumunun Türkçe karşılığı. SABİT KÜME (motordan: api/_motor.js). */
+const YAKINLIK_METIN: Record<string, string> = {
+  in: 'bandın içinde',
+  below: 'bandın altında',
+  near: 'banda yakın',
+  far: 'bandın uzağında',
+};
 
 export default function ListelerScreen() {
   const { colors } = useTheme();
+  const liste = useListe();
   const senkron = getSupabase();
+
+  const cagri = useCallback(
+    (signal: AbortSignal) => fetchRecommend(liste, { vade: 'orta', signal }),
+    [liste],
+  );
+  const { durum, veri, hata, yenile, taze } = useIstek(cagri, liste.join(','), {
+    etkin: liste.length > 0,
+  });
+
+  const satirlar: RecommendRow[] = veri?.sonuclar ?? [];
 
   return (
     <ScreenShell
       title="Listeler"
-      subtitle="Takip ettiğin hisseler. Veri bağlama FAZ 2'de."
-      note="Fiyat ve skorlar motor API'den gelir; bu ekranda henüz istek atılmıyor.">
-      <Card
-        title="Takip listesi"
-        subtitle="FAZ 2'de dolacak"
-        right={<Pill label="İSKELET" tone="info" size="sm" glyph={null} />}>
-        <View style={styles.satirlar}>
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-        </View>
-      </Card>
+      subtitle="Takip ettiğin hisseler — her sayı motor API'den gelir."
+      scroll={false}
+      note="Liste bu sürümde cihazda saklanmıyor (bulut senkronu kurulu değil).">
+      <FlatList
+        data={satirlar}
+        keyExtractor={(r) => r.sym}
+        style={styles.liste}
+        contentContainerStyle={styles.listeIc}
+        refreshControl={
+          <RefreshControl
+            refreshing={taze && durum === 'veri'}
+            onRefresh={yenile}
+            tintColor={colors.gold}
+          />
+        }
+        ListHeaderComponent={
+          <View style={styles.basliklar}>
+            <Durum
+              durum={durum}
+              hata={hata}
+              yenile={yenile}
+              iskelet={Math.max(liste.length, 3)}
+              bosMetin="Takip listesi boş. Arama sekmesinden sembol ekle."
+            />
+            {durum === 'veri' && veri ? (
+              <View style={styles.ozet}>
+                <Text style={[type.micro, { color: colors.textFaint }]}>
+                  {'Vade: ' + veri.vade + ' · motor ' + veri.surum.motor}
+                </Text>
+                <OlcumNotu kaynak={veri} />
+                {veri.atlanan.length ? (
+                  <Text style={[type.micro, { color: colors.textFaint }]}>
+                    {'Zaman bütçesi doldu, ölçülmeyenler: ' + veri.atlanan.join(', ')}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        }
+        ListEmptyComponent={
+          durum === 'veri' ? (
+            <VeriYok metin="Motor bu semboller için sonuç döndürmedi." />
+          ) : null
+        }
+        renderItem={({ item }) => <Satir satir={item} />}
+      />
 
       <Card title="Bulut senkronu">
-        <Text style={[styles.metin, { color: colors.textDim }]}>
+        <Text style={[type.small, { color: colors.textDim }]}>
           {senkron.ok ? 'Senkron yapılandırıldı.' : senkron.message}
         </Text>
       </Card>
@@ -52,7 +119,66 @@ export default function ListelerScreen() {
   );
 }
 
+/** Tek satır. Gösterdiği HER değer uçtan gelen bir alan. */
+function Satir({ satir }: { satir: RecommendRow }) {
+  const { colors } = useTheme();
+  const fiyat = satir.plan?.seviye?.price ?? satir.fa.price;
+  const skor = satir.composite.blendedShown;
+  const bant = satir.composite.band;
+  const yakinlik = satir.plan?.yakinlik?.state;
+
+  return (
+    <View style={styles.satirKab}>
+      <TickerRow
+        symbol={satir.sym}
+        name={satir.market === 'BIST' ? 'Borsa İstanbul' : 'ABD'}
+        price={fiyat}
+        currency={satir.market === 'BIST' ? 'TRY' : null}
+        changePct={null}
+        style={styles.satirTicker}
+        onPress={() => router.push({ pathname: '/analiz', params: { sym: satir.sym } })}
+        right={
+          <View style={styles.sag}>
+            {/* NEDEN FIYAT BURADA: `right` verildiginde TickerRow kendi fiyat
+                blogunu basmiyor (bkz. TickerRow). Fiyat hala UCTAN gelen ham
+                sayi; yalniz tr-TR bicimlendirmesi istemcide. */}
+            <Text style={[type.bodyBold, { color: colors.text }]} numberOfLines={1}>
+              {formatPrice(fiyat, satir.market === 'BIST' ? 'TRY' : null)}
+            </Text>
+            <Pill
+              label={'Bileşke ' + formatScore(skor)}
+              tone={typeof skor === 'number' ? 'info' : 'neutral'}
+              glyph={null}
+              size="sm"
+            />
+            <Text style={[type.micro, { color: colors.textDim }]} numberOfLines={1}>
+              {bant ?? 'bant ölçülemedi'}
+            </Text>
+            {yakinlik ? (
+              <Text style={[type.micro, { color: colors.textFaint }]} numberOfLines={1}>
+                {YAKINLIK_METIN[yakinlik] ?? yakinlik}
+              </Text>
+            ) : null}
+          </View>
+        }
+      />
+      <Dugme
+        label="Çıkar"
+        size="sm"
+        variant="outline"
+        tone="neutral"
+        onPress={() => cikar(satir.sym)}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  satirlar: { gap: space.sm },
-  metin: { ...type.small },
+  liste: { flex: 1 },
+  listeIc: { gap: space.sm, paddingBottom: space.md },
+  basliklar: { gap: space.sm },
+  ozet: { gap: space.xs },
+  satirKab: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  satirTicker: { flex: 1 },
+  sag: { alignItems: 'flex-end', gap: 2 },
 });

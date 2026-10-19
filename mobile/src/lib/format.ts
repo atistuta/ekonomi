@@ -81,6 +81,20 @@ export function formatScore(value: number | null | undefined): string {
   return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(value);
 }
 
+/**
+ * 0-1 aralığındaki motor oranı (bütüncüllük direkleri `v`, ağırlık `w`).
+ * ÖLÇÜLDÜ (2026-10-18): /api/analyze `direkler[].v` 0,68403 gibi ORAN
+ * döndürüyor. Bunu skor gibi yuvarlamak ekranda "1" yazdırırdı — yanlış.
+ * 100'e ÇARPILMAZ: ölçek değiştirmek motorun işidir, istemci yalnız basar.
+ */
+export function formatOran(value: number | null | undefined, digits = 2): string {
+  if (!isNum(value)) return EMPTY;
+  return new Intl.NumberFormat(LOCALE, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
 /** Hacim / piyasa değeri gibi büyük sayılar: 1,2 Mr · 340 Mn · 12 B. */
 export function formatCompact(value: number | null | undefined): string {
   if (!isNum(value)) return EMPTY;

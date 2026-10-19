@@ -1,61 +1,134 @@
 // =====================================================================
-//  BUGÜN — 2. sekme (iskelet)                         (FAZ 1 / native)
+//  BUGÜN — 2. sekme, MOTORA BAĞLI                     (FAZ 2 / native)
 // ---------------------------------------------------------------------
-//  NE: günlük akış sekmesi. Web'deki "📡 Bugün" menüsünün altındaki 4
-//  bölüm burada yaşayacak: Gündem, Haberler, Nabız, Hisse Haberleri.
+//  NE: takip listesinin TEK TURDA kıyası: /api/compare. Motorun kendi
+//  ürettiği `sira` dizisi (1'den başlayarak) ekrana olduğu gibi
+//  basılıyor; sıralanamayanlar sessizce düşürülmüyor, yazıyor.
 //
-//  NEDEN ALT BÖLÜMLER ŞİMDİDEN YAZILI: web'de bunlar açılır menüde;
-//  telefonda açılır menü kötü bir kalıp (tek elle zor, keşfedilmez).
-//  Alt bölümlerin ADLARINI şimdi göstermek, FAZ 2'de hangi gezinme
-//  kalıbına (segment / yatay şerit) geçeceğimizi ölçmemizi sağlıyor.
-//  Şu an TIKLANMIYORLAR ve bu metinde açıkça yazıyor — çalışmayan bir
-//  düğmeyi çalışıyormuş gibi göstermek, en pahalı yalan.
+//  NEDEN SIRALAMAYI İSTEMCİ YAPMIYOR: `sira` alanı uçtan geliyor
+//  (anahtar `dAtr`, eşitlik bozucu `skor10` — uç notu). Burada bir
+//  `sort` yazmak İKİNCİ bir sıralama kuralı demekti; web ile native
+//  ilk farklı veriye kadar aynı görünür, sonra ayrılırdı.
 //
-//  NEDEN HABER BAŞLIĞI UYDURULMADI: uydurma manşet ekran görüntüsünde
-//  gerçek haber gibi görünür. Yerine iskelet metin satırları var.
+//  NEDEN "konjonktür · piyasa nabzı · öne çıkan sektör" YOK:
+//  yol haritasının bu ekran için saydığı dört karttan yalnız "günün
+//  fırsatları" ayağının UCU var (compare/recommend). Konjonktür,
+//  piyasa nabzı ve sektör için FAZ 1'de uç AÇILMADI (ÖLÇÜLDÜ: api/
+//  altında score · recommend · analyze · theme · compare · causal var,
+//  makro/nabız/sektör ucu yok). Uydurma bir kart koymak, tam olarak
+//  yasak olan şey: sahte veri. Kart yerine EKSİK AÇIKÇA yazıyor ve
+//  yol haritasında madde açık bırakıldı.
+//
+//  BURADA HESAP YOK: sıra, durum, skor10 — hepsi uç alanları.
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { useCallback } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Card, Pill, ScreenShell, SkeletonText } from '@/components';
-import { space } from '@/theme';
+import { fetchCompare, useIstek, useListe, type SiraKayit } from '@/api';
+import { Card, Durum, OlcumNotu, Pill, ScreenShell } from '@/components';
+import { formatScore } from '@/lib/format';
+import { space, type, useTheme } from '@/theme';
 
-/** Web menüsündeki adlar — `index.html` "📡 Bugün" grubundan AYNEN. */
-const BOLUMLER = ['⭐ Gündem', '📰 Haberler', '⚡ Nabız', '📰 Hisse Haberleri'] as const;
+/** Yakınlık durumu — SABİT KÜME (motor), yalnız Türkçeye çevriliyor. */
+const DURUM_METIN: Record<string, string> = {
+  in: 'alım bandının içinde',
+  below: 'bandın altında',
+  near: 'banda yakın',
+  far: 'bandın uzağında',
+};
 
 export default function BugunScreen() {
+  const { colors } = useTheme();
+  const liste = useListe();
+
+  const cagri = useCallback(
+    (signal: AbortSignal) => fetchCompare(liste, { vade: 'orta', signal }),
+    [liste],
+  );
+  const { durum, veri, hata, yenile } = useIstek(cagri, liste.join(','), {
+    etkin: liste.length > 0,
+  });
+
+  const sira: SiraKayit[] = veri?.sira ?? [];
+
   return (
     <ScreenShell
       title="Bugün"
-      subtitle="Günün gündemi, haberler ve anlık sıçramalar. Veri bağlama FAZ 2'de."
-      note="Alt bölüm adları web menüsünden alındı; bu sürümde henüz tıklanmıyorlar.">
-      <Card title="Bölümler" subtitle="Web'deki sıra korunuyor">
-        <View style={styles.pills}>
-          {BOLUMLER.map((ad) => (
-            <Pill key={ad} label={ad} tone="neutral" variant="outline" glyph={null} />
-          ))}
-        </View>
+      subtitle="Takip listenin bugünkü sırası — sıralamayı motor yapar."
+      note="Konjonktür, piyasa nabzı ve sektör kartları için motor ucu henüz yok; uydurma kart konmadı.">
+      <Card
+        title="Fiyata yakınlık sırası"
+        subtitle="Anahtar: alım bandına ATR uzaklığı (motor kararı)"
+        right={
+          durum === 'veri' && veri ? (
+            <Pill label={veri.vade} tone="info" glyph={null} size="sm" />
+          ) : null
+        }>
+        <Durum
+          durum={durum}
+          hata={hata}
+          yenile={yenile}
+          iskelet={Math.max(liste.length, 3)}
+          bosMetin="Takip listesi boş. Arama sekmesinden sembol ekle."
+        />
+        {durum === 'veri' ? (
+          sira.length ? (
+            <ScrollView style={styles.kaydir} nestedScrollEnabled>
+              {sira.map((s) => (
+                <Text
+                  key={s.sym}
+                  accessibilityRole="button"
+                  onPress={() => router.push({ pathname: '/analiz', params: { sym: s.sym } })}
+                  style={[styles.sira, { color: colors.text, borderBottomColor: colors.border }]}>
+                  <Text style={type.smallBold}>{s.sira + '. ' + s.sym}</Text>
+                  <Text style={{ color: colors.textDim }}>
+                    {'  ' + (DURUM_METIN[s.durum] ?? s.durum)}
+                  </Text>
+                  <Text style={{ color: colors.textFaint }}>
+                    {'  · bütüncül ' + formatScore(s.skor10) + '/10'}
+                  </Text>
+                </Text>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={[type.small, { color: colors.textDim }]}>
+              Sıralanabilir sembol yok (alım bandı ya da fiyat ölçülemedi).
+            </Text>
+          )
+        ) : null}
+        {durum === 'veri' && veri ? (
+          <View style={styles.notlar}>
+            {veri.siralanamayan.length ? (
+              <Text style={[type.micro, { color: colors.textFaint }]}>
+                {'Sıralanamayan: ' + veri.siralanamayan.join(', ') + ' (fiyat/band yok).'}
+              </Text>
+            ) : null}
+            <OlcumNotu kaynak={veri} />
+          </View>
+        ) : null}
       </Card>
 
-      <Card
-        title="⭐ Gündem"
-        subtitle="FAZ 2'de dolacak"
-        right={<Pill label="İSKELET" tone="info" size="sm" glyph={null} />}>
-        <SkeletonText lines={3} />
-      </Card>
-
-      <Card
-        title="⚡ Nabız"
-        subtitle="FAZ 2'de dolacak — anlık sıçrama taraması"
-        right={<Pill label="İSKELET" tone="info" size="sm" glyph={null} />}>
-        <SkeletonText lines={2} />
+      <Card title="Henüz ölçülmeyen kartlar" subtitle="Dürüst eksik listesi">
+        <Text style={[type.small, { color: colors.textDim }]}>
+          {"Konjonktür kartı, piyasa nabzı ve öne çıkan sektör için motor API'de uç yok. Bu " +
+            'kartlar açılmadan önce uçlarının yazılması gerekiyor; o yüzden burada boş bırakıldı ' +
+            '— yer tutucu sayı GÖSTERİLMİYOR.'}
+        </Text>
       </Card>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  kaydir: { maxHeight: 320 },
+  sira: {
+    ...type.small,
+    paddingVertical: space.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  notlar: { gap: space.xs, marginTop: space.sm },
 });
