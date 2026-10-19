@@ -484,6 +484,26 @@ kalmadı.
       ② `npx tsc --noEmit` temiz (exit 0), ama `npx expo-doctor` **19/21**: iki
       düşen denetim de Expo sunucusuna bağlanıyor (ağ kaynaklı, proje kusuru
       değil — erişim varken 20/21 geçmişti), yine de "21/21" denemez.
+
+      **GÜNCELLEME (2026-10-19) — ③ ④ ⑤ KAPANDI:** sekme ikonları artık
+      **vektör** (emoji değil, aktif sekme altın); uygulama ikonu/splash/Android
+      adaptif ikon (ön+arka+monokrom, güvenli alan %60) + favicon
+      `mobile/scripts/ikon-uret.mjs` ile üretildi — bağımlılıksız PNG üretici
+      (`node:zlib`), mürekkep #0F1522 + altın #D4A24E, telif/marka taklidi yok;
+      şablon `assets/expo.icon/` SİLİNDİ. `npx expo lint` artık koşuyor: **0
+      sorun**. ① ve ② hâlâ açık: native derleme HÂLÂ denenmedi, `expo-doctor`
+      19/21 (iki hata önceden vardı — RN Directory sunucu yanıtı + 5 Expo yama
+      sürümü geride; kapsam dışı olduğu için yükseltilmedi).
+      **NATIVE DERLEME ÖN KOŞULLARI KURULDU:** `mobile/eas.json` (3 profil —
+      development/preview/production, her biri
+      `EXPO_PUBLIC_API_TABAN=https://day-starter.vercel.app`, çünkü native
+      istemci localhost'a ulaşamaz; `appVersionSource=remote`) ve `app.json`
+      içinde `ios.bundleIdentifier` = `android.package` =
+      `com.atistuta.sabahbulteni`. ⚠️ **BU KİMLİK MAĞAZAYA İLK GÖNDERİMDEN
+      SONRA ASLA DEĞİŞMEZ — kullanıcı onayı bekliyor** (varsayım: doğrulanmış
+      alan adı yok, GitHub kullanıcısı `atistuta`). Derleme KOŞULMADI: EAS bir
+      Expo hesabı oturumu istiyor, hesap açmak ajana kapalı → `npx eas build`
+      kullanıcının elinde.
       ③ sekme ikonları **emoji** (vektör set yeni bağımlılık demekti); web'de
       sekme metni emojiyi iki kez çiziyor — react-navigation artefaktı, kozmetik.
       ④ uygulama ikonu/splash görseli hâlâ **Expo şablonunun sanatı**; Android
@@ -524,19 +544,29 @@ Taban adres `EXPO_PUBLIC_API_TABAN` ile değişebiliyor, varsayılan
       seri istemcide ÜRETİLMİYOR. **AÇIK: native çizim** (victory-native /
       Skia) ve endeks grafiği (`^GSPC` ortak sembol biçiminden geçmiyor).
 - [~] **Listeler:** `/api/recommend` → fiyat + bileşke + bant + banda yakınlık,
-      pull-to-refresh, çıkar. **AÇIK: Supabase senkronu** — anahtar yok, sahte
-      anahtar üretilmedi; liste şimdilik yalnız BELLEKTE (AsyncStorage kurulu
-      değil, yarım yerel kalıcılık sonra ikinci doğruluk kaynağı olurdu).
+      pull-to-refresh, çıkar. **KALICILIK KAPANDI (2026-10-19):**
+      `mobile/src/lib/kalici.ts` AsyncStorage ile web'le birebir aynı `sb:lists`
+      anahtarı/şekli; şema sürümü KOMŞU anahtarda (`sb:lists:surum`=1 — içine
+      konsa web'in `Array.isArray` denetimi kırılırdı), bozuk kayıt çökertmiyor
+      (atlanan satır ekranda dürüstçe yazılıyor), web'den gelen listeler
+      korunuyor, `useHazir()` depo okunmadan motora gitmiyor. Tarayıcıda
+      doğrulandı: TSLA eklendi → sayfa yenilendi → satır durdu.
+      **AÇIK: Supabase bulut senkronu** — anahtar yok, sahte anahtar üretilmedi;
+      ekranda dürüstçe yazıyor.
 - [x] **Arama + Keşfet:** Arama = tek alan iki düğme — sembol ölç (`/api/recommend`,
       listeye ekle) ve 🔭 tematik keşif (`/api/theme`). **ÖLÇÜLDÜ:** `/api/theme`
       üretimde 200 ile `{"candidates":[],"error":"no_key"}` dönüyor (sunucuda
       `ANTHROPIC_API_KEY` yok) → ekran "sonuç yok" DEMİYOR, "ölçemedim" diyor.
       Keşfet = motorun `yakinlik` ve `momentum.active` kararlarına göre gruplama.
       **AÇIK: 🤖 radar/gündem** — uç yok.
-- [~] Liste virtualizasyonu **FlatList** ile (RN'in kendi sanallaştırması);
-      iskelet + pull-to-refresh var. **FlashList ALINMADI:** `@shopify/flash-list`
-      kurulu değil, yalnız bunun için bağımlılık eklenmedi. **Optimistic update
-      AÇIK** (yazma ucu yok; listede ekleme/çıkarma zaten anında).
+- [x] Liste virtualizasyonu **FlatList** ile (RN'in kendi sanallaştırması);
+      iskelet + pull-to-refresh var. **FlashList KAPANDI — GEREKSİZ (ölçüldü
+      2026-10-19):** tek sanal liste Listeler ve azami 8 satır, çünkü motor
+      sözleşmesi `AZAMI_SEMBOL=8` (uç fazlasını 400 ile REDDEDİYOR, kırpmıyor).
+      Geri dönüşüm kazancı ekran DIŞI satırlarda doğar; 8 satırda ölçülebilir
+      kazanç yok, karşılığı yeni native bağımlılık + derleme borcu. Sınır
+      artarsa yeniden ölçülecek. **Optimistic update AÇIK** (yazma ucu yok;
+      listede ekleme/çıkarma zaten anında).
 
 **Üç durum HER ekranda gerçek** (`components/Durum.tsx`): yükleniyor (iskelet) ·
 hata (yeniden dene) · boş. **"Veri yok ≠ ölçemedim" ayrımı taşınıyor:** `no-data`
@@ -610,7 +640,7 @@ ve test altyapısı da hâlâ açık (FAZ 2 ⑦ maddesi).
 ## Elit kalite kontrol listesi (her sürümde geç)
 
 - [ ] Her scroll / geçiş 60fps
-- [ ] Tüm uzun listeler virtualize (FlashList)
+- [x] Tüm uzun listeler virtualize — FlatList yeterli; FlashList ölçümle gereksiz çıktı (azami 8 satır)
 - [ ] Skeleton / optimistic UI — bekleme boş görünmüyor
 - [ ] Haptik + spring mikro-etkileşim
 - [ ] Boş / hata / offline durumları tasarlanmış
