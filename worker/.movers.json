@@ -1,7 +1,7 @@
 {
   "date": "2026-10-19",
   "levels": {
-    "SNDK.US": 2,
+    "SNDK.US": 1,
     "SKHY.US": 1,
     "MU.US": 1,
     "SPCX.US": 0,
@@ -23,8 +23,9 @@
     "AVGO.US": -1,
     "ARM.US": -2,
     "GLW.US": -1,
-    "AMLX.US": -1,
+    "AMLX.US": 1,
     "DELL.US": -1,
-    "SOFI.US": -1
+    "SOFI.US": -1,
+    "CEG.US": -1
   }
 }
