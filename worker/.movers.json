@@ -5,11 +5,13 @@
     "SKHY.US": 1,
     "IOVA.US": 1,
     "MRVL.US": 1,
-    "LRCX.US": 1,
+    "LRCX.US": -1,
     "PLTR.US": 1,
     "TER.US": 1,
     "MP.US": -1,
     "AMLX.US": 1,
-    "CEG.US": -1
+    "CEG.US": -1,
+    "KLAC.US": -1,
+    "SOFI.US": 1
   }
 }
