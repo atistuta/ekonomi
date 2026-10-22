@@ -1,10 +1,6 @@
 {
-  "date": "2026-10-21",
+  "date": "2026-10-22",
   "levels": {
-    "IOVA.US": 1,
-    "LRCX.US": -1,
-    "ARM.US": -1,
-    "AMLX.US": 1,
     "VST.US": 1,
     "SPCX.US": 2,
     "SIMO.US": 1,
@@ -13,7 +9,6 @@
     "PLTR.US": 1,
     "ETN.US": 1,
     "GEV.US": 1,
-    "TER.US": 1,
     "VRT.US": 1,
     "DELL.US": 1,
     "CEG.US": 1
