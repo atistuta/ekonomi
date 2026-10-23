@@ -3,19 +3,19 @@
   "levels": {
     "VST.US": -3,
     "SNDK.US": -2,
-    "SKHY.US": -2,
+    "SKHY.US": 1,
     "MU.US": -2,
-    "SPCX.US": -3,
+    "SPCX.US": 0,
     "IOVA.US": -1,
     "SIMO.US": -5,
     "MRVL.US": -2,
-    "LITE.US": -3,
-    "COIN.US": -1,
+    "LITE.US": 0,
+    "COIN.US": 0,
     "APH.US": -2,
-    "GFI.US": -1,
+    "GFI.US": 0,
     "LRCX.US": -3,
     "ETN.US": -2,
-    "COHR.US": -4,
+    "COHR.US": 0,
     "FN.US": -3,
     "GEV.US": -3,
     "ASML.US": -2,
@@ -32,6 +32,7 @@
     "GLW.US": -2,
     "REMX.US": -1,
     "DELL.US": -2,
-    "CEG.US": -1
+    "CEG.US": -1,
+    "AMLX.US": -1
   }
 }
