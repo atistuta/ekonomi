@@ -4,7 +4,7 @@
     "VST.US": -3,
     "SNDK.US": -2,
     "SKHY.US": 1,
-    "MU.US": -2,
+    "MU.US": 1,
     "SPCX.US": 0,
     "IOVA.US": -1,
     "SIMO.US": -5,
@@ -33,6 +33,7 @@
     "REMX.US": -1,
     "DELL.US": -2,
     "CEG.US": -1,
-    "AMLX.US": -1
+    "AMLX.US": -1,
+    "FTNT.US": 1
   }
 }
