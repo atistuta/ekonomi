@@ -20,6 +20,8 @@ export { Disclaimer, DISCLAIMER_TEXT, type DisclaimerProps } from './Disclaimer'
 export { Dugme, type DugmeProps } from './Dugme';
 // FAZ 2: üç durumun tek gövdesi (yükleniyor · hata · boş) + dürüstlük notu.
 export { Durum, OlcumNotu, VeriYok, type DurumProps, type VeriYokProps } from './Durum';
+// FAZ 2: /api/chart kapanış serisinin grafiği (react-native-svg).
+export { FiyatGrafigi, type FiyatGrafigiProps } from './FiyatGrafigi';
 export { Badge, Pill, type PillProps } from './Pill';
 export { ScoreGauge, type ScoreGaugeProps } from './ScoreGauge';
 export { ScreenShell, type ScreenShellProps } from './ScreenShell';

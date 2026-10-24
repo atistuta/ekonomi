@@ -113,3 +113,43 @@ export function formatCompact(value: number | null | undefined): string {
   }
   return new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(value);
 }
+
+/**
+ * UNIX **SANİYE** damgası → kısa gün/ay ("24 Eki").
+ *
+ * NEDEN SANİYE: `/api/chart` mum damgası 10 haneli (ÖLÇÜLDÜ: 1790256600),
+ * `Date` ise milisaniye bekler. Dönüşümü burada bir kez yapıyoruz;
+ * ekranda `new Date(t * 1000)` yazılması yasak (iki kaynak doğar).
+ *
+ * NEDEN AY ADI SAYI DEĞİL: eksen etiketinde "24.10" ile "10.24" ayırt
+ * edilemez; ay adı yerelden gelir ve belirsizlik kalmaz.
+ */
+export function formatGunAy(saniye: number | null | undefined): string {
+  if (!isNum(saniye)) return EMPTY;
+  const d = new Date(saniye * 1000);
+  if (Number.isNaN(d.getTime())) return EMPTY;
+  try {
+    return new Intl.DateTimeFormat(LOCALE, { day: 'numeric', month: 'short' }).format(d);
+  } catch {
+    return EMPTY;
+  }
+}
+
+/**
+ * UNIX **SANİYE** damgası → gün/ay/yıl ("24 Eki 2026"). Çok yıllı
+ * aralıklarda (1y / 5y) yıl olmadan ilk etiket yanıltıcı olur.
+ */
+export function formatGunAyYil(saniye: number | null | undefined): string {
+  if (!isNum(saniye)) return EMPTY;
+  const d = new Date(saniye * 1000);
+  if (Number.isNaN(d.getTime())) return EMPTY;
+  try {
+    return new Intl.DateTimeFormat(LOCALE, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(d);
+  } catch {
+    return EMPTY;
+  }
+}

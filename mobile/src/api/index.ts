@@ -12,6 +12,10 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
+// `client.ts` kendi içinde `export * from './types'` yapıyor, bu yüzden
+// uç sözleşmeleri (ScoreResponse, ChartResponse, ARALIKLAR, Aralik …) ve
+// çağrılar (fetchScore … fetchChart) bu tek satırdan geçiyor. İkinci bir
+// `export` satırı yazmak aynı adı iki yerden açmak olurdu.
 export * from './client';
 export { useIstek, type IstekAyar, type IstekDurum, type IstekSonuc } from './istek';
 export {

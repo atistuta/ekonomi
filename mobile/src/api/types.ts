@@ -361,3 +361,110 @@ export type ThemeResponse = {
   ms?: number;
   uyari?: string;
 };
+
+// =====================================================================
+//  /api/chart SÖZLEŞME TİPLERİ                        (FAZ 2 / native)
+// ---------------------------------------------------------------------
+//  NE: `api/chart.js` uç noktasının cevabının TypeScript karşılığı —
+//  OHLCV serisi + künye.
+//
+//  NEDEN BU UÇ AYRI KÜME: diğer dört uç (score/recommend/analyze/
+//  compare) `ayristir()` ile ÇOĞUL sembol alıyor; grafik ucu TEK sembol
+//  alıyor ve virgüllü isteği kırpmak yerine 400 `cok_sembol` (azami: 1)
+//  ile REDDEDİYOR. ÖLÇÜLDÜ (2026-10-24, üretim):
+//    ?symbol=AAPL,MSFT → 400 {"error":"cok_sembol","azami":1}
+//  Bu yüzden `fetchChart` sembol kapısından (`sembolUcu`) GEÇMEZ.
+//
+//  NEDEN `time` SANİYE: ölçülen gövdede `time: 1790256600` — 10 haneli,
+//  yani UNIX SANİYE. `new Date(time)` yazmak 1970'e düşürür; her
+//  dönüşüm 1000 ile çarpmak zorunda (bkz. lib/format.ts formatGunAy).
+//
+//  NEDEN MUM ALANLARI `number` (null DEĞİL): ölçülen seride her mumun
+//  beş alanı da dolu geldi ve uç nokta eksik mumu diziye koymak yerine
+//  atıyor. Yine de çizim katmanı `Number.isFinite` süzgecinden geçirir —
+//  tip güvencesi çalışma zamanı güvencesi değildir.
+//
+//  BOŞ SERİ ARIZA DEĞİL: 200 + `mumlar: []` + `adet: 0` geçerli bir
+//  VERİ cevabıdır (yeni halka arz, kapalı pazar). Bunu "ölçemedim"
+//  diye göstermek yalan olur; doğrusu "bu aralıkta mum yok".
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/**
+ * İzinli aralıklar — sunucunun kümesiyle BİREBİR. ÖLÇÜLDÜ (üretim):
+ * `?range=2mo` → 400 `{"error":"bad_range","izinli":["1d","1mo","3mo","6mo","1y","5y"]}`
+ */
+export const ARALIKLAR = ['1d', '1mo', '3mo', '6mo', '1y', '5y'] as const;
+export type Aralik = (typeof ARALIKLAR)[number];
+
+/**
+ * İzinli adımlar (interval) — ÖLÇÜLDÜ: `?interval=1h` → 400
+ * `{"error":"bad_interval","izinli":["5m","15m","60m","1d"]}`
+ */
+export const ADIMLAR = ['5m', '15m', '60m', '1d'] as const;
+export type Adim = (typeof ADIMLAR)[number];
+
+/** Uç noktanın varsayılanları — sorguya yazılmasa sunucu bunları kullanır. */
+export const VARSAYILAN_ARALIK: Aralik = '6mo';
+export const VARSAYILAN_ADIM: Adim = '1d';
+
+/**
+ * Tek mum. `time` UNIX **SANİYE** (ms değil). Fiyatlar HAM — biçim
+ * `lib/format.ts`'in işi.
+ */
+export type Mum = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+/**
+ * Yahoo `meta` künyesi, olduğu gibi geçiriliyor. HEPSİ isteğe bağlı:
+ * ölçülen AAPL cevabında `previousClose` ve `scale` YOKTU, `chartPreviousClose`
+ * vardı — alanların varlığı sembole/pazara göre değişiyor.
+ */
+export type ChartKunye = {
+  currency?: string | null;
+  symbol?: string | null;
+  exchangeName?: string | null;
+  instrumentType?: string | null;
+  firstTradeDate?: number | null;
+  regularMarketTime?: number | null;
+  gmtoffset?: number | null;
+  timezone?: string | null;
+  exchangeTimezoneName?: string | null;
+  regularMarketPrice?: number | null;
+  chartPreviousClose?: number | null;
+  previousClose?: number | null;
+  scale?: number | null;
+  priceHint?: number | null;
+  fiftyTwoWeekHigh?: number | null;
+  fiftyTwoWeekLow?: number | null;
+  dataGranularity?: string | null;
+  range?: string | null;
+};
+
+/**
+ * Grafik cevabı. `tam === false` → 200 olsa bile ÖLÇÜM EKSİK; aynı
+ * `olcumEksik()` yardımcısı bu gövdede de çalışır (`tam` + `sayac`
+ * alanları skor cevabıyla aynı şekilde).
+ */
+export type ChartResponse = {
+  sym: string;
+  market: Market;
+  range: Aralik;
+  interval: Adim;
+  mumlar: Mum[];
+  /** `mumlar.length` — sunucunun saydığı; istemci yeniden saymaz. */
+  adet: number;
+  kunye: ChartKunye | null;
+  sayac: Sayac;
+  tam: boolean;
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};

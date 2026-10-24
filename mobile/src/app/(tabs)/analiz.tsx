@@ -22,10 +22,19 @@
 //  sekmesinin işi (5 menü düzeni korunuyor); burada liste + Listeler/
 //  Bugün/Keşfet'ten gelen sym parametresi var.
 //
-//  NEDEN GRAFİK YOK: yol haritası bu maddede grafik de istiyor. Fiyat
-//  serisi döndüren bir uç YOK (ÖLÇÜLDÜ: uçlar yalnız skor/plan/analiz
-//  alanları veriyor, OHLC serisi vermiyor) ve seriyi istemcide üretmek
-//  "motor API'de" kuralını kırardı. Madde AÇIK bırakıldı.
+//  GRAFİK ARTIK VAR: `/api/chart` yazıldı ve ÖLÇÜLDÜ (2026-10-24,
+//  üretim): ?symbol=AAPL&range=1mo → 200, adet 22, tam true.
+//  Bu yüzden eski "fiyat serisi döndüren uç YOK" notu düştü.
+//
+//  NEDEN İKİNCİ BİR İSTEK: grafik /api/analyze'dan GELMİYOR, ayrı uç.
+//  Aynı `useIstek` ile ikinci çağrı atılıyor çünkü aralık (1mo…5y)
+//  kullanıcı elinde ve her değişiklikte analizi baştan ölçmek 45-55
+//  saniyelik skor turunu boşa tekrarlardı. Grafik ucu tek dış istekle
+//  262 ms döndü — ayrı tutmak ucuz.
+//
+//  NEDEN GRAFİK İSTEĞİ EKRANDA, KOMPONENTTE DEĞİL: proje kuralı
+//  "ekranlar ister, komponentler çizer" (`components/` içinde `fetch`
+//  yok). `FiyatGrafigi` saf sunum: durum/veri/hata props'tan gelir.
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
@@ -35,10 +44,13 @@ import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import {
+  VARSAYILAN_ARALIK,
   fetchAnalyze,
+  fetchChart,
   useIstek,
   useListe,
   type AnalyzeRow,
+  type Aralik,
   type Direk,
   type PlanSeviye,
 } from '@/api';
@@ -46,6 +58,7 @@ import {
   Card,
   Dugme,
   Durum,
+  FiyatGrafigi,
   OlcumNotu,
   Pill,
   ScoreGauge,
@@ -83,11 +96,27 @@ export default function AnalizScreen() {
 
   const satir: AnalyzeRow | null = veri?.sonuclar?.[0] ?? null;
 
+  // ── GRAFİK: ayrı uç, ayrı istek, kullanıcı elinde aralık ──────────
+  // NEDEN ENDEKS SÜZGECİ: `/api/chart` '^' ile başlayan sembolü 400
+  // `bad_symbol` ile reddediyor (ÖLÇÜLDÜ: ?symbol=^GSPC). İstemci de
+  // denemesin diye istek burada kapatılıyor — kırmızı kutu yerine hiç
+  // sorulmamış grafik.
+  const [aralik, setAralik] = useState<Aralik>(VARSAYILAN_ARALIK);
+  const grafiklenebilir = Boolean(sembol) && !(sembol ?? '').startsWith('^');
+  const grafikCagri = useCallback(
+    (signal: AbortSignal) =>
+      fetchChart(sembol ?? '', { range: aralik, interval: '1d', signal }),
+    [sembol, aralik],
+  );
+  const grafik = useIstek(grafikCagri, (sembol ?? '') + '|' + aralik, {
+    etkin: grafiklenebilir,
+  });
+
   return (
     <ScreenShell
       title="Analiz"
       subtitle="Tek hisse derin dalış — tüm skorlar motor API'den."
-      note="Fiyat grafiği için seri döndüren uç yok; grafik FAZ 2'de açık madde.">
+      note="Fiyat grafiği /api/chart ucundan gelir; çizim sunum katmanıdır, gösterge hesabı motorda.">
       <Card title="Sembol" subtitle="Takip listesinden seç (serbest arama: Arama sekmesi)">
         <View style={styles.secici}>
           {liste.map((s) => (
@@ -107,6 +136,23 @@ export default function AnalizScreen() {
           </Text>
         ) : null}
       </Card>
+
+      {/* NEDEN SKOR KARTLARINDAN ÖNCE: grafik ucu 262 ms, analiz turu
+          45-55 sn. Grafiği aşağıya koymak, hızlı gelen veriyi yavaş
+          olanın arkasında bekletmek olurdu. Sembol seçicinin hemen
+          altında, çünkü seçilen sembolün ilk somut karşılığı bu. */}
+      {grafiklenebilir ? (
+        <FiyatGrafigi
+          sembol={sembol ?? ''}
+          market={satir?.market}
+          durum={grafik.durum}
+          veri={grafik.veri}
+          hata={grafik.hata}
+          yenile={grafik.yenile}
+          aralik={aralik}
+          onAralik={setAralik}
+        />
+      ) : null}
 
       <Durum
         durum={durum}

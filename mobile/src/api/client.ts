@@ -37,8 +37,15 @@
 // =====================================================================
 
 import {
+  ADIMLAR,
+  ARALIKLAR,
   AZAMI_SEMBOL,
+  VARSAYILAN_ADIM,
+  VARSAYILAN_ARALIK,
+  type Adim,
   type AnalyzeResponse,
+  type Aralik,
+  type ChartResponse,
   type CompareResponse,
   type Market,
   type RecommendResponse,
@@ -84,6 +91,7 @@ export const ENDPOINTS = {
   compare: '/api/compare',
   yfin: '/api/yfin',
   watchlist: '/api/watchlist',
+  chart: '/api/chart',
 } as const;
 
 export type EndpointName = keyof typeof ENDPOINTS;
@@ -156,8 +164,23 @@ function kodMetni(code: string | undefined, azami?: number, istenen?: number): s
     case 'symbols_yok':
     case 'symbols_bos':
       return 'Sembol verilmedi.';
+    case 'symbol_yok':
+      // Grafik ucunun TEKİL kodu: `symbols_yok` değil `symbol_yok`.
+      // ÖLÇÜLDÜ (2026-10-24): ?symbol= → 400 {"error":"symbol_yok"}
+      return 'Sembol verilmedi.';
     case 'cok_sembol':
+      // Grafik ucunda `azami: 1` geliyor (ÖLÇÜLDÜ: ?symbol=AAPL,MSFT →
+      // 400 {"error":"cok_sembol","azami":1}, `istenen` alanı YOK).
+      // Tekil durumda çoğul cümle ("en çok 1 sembol sorulabilir")
+      // bilgisizce kurulmuş görünür — ayrı cümle hak ediyor.
+      if ((azami ?? AZAMI_SEMBOL) === 1) return 'Bu uç tek sembol alır; birden çok sembol verildi.';
       return 'En çok ' + (azami ?? AZAMI_SEMBOL) + ' sembol sorulabilir (' + (istenen ?? 0) + ' istendi).';
+    case 'bad_range':
+      return 'Geçersiz aralık.';
+    case 'bad_interval':
+      return 'Geçersiz adım (mum periyodu).';
+    case 'grafik_alinamadi':
+      return 'Fiyat serisi alınamadı — ölçüm yapılamadı.';
     case 'too_long':
       return 'Sembol listesi çok uzun.';
     case 'bad_vade':
@@ -523,4 +546,135 @@ export function temaKodMetni(code: string | null | undefined): string | null {
     default:
       return null;
   }
+}
+
+// ---------------------------------------------------------------------
+//  GRAFİK UCU — sembol kapısından GEÇMEZ
+// ---------------------------------------------------------------------
+//  NEDEN `sembolUcu` KULLANILMIYOR: o kapı ÇOĞUL (`symbols=A,B`) ve
+//  AZAMI_SEMBOL=8'e göre kurulu. Grafik ucu TEKİL (`symbol=A`), azamisi
+//  1 ve virgüllü isteği KIRPMIYOR — reddediyor. ÖLÇÜLDÜ (2026-10-24,
+//  üretim https://day-starter.vercel.app):
+//    ?symbol=AAPL,MSFT → 400 {"error":"cok_sembol","azami":1}
+//    ?symbol=^GSPC     → 400 {"error":"bad_symbol","gecersiz":["^GSPC"]}
+//    ?range=2mo        → 400 {"error":"bad_range","izinli":[...]}
+//    ?interval=1h      → 400 {"error":"bad_interval","izinli":[...]}
+//  Ortak kapıya "bazen tekil" dalı eklemek, dört ucun paylaştığı tek
+//  davranışı koşullu yapardı; ayrı kapı daha az borç.
+//
+//  NEDEN ZAMAN AŞIMI `SCORE_TIMEOUT_MS` DEĞİL: bu uç TEK dış istek
+//  atıyor ve `maxDuration = 10` (ÖLÇÜLDÜ: ms = 262). 58 sn beklemek,
+//  ölü bir bağlantıda kullanıcıyı bir dakika iskelet karşısında
+//  tutmak olurdu. `DEFAULT_TIMEOUT_MS` (12 sn) sunucunun 10 sn'lik
+//  tavanının hemen üstü: önce sunucu konuşur.
+// ---------------------------------------------------------------------
+
+export type ChartOptions = Omit<RequestOptions, 'query'> & {
+  /** Varsayılan '6mo' — uç noktanın varsayılanıyla aynı. */
+  range?: Aralik;
+  /** Varsayılan '1d'. */
+  interval?: Adim;
+  market?: Market;
+};
+
+/**
+ * Grafik çağrısı: GET /api/chart?symbol=AAPL&range=6mo&interval=1d
+ *
+ * Yerel kapı — ağa ÇIKMADAN `bad-request` döndürülen durumlar, hepsi
+ * sunucunun aynı kodunu taşır (kullanıcı aynı cümleyi anında görür):
+ *   · boş sembol            → `symbol_yok`
+ *   · virgül içeriyor       → `cok_sembol` (azami 1)
+ *   · `^` ile başlıyor      → `bad_symbol` (ENDEKS: uç ortak sembol
+ *     biçimini kabul etmiyor; denemek kesin 400 demek)
+ *   · uzunluk > AZAMI_SORGU → `too_long`
+ *   · küme dışı range/interval → `bad_range` / `bad_interval`
+ */
+export async function fetchChart(
+  symbol: string,
+  options: ChartOptions = {},
+): Promise<ApiResult<ChartResponse>> {
+  const {
+    range = VARSAYILAN_ARALIK,
+    interval = VARSAYILAN_ADIM,
+    market,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+  } = options;
+  const path = ENDPOINTS.chart;
+
+  const sym = String(symbol ?? '').trim().toUpperCase();
+
+  if (!sym) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('symbol_yok') ?? 'Sembol verilmedi.',
+        endpoint: path,
+        code: 'symbol_yok',
+      },
+    };
+  }
+  if (sym.includes(',')) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('cok_sembol', 1) ?? 'Bu uç tek sembol alır.',
+        endpoint: path,
+        code: 'cok_sembol',
+      },
+    };
+  }
+  if (sym.startsWith('^')) {
+    // ENDEKS. Sunucu kesinlikle 400 `bad_symbol` döner — ağa çıkmıyoruz.
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Endeks sembolleri bu uçtan grafiklenemiyor.',
+        endpoint: path,
+        code: 'bad_symbol',
+      },
+    };
+  }
+  if (sym.length > AZAMI_SORGU) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('too_long') ?? 'Sembol çok uzun.',
+        endpoint: path,
+        code: 'too_long',
+      },
+    };
+  }
+  if (!(ARALIKLAR as readonly string[]).includes(range)) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('bad_range') ?? 'Geçersiz aralık.',
+        endpoint: path,
+        code: 'bad_range',
+      },
+    };
+  }
+  if (!(ADIMLAR as readonly string[]).includes(interval)) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('bad_interval') ?? 'Geçersiz adım.',
+        endpoint: path,
+        code: 'bad_interval',
+      },
+    };
+  }
+
+  return apiGet<ChartResponse>(path, {
+    query: { symbol: sym, range, interval, market },
+    timeoutMs,
+    signal,
+  });
 }
