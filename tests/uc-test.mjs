@@ -13,9 +13,9 @@
 //  `cok_sembol` kontrolünü etkisizleştirip 8 sembol sınırını kaldırabilir
 //  ve bunu kimse farketmez, çünkü cevap yine 200 döner.
 //
-//  NE ÖLÇER (13 bölüm)  ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
+//  NE ÖLÇER (14 bölüm)  ① ② ③ ④ = score · ⑤ = recommend · ⑥ = analyze
 //                       ⑦ = süre freni · ⑧ = theme · ⑨ = compare
-//                       ⑩ = causal · ⑫ = chart · ⑬ = pulse
+//                       ⑩ = causal · ⑫ = chart · ⑬ = pulse · ⑭ = news
 //    ① yüzey              — default/ayristir/config yerinde mi
 //    ② ayristir()         — pazar çözümü, yineleme, sınırlar, hata kodları
 //    ③ handler kapısı     — CORS · OPTIONS · 405 · 4xx gövdeleri
@@ -46,9 +46,17 @@
 //                           ilan edilen pencere ile KV TTL'inin TUTARLILIĞI
 //                           ve Yahoo adresinin uçta DİRİLMEDİĞİ
 //    ⑬ /api/pulse         — yedinci uç: makro duruş + konjonktür fazı.
-//                           POST (girdi manşet listesi), SIFIR dış istek,
-//                           eksik veri UYDURULMUYOR, eşikler motorda,
-//                           duruş AĞIRLIKLI / konjonktür AĞIRLIKSIZ ayrımı
+//                           POST (girdi manşet listesi), İSTEMCİ YOLUNDA
+//                           SIFIR dış istek, eksik veri UYDURULMUYOR,
+//                           eşikler motorda, duruş AĞIRLIKLI /
+//                           konjonktür AĞIRLIKSIZ ayrımı. 2026-10-24'ten
+//                           sonra İKİNCİ bir yol var (sunucu haberi kendi
+//                           tarar) — ⑬f onun GERİYE DÖNÜK UYUMUNU ölçüyor.
+//    ⑭ /api/news          — sekizinci uç: haber (manşet) ucu + haberin
+//                           KENDİ ağ taşıyıcısı (`api/_haber.js`). Kapı,
+//                           limit tavanı, pazar beyaz listesi, RSS
+//                           ayrıştırmasının SAF sınanması, ve haberin
+//                           `_ag.js`in IZINLI listesine GİRMEDİĞİ
 //
 //  AĞ YASAĞI — BU TESTİN EN ÖNEMLİ KURALI: HER ÜÇ ucun handler()'ı
 //  yalnız ağ'a hiç gitmeyecek isteklerle çağrılır (OPTIONS, GET-dışı, ya da
@@ -117,7 +125,22 @@ import grafikHandler, {
 import nabizHandler, {
   config as nabizConfig, ayristirGovde as nabizAyristir, ayristirListe,
   AZAMI_BASLIK, AZAMI_GOVDE_BAYT as NABIZ_GOVDE_BAYT, PENCERE_GUN, TAZE_GUN,
+  istemciVerdi, ayristirSunucuGirdisi, MAKRO_SORGULAR, AZAMI_SEMBOL_HABER,
 } from '../api/pulse.js';
+// ⑭ /api/news — haber ucu. Modül düzeyinde motor KURMUYOR ve ağa ÇIKMIYOR
+// (yalnız sabit + saf fonksiyon), bu yüzden içe almak bedava.
+import haberHandler, {
+  config as haberConfig, VARSAYILAN_PAZAR,
+  AZAMI_MADDE as haberAzamiMadde, VARSAYILAN_MADDE as haberVarsayilanMadde,
+  AZAMI_HABER_SORGU as haberAzamiSorgu, HABER_PAZARLAR as haberPazarlar,
+} from '../api/news.js';
+// ⑭ haberin KENDİ ağ taşıyıcısı — `_ag.js` DEĞİL. `ayristirRSS` /
+// `haberAdresi` / `izinliAdres` SAF: ağa çıkmadan ölçülebiliyorlar.
+import {
+  ayristirRSS, haberAdresi, izinliAdres, bosHaberSayac, haberTam,
+  IZINLI_KONAK, HABER_ISTEK_MS, ASGARI_GOVDE_BAYT, MADDE_ALANLARI,
+  PAZAR_YERELI, AZAMI_MADDE as agAzamiMadde,
+} from '../api/_haber.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCORE_PATH = path.join(ROOT, 'api', 'score.js');
@@ -131,6 +154,9 @@ const GIRDI_PATH = path.join(ROOT, 'api', '_girdi.js');
 const ONBELLEK_PATH = path.join(ROOT, 'api', '_onbellek.js');
 const CHART_PATH = path.join(ROOT, 'api', 'chart.js');
 const PULSE_PATH = path.join(ROOT, 'api', 'pulse.js');
+const NEWS_PATH = path.join(ROOT, 'api', 'news.js');
+const HABER_PATH = path.join(ROOT, 'api', '_haber.js');
+const AG_PATH = path.join(ROOT, 'api', '_ag.js');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
 // --- küçük koşum defteri (tests/uretim-test.mjs ile aynı kalıp) -----------
@@ -149,7 +175,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse kapıları ve doğrulamaları yerinde.`);
+  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news kapıları ve doğrulamaları yerinde.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -2522,9 +2548,15 @@ ok('⑬a · taze sayımı 2 gün (app.js `fresh2d` ile aynı)', TAZE_GUN === 2, 
     ok('⑬d · geçerli POST → 200', res.kod === 200, `kod ${res.kod}`);
     ok('⑬d · ÖLÇÜM · uç ağa HİÇ çıkmadı (0 dış istek)', agDenemesi === 0, `${agDenemesi} deneme`);
     ok('⑬d · gövde alanları sabit',
-      anahtarlar(res.govde) === 'degerlendirilen,durus,eksik,konjonktur,ms,pencere,surum,taze,uyari',
+      anahtarlar(res.govde) === 'degerlendirilen,durus,eksik,haberler,kaynak,konjonktur,ms,pencere,surum,taze,uyari',
       anahtarlar(res.govde));
     ok('⑬d · uyarı metni gövdede', res.govde.uyari === UYARI);
+    // GERİYE DÖNÜK UYUM: istemci manşet verdiğinde yol AÇIKÇA 'istemci'
+    // ve sunucu ölçümü NULL — yani "haber taramadım" uydurma sayaçla
+    // gizlenmiyor.
+    ok('⑬d · istemci manşet verdi → kaynak = istemci', res.govde.kaynak === 'istemci', String(res.govde.kaynak));
+    ok('⑬d · istemci yolunda `haberler` null (sunucu taraması YAPILMADI)',
+      res.govde.haberler === null, String(res.govde.haberler));
     ok('⑬d · duruş alanları sabit',
       anahtarlar(res.govde.durus) === 'baski,egilimAsagi,egilimYukari,enflasyonYon,faizYon,kod',
       anahtarlar(res.govde.durus));
@@ -2681,11 +2713,17 @@ ok('⑬a · taze sayımı 2 gün (app.js `fresh2d` ile aynı)', TAZE_GUN === 2, 
     !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src));
   ok('⑬e · ANTHROPIC anahtarı / e-posta geçmiyor', !/ANTHROPIC|apiKey|@gmail|userEmail/.test(src));
 
-  // AĞ YASAĞI STATİK: uç ağ taşıyıcısının FETCH yüzeyini hiç kullanmıyor
-  // ve RSS/haber konağı eklemiyor. `canliAg` yalnız motoru kurmak için.
-  ok('⑬e · uçta haber/RSS adresi YOK (IZINLI listesi genişletilmedi)',
+  // ADRES YASAĞI STATİK (2026-10-24'te ANLAMI DEĞİŞTİ, kuralı DEĞİL):
+  // uç artık haber tarıyor ama RSS ADRESİNİ KENDİ KURMUYOR — adres,
+  // izin listesi ve zaman aşımı `api/_haber.js`te. Uçta adres dirilirse
+  // iki yerde iki besleme olur ve biri sessizce bayatlar.
+  ok('⑬e · uçta haber/RSS adresi YOK (adres taşıyıcıda, uçta değil)',
     !/news\.google|rss|feed|\.xml/i.test(kod));
-  const agSrc = readFileSync(path.join(ROOT, 'api', '_ag.js'), 'utf8');
+  ok('⑬e · haber taşıyıcısı `./_haber.js` üzerinden çağrılıyor',
+    /from\s+'\.\/_haber\.js'/.test(kod) && /haberCek\(/.test(kod));
+  ok('⑬e · yeni karar BAŞLIKTA yazılı, eski metin SİLİNMEMİŞ',
+    /HABERİ KİM TARAR/.test(src) && /2026-10-24/.test(src) && /kaynak/.test(src));
+  const agSrc = readFileSync(AG_PATH, 'utf8');
   ok('⑬e · ÖLÇÜM · `_ag.js` IZINLI listesi hâlâ BEŞ konak (dokunulmadı)',
     (agSrc.match(/finance\.yahoo\.com|www\.sec\.gov|data\.sec\.gov|www\.isyatirim\.com\.tr/g) || []).length >= 4
     && !/news\.google|googleapis|api\.anthropic\.com/.test(agSrc));
@@ -2713,6 +2751,480 @@ ok('⑬a · taze sayımı 2 gün (app.js `fresh2d` ile aynı)', TAZE_GUN === 2, 
     const akis = readFileSync(AKIS_PATH, 'utf8');
     return !/macroPhase|pulseStance|rateDirection|inflDirection/.test(akis);
   })());
+}
+
+// --- ⑬f sunucu yolu — SAHTE besleme, geriye dönük uyum ÖLÇÜMÜ ------------
+// 2026-10-24 kararının asıl riski: istemci yolunu bozmak. Burada İKİ yol
+// AYNI koşumda ölçülüyor — aynı gövde alanları, kayan tek sayı yok.
+// AĞA ÇIKMIYOR: `globalThis.fetch` sahte bir Google News gövdesi döndürüyor
+// ve adresin İZİNLİ konakta kaldığı da burada doğrulanıyor.
+{
+  const gercekFetch = globalThis.fetch;
+  const SIMDI = Date.parse('2026-10-19T12:00:00Z');
+  const yas = (saat) => new Date(SIMDI - saat * 36e5).toUTCString();
+
+  // Fikstür: başlıklar ŞAHİN, böylece sunucu yolunun manşetleri motora
+  // GERÇEKTEN girdi mi ölçülebiliyor (duruş kodu neu kalmamalı).
+  const madde = (t) => `<item><title>${t}</title>`
+    + '<link>https://news.google.com/__t__</link>'
+    + `<pubDate>${yas(10)}</pubDate><source url="https://x.example">Örnek Yayın</source></item>`;
+  const RSS = '<?xml version="1.0"?><rss version="2.0"><channel>'
+    + '<title>Örnek besleme — ASGARI_GOVDE_BAYT tavanını aşmak için uzun kanal başlığı</title>'
+    + madde('Fed signals rate hike as inflation persists')
+    + madde('Powell: rates will stay higher for longer, hawkish tone')
+    + madde('CPI accelerates, inflation rises again')
+    + '</channel></rss>';
+  ok('⑬f · fikstür kısa gövde eşiğini AŞIYOR (kurulum doğru)',
+    Buffer.byteLength(RSS, 'utf8') >= ASGARI_GOVDE_BAYT, `${Buffer.byteLength(RSS, 'utf8')} bayt`);
+
+  let cagrilar = [];
+  globalThis.fetch = async (adres) => {
+    cagrilar.push(String(adres));
+    return { ok: true, status: 200, text: async () => RSS };
+  };
+
+  try {
+    // --- yol seçimi SAF olarak ------------------------------------------
+    ok('⑬f · manşet dizisi varsa istemci yolu', istemciVerdi({ faizHaberleri: [] }) === true);
+    ok('⑬f · yalnız enflasyon listesi de istemci yolu',
+      istemciVerdi({ enflasyonHaberleri: [] }) === true);
+    ok('⑬f · hiç liste yoksa istemci yolu DEĞİL', istemciVerdi({ q: 'ASELSAN' }) === false);
+    ok('⑬f · gövde yok → istemci yolu değil', istemciVerdi(null) === false && istemciVerdi([]) === false);
+
+    const g = ayristirSunucuGirdisi;
+    ok('⑬f · ne q ne semboller → girdi_yok (ESKİ 400\'e düşer)',
+      g({}).error === 'girdi_yok', String(g({}).error));
+    ok('⑬f · q verildi → tek sorgu, varsayılan pazar TR',
+      g({ q: 'ASELSAN' }).sorgular.length === 1 && g({ q: 'ASELSAN' }).pazar === 'TR');
+    ok('⑬f · semboller virgüllü dizge KABUL', g({ semboller: 'ASELSAN,THYAO' }).sorgular.length === 2);
+    ok('⑬f · semboller dizi KABUL', g({ semboller: ['ASELSAN', 'THYAO'] }).sorgular.length === 2);
+    ok('⑬f · üçüncü tür → bad_semboller', g({ semboller: 42 }).error === 'bad_semboller');
+    ok('⑬f · sembol tavanı → cok_sembol (SESSİZ KIRPMA yok)',
+      g({ semboller: ['A', 'B', 'C', 'D', 'E'] }).error === 'cok_sembol',
+      String(g({ semboller: ['A', 'B', 'C', 'D', 'E'] }).error));
+    ok('⑬f · cok_sembol tavanı BİLDİRİYOR',
+      g({ semboller: ['A', 'B', 'C', 'D', 'E'] }).azami === AZAMI_SEMBOL_HABER);
+    ok('⑬f · tam tavan hâlâ kabul', g({ semboller: ['A', 'B', 'C', 'D'] }).sorgular.length === 4);
+    ok('⑬f · uzun q → too_long', g({ q: 'x'.repeat(haberAzamiSorgu + 1) }).error === 'too_long');
+    ok('⑬f · uzun sembol → too_long',
+      g({ semboller: ['x'.repeat(haberAzamiSorgu + 1)] }).error === 'too_long');
+    ok('⑬f · bilinmeyen haber pazarı → bad_haberPazari',
+      g({ q: 'x', haberPazari: 'TOKYO' }).error === 'bad_haberPazari');
+    ok('⑬f · bad_haberPazari izinli pazarları BİLDİRİYOR',
+      Array.isArray(g({ q: 'x', haberPazari: 'TOKYO' }).izinli));
+    ok('⑬f · makro sorgular app.js pmFed/pmInfl ile aynı beslemeyi istiyor',
+      /Fed OR Powell OR FOMC/.test(MAKRO_SORGULAR.faiz.q)
+      && /CPI OR inflation/.test(MAKRO_SORGULAR.enflasyon.q));
+
+    // --- girdi_yok ESKİ 400'e düşüyor mu (en kritik uyum denetimi) -------
+    {
+      const r = sahteRes();
+      await nabizHandler({ method: 'POST', body: {} }, r);
+      ok('⑬f · ÖLÇÜM · girdi_yok ESKİ hata kodunu koruyor (yeni kod icat edilmedi)',
+        r.kod === 400 && r.govde.error === 'faizHaberleri_yok', `${r.kod} / ${r.govde && r.govde.error}`);
+      ok('⑬f · o yolda ağa ÇIKILMADI', cagrilar.length === 0, `${cagrilar.length} istek`);
+    }
+
+    // --- doğrulama hataları ağdan ÖNCE dönüyor --------------------------
+    for (const [ad, govde, kod] of [
+      ['bad_haberPazari', { q: 'ASELSAN', haberPazari: 'TOKYO' }, 'bad_haberPazari'],
+      ['cok_sembol', { semboller: ['A', 'B', 'C', 'D', 'E'] }, 'cok_sembol'],
+      ['bad_semboller', { semboller: 42 }, 'bad_semboller'],
+    ]) {
+      cagrilar = [];
+      const r = sahteRes();
+      await nabizHandler({ method: 'POST', body: govde }, r);
+      ok(`⑬f · ${ad} → 400`, r.kod === 400 && r.govde.error === kod, `${r.kod} / ${r.govde && r.govde.error}`);
+      ok(`⑬f · ${ad} gövdesinde uyarı metni`, r.govde.uyari === UYARI);
+      ok(`⑬f · ${ad} ağdan ÖNCE döndü`, cagrilar.length === 0, `${cagrilar.length} istek`);
+    }
+
+    // --- sunucu yolu gerçekten çalışıyor mu -----------------------------
+    cagrilar = [];
+    {
+      const r = sahteRes();
+      await nabizHandler({ method: 'POST', body: {
+        q: 'ASELSAN', genislik: 62, enflasyonBaskisi: 0.4, risk: 0.2, simdi: SIMDI,
+      } }, r);
+      ok('⑬f · sunucu yolu → 200', r.kod === 200, `kod ${r.kod}`);
+      ok('⑬f · gövde alanları İSTEMCİ yolundakiyle AYNI (tek alan eklenmedi/çıkmadı)',
+        anahtarlar(r.govde) === 'degerlendirilen,durus,eksik,haberler,kaynak,konjonktur,ms,pencere,surum,taze,uyari',
+        anahtarlar(r.govde));
+      ok('⑬f · yol AÇIKÇA bildiriliyor (kaynak = sunucu)', r.govde.kaynak === 'sunucu', String(r.govde.kaynak));
+      ok('⑬f · ÖLÇÜM · 2 makro + 1 sorgu = 3 istek (paralel)',
+        cagrilar.length === 3, `${cagrilar.length} istek`);
+      ok('⑬f · ÖLÇÜM · bütün adresler İZİNLİ konakta', cagrilar.every(izinliAdres),
+        cagrilar.length ? cagrilar[0].slice(0, 46) : '-');
+      ok('⑬f · adresler pazar yereli taşıyor (hl/gl/ceid)',
+        cagrilar.every((a) => /[?&]hl=/.test(a) && /&gl=/.test(a) && /&ceid=/.test(a)));
+      ok('⑬f · haber ÖLÇÜMÜ gövdede (faiz/enflasyon/sorgu/sayac/tam)',
+        anahtarlar(r.govde.haberler) === 'enflasyon,faiz,sayac,sorgu,tam',
+        anahtarlar(r.govde.haberler));
+      ok('⑬f · ÖLÇÜM · makro beslemelerden 3 + 3 manşet okundu',
+        r.govde.haberler.faiz === 3 && r.govde.haberler.enflasyon === 3,
+        `${r.govde.haberler.faiz} / ${r.govde.haberler.enflasyon}`);
+      ok('⑬f · sayaçta hata/zaman aşımı/kısa gövde YOK → tam',
+        r.govde.haberler.tam === true && r.govde.haberler.sayac.basari === 3,
+        JSON.stringify(r.govde.haberler.sayac));
+      ok('⑬f · sorgu manşetleri AYRI dönüyor (duruşa girmiyor)',
+        r.govde.haberler.sorgu.length === 1 && r.govde.haberler.sorgu[0].sorgu === 'ASELSAN'
+        && r.govde.haberler.sorgu[0].adet === 3);
+      ok('⑬f · sorgu maddeleri taşıyıcının alan kümesini taşıyor',
+        anahtarlar(r.govde.haberler.sorgu[0].maddeler[0]) === MADDE_ALANLARI.slice().sort().join(','),
+        anahtarlar(r.govde.haberler.sorgu[0].maddeler[0]));
+      ok('⑬f · ÖLÇÜM · sunucunun topladığı manşet MOTORA GİRDİ (duruş neu değil)',
+        r.govde.degerlendirilen.faiz > 0 && r.govde.durus.kod === 'hawk',
+        `${JSON.stringify(r.govde.degerlendirilen)} manşet / kod ${r.govde.durus.kod}`);
+      ok('⑬f · cevap gövdeye bağlı olduğu için CDN\'de paylaşılmıyor',
+        /no-store/.test(r.basliklar['cache-control'] || ''), r.basliklar['cache-control']);
+    }
+
+    // --- sembol tavanına kadar istek sayısı ÖLÇÜLÜYOR -------------------
+    cagrilar = [];
+    {
+      const r = sahteRes();
+      await nabizHandler({ method: 'POST', body: {
+        semboller: ['ASELSAN', 'THYAO', 'KCHOL', 'SISE'], simdi: SIMDI,
+      } }, r);
+      ok('⑬f · 4 sembol → 200', r.kod === 200, `kod ${r.kod}`);
+      ok('⑬f · ÖLÇÜM · 2 makro + 4 sembol = 6 istek (maxDuration aritmetiği)',
+        cagrilar.length === 6, `${cagrilar.length} istek`);
+      ok('⑬f · her sembol kendi ölçümüyle dönüyor', r.govde.haberler.sorgu.length === 4);
+      ok('⑬f · genişlik verilmediği için konjonktür null (UYDURULMUYOR)',
+        r.govde.konjonktur === null && r.govde.eksik.length > 0, JSON.stringify(r.govde.eksik));
+    }
+
+    // --- besleme ARIZALI: 502 DEĞİL, dürüst sessizlik -------------------
+    cagrilar = [];
+    globalThis.fetch = async () => { cagrilar.push('hata'); return { ok: false, status: 503, text: async () => '' }; };
+    {
+      const r = sahteRes();
+      await nabizHandler({ method: 'POST', body: { q: 'ASELSAN', simdi: SIMDI } }, r);
+      ok('⑬f · besleme 503 → uç hâlâ 200 (duruş nötr hesaplanabiliyor)', r.kod === 200, `kod ${r.kod}`);
+      ok('⑬f · ama SESSİZ DEĞİL: `tam` false ve sayaç hatayı sayıyor',
+        r.govde.haberler.tam === false && r.govde.haberler.sayac.hata === 3,
+        JSON.stringify(r.govde.haberler.sayac));
+      ok('⑬f · manşet yok → yönler 0, kod neu (dürüst sessizlik)',
+        r.govde.durus.faizYon === 0 && r.govde.durus.kod === 'neu');
+      ok('⑬f · boş besleme "veri yok" ile KARIŞTIRILMIYOR (kaynak sunucu kalıyor)',
+        r.govde.kaynak === 'sunucu');
+    }
+
+    // --- İSTEMCİ yolu ağa HİÇ çıkmıyor (sahte fetch sayacı ile) ---------
+    cagrilar = [];
+    {
+      const r = sahteRes();
+      await nabizHandler({ method: 'POST', body: {
+        faizHaberleri: [{ title: 'Fed cuts rates, dovish turn', description: '', pubDate: yas(5) }],
+        enflasyonHaberleri: [], simdi: SIMDI,
+      } }, r);
+      ok('⑬f · ÖLÇÜM · istemci manşet verdi → SIFIR dış istek', cagrilar.length === 0, `${cagrilar.length} istek`);
+      ok('⑬f · istemci yolunda kaynak/haberler değişmedi',
+        r.kod === 200 && r.govde.kaynak === 'istemci' && r.govde.haberler === null);
+      ok('⑬f · istemci yolunda duruş yine motordan (dove)', r.govde.durus.kod === 'dove', r.govde.durus.kod);
+    }
+  } finally {
+    globalThis.fetch = gercekFetch;
+  }
+}
+// =========================================================================
+bolum('⑭ /api/news — sekizinci uç, haber (manşet) + api/_haber.js');
+// =========================================================================
+// NİYE AYRI BÖLÜM: haberin ağ taşıyıcısı `_ag.js` DEĞİL. Bu bölümün asıl
+// işi o AYRIMI ölçmek — `_ag.js`in beş konaklı IZINLI listesi SKOR
+// şeridinin güvenlik sözleşmesi ve haber oraya GİRMEDİ.
+// AĞ: ⑭e `globalThis.fetch`i sahte bir besleme ile değiştiriyor; öteki
+// bütün alt bölümler ağa HİÇ çıkmayan isteklerle çalışıyor.
+
+// --- ⑭a yüzey ----------------------------------------------------------
+ok('⑭a · default dışa aktarma bir fonksiyon', typeof haberHandler === 'function', typeof haberHandler);
+ok('⑭a · config.runtime = nodejs', haberConfig && haberConfig.runtime === 'nodejs');
+ok('⑭a · config.maxDuration = 10 (TEK istek; 60 kopyalanmadı)',
+  haberConfig && haberConfig.maxDuration === 10, String(haberConfig && haberConfig.maxDuration));
+ok('⑭a · limit tavanı 25, varsayılan 10',
+  haberAzamiMadde === 25 && haberVarsayilanMadde === 10,
+  `${haberVarsayilanMadde}..${haberAzamiMadde}`);
+ok('⑭a · uçtaki tavan taşıyıcının TA KENDİSİ (yerel kopya yok)',
+  haberAzamiMadde === agAzamiMadde);
+ok('⑭a · varsayılan pazar KENDİ beyaz listesinde',
+  haberPazarlar.includes(VARSAYILAN_PAZAR), `${VARSAYILAN_PAZAR} ∈ ${haberPazarlar.join('/')}`);
+ok('⑭a · pazar listesi TR + US (üçüncüsü ÖLÇÜLMEDİ, uydurulmadı)',
+  haberPazarlar.length === 2 && haberPazarlar.includes('TR') && haberPazarlar.includes('US'),
+  haberPazarlar.join(','));
+ok('⑭a · sorgu tavanı sayı ve pozitif',
+  Number.isInteger(haberAzamiSorgu) && haberAzamiSorgu > 0, String(haberAzamiSorgu));
+ok('⑭a · zaman aşımı sayı ve maxDuration tavanının ALTINDA',
+  Number.isInteger(HABER_ISTEK_MS) && HABER_ISTEK_MS > 0
+  && HABER_ISTEK_MS < haberConfig.maxDuration * 1000, `${HABER_ISTEK_MS} ms`);
+ok('⑭a · izin listesi TEK konak (yalnız news.google.com)',
+  IZINLI_KONAK.length === 1 && IZINLI_KONAK[0] === 'news.google.com', IZINLI_KONAK.join(','));
+ok('⑭a · madde alan kümesi beyaz liste (title/link/pubDate/source)',
+  MADDE_ALANLARI.join(',') === 'title,link,pubDate,source', MADDE_ALANLARI.join(','));
+ok('⑭a · kısa gövde eşiği sayı ve pozitif',
+  Number.isInteger(ASGARI_GOVDE_BAYT) && ASGARI_GOVDE_BAYT > 0, String(ASGARI_GOVDE_BAYT));
+
+// --- ⑭b method kapısı --------------------------------------------------
+{
+  const o = await cagirUc(haberHandler, 'OPTIONS', {});
+  ok('⑭b · OPTIONS → 204 + end()', o.kod === 204 && o.bitti === true, `kod ${o.kod}`);
+  ok('⑭b · CORS yöntem başlığı GET, OPTIONS',
+    o.basliklar['access-control-allow-methods'] === 'GET, OPTIONS',
+    o.basliklar['access-control-allow-methods']);
+  ok('⑭b · CORS köken başlığı *', o.basliklar['access-control-allow-origin'] === '*');
+
+  const p = await cagirUc(haberHandler, 'POST', {});
+  ok('⑭b · POST → 405 (bu uç GET)', p.kod === 405 && p.govde.error === 'method_not_allowed', `kod ${p.kod}`);
+  ok('⑭b · 405 Allow başlığı GET, OPTIONS', p.basliklar.allow === 'GET, OPTIONS', p.basliklar.allow);
+  ok('⑭b · hata yolu Cache-Control: max-age=30',
+    p.basliklar['cache-control'] === 'public, max-age=30', p.basliklar['cache-control']);
+  ok('⑭b · 405 gövdesinde uyarı metni', p.govde.uyari === UYARI);
+}
+
+// --- ⑭c sorgu doğrulaması — hepsi ağdan ÖNCE dönüyor -------------------
+{
+  const gercekFetch = globalThis.fetch;
+  let agDenemesi = 0;
+  globalThis.fetch = (...a) => { agDenemesi++; throw new Error('⑭c AĞ YASAĞI: ' + String(a[0])); };
+  try {
+    const e = async (query) => (await cagirUc(haberHandler, 'GET', query)).govde.error;
+    ok('⑭c · q yok → missing_q', (await e({})) === 'missing_q');
+    ok('⑭c · boş q → missing_q', (await e({ q: '   ' })) === 'missing_q');
+    ok('⑭c · tavanı aşan q → too_long',
+      (await e({ q: 'x'.repeat(haberAzamiSorgu + 1) })) === 'too_long');
+    ok('⑭c · bilinmeyen pazar → bad_market', (await e({ q: 'ASELSAN', market: 'TOKYO' })) === 'bad_market');
+    ok('⑭c · limit tavanı → limit_buyuk (SESSİZ KIRPMA yok)',
+      (await e({ q: 'ASELSAN', limit: String(haberAzamiMadde + 1) })) === 'limit_buyuk');
+    ok('⑭c · limit 0 → bad_limit', (await e({ q: 'ASELSAN', limit: '0' })) === 'bad_limit');
+    ok('⑭c · limit negatif → bad_limit', (await e({ q: 'ASELSAN', limit: '-3' })) === 'bad_limit');
+    ok('⑭c · limit ondalık → bad_limit', (await e({ q: 'ASELSAN', limit: '2.5' })) === 'bad_limit');
+    ok('⑭c · limit metin → bad_limit', (await e({ q: 'ASELSAN', limit: 'çok' })) === 'bad_limit');
+
+    const bm = await cagirUc(haberHandler, 'GET', { q: 'ASELSAN', market: 'TOKYO' });
+    ok('⑭c · bad_market izinli pazarları BİLDİRİYOR',
+      Array.isArray(bm.govde.izinli) && bm.govde.izinli.includes('TR'), JSON.stringify(bm.govde.izinli));
+    const lb = await cagirUc(haberHandler, 'GET', { q: 'ASELSAN', limit: '99' });
+    ok('⑭c · limit_buyuk tavanı VE isteneni BİLDİRİYOR',
+      lb.govde.azami === haberAzamiMadde && lb.govde.istenen === 99,
+      `${lb.govde.azami} / ${lb.govde.istenen}`);
+    const tl = await cagirUc(haberHandler, 'GET', { q: 'x'.repeat(haberAzamiSorgu + 1) });
+    ok('⑭c · too_long tavanı BİLDİRİYOR', tl.govde.azami === haberAzamiSorgu);
+
+    for (const r of [bm, lb, tl]) {
+      ok('⑭c · 4xx gövdesinde uyarı metni', r.govde.uyari === UYARI);
+      ok('⑭c · 4xx kısa önbellekli', r.basliklar['cache-control'] === 'public, max-age=30');
+    }
+    ok('⑭c · ÖLÇÜM · doğrulama yolu ağa HİÇ çıkmadı', agDenemesi === 0, `${agDenemesi} deneme`);
+  } finally {
+    globalThis.fetch = gercekFetch;
+  }
+}
+
+// --- ⑭d saf yardımcılar — adres kurma ve RSS ayrıştırma -----------------
+{
+  ok('⑭d · TR adresi hl=tr&gl=TR&ceid=TR:tr',
+    /[?&]hl=tr&gl=TR&ceid=TR%3Atr$/.test(haberAdresi('ASELSAN', 'TR')), haberAdresi('ASELSAN', 'TR'));
+  ok('⑭d · US adresi hl=en-US&gl=US&ceid=US:en',
+    /[?&]hl=en-US&gl=US&ceid=US%3Aen$/.test(haberAdresi('AAPL', 'US')), haberAdresi('AAPL', 'US'));
+  ok('⑭d · varsayılan pazar TR (sessiz US yok)', haberAdresi('ASELSAN') === haberAdresi('ASELSAN', 'TR'));
+  ok('⑭d · pazar kodu büyük/küçük harf duyarsız', haberAdresi('AAPL', 'us') === haberAdresi('AAPL', 'US'));
+  ok('⑭d · sorgu KAÇIRILIYOR (boşluk/" adresi bozmuyor)',
+    !/\s/.test(haberAdresi('Fed "rate cut" & faiz', 'TR'))
+    && haberAdresi('Fed "rate cut" & faiz', 'TR').includes('%22'));
+  ok('⑭d · boş sorgu → null (uydurma besleme yok)',
+    haberAdresi('', 'TR') === null && haberAdresi('   ', 'TR') === null);
+  ok('⑭d · bilinmeyen pazar → null', haberAdresi('ASELSAN', 'TOKYO') === null);
+  ok('⑭d · tavanı aşan sorgu → null', haberAdresi('x'.repeat(haberAzamiSorgu + 1), 'TR') === null);
+  ok('⑭d · kurulan adres KENDİ izin listesinden geçiyor', izinliAdres(haberAdresi('ASELSAN', 'TR')) === true);
+  ok('⑭d · http REDDEDİLİYOR (yalnız https)', izinliAdres('http://news.google.com/rss/search?q=x') === false);
+  ok('⑭d · izin listesi DIŞI konak reddediliyor',
+    izinliAdres('https://evil.example/rss') === false
+    && izinliAdres('https://news.google.com.evil.example/rss') === false);
+  ok('⑭d · bozuk adres reddediliyor (çökmüyor)', izinliAdres('xxx') === false && izinliAdres(null) === false);
+
+  // RSS ayrıştırma — SAF, fikstürle. İkizi app.js:164 `parseRSS`.
+  const XML = '<?xml version="1.0"?><rss><channel>'
+    + '<item><title>Birinci manşet &amp; ek</title><link>https://news.google.com/a</link>'
+    + '<pubDate>Mon, 19 Oct 2026 09:00:00 GMT</pubDate><source url="https://x">Örnek</source></item>'
+    + '<item><title><![CDATA[İkinci manşet]]></title><link>https://news.google.com/b</link>'
+    + '<pubDate>Mon, 19 Oct 2026 08:00:00 GMT</pubDate></item>'
+    + '<item><link>https://news.google.com/c</link><pubDate>x</pubDate></item>'
+    + '</channel></rss>';
+  const m = ayristirRSS(XML, 10);
+  ok('⑭d · başlıksız madde ELENDİ (manşet değil)', m.length === 2, `${m.length} madde`);
+  ok('⑭d · madde alan kümesi SABİT',
+    anahtarlar(m[0]) === MADDE_ALANLARI.slice().sort().join(','), anahtarlar(m[0]));
+  ok('⑭d · XML kaçışı çözülüyor (&amp; → &)', m[0].title === 'Birinci manşet & ek', m[0].title);
+  ok('⑭d · CDATA okunuyor', m[1].title === 'İkinci manşet', m[1].title);
+  ok('⑭d · bağlantı okunuyor', m[0].link === 'https://news.google.com/a', m[0].link);
+  ok('⑭d · kaynak adı okunuyor, yoksa boş (uydurulmuyor)',
+    m[0].source === 'Örnek' && m[1].source === '', `${m[0].source} / "${m[1].source}"`);
+  ok('⑭d · pubDate ÜST KAYNAĞIN VERDİĞİ GİBİ (ms\'e çevrilmedi)',
+    m[0].pubDate === 'Mon, 19 Oct 2026 09:00:00 GMT', m[0].pubDate);
+  ok('⑭d · Atom <entry> + <link href> de okunuyor', (() => {
+    const a = ayristirRSS('<feed><entry><title>Atom başlık</title>'
+      + '<link rel="alternate" href="https://news.google.com/z"/>'
+      + '<updated>2026-10-19T09:00:00Z</updated></entry></feed>', 5);
+    return a.length === 1 && a[0].link === 'https://news.google.com/z'
+      && a[0].pubDate === '2026-10-19T09:00:00Z';
+  })());
+  ok('⑭d · limit UYULUYOR', ayristirRSS(XML, 1).length === 1);
+  ok('⑭d · limit taşıyıcı tavanının üstünde olsa da çökmüyor', ayristirRSS(XML, 9999).length === 2);
+  ok('⑭d · limit 0 → boş (sessiz varsayılan yok)', ayristirRSS(XML, 0).length === 0);
+  ok('⑭d · boş/çöp gövde → boş dizi (çökmüyor)',
+    ayristirRSS('', 10).length === 0 && ayristirRSS(null, 10).length === 0
+    && ayristirRSS('<html>hiç madde yok</html>', 10).length === 0);
+
+  // Sayaç — "ölçemedim" ile "haber yok" ayrımı.
+  const s = bosHaberSayac();
+  ok('⑭d · boş sayaç alanları sabit',
+    anahtarlar(s) === 'basari,bayt,hata,istek,kisa,zamanAsimi', anahtarlar(s));
+  ok('⑭d · temiz sayaç → tam', haberTam(s) === true);
+  ok('⑭d · hata/zaman aşımı/kısa gövde → tam DEĞİL',
+    haberTam({ ...s, hata: 1 }) === false && haberTam({ ...s, zamanAsimi: 1 }) === false
+    && haberTam({ ...s, kisa: 1 }) === false);
+  ok('⑭d · sayaç yoksa tam DEĞİL (sessiz true yok)', haberTam(null) === false);
+  ok('⑭d · pazar yereli tablosu her pazar için hl/gl/ceid taşıyor',
+    haberPazarlar.every((p) => PAZAR_YERELI[p] && PAZAR_YERELI[p].hl
+      && PAZAR_YERELI[p].gl && PAZAR_YERELI[p].ceid));
+}
+
+// --- ⑭e gerçek cevap — SAHTE besleme (ağa çıkmıyor) --------------------
+{
+  const gercekFetch = globalThis.fetch;
+  const madde = (i) => `<item><title>Manşet ${i}</title><link>https://news.google.com/${i}</link>`
+    + `<pubDate>Mon, 19 Oct 2026 0${i}:00:00 GMT</pubDate><source url="https://x">Örnek Yayın</source></item>`;
+  const RSS = '<?xml version="1.0"?><rss><channel>'
+    + '<title>Örnek besleme — kısa gövde eşiğini aşmak için yeterince uzun kanal başlığı</title>'
+    + [1, 2, 3, 4, 5].map(madde).join('') + '</channel></rss>';
+  let adresler = [];
+  globalThis.fetch = async (adres) => {
+    adresler.push(String(adres));
+    return { ok: true, status: 200, text: async () => RSS };
+  };
+  try {
+    const r = await cagirUc(haberHandler, 'GET', { q: 'ASELSAN', market: 'TR', limit: '3' });
+    ok('⑭e · geçerli GET → 200', r.kod === 200, `kod ${r.kod}`);
+    ok('⑭e · gövde alanları sabit',
+      anahtarlar(r.govde) === 'adet,limit,maddeler,market,ms,q,sayac,tam,uyari', anahtarlar(r.govde));
+    ok('⑭e · uyarı metni gövdede', r.govde.uyari === UYARI);
+    ok('⑭e · istenen q/market/limit cevapta GERİ BİLDİRİLİYOR',
+      r.govde.q === 'ASELSAN' && r.govde.market === 'TR' && r.govde.limit === 3);
+    ok('⑭e · ÖLÇÜM · TEK dış istek (uç fan-out yapmıyor)', adresler.length === 1, `${adresler.length} istek`);
+    ok('⑭e · istek İZİNLİ konağa gitti', adresler.every(izinliAdres), adresler[0].slice(0, 46));
+    ok('⑭e · limit UYULDU (5 maddelik besleme, 3 istendi)',
+      r.govde.maddeler.length === 3 && r.govde.adet === 3, `${r.govde.adet} madde`);
+    ok('⑭e · madde alan kümesi beyaz listeli',
+      anahtarlar(r.govde.maddeler[0]) === MADDE_ALANLARI.slice().sort().join(','),
+      anahtarlar(r.govde.maddeler[0]));
+    ok('⑭e · `tam` ölçüm sonucunu bildiriyor', r.govde.tam === true);
+    ok('⑭e · sayaç gövdede (ölçemedim/haber yok ayrımı istemciye geçiyor)',
+      r.govde.sayac && r.govde.sayac.istek === 1 && r.govde.sayac.basari === 1 && r.govde.sayac.bayt > 0,
+      JSON.stringify(r.govde.sayac));
+    ok('⑭e · ms HAM sayı', typeof r.govde.ms === 'number' && r.govde.ms >= 0);
+    ok('⑭e · DOLU ve TAM cevap uzun pencerede önbelleklendi',
+      /max-age=120/.test(r.basliklar['cache-control'] || ''), r.basliklar['cache-control']);
+
+    const v = await cagirUc(haberHandler, 'GET', { q: 'ASELSAN' });
+    ok('⑭e · limit verilmedi → varsayılan 10, pazar varsayılan TR',
+      v.govde.limit === haberVarsayilanMadde && v.govde.market === VARSAYILAN_PAZAR,
+      `${v.govde.limit} / ${v.govde.market}`);
+
+    // BOŞ BESLEME: 200 + boş liste + tam:true — "haber yok" ARIZA DEĞİL.
+    adresler = [];
+    globalThis.fetch = async (adres) => {
+      adresler.push(String(adres));
+      return { ok: true, status: 200, text: async () => '<?xml version="1.0"?><rss><channel>'
+        + '<title>Hiç maddesi olmayan gecerli bir besleme</title>'
+        // ASGARI_GOVDE_BAYT eşiğini AŞMAK için dolgu: gövde KISA olursa
+        // taşıyıcı bunu "ölçemedim" sayar; burada ölçülen şey "haber yok".
+        + '<description>' + 'bos besleme dolgusu '.repeat(20) + '</description>'
+        + '</channel></rss>' };
+    };
+    const bos = await cagirUc(haberHandler, 'GET', { q: 'YOKBOYLEBIRSEY' });
+    ok('⑭e · haberi olmayan sorgu → 200 + boş liste + tam (arıza DEĞİL)',
+      bos.kod === 200 && bos.govde.adet === 0 && bos.govde.tam === true,
+      `${bos.kod} / ${bos.govde.adet} / ${bos.govde.tam}`);
+    ok('⑭e · boş cevap KISA önbellekli (birkaç dakika sonra manşet gelebilir)',
+      bos.basliklar['cache-control'] === 'public, max-age=30', bos.basliklar['cache-control']);
+
+    // ÜST KAYNAK 503: "ölçemedim" — boş liste ile KARIŞTIRILMIYOR.
+    globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => '' });
+    const ariza = await cagirUc(haberHandler, 'GET', { q: 'ASELSAN' });
+    ok('⑭e · üst kaynak 503 → 200 ama `tam` false (ölçemedim ≠ haber yok)',
+      ariza.kod === 200 && ariza.govde.tam === false && ariza.govde.sayac.hata === 1,
+      `${ariza.kod} / tam ${ariza.govde.tam}`);
+
+    // KISA GÖVDE: ölçemedim.
+    globalThis.fetch = async () => ({ ok: true, status: 200, text: async () => '<rss/>' });
+    const kisa = await cagirUc(haberHandler, 'GET', { q: 'ASELSAN' });
+    ok('⑭e · kısa gövde → ölçemedim (`kisa` sayacı, tam false)',
+      kisa.govde.tam === false && kisa.govde.sayac.kisa === 1, JSON.stringify(kisa.govde.sayac));
+
+    // ZAMAN AŞIMI: AbortError sayacı ayrı tutuluyor.
+    globalThis.fetch = async () => { const e = new Error('iptal'); e.name = 'AbortError'; throw e; };
+    const za = await cagirUc(haberHandler, 'GET', { q: 'ASELSAN' });
+    ok('⑭e · zaman aşımı AYRI sayılıyor (hata ile karışmıyor)',
+      za.kod === 200 && za.govde.sayac.zamanAsimi === 1 && za.govde.sayac.hata === 0,
+      JSON.stringify(za.govde.sayac));
+  } finally {
+    globalThis.fetch = gercekFetch;
+  }
+}
+
+// --- ⑭f statik denetimler — ayrım metinde de duruyor -------------------
+{
+  const src = readFileSync(NEWS_PATH, 'utf8');
+  const kod = src.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  const habSrc = readFileSync(HABER_PATH, 'utf8');
+  const habKod = habSrc.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+
+  ok('⑭f · uç uyarı metnini taşıyor', src.includes(UYARI));
+  ok('⑭f · HAM METİN · `Intl` kullanımı yok', !/\bIntl\b/.test(kod) && !/\bIntl\b/.test(habKod));
+  ok('⑭f · HAM METİN · `toFixed(` yok', !kod.includes('toFixed(') && !habKod.includes('toFixed('));
+  ok('⑭f · HAM METİN · `toLocaleString` yok',
+    !kod.includes('toLocaleString') && !habKod.includes('toLocaleString'));
+  ok('⑭f · hata yolunda `api/news:` önekli log var', /console\.error\('api\/news:/.test(kod));
+  ok('⑭f · 502 yalnız makine kodu döndürüyor',
+    /error:\s*'haber_alinamadi'/.test(kod) && !/\bdetail\s*:/.test(kod));
+
+  // ASIL AYRIM: haber `_ag.js`e GİRMEDİ.
+  ok('⑭f · uç `_ag.js` import ETMİYOR', !/_ag\.js/.test(kod));
+  ok('⑭f · taşıyıcı `_ag.js` import ETMİYOR (kendi zaman aşımı/izin listesi)', !/_ag\.js/.test(habKod));
+  ok('⑭f · uç motor/ayar import ETMİYOR (skor şeridinin İÇİNDE değil)',
+    !/_motor\.js|_ayar\.js/.test(kod));
+  ok('⑭f · app.js / config.js import edilmiyor',
+    !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src)
+    && !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(habSrc));
+  const agSrc2 = readFileSync(AG_PATH, 'utf8');
+  ok('⑭f · ÖLÇÜM · `_ag.js`e haber konağı EKLENMEDİ', !/news\.google/.test(agSrc2));
+  ok('⑭f · ÖLÇÜM · `_ag.js` IZINLI listesi hâlâ ESKİ konakları taşıyor',
+    (agSrc2.match(/finance\.yahoo\.com|www\.sec\.gov|data\.sec\.gov|www\.isyatirim\.com\.tr/g) || []).length >= 4);
+
+  // AĞA ÇIKAN TEK YER taşıyıcı: uçta `fetch(` yok.
+  ok('⑭f · uçta çıplak `fetch(` yok (ağ TAŞIYICIDA)', !/\bfetch\(/.test(kod));
+  ok('⑭f · taşıyıcıda zaman aşımı GERÇEKTEN var (AbortController + signal)',
+    /AbortController/.test(habKod) && /signal:/.test(habKod) && /clearTimeout/.test(habKod));
+  ok('⑭f · taşıyıcı adresi izin listesinden GEÇİRİYOR (çağrı öncesi)',
+    /izinliAdres\(adres\)/.test(habKod));
+
+  // KİŞİSEL VERİ: 9007fc3'te SEC kimliğinden çıkarılan e-posta burada
+  // tekrar doğmasın.
+  ok('⑭f · kimlik dizgesinde e-posta/anahtar YOK',
+    !/@gmail|ANTHROPIC|apiKey/.test(habSrc), 'temiz');
+  ok('⑭f · `User-Agent` sade bir ad taşıyor', /'User-Agent':\s*'day-starter\/1\.0/.test(habKod));
+
+  // app.js'teki İKİZE işaret ediliyor mu (kopyala-yapıştır değil, atıf).
+  ok('⑭f · `ayristirRSS` app.js\'teki ikizine İŞARET EDİYOR',
+    /app\.js:\d+/.test(habSrc) && /parseRSS/.test(habSrc));
+  ok('⑭f · taşıyıcı ELLE yazıldığını söylüyor (üretilmiş değil)', /ELLE YAZILMIŞ/i.test(habSrc));
+
+  // KV önbelleği YOK — gerekçesi YAZILI (sessiz eksiklik değil).
+  ok('⑭f · `_onbellek.js` import EDİLMEMİŞ ve gerekçesi başlıkta yazılı',
+    !/_onbellek\.js/.test(kod) && /KV ÖNBELLEĞİ YOK/.test(src));
+
+  // Yeni bağımlılık EKLENMEDİ: RSS ayrıştırma elle.
+  ok('⑭f · taşıyıcı dış paket import ETMİYOR (yeni bağımlılık yok)',
+    !/^\s*import\s/m.test(habKod), 'import yok');
 }
 
 bitir();

@@ -29,6 +29,43 @@
 //  EKLENMEDİ; `_ag.js`e DOKUNULMADI.
 //
 //  ---------------------------------------------------------------------
+//  2026-10-24'TE KARAR DEĞİŞTİ — ESKİSİ YUKARIDA DURUYOR, SİLİNMEDİ
+//
+//  NİYE DEĞİŞTİ: yukarıdaki (b) kararı "İSTEMCİ manşetleri ZATEN
+//  topluyor" ölçümüne dayanıyordu. O ölçüm WEB İÇİN doğruydu ve NATIVE
+//  İÇİN YANLIŞ çıktı. Native istemci (mobile/) RSS TARAYAMIYOR:
+//  webdeki yol `fetchVia` (tarayıcı vekili) + `parseRSS` (`DOMParser`)
+//  üzerinden gidiyor, ikisi de native tarafta YOK. Yani (b) kararı
+//  native istemciye ⚡ Nabız'ı KAPATIYORDU — "native ince istemci,
+//  hesap/veri sunucuda" kuralının tam tersi.
+//
+//  (a)'nın ESKİ GEREKÇESİ HÂLÂ GEÇERLİ ve ÇÖZÜLDÜ: haber `_ag.js`in beş
+//  konaklı `IZINLI` listesine GİRMEDİ. `_ag.js` AÇILMADI,
+//  DEĞİŞTİRİLMEDİ. Haberin KENDİ taşıyıcısı var: `api/_haber.js` —
+//  kendi konak izin listesi (yalnız `news.google.com`), kendi zaman
+//  aşımı (6000 ms), kendi sayaçları. Skor şeridinin konak sözleşmesi
+//  BİR MİLİMETRE genişlemedi.
+//
+//  GERİYE DÖNÜK UYUM ŞART — MEVCUT WEB BUNA BAĞLI: istemci manşet
+//  gönderirse DAVRANIŞ DEĞİŞMEZ; uç ağa ÇIKMAZ, tek bir sayı farklı
+//  dönmez. Sunucu yolu YALNIZ manşet gelmediğinde ve `q`/`semboller`
+//  verildiğinde açılır. Hangi yolun kullanıldığı cevapta AÇIKÇA
+//  yazıyor: `kaynak: 'istemci' | 'sunucu'`. Tahmin edilmesi gereken bir
+//  şey bırakılmadı.
+//
+//  SORGULAR UYDURULMADI: sunucu yolu app.js:11629-11630'daki pmFed /
+//  pmInfl sorgularını BİREBİR kullanıyor (aşağıda MAKRO_SORGULAR).
+//  Yeni bir sorgu yazmak, sunucunun okuduğu manşet kümesini ekranın
+//  okuduğundan AYRIŞTIRMAK olurdu — aynı duruş iki yerde iki değer
+//  verirdi.
+//
+//  SKOR DEĞİŞMEDİ: haber katmanı hiçbir skora GİRDİ VERMİYOR. Bu uç
+//  skor zincirinin (/api/score ⊂ recommend ⊂ analyze ⊂ compare) İÇİNDE
+//  değil, YANINDA — ve değişiklik yalnız GİRDİNİN NEREDEN GELDİĞİNİ
+//  etkiliyor, girdiyle NE YAPILDIĞINI değil. Yön matematiği hâlâ
+//  motorda, tek eşik buraya kopyalanmadı.
+//
+//  ---------------------------------------------------------------------
 //  MANTIK YENİDEN YAZILMADI — MOTORA DİLİMLENDİ
 //
 //  Yön matematiği app.js'te, ama AĞA ÇIKAN iki fonksiyonun (computeMacro ·
@@ -79,7 +116,7 @@
 //  CYCLE_PHASES.label içinde KALIYOR — motorda da duruyorlar ama BİLEREK
 //  dışa verilmiyorlar.
 //
-//  ÖNBELLEK YOK: 0 dış istek + girdi istemcinin POST gövdesi. Gövdeyi
+//  ÖNBELLEK YOK: istemci yolunda 0 dış istek + girdi POST gövdesi. Gövdeyi
 //  anahtara özetlemek yeniden hesaplamaktan pahalı olurdu (gerekçe
 //  api/_onbellek.js başlığında yazılı). Cevap `no-store`.
 //
@@ -91,8 +128,15 @@
 //  SÖZLEŞME
 //    POST /api/pulse   Content-Type: application/json
 //    Gövde: {
-//      faizHaberleri:      [{ title, description?, pubDate }],   // zorunlu
-//      enflasyonHaberleri: [{ title, description?, pubDate }],   // zorunlu
+//      faizHaberleri:      [{ title, description?, pubDate }],   // bkz. ↓
+//      enflasyonHaberleri: [{ title, description?, pubDate }],   // bkz. ↓
+//        İKİSİ DE GELİRSE ya da BİRİ GELİRSE → İSTEMCİ YOLU (eski
+//        davranış, ağa çıkılmaz). HİÇBİRİ GELMEZSE ve `q`/`semboller`
+//        verilmişse → SUNUCU YOLU (uç haberi kendi tarar). İkisi de
+//        yoksa eski hata: 400 `faizHaberleri_yok`.
+//      q?:                 serbest metin — sunucu yolunu AÇAR
+//      semboller?:         ['ASELS','THYAO'] ya da 'ASELS,THYAO' — açar
+//      haberPazari?:       TR | US  (sembol haberinin yerel ayarı)
 //      genislik?:          0..100   (evrenin ortalama TA skoru)
 //      enflasyonBaskisi?:  0..1     (computeMacro dims.infl)
 //      risk?:              0..1     (jeopolitik risk, dims.risk)
@@ -104,8 +148,23 @@
 //      pencere: { gun, tazelikSaat, tazelikAgirlik },
 //      degerlendirilen: { faiz, enflasyon },
 //      konjonktur: { faz, boyutlar: {rate,infl,growth,risk}, sektorler[] } | null,
+//      kaynak: 'istemci' | 'sunucu',
+//      haberler: null | { faiz, enflasyon, sorgu: [{sorgu, market,
+//                         adet, maddeler[]}], sayac, tam },
 //      eksik: [...], surum, ms, uyari
 //    }
+//      kaynak    manşetleri KİMİN topladığı. 'istemci' iken `haberler`
+//                null'dır ve uç ağa HİÇ çıkmamıştır.
+//      haberler  sunucu yolunun ÖLÇÜMÜ. `faiz`/`enflasyon` = DURUŞA
+//                giren manşet SAYILARI (metin değil: duruş onlardan
+//                üretildi, tele geri dönmelerinin anlamı yok).
+//                `sorgu[]` = çağıranın `q`/`semboller`i için okunan
+//                manşetler; bunlar DURUŞ MATEMATİĞİNE GİRMİYOR
+//                (sembol haberinden makro duruş çıkarmak, app.js'in
+//                yapmadığı bir hesap olurdu) — istemci onları ekranda
+//                gösterebilsin diye METİN olarak dönüyorlar.
+//                `tam` false ise manşet taraması EKSİK: duruş yine
+//                dönüyor ama DAHA AZ manşetle hesaplandı.
 //      faizYon/enflasyonYon/baski  -1..+1 HAM sayı
 //      kod   hawk|dove|neu   (SABİT KÜME, motordan)
 //      faz   early|mid|late|recession   (SABİT KÜME, motordan)
@@ -120,11 +179,18 @@
 import { buildMotor, IMZA } from './_motor.js';
 import { TA_WEIGHTS, TA_BENCHMARK, IMZA_AYAR } from './_ayar.js';
 import { canliAg } from './_ag.js';
+// Haberin KENDİ taşıyıcısı — `_ag.js` DEĞİL (gerekçe: dosya başlığı +
+// api/_haber.js başlığı). `canliAg` yukarıda yalnız MOTORU KURMAK için
+// duruyor; haber onun `fetch` yüzeyinden GEÇMİYOR.
+import {
+  haberCek, bosHaberSayac, haberTam, AZAMI_HABER_SORGU, HABER_PAZARLAR,
+} from './_haber.js';
 
-// maxDuration 10 · /api/causal ile AYNI kademe ve aynı gerekçe: bu uç
-// AĞA ÇIKMIYOR. Öteki uçların 30-60 sn'si Yahoo/SEC turu içindi; buraya
-// kopyalamak ölçülmemiş bir sayı yazmak olurdu. İş yükü: iki regex
-// taraması × en çok 240 manşet — milisaniyeler.
+// maxDuration 10 · İSTEMCİ YOLUNDA /api/causal ile aynı kademe (ağ turu
+// yok). SUNUCU YOLU bu tavanı AŞMIYOR, ÖLÇÜLDÜ: istekler PARALEL gidiyor
+// ve `_haber.js` her birine 6000 ms zaman aşımı koyuyor, yani en kötü hâl
+// 6 sn + regex ayrıştırma. 10 sn tavanı KORUNDU; 30/60 sn'ye çıkarmak
+// ölçülmemiş bir sayı yazmak olurdu.
 export const config = { runtime: 'nodejs', maxDuration: 10 };
 
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
@@ -156,6 +222,98 @@ export const AZAMI_GOVDE_BAYT = 131072;
 // ---------------------------------------------------------------------
 export const PENCERE_GUN = 14;
 export const TAZE_GUN = 2;
+
+// ---------------------------------------------------------------------
+//  SUNUCU YOLUNUN SORGULARI — UYDURULMADI, app.js'ten BİREBİR ALINDI
+//  (app.js:11629 `pmFed` · app.js:11630 `pmInfl`). Dil/pazar da oradan:
+//  faiz sorgusu TR, enflasyon sorgusu EN. Metni burada "iyileştirmek",
+//  sunucunun okuduğu manşet kümesini ekranın okuduğundan ayrıştırır ve
+//  aynı duruş iki yerde iki değer verirdi.
+//  pmBig (büyük manşet) BİLEREK YOK: bu uç büyük manşet DÖNDÜRMÜYOR,
+//  o blok tamamen sunum (dosya başlığında yazılı).
+// ---------------------------------------------------------------------
+export const MAKRO_SORGULAR = {
+  faiz: {
+    market: 'TR',
+    q: '(Fed OR Powell OR FOMC OR "Merkez Bankası") (faiz OR "interest rate" OR "rate cut" OR "rate hike" OR "faiz kararı" OR hawkish OR dovish)',
+  },
+  enflasyon: {
+    market: 'US',
+    q: '(CPI OR inflation OR "consumer price" OR "Treasury yield" OR "10-year yield" OR "jobs report" OR PCE)',
+  },
+};
+
+// Sunucu yolunda bir beslemeden okunan azami manşet. AZAMI_BASLIK (120)
+// İSTEMCİ yolunun tavanı ve orada girdiyi istemci TOPLAMIŞ oluyor —
+// bedava. Sunucu yolunda her manşet BİZİM taradığımız bayt, o yüzden
+// taşıyıcının kendi tavanı (`_haber.js` AZAMI_MADDE = 25) geçerli.
+export const SUNUCU_AZAMI_MADDE = 25;
+
+// Sembol başına haber İSTEĞİ sayısı değil, SEMBOL sayısı tavanı.
+// ARİTMETİK: 2 makro + 4 sembol = 6 PARALEL istek × 6 sn zaman aşımı,
+// hepsi 10 sn `maxDuration` tavanının altında. Beşinci sembol tavanı
+// aşmıyor ama ölçülmemiş; gerekirse ÖLÇÜLÜP büyütülür.
+export const AZAMI_SEMBOL_HABER = 4;
+
+/**
+ * İstemci manşet VERDİ Mİ? Tek soru, tek yerde — iki ayrı yerde
+ * sorulursa bir gün ayrışır ve geriye dönük uyum sessizce kırılır.
+ * SAF. Dışa aktarılıyor: tests/uc-test.mjs ağsız ölçebiliyor.
+ */
+export function istemciVerdi(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  return Array.isArray(body.faizHaberleri) || Array.isArray(body.enflasyonHaberleri);
+}
+
+/**
+ * Sunucu yolunun girdisini çöz: `q` ve/veya `semboller`.
+ * SAF: ağa çıkmaz. Dışa aktarılıyor — ağsız sınanabiliyor.
+ *
+ * SESSİZ KIRPMA YOK: sembol tavanı aşılırsa açıkça reddediliyor
+ * (chart.js'in `cok_sembol` kararıyla aynı fikir).
+ *
+ * @returns {{sorgular:{sorgu:string,market:string}[], pazar:string}
+ *           | {error:string, ...}}
+ */
+export function ayristirSunucuGirdisi(body) {
+  const pazarHam = String((body && body.haberPazari) ?? 'TR').trim().toUpperCase();
+  if (!HABER_PAZARLAR.includes(pazarHam)) {
+    return { error: 'bad_haberPazari', izinli: HABER_PAZARLAR };
+  }
+
+  // `semboller` iki biçimde gelebilir — app.js'in alışkanlığı virgüllü
+  // dizge, native taraf dizi gönderiyor. İkisi de kabul; üçüncü bir tür
+  // REDDEDİLİYOR.
+  let ham = [];
+  const s = body && body.semboller;
+  if (Array.isArray(s)) ham = s;
+  else if (typeof s === 'string') ham = s.split(',');
+  else if (s !== undefined && s !== null && s !== '') return { error: 'bad_semboller' };
+
+  const semboller = [];
+  for (const it of ham) {
+    const t = String(it ?? '').trim();
+    if (!t) continue;
+    if (t.length > AZAMI_HABER_SORGU) return { error: 'too_long', azami: AZAMI_HABER_SORGU };
+    semboller.push(t);
+  }
+  if (semboller.length > AZAMI_SEMBOL_HABER) {
+    return { error: 'cok_sembol', azami: AZAMI_SEMBOL_HABER, istenen: semboller.length };
+  }
+
+  const q = String((body && body.q) ?? '').trim();
+  if (q.length > AZAMI_HABER_SORGU) return { error: 'too_long', azami: AZAMI_HABER_SORGU };
+
+  const sorgular = [];
+  if (q) sorgular.push({ sorgu: q, market: pazarHam });
+  for (const sym of semboller) sorgular.push({ sorgu: sym, market: pazarHam });
+
+  // Ne `q` ne `semboller` → sunucu yolu AÇILMAZ. Çağıran bunu
+  // "istemci yolu" diye okur ve eski 400'e düşer.
+  if (!sorgular.length) return { error: 'girdi_yok' };
+
+  return { sorgular, pazar: pazarHam };
+}
 
 function kisaOnbellek(res) {
   res.setHeader('Cache-Control', 'public, max-age=30');
@@ -304,6 +462,91 @@ export default async function handler(req, res) {
     }
   }
 
+  const t0 = Date.now();
+
+  // -------------------------------------------------------------------
+  //  YOL SEÇİMİ — GERİYE DÖNÜK UYUM ÖNCE GELİR (2026-10-24 kararı,
+  //  gerekçe dosya başlığında). İstemci manşet verdiyse BU BLOK HİÇ
+  //  ÇALIŞMAZ: ne ağ açılır, ne gövde değişir, ne tek bir sayı kayar.
+  // -------------------------------------------------------------------
+  let kaynak = 'istemci';
+  let haberler = null;
+
+  if (!istemciVerdi(body)) {
+    const sg = ayristirSunucuGirdisi(body);
+    // `girdi_yok` = çağıran sunucu yolunu İSTEMEDİ. Eski davranışa
+    // düşüyoruz (aşağıda 400 `faizHaberleri_yok`) — yeni bir hata kodu
+    // icat etmek, bugünün istemcisinin gördüğü cevabı değiştirmek olurdu.
+    if (sg.error && sg.error !== 'girdi_yok') {
+      kisaOnbellek(res);
+      res.status(400).json({ ...sg, uyari: UYARI });
+      return;
+    }
+    if (!sg.error) {
+      try {
+        // TEK SAYAÇ, bütün beslemeler için: `tam` ancak HEPSİ eksiksiz
+        // okunduğunda true olur. Beslemeleri ayrı ayrı "tam" ilan edip
+        // birini kaçırmak, eksik duruşu tam göstermek olurdu.
+        const sayac = bosHaberSayac();
+
+        // PARALEL: diziliyse 6 × 6 sn en kötü hâl 36 sn olur ve 10 sn
+        // tavanını aşardı (yukarıdaki maxDuration aritmetiği).
+        const [fz, enf, ...ek] = await Promise.all([
+          haberCek(MAKRO_SORGULAR.faiz.q, {
+            market: MAKRO_SORGULAR.faiz.market, limit: SUNUCU_AZAMI_MADDE, sayac,
+          }),
+          haberCek(MAKRO_SORGULAR.enflasyon.q, {
+            market: MAKRO_SORGULAR.enflasyon.market, limit: SUNUCU_AZAMI_MADDE, sayac,
+          }),
+          ...sg.sorgular.map((it) => haberCek(it.sorgu, {
+            market: it.market, limit: SUNUCU_AZAMI_MADDE, sayac,
+          })),
+        ]);
+
+        // Taşıyıcının maddesi `{title, link, pubDate, source}`; motor
+        // `title` + `description` + `pubDate` okuyor. `description`
+        // UYDURULMUYOR: taşıyıcı döndürmüyor, boş geçiyor.
+        const cevir = (r) => (r.maddeler || []).map((m) => ({
+          title: m.title, description: '', pubDate: m.pubDate,
+        }));
+
+        // Gövde YERİNDE değiştirilmiyor, YENİSİ kuruluyor: çağıranın
+        // öteki alanları (genislik/risk/simdi) olduğu gibi korunuyor ve
+        // doğrulama ORTAK kapıdan (`ayristirGovde`) geçiyor — sunucu
+        // yolu için İKİNCİ bir doğrulama yazılmadı.
+        body = {
+          ...body,
+          faizHaberleri: cevir(fz),
+          enflasyonHaberleri: cevir(enf),
+        };
+
+        kaynak = 'sunucu';
+        haberler = {
+          faiz: body.faizHaberleri.length,
+          enflasyon: body.enflasyonHaberleri.length,
+          sorgu: sg.sorgular.map((it, i) => ({
+            sorgu: it.sorgu,
+            market: it.market,
+            adet: (ek[i] && ek[i].maddeler ? ek[i].maddeler.length : 0),
+            maddeler: (ek[i] && ek[i].maddeler) || [],
+          })),
+          sayac,
+          tam: haberTam(sayac),
+        };
+      } catch (e) {
+        // Haber taraması çökse bile uç 502 DÖNMÜYOR: duruş boş
+        // manşetlerle "nötr" olarak hesaplanabilir ve bu DÜRÜST bir
+        // sessizliktir. Ama sessiz DEĞİL — `haberler.tam` false.
+        console.error('api/pulse: haber taramasi basarisiz —', (e && e.stack) || e);
+        const sayac = bosHaberSayac();
+        sayac.hata++;
+        body = { ...body, faizHaberleri: [], enflasyonHaberleri: [] };
+        kaynak = 'sunucu';
+        haberler = { faiz: 0, enflasyon: 0, sorgu: [], sayac, tam: false };
+      }
+    }
+  }
+
   const ay = ayristirGovde(body);
   if (ay.hata) {
     kisaOnbellek(res);
@@ -311,7 +554,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  const t0 = Date.now();
   try {
     const simdi = ay.simdi;
 
@@ -370,6 +612,9 @@ export default async function handler(req, res) {
       },
       degerlendirilen: { faiz: faizTaze.length, enflasyon: enfTaze.length },
       konjonktur,
+      // Yol AÇIKÇA bildiriliyor — istemci tahmin etmiyor.
+      kaynak,
+      haberler,
       eksik,
       surum: { motor: IMZA, ayar: IMZA_AYAR },
       ms: Date.now() - t0,
