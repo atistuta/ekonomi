@@ -325,6 +325,24 @@ kalmadı.
       `api/score.js` ile **bilerek kopya** (Vercel'de her uç kendi lambda'sı:
       kendi motoru, kendi SEC önbelleği, ortak modül durumu YOK); sessiz
       ayrışmayı `tests/uc-test.mjs` ⑤b/⑤e bekçiliyor.
+      **ÜRETİM DOĞRULAMASI (2026-10-24, canlı HTTP — tahmin değil, ölçüm).**
+      Oturum boyunca "v101 + 8 uç + KV üretime DAĞITILMADI" diye taşınan
+      engel ARTIK YOK; `https://day-starter.vercel.app` güncel:
+        · `app.js?v=101` ve `sw.js` → `bulten-v131` — yerel depoyla BİREBİR.
+        · `/api/chart?symbol=AAPL&range=1mo` → **HTTP 200**, `adet 22`,
+          `tam true`, `kunye.currency USD`, `ms 262`, ilk mum ham sayı
+          (`close 335.92`, `time 1790256600` = saniye).
+        · Dönen motor imzası **`sha256:faa38d4cf9408912`** = iki yeni dilim
+          (`makro-faz` + `nabiz-yon`) eklendikten SONRAKİ imza. Yani canlıda
+          koşan motor, paritenin FARK 0 verdiği motorun TA KENDİSİ.
+        · 11 ucun hepsi kendi bekçi koduyla cevap veriyor, HİÇBİRİ 404 DEĞİL:
+          analyze/chart/compare/recommend/score/theme/watchlist/yfin **400**
+          (parametre eksik = kapı çalışıyor), causal/pulse **405** (POST-only),
+          poll **401** (yetki istiyor).
+      **BU ÖLÇÜMÜN SÖYLEMEDİĞİ:** uçların AYAKTA olduğu kanıtlandı; KV
+      önbelleğinin gerçekten yazıp okuduğu (`X-Onbellek: isabet`) ve
+      `ANTHROPIC_API_KEY` bağlı tema Yol B'si ÖLÇÜLMEDİ — ikisi de ayrı iş.
+
       **CANLI DUMAN TESTİ İNDİ** (2026-10-14, `tests/duman.mjs`): iki ucun
       `handler`'ı sahte `req`/`res` ile, **gerçek ağ üzerinden** çağrıldı.
       Elle koşulur, CI'da koşmaz, fikstüre yazmaz. **Ölçülen** (AAPL+ASELS.IS,
