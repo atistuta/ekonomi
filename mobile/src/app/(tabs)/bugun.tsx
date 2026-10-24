@@ -29,7 +29,7 @@ import { useCallback } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { fetchCompare, useHazir, useIstek, useListe, type SiraKayit } from '@/api';
-import { Card, Durum, OlcumNotu, Pill, ScreenShell } from '@/components';
+import { Card, Durum, OlcumEksikRozet, Pill, ScreenShell, VeriYok } from '@/components';
 import { formatScore } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
 
@@ -70,13 +70,21 @@ export default function BugunScreen() {
             <Pill label={veri.vade} tone="info" glyph={null} size="sm" />
           ) : null
         }>
+        {/* NEDEN `kartsiz`: bu gövde zaten bir `Card` içinde; `Durum`un
+            kendi kartını çizmesi iç içe iki kart kenarı demekti.
+            NEDEN `sekil="sira"`: beklenen içerik numaralı sıra satırı,
+            fiyat/değişim taşıyan liste satırı DEĞİL — iskelet gelecek
+            şeklin aynısını taşımazsa içerik yerleşince düzen sıçrar. */}
         <Durum
           durum={durum}
           hata={hata}
           yenile={yenile}
           iskelet={Math.max(liste.length, 3)}
+          sekil="sira"
+          kartsiz
           bosMetin="Takip listesi boş. Arama sekmesinden sembol ekle."
         />
+        {durum === 'veri' && veri ? <OlcumEksikRozet kaynak={veri} /> : null}
         {durum === 'veri' ? (
           sira.length ? (
             <ScrollView style={styles.kaydir} nestedScrollEnabled>
@@ -97,9 +105,13 @@ export default function BugunScreen() {
               ))}
             </ScrollView>
           ) : (
-            <Text style={[type.small, { color: colors.textDim }]}>
-              Sıralanabilir sembol yok (alım bandı ya da fiyat ölçülemedi).
-            </Text>
+            // ÖLÇÜLDÜ, SONUÇ YOK: hata değil veri cevabı — "yeniden dene"
+            // düğmesi yok (aynı boş sıra gelir). Diğer ekranlarla aynı
+            // kutu: ayrı bir metin yazmak beşinci bir anlatım olurdu.
+            <VeriYok
+              kartsiz
+              metin="Sıralanabilir sembol yok (alım bandı ya da fiyat ölçülemedi)."
+            />
           )
         ) : null}
         {durum === 'veri' && veri ? (
@@ -109,7 +121,6 @@ export default function BugunScreen() {
                 {'Sıralanamayan: ' + veri.siralanamayan.join(', ') + ' (fiyat/band yok).'}
               </Text>
             ) : null}
-            <OlcumNotu kaynak={veri} />
           </View>
         ) : null}
       </Card>

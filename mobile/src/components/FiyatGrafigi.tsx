@@ -23,16 +23,18 @@
 //  bağımlılıklarında `react-native-svg: 15.15.4` var ve `TabIkon.tsx`
 //  zaten kullanıyor. Yeni bağımlılık eklenmedi.
 //
-//  NEDEN `Durum` KOMPONENTİ KULLANILMIYOR: `Durum` kendi `Card`ını
-//  çiziyor; bu komponent de bir `Card`. İç içe iki kart, kart
-//  kenarlığını iki kez çizip ekranı gürültülü yapardı. Üç hâl burada
-//  aynı metin kurallarıyla, kartın İÇİNDE çiziliyor.
+//  NEDEN `Durum` KOMPONENTİ ARTIK KULLANILIYOR (FAZ 3'te değişti):
+//  burada yerel bir `HataGovde` vardı ve hata türlerini `kind !==
+//  'no-data'` diye İKİYE bölüyordu, yani `bad-request` (400
+//  `bad_symbol`) "ölçemedim" kutusuna düşüp işe yaramayan bir "Yeniden
+//  dene" düğmesi alıyordu. `Durum`a `kartsiz` prop'u eklendi: kendi
+//  `Card`ını çizmiyor, bu kartın İÇİNDE basılıyor. İç içe iki kart
+//  sorunu da, ikinci bir hata kuralı tutma borcu da böylece kapandı.
 //
-//  ── DÖRT AYRI HÂL, DÖRT AYRI CÜMLE ────────────────────────────────
-//   ① yükleniyor            → iskelet
-//   ② hata (`unmeasured`)   → "ölçemedim" + yeniden dene
-//   ③ hata (`no-data`)      → "veri yok", yeniden dene YOK
-//   ④ 200 + `adet === 0`    → "bu aralıkta mum yok" — ARIZA DEĞİL,
+//  ── AYRI HÂL, AYRI CÜMLE ──────────────────────────────────────────
+//   ① yükleniyor            → grafik şeklinde iskelet
+//   ② hata                  → `Durum`: dört türün dördü ayrı kutu
+//   ③ 200 + `adet === 0`    → "bu aralıkta mum yok" — ARIZA DEĞİL,
 //      veri cevabı. Bunu "ölçemedim" diye göstermek YALAN olurdu
 //      (yeni halka arz / kapalı pazar bunu normal olarak üretir).
 //  Ayrıca 200 gelse bile `tam === false` ise grafiğin ÜSTÜNDE "ölçüm
@@ -47,9 +49,9 @@ import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { Card } from './Card';
 import { Dugme } from './Dugme';
-import { OlcumNotu } from './Durum';
+import { Durum, OlcumNotu } from './Durum';
 import { Pill } from './Pill';
-import { Skeleton } from './Skeleton';
+import { SkeletonChart } from './Skeleton';
 import type { ApiError } from '@/api/client';
 import type { IstekDurum } from '@/api/istek';
 import { ARALIKLAR, olcumEksik, type Aralik, type ChartResponse, type Mum } from '@/api/types';
@@ -230,20 +232,30 @@ export function FiyatGrafigi({
 
       {durum === 'yukleniyor' ? (
         <>
-          <Skeleton width="100%" height={GRAFIK_YUKSEKLIK} rounded="md" />
+          <SkeletonChart height={GRAFIK_YUKSEKLIK} />
           <Text style={[type.micro, { color: colors.textFaint, marginTop: space.sm }]}>
             Fiyat serisi ölçülüyor…
           </Text>
         </>
       ) : null}
 
-      {durum === 'bos' ? (
-        <Text style={[type.small, { color: colors.textDim }]}>
-          Bir sembol seç; seri o zaman istenecek.
-        </Text>
+      {/* NEDEN HATA/BOŞ GÖVDESİ ARTIK `Durum`: burada eskiden yerel bir
+          `HataGovde` vardı ve `kind !== 'no-data'` diye İKİYE bölüyordu.
+          `/api/chart` 400 `bad_symbol` döndürebiliyor (ÖLÇÜLDÜ: ?symbol=
+          ^GSPC) ve o hâlde kullanıcı "ölçemedim" + işe yaramayan bir
+          "Yeniden dene" düğmesi görüyordu. Dört türün tek karar yeri
+          `Durum`; ikinci bir kopya tutmak o kuralın yarısını kaçırmak
+          demekti. `kartsiz`: bu gövde zaten bir `Card` içinde. */}
+      {durum === 'bos' || durum === 'hata' ? (
+        <Durum
+          durum={durum}
+          hata={hata}
+          yenile={yenile}
+          sekil="grafik"
+          kartsiz
+          bosMetin="Bir sembol seç; seri o zaman istenecek."
+        />
       ) : null}
-
-      {durum === 'hata' ? <HataGovde hata={hata} yenile={yenile} /> : null}
 
       {durum === 'veri' ? (
         <>
@@ -352,32 +364,6 @@ export function FiyatGrafigi({
         </>
       ) : null}
     </Card>
-  );
-}
-
-/**
- * Hata gövdesi. "veri yok" ile "ölçemedim" ayrı: yalnız ikincisinde
- * yeniden deneme anlamlı (`Durum` komponentiyle AYNI kural — metin
- * `client.ts`ten gelir, burada ikinci bir cümle uydurulmaz).
- */
-function HataGovde({ hata, yenile }: { hata: ApiError | null; yenile: () => void }) {
-  const { colors } = useTheme();
-  const olcemedim = hata?.kind !== 'no-data';
-  return (
-    <View>
-      <Pill
-        label={olcemedim ? 'ölçemedim' : 'veri yok'}
-        tone={olcemedim ? 'gold' : 'neutral'}
-        glyph={null}
-        size="sm"
-      />
-      <Text style={[type.small, { color: colors.text, marginTop: space.sm }]}>
-        {hata?.message ?? 'Fiyat serisi alınamadı.'}
-      </Text>
-      {olcemedim ? (
-        <Dugme label="Yeniden dene" onPress={yenile} style={{ marginTop: space.md }} />
-      ) : null}
-    </View>
   );
 }
 

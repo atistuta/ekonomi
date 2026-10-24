@@ -29,7 +29,7 @@ import { useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { fetchRecommend, useHazir, useIstek, useListe, type RecommendRow } from '@/api';
-import { Card, Durum, OlcumNotu, Pill, ScreenShell, VeriYok } from '@/components';
+import { Card, Durum, OlcumEksikRozet, Pill, ScreenShell, VeriYok } from '@/components';
 import { formatPercent, formatPrice, formatScore } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
 
@@ -60,21 +60,35 @@ export default function KesfetScreen() {
       title="Keşfet"
       subtitle="Motorun fırsat ve momentum kararları — eşikler motorda."
       note="Radar / gündem katmanı için motor ucu yok; tematik keşif Arama sekmesinde.">
+      {/* `sekil="sira"`: beklenen içerik sembol + rozet + iki künye
+          satırı; fiyat/değişim sütunlu liste satırı değil. */}
       <Durum
         durum={durum}
         hata={hata}
         yenile={yenile}
         iskelet={2}
+        sekil="sira"
         bosMetin="Takip listesi boş. Arama sekmesinden sembol ekle."
       />
 
-      {durum === 'veri' ? (
+      {/* NEDEN AYRI BİR "HİÇ SONUÇ YOK" DALI: eskiden tur boş döndüğünde
+          iki kart birlikte "listede banda yakın sembol yok" + "momentumu
+          etkin sembol yok" diyordu. İkisi de doğruymuş gibi görünüyor ama
+          ima ettiği şey yanlıştı: semboller ölçüldü de hiçbiri bu
+          kategoriye girmedi. Oysa motor HİÇ satır döndürmemişti —
+          kategori boşluğu ile sonuç boşluğu aynı şey değil. */}
+      {durum === 'veri' && !satirlar.length ? (
+        <VeriYok metin="Motor bu semboller için sonuç döndürmedi; ayrıştırılacak satır yok." />
+      ) : null}
+
+      {durum === 'veri' && satirlar.length ? (
         <>
+          {veri ? <OlcumEksikRozet kaynak={veri} /> : null}
           <Card title="Alım bandına yakın" subtitle="Motorun `yakinlik` kararı">
             {bandaYakin.length ? (
               bandaYakin.map((r) => <FirsatSatiri key={r.sym} satir={r} />)
             ) : (
-              <VeriYok metin="Listede alım bandına yakın sembol yok." />
+              <VeriYok kartsiz metin="Listede alım bandına yakın sembol yok." />
             )}
           </Card>
 
@@ -94,11 +108,9 @@ export default function KesfetScreen() {
                 </View>
               ))
             ) : (
-              <VeriYok metin="Listede momentum rejimi etkin olan sembol yok." />
+              <VeriYok kartsiz metin="Listede momentum rejimi etkin olan sembol yok." />
             )}
           </Card>
-
-          {veri ? <OlcumNotu kaynak={veri} /> : null}
         </>
       ) : null}
     </ScreenShell>

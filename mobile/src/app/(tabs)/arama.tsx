@@ -41,7 +41,8 @@ import {
   Card,
   Dugme,
   Durum,
-  OlcumNotu,
+  OlcemedimKutu,
+  OlcumEksikRozet,
   Pill,
   ScreenShell,
   TickerRow,
@@ -124,16 +125,24 @@ export default function AramaScreen() {
       <Card
         title="Sembol sonucu"
         subtitle={sembolSorgu ? sembolSorgu + ' · /api/recommend' : 'Henüz ölçüm istenmedi'}>
+        {/* `kartsiz`: zaten bir `Card` içindeyiz. Hatalı sembol girişi
+            (`bad-request`) ARTIK ayrı kutu: bu ekranda en sık görülen
+            hata o ve eskiden "ölçemedim" + işe yaramayan "Yeniden dene"
+            düğmesi alıyordu — oysa 400'ü tekrarlamak aynı 400'ü verir,
+            düzeltilmesi gereken şey yazılan metin. */}
         <Durum
           durum={sembolIstek.durum}
           hata={sembolIstek.hata}
           yenile={sembolIstek.yenile}
           iskelet={1}
+          sekil="satir"
+          kartsiz
           bosMetin="Bir sembol yaz ve 'Sembol ölç'e bas."
         />
         {sembolIstek.durum === 'veri' ? (
           satir ? (
             <>
+              <OlcumEksikRozet kaynak={satir} />
               <TickerRow
                 symbol={satir.sym}
                 name={satir.market === 'BIST' ? 'Borsa İstanbul' : 'ABD'}
@@ -162,7 +171,6 @@ export default function AramaScreen() {
               <Text style={[type.micro, { color: colors.textDim }]}>
                 {satir.composite.band ?? 'Bant ölçülemedi.'}
               </Text>
-              <OlcumNotu kaynak={satir} />
               <Dugme
                 label={liste.includes(satir.sym) ? 'Listede' : 'Listeye ekle'}
                 size="sm"
@@ -174,7 +182,7 @@ export default function AramaScreen() {
               />
             </>
           ) : (
-            <VeriYok metin={sembolSorgu + ' için motor sonuç döndürmedi.'} />
+            <VeriYok kartsiz metin={sembolSorgu + ' için motor sonuç döndürmedi.'} />
           )
         ) : null}
       </Card>
@@ -187,15 +195,22 @@ export default function AramaScreen() {
           hata={temaIstek.hata}
           yenile={temaIstek.yenile}
           iskelet={2}
+          sekil="metin"
+          kartsiz
           bosMetin="Örn. 'yapay zeka', 'savunma', 'robotik'."
         />
         {temaIstek.durum === 'veri' ? (
           temaKod ? (
             // ÖLÇÜLEMEDİ: uç 200 döndü ama arama hiç yapılmadı (anahtar yok).
-            <View style={styles.temaUyari}>
-              <Pill label="ölçemedim" tone="gold" glyph={null} size="sm" />
-              <Text style={[type.small, { color: colors.text }]}>{temaKod}</Text>
-            </View>
+            //
+            // NEDEN BURADA ELLE PILL ÇİZİLMİYOR ARTIK: bu, `Durum`un
+            // 'unmeasured' kutusunun altıncı kopyasıydı — aynı olayın
+            // ayrı bir anlatımı, kendi "yeniden dene" kuralıyla (hiç
+            // yoktu). `Durum`a 'unmeasured' türünde uydurma bir
+            // `ApiError` beslemiyoruz; HTTP 200 geldi, hata nesnesi
+            // taşımak yalan olurdu. Kutuyu `OlcemedimKutu` ile aynı
+            // gövdeden kuruyoruz: tek görünüm, tek kural.
+            <OlcemedimKutu metin={temaKod} />
           ) : adaylar.length ? (
             adaylar.map((a) => (
               <View key={a.symbol} style={styles.aday}>
@@ -219,7 +234,7 @@ export default function AramaScreen() {
               </View>
             ))
           ) : (
-            <VeriYok metin="Bu tema için motor aday döndürmedi." />
+            <VeriYok kartsiz metin="Bu tema için motor aday döndürmedi." />
           )
         ) : null}
       </Card>
@@ -237,6 +252,5 @@ const styles = StyleSheet.create({
   },
   dugmeler: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
   sag: { alignItems: 'flex-end', gap: 2 },
-  temaUyari: { gap: space.xs },
   aday: { gap: 2, paddingVertical: space.sm },
 });

@@ -59,7 +59,7 @@ import {
   Dugme,
   Durum,
   FiyatGrafigi,
-  OlcumNotu,
+  OlcumEksikRozet,
   Pill,
   ScoreGauge,
   ScreenShell,
@@ -154,11 +154,17 @@ export default function AnalizScreen() {
         />
       ) : null}
 
+      {/* NEDEN `sekil="skor"`: bu ekranın beklediği içerik üç `ScoreGauge`
+          (sayı + bant + çubuk), liste satırı DEĞİL. Eskiden burada satır
+          iskeleti vardı: iskelet "fiyat listesi gelecek" diyor, sonra
+          skor kartı yerleşiyordu — hem söz yalan hem düzen sıçraması.
+          Üç parça, kartın gerçek sayısı. */}
       <Durum
         durum={durum}
         hata={hata}
         yenile={yenile}
         iskelet={3}
+        sekil="skor"
         bosMetin="Bir sembol seç; ölçüm o zaman istenecek."
       />
 
@@ -179,6 +185,10 @@ export default function AnalizScreen() {
                   size="sm"
                 />
               }>
+              {/* Eksik ölçüm rozeti SKORLARIN ÜSTÜNDE: `tam:false` ile
+                  gelen bir skoru önce gösterip altına künye düşmek,
+                  eksik ölçümü tam ölçüm gibi sunmaktı. */}
+              <OlcumEksikRozet kaynak={satir} />
               <ScoreGauge
                 score={satir.ta.score}
                 caption="Teknik"
@@ -200,7 +210,6 @@ export default function AnalizScreen() {
                   {'Temel ölçülemedi: ' + satir.fa.why}
                 </Text>
               ) : null}
-              <OlcumNotu kaynak={satir} />
             </Card>
 
             <Card

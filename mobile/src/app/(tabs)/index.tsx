@@ -46,7 +46,16 @@ import {
   type RecommendRow,
 } from '@/api';
 import { getSupabase } from '@/api/supabase';
-import { Card, Durum, Dugme, OlcumNotu, Pill, ScreenShell, TickerRow, VeriYok } from '@/components';
+import {
+  Card,
+  Durum,
+  Dugme,
+  OlcumEksikRozet,
+  Pill,
+  ScreenShell,
+  TickerRow,
+  VeriYok,
+} from '@/components';
 import { formatPrice, formatScore } from '@/lib/format';
 import { depoCalisiyorMu } from '@/lib/kalici';
 import { space, type, useTheme } from '@/theme';
@@ -118,19 +127,26 @@ export default function ListelerScreen() {
               hata={hata}
               yenile={yenile}
               iskelet={Math.max(liste.length, 3)}
+              sekil="satir"
               bosMetin="Takip listesi boş. Arama sekmesinden sembol ekle."
             />
             {durum === 'veri' && veri ? (
               <View style={styles.ozet}>
-                <Text style={[type.micro, { color: colors.textFaint }]}>
-                  {'Vade: ' + veri.vade + ' · motor ' + veri.surum.motor}
-                </Text>
-                <OlcumNotu kaynak={veri} />
+                {/* NEDEN ROZET SATIRLARIN ÜSTÜNDE: eksik ölçüm künye
+                    satırı olarak altta dururken kullanıcı sayıları
+                    okuduktan SONRA eksikliği öğreniyordu. `atlanan`
+                    da aynı yere taşındı: ölçülmeyen sembolü listenin
+                    dibinde söylemek, olmayan satırı aramasına yol
+                    açıyor. */}
+                <OlcumEksikRozet kaynak={veri} />
                 {veri.atlanan.length ? (
-                  <Text style={[type.micro, { color: colors.textFaint }]}>
+                  <Text style={[type.micro, { color: colors.gold }]}>
                     {'Zaman bütçesi doldu, ölçülmeyenler: ' + veri.atlanan.join(', ')}
                   </Text>
                 ) : null}
+                <Text style={[type.micro, { color: colors.textFaint }]}>
+                  {'Vade: ' + veri.vade + ' · motor ' + veri.surum.motor}
+                </Text>
               </View>
             ) : null}
           </View>
