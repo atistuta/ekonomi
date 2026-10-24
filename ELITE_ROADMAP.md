@@ -523,7 +523,7 @@ kalmadı.
       kanıtlandı, "çalışıyor" kanıtlanmadı. iOS derlemesi hiç denenmedi.
       **NATIVE DERLEME ÖN KOŞULLARI KURULDU:** `mobile/eas.json` (3 profil —
       development/preview/production, her biri
-      `EXPO_PUBLIC_API_TABAN=https://day-starter.vercel.app`, çünkü native
+      `EXPO_PUBLIC_API_URL=https://day-starter.vercel.app`, çünkü native
       istemci localhost'a ulaşamaz; `appVersionSource=remote`) ve `app.json`
       içinde `ios.bundleIdentifier` = `android.package` =
       `com.atistuta.sabahbulteni`. ⚠️ **BU KİMLİK MAĞAZAYA İLK GÖNDERİMDEN
@@ -554,7 +554,7 @@ besleniyor; tek API katmanı `mobile/src/api/` (`client.ts` ağ + hata taksonomi
 **Ekranlarda `fetch` YOK, hesap YOK:** her sayı uçtan geliyor, istemci yalnız
 `lib/format.ts` ile `tr-TR` biçimlendiriyor (eşik, ağırlık, sıralama, harman
 istemcide hiç yok — sıralamayı `/api/compare`nin `sira[]` dizisi yapıyor).
-Taban adres `EXPO_PUBLIC_API_TABAN` ile değişebiliyor, varsayılan
+Taban adres `EXPO_PUBLIC_API_URL` ile değişebiliyor, varsayılan
 `https://day-starter.vercel.app`; **gizli anahtar konmadı**.
 
 - [x] **Bugün (dashboard):** `/api/compare` → motorun yaptığı sıra + bütüncül skor

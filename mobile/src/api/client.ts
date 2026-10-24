@@ -39,15 +39,21 @@
 import {
   ADIMLAR,
   ARALIKLAR,
+  AZAMI_HABER_SORGU,
+  AZAMI_MADDE,
   AZAMI_SEMBOL,
+  HABER_PAZARLAR,
   VARSAYILAN_ADIM,
   VARSAYILAN_ARALIK,
+  VARSAYILAN_HABER_PAZAR,
   type Adim,
   type AnalyzeResponse,
   type Aralik,
   type ChartResponse,
   type CompareResponse,
+  type HaberPazar,
   type Market,
+  type NewsResponse,
   type RecommendResponse,
   type ScoreErrorBody,
   type ScoreResponse,
@@ -92,6 +98,10 @@ export const ENDPOINTS = {
   yfin: '/api/yfin',
   watchlist: '/api/watchlist',
   chart: '/api/chart',
+  // Haber ucu SKOR ZİNCİRİNİN İÇİNDE DEĞİL, yanında (api/news.js
+  // başlığı): metin döner, hiçbir skora girdi vermez. Yol adı İngilizce,
+  // öteki uçlarla aynı dilde.
+  news: '/api/news',
 } as const;
 
 export type EndpointName = keyof typeof ENDPOINTS;
@@ -191,6 +201,18 @@ function kodMetni(code: string | undefined, azami?: number, istenen?: number): s
       return 'Sembol biçimi geçersiz.';
     case 'method_not_allowed':
       return 'İstek yöntemi desteklenmiyor.';
+    // --- /api/news kodları (api/news.js). `too_long` BİLEREK burada
+    // yeniden tanımlanmadı: skor tarafında "sembol listesi", haber
+    // tarafında "sorgu metni" demek. Aynı koda iki anlam yüklemek yerine
+    // haber tarafı kendi cümlesini `fetchNews` kapısında veriyor.
+    case 'missing_q':
+      return 'Haber sorgusu verilmedi.';
+    case 'bad_limit':
+      return 'Geçersiz madde sayısı.';
+    case 'limit_buyuk':
+      return 'En çok ' + (azami ?? AZAMI_MADDE) + ' manşet istenebilir (' + (istenen ?? 0) + ' istendi).';
+    case 'haber_alinamadi':
+      return 'Haber beslemesi okunamadı — ölçüm yapılamadı.';
     case 'motor_kurulamadi':
     case 'skor_hesaplanamadi':
       return 'Motor çalıştırılamadı — ölçüm alınamadı.';
@@ -674,6 +696,117 @@ export async function fetchChart(
 
   return apiGet<ChartResponse>(path, {
     query: { symbol: sym, range, interval, market },
+    timeoutMs,
+    signal,
+  });
+}
+
+export type NewsOptions = Omit<RequestOptions, 'query'> & {
+  /** Besleme yereli. Verilmezse uç noktanın varsayılanı (TR) gönderilir. */
+  market?: HaberPazar;
+  /** 1..AZAMI_MADDE. Verilmezse uç noktanın varsayılanı (10) kullanılır. */
+  limit?: number;
+};
+
+/**
+ * `/api/news` — manşet metni. `fetchChart` deseninin BİREBİR aynısı:
+ * kesin 400 üretecek istekler AĞA ÇIKMADAN burada kesilir, kalanı
+ * `apiGet`e devredilir (tek hata eşlemesi orada).
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS` (12 sn), `SCORE_TIMEOUT_MS` DEĞİL: uç
+ * `maxDuration: 10` ile çalışıyor ve TEK dış istek yapıyor (api/news.js:83
+ * gerekçesi · `_haber.js HABER_ISTEK_MS = 6000`). /api/chart ile aynı
+ * kademe; skorun 58 sn'si buraya kopyalanmaz.
+ *
+ * NEDEN BOŞ LİSTE HATA DEĞİL: uç 200 + `maddeler: []` + `adet: 0` +
+ * `tam: true` dönebilir ve bu ÖLÇÜLMÜŞ bir cevaptır ("bu sorguda haber
+ * yok"). Burada `no-data`ya çevirmek, ekrana "ölçemedim" tonunu
+ * gösterirdi; gövde `ok: true` olarak geçirilir, ekran `adet === 0` dalını
+ * `VeriYok` ile anlatır.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır, yeni kod uydurulmadı):
+ *   · boş q                   → `missing_q`
+ *   · q uzunluğu > 256        → `too_long`
+ *   · küme dışı market        → `bad_market`
+ *   · tamsayı olmayan/<1 limit→ `bad_limit`
+ *   · limit > 25              → `limit_buyuk`
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchNews(
+  query: string,
+  options: NewsOptions = {},
+): Promise<ApiResult<NewsResponse>> {
+  const { market = VARSAYILAN_HABER_PAZAR, limit, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.news;
+
+  // `q` SERBEST METİN: sembol kapısından (büyük harfe çevirme, biçim
+  // denetimi) GEÇİRİLMİYOR — "Fed faiz kararı" geçerli bir haber sorgusu
+  // (gerekçe: api/news.js:32-36).
+  const q = String(query ?? '').trim();
+
+  if (!q) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('missing_q') ?? 'Haber sorgusu verilmedi.',
+        endpoint: path,
+        code: 'missing_q',
+      },
+    };
+  }
+  if (q.length > AZAMI_HABER_SORGU) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        // `kodMetni('too_long')` SKOR cümlesini ("sembol listesi çok
+        // uzun") döndürür; haber sorgusu için yanlış olur.
+        message: 'Haber sorgusu çok uzun (en çok ' + AZAMI_HABER_SORGU + ' karakter).',
+        endpoint: path,
+        code: 'too_long',
+      },
+    };
+  }
+  if (!(HABER_PAZARLAR as readonly string[]).includes(market)) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('bad_market') ?? 'Geçersiz pazar.',
+        endpoint: path,
+        code: 'bad_market',
+      },
+    };
+  }
+  if (limit !== undefined) {
+    if (!Number.isInteger(limit) || limit < 1) {
+      return {
+        ok: false,
+        error: {
+          kind: 'bad-request',
+          message: kodMetni('bad_limit') ?? 'Geçersiz madde sayısı.',
+          endpoint: path,
+          code: 'bad_limit',
+        },
+      };
+    }
+    if (limit > AZAMI_MADDE) {
+      return {
+        ok: false,
+        error: {
+          kind: 'bad-request',
+          message: kodMetni('limit_buyuk', AZAMI_MADDE, limit) ?? 'Çok fazla manşet istendi.',
+          endpoint: path,
+          code: 'limit_buyuk',
+        },
+      };
+    }
+  }
+
+  return apiGet<NewsResponse>(path, {
+    query: { q, market, limit },
     timeoutMs,
     signal,
   });

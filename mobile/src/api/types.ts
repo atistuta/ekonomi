@@ -468,3 +468,116 @@ export type ChartResponse = {
   ms: number;
   uyari: string;
 };
+
+// =====================================================================
+//  /api/news SÖZLEŞME TİPLERİ                         (FAZ 3 / native)
+// ---------------------------------------------------------------------
+//  NE: `api/news.js` uç noktasının cevabının TypeScript karşılığı —
+//  HAM manşet metni + sayaç. Alanlar TAHMİN EDİLMEDİ, uç dosyasının
+//  SÖZLEŞME bloğundan (api/news.js:46-63) ve taşıyıcının madde alan
+//  kümesinden (api/_haber.js `MADDE_ALANLARI`) okundu.
+//
+//  NEDEN `Sayac` YENİDEN KULLANILMIYOR: haber sayacı skor sayacının
+//  NESNESİ DEĞİL (api/_haber.js `bosHaberSayac`): alanları
+//  `{istek, basari, hata, zamanAsimi, kisa, bayt}`; `yahoo/sec/bist`
+//  yok. Taşıyıcının kendi başlığı bunun GEREKÇESİNİ yazıyor — haber
+//  kesintisi skor kesintisine karışmasın. Tipi `Sayac` yazmak derleyiciye
+//  var olmayan alanlar söz vermek olurdu, bu yüzden `olcumEksik()` de bu
+//  gövdede ÇALIŞMAZ; ayrı yardımcı `haberOlcumEksik()` var.
+//
+//  NEDEN `market` AYRI BİR TÜR (`Market` DEĞİL): skor tarafındaki
+//  `Market` = 'US' | 'BIST' (borsa), haber ucunun `market`i = 'TR' | 'US'
+//  (besleme yereli — api/_haber.js `PAZAR_YERELI`). Aynı adı taşıyan iki
+//  ayrı küme; birleştirmek 'BIST' değerini haber ucuna sızdırırdı ve uç
+//  400 `bad_market` döndürürdü.
+//
+//  NEDEN `pubDate` DİZGİ: uç ÜST KAYNAĞIN verdiği gibi dönüyor (RFC-822
+//  dizgesi) — ms'e çevirmek biçimlemedir ve istemcide kalır
+//  (`lib/format.ts formatHaberTarih`).
+//
+//  BOŞ LİSTE ARIZA DEĞİL (uç başlığı): 200 + `maddeler: []` + `adet: 0`
+//  + `tam: true` geçerli bir VERİ cevabıdır — "bu sorguda haber yok".
+//  `tam: false` ise AYRI bir şey: "ölçemedim". Ekran ikisini
+//  karıştırmamak zorunda.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/** Uç noktanın kabul ettiği besleme yerelleri (api/_haber.js PAZAR_YERELI). */
+export const HABER_PAZARLAR = ['TR', 'US'] as const;
+export type HaberPazar = (typeof HABER_PAZARLAR)[number];
+
+/** Uç noktanın varsayılanı (api/news.js VARSAYILAN_PAZAR). */
+export const VARSAYILAN_HABER_PAZAR: HaberPazar = 'TR';
+
+/** api/_haber.js AZAMI_MADDE / VARSAYILAN_MADDE / AZAMI_HABER_SORGU. */
+export const AZAMI_MADDE = 25;
+export const VARSAYILAN_MADDE = 10;
+export const AZAMI_HABER_SORGU = 256;
+
+/**
+ * Tek manşet. Dört alan, HEPSİ HAM metin (api/_haber.js MADDE_ALANLARI).
+ * `source` ve `link` BOŞ DİZGİ olabilir — taşıyıcı bulamadığında
+ * uydurmuyor, boş bırakıyor; ekran da uydurmaz.
+ */
+export type HaberMadde = {
+  title: string;
+  link: string;
+  /** Üst kaynağın verdiği gibi (RFC-822). Biçimleme istemcide. */
+  pubDate: string;
+  source: string;
+};
+
+/**
+ * Haber sayacı — `api/_haber.js bosHaberSayac()`. `kisa` = 200 döndü ama
+ * gövde besleme değil (hata sayfası / kesik aktarım): ÖLÇEMEDİM.
+ */
+export type HaberSayac = {
+  istek: number;
+  basari: number;
+  hata: number;
+  zamanAsimi: number;
+  kisa: number;
+  /** Okunan gövde boyutu — teşhis için. */
+  bayt: number;
+};
+
+export type NewsResponse = {
+  q: string;
+  market: HaberPazar;
+  limit: number;
+  maddeler: HaberMadde[];
+  /** `maddeler.length` — sunucunun saydığı; istemci yeniden saymaz. */
+  adet: number;
+  sayac: HaberSayac;
+  /** `false` → 200 olsa bile ÖLÇEMEDİM (hata/zaman aşımı/kısa gövde). */
+  tam: boolean;
+  ms: number;
+  uyari: string;
+};
+
+/** Uç noktanın makine hata kodları (api/news.js). */
+export type NewsErrorCode =
+  | 'missing_q'
+  | 'too_long'
+  | 'bad_market'
+  | 'bad_limit'
+  | 'limit_buyuk'
+  | 'method_not_allowed'
+  | 'haber_alinamadi';
+
+/**
+ * Haber cevabı için "ölçemedim" sorusu. `olcumEksik()` BU GÖVDEDE
+ * KULLANILAMAZ: o yardımcı `sayac.yahoo/sec/bist` okuyor, haber sayacında
+ * o alanlar yok. Tek yer burası — her ekran kendi `if (!veri.tam)`
+ * zincirini yazarsa biri `kisa`yı "haber yok" sayar ve yalan söyler.
+ */
+export function haberOlcumEksik(
+  x: { tam?: boolean; sayac?: HaberSayac } | null | undefined,
+): boolean {
+  if (!x) return false;
+  if (x.tam === false) return true;
+  const s = x.sayac;
+  if (!s) return false;
+  return (s.hata ?? 0) > 0 || (s.zamanAsimi ?? 0) > 0 || (s.kisa ?? 0) > 0;
+}

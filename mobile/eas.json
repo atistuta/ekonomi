@@ -10,7 +10,7 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "EXPO_PUBLIC_API_TABAN": "https://day-starter.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://day-starter.vercel.app"
       },
       "ios": { "simulator": true },
       "android": { "buildType": "apk" }
@@ -19,7 +19,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_TABAN": "https://day-starter.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://day-starter.vercel.app"
       },
       "android": { "buildType": "apk" }
     },
@@ -28,7 +28,7 @@
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_TABAN": "https://day-starter.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://day-starter.vercel.app"
       },
       "android": { "buildType": "app-bundle" }
     }

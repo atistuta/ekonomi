@@ -153,3 +153,36 @@ export function formatGunAyYil(saniye: number | null | undefined): string {
     return EMPTY;
   }
 }
+
+/**
+ * Haber maddesinin HAM `pubDate` dizgesi → "24 Eki 2026 09:41".
+ *
+ * NEDEN BURADA: uç nokta tarihi ÜST KAYNAĞIN VERDİĞİ GİBİ (RFC-822)
+ * döndürüyor ve bunu biçimlemek istemcinin işi (api/news.js:26-30).
+ * Biçimleme tek yerden geçsin diye ekranda `new Date(...)` yazılmıyor.
+ *
+ * NEDEN `EMPTY` DEĞİL, HAM METNE DÜŞÜYOR: RFC-822 ayrıştırması Hermes'te
+ * ISO olmayan biçimler için uygulamaya bağlı. Ayrıştırma tutmazsa elimizde
+ * YİNE DE kaynağın söylediği tarih var; onu silip "—" yazmak ölçülmüş bir
+ * bilgiyi atmak olurdu. Uydurma da yapılmıyor: ya biçimlenmiş tarih ya
+ * kaynağın kendi metni.
+ */
+export function formatHaberTarih(ham: string | null | undefined): string {
+  const metin = String(ham ?? '').trim();
+  if (!metin) return EMPTY;
+  const ms = Date.parse(metin);
+  if (!Number.isFinite(ms)) return metin;
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return metin;
+  try {
+    return new Intl.DateTimeFormat(LOCALE, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(d);
+  } catch {
+    return metin;
+  }
+}
