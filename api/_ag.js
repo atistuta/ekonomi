@@ -35,11 +35,32 @@ import { setTimeout as bekle } from 'node:timers/promises';
 //  ÖLÇÜLMÜŞ SABİTLER — değiştirmeden önce YENİDEN ÖLÇ.
 // ---------------------------------------------------------------------
 
-// SEC: iletişim bilgisi İSTEMİYOR — e-postasız UA ölçülmüş HTTP 200 veriyor.
-// Kullanıcının e-posta adresi buraya ASLA konmaz.
-// Kuyruktaki "parite-testi" eki tarihsel; HTTP 200 aldığı ÖLÇÜLDÜ. Yeniden
-// ölçmeden değiştirmeyin: UA değişimi uzak tarafın cevabını değiştirebilir.
-export const UA_SEC = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) sabah-bulteni-parite-testi';
+// SEC UA — `www.sec.gov` WAF'ı UA içinde E-POSTA BİÇİMLİ iletişim imi ARIYOR.
+//
+// ESKİ NOT YANLIŞTI ("iletişim bilgisi İSTEMİYOR"): o not yalnız
+// `data.sec.gov` için doğruydu. `www.sec.gov` için e-postasız UA 403 alıyor.
+//
+// ÖLÇÜMLER (hepsi https://www.sec.gov/files/company_tickers.json üzerinde):
+//   2026-10-24 (api/proxy.js ölçümü, canlı curl):
+//     '…(contact: sabah-bulteni)' (@ yok)            → 403
+//     'Mozilla/5.0 (compatible; SabahBulteni/1.0)'   → 403
+//     eski e-postasız UA ('…parite-testi')           → 403 (www), 200 (data)
+//     aşağıdaki UA                                   → 200
+//   2026-10-25 (üretim, Vercel): eski UA → 403; normal Chrome 131 UA → 403;
+//     aşağıdaki UA → 200. 403 zinciri: CIK haritası yok → secFetchModel null
+//     → fa.score null → tam:false → _onbellek.js hiç yazmıyor → her istek
+//     12-14 sn. FA üretimde komple devre dışıydı.
+//   2026-10-25 (bu geliştirme makinesi, 5 istek): eski UA → 403 · 403 · 403
+//     (3/3), aşağıdaki UA → 200 · 200 (2/2). Bir ara ölçümde eski UA'nın bir
+//     kez 200 verdiği görüldü ama TEKRAR ETMEDİ; SEC WAF'ının kararı tam
+//     kararlı değil. Yine de: geliştirme makinesinde "200 gördüm" demek
+//     üretimde çalışacağı anlamına GELMEZ — kanıt üretim ölçümüdür.
+//
+// `https://data.sec.gov/files/company_tickers.json` → 404, alternatif yol YOK.
+// Kullanıcının kişisel e-posta adresi buraya ASLA konmaz; aşağıdaki adres
+// projenin kendi alan adında genel bir iletişim adresi. api/proxy.js aynı
+// dizeyi kullanıyor — ikisi birlikte değişir. Değiştirmeden önce YENİDEN ÖLÇ.
+export const UA_SEC = 'SabahBulteni/1.0 (+https://day-starter.vercel.app; iletisim@day-starter.vercel.app)';
 
 // Yahoo ve İş Yatırım tarayıcı başlığı bekliyor.
 export const UA_WEB = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
