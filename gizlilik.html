@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0b1220" />
+<title>Gizlilik Politikası — Sabah Bülteni</title>
+<meta name="description" content="Sabah Bülteni uygulamasının gizlilik politikası: hangi veriler işlenir, nerede saklanır, kimlerle paylaşılır." />
+<!--
+  BU SAYFA KASITLI OLARAK KENDİ KENDİNE YETERLİ.
+  styles.css'e bağlanmıyor; tek dosya olarak her yerde (Vercel, GitHub Pages,
+  mağaza inceleyicisinin tarayıcısı) aynı görünsün diye CSS gömülü. Mağaza
+  incelemesi bu URL'yi uygulamadan bağımsız açar; harici varlığa bağımlılık
+  = kırık sayfa riski.
+
+  İÇERİK KURALI: buradaki her cümle ÖLÇÜLMÜŞ davranışı anlatır, şablon metin
+  değil. Değiştirmeden önce koda bak:
+    · cihazda kalan veri      -> mobile/src/lib/kalici.ts (AsyncStorage)
+    · senkron kodu            -> api/watchlist.js
+    · sunucu önbelleği        -> api/_onbellek.js
+    · üçüncü taraf konakları  -> api/proxy.js IZINLI_KONAKLAR + api/_ag.js
+    · tema ucu (LLM)          -> api/theme.js
+  Yeni bir veri akışı eklediğinde bu sayfayı VE mağaza formlarını güncelle;
+  Apple App Privacy / Google Data safety beyanları bu metinle ÇELİŞMEMELİ.
+-->
+<style>
+  :root{
+    --bg:#0b1220; --kart:#121c2e; --cizgi:#1e2d45;
+    --metin:#e6edf7; --soluk:#9fb0c9; --vurgu:#5aa9ff;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f6f8fc; --kart:#ffffff; --cizgi:#dde4ee;
+      --metin:#101828; --soluk:#51607a; --vurgu:#1259c3;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--metin);
+    font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  .sarmal{max-width:760px; margin:0 auto; padding:32px 16px 64px}
+  header.ust{border-bottom:1px solid var(--cizgi); padding-bottom:20px; margin-bottom:28px}
+  h1{font-size:26px; line-height:1.3; margin:0 0 8px}
+  h2{font-size:19px; margin:34px 0 10px; padding-top:6px}
+  h3{font-size:16px; margin:22px 0 6px}
+  p,li{color:var(--metin)}
+  .tarih{color:var(--soluk); font-size:14px; margin:0}
+  .ozet{
+    background:var(--kart); border:1px solid var(--cizgi); border-left:3px solid var(--vurgu);
+    border-radius:10px; padding:14px 16px; margin:22px 0;
+  }
+  .ozet ul{margin:8px 0 0; padding-left:20px}
+  .ozet li{margin:4px 0}
+  table{width:100%; border-collapse:collapse; margin:12px 0; font-size:14.5px; display:block; overflow-x:auto}
+  th,td{border:1px solid var(--cizgi); padding:9px 10px; text-align:left; vertical-align:top}
+  th{background:var(--kart); font-weight:600}
+  code{
+    background:var(--kart); border:1px solid var(--cizgi); border-radius:5px;
+    padding:1px 5px; font-size:13.5px;
+  }
+  a{color:var(--vurgu)}
+  .yasal{
+    margin-top:40px; padding:14px 16px; border:1px solid var(--cizgi);
+    border-radius:10px; background:var(--kart); color:var(--soluk); font-size:14px;
+  }
+  footer{margin-top:32px; padding-top:18px; border-top:1px solid var(--cizgi); color:var(--soluk); font-size:14px}
+</style>
+</head>
+<body>
+<div class="sarmal">
+
+<header class="ust">
+  <h1>Gizlilik Politikası — Sabah Bülteni</h1>
+  <p class="tarih">Yürürlük tarihi: 25 Ekim 2026 · Son güncelleme: 25 Ekim 2026</p>
+</header>
+
+<p>
+  Bu politika <strong>Sabah Bülteni</strong> mobil uygulaması
+  (<code>com.sabahbulteni.app</code>) ve
+  <a href="https://day-starter.vercel.app">day-starter.vercel.app</a>
+  adresindeki web sürümü için geçerlidir. Uygulama bir bireysel geliştirici
+  tarafından yürütülmektedir.
+</p>
+
+<div class="ozet">
+  <strong>Kısa özet</strong>
+  <ul>
+    <li>Hesap açmanız <strong>gerekmiyor</strong>; ad, e-posta, telefon veya kimlik bilgisi <strong>istemiyoruz</strong>.</li>
+    <li>Uygulamada <strong>reklam ağı, analitik aracı veya üçüncü taraf izleme kodu yok</strong>.</li>
+    <li>Verinizi <strong>satmıyor, kiralamıyor ve reklam amacıyla paylaşmıyoruz</strong>.</li>
+    <li>Listeleriniz ve ayarlarınız <strong>kendi cihazınızda</strong> saklanır.</li>
+    <li>Konum, rehber, fotoğraf, kamera, mikrofon ve sağlık verisine <strong>erişmiyoruz</strong>.</li>
+  </ul>
+</div>
+
+<h2>1. Cihazınızda kalan veriler</h2>
+<p>
+  Uygulama; izleme listelerinizi, portföyünüzde takip ettiğiniz sembolleri ve
+  görünüm tercihlerinizi cihazınızın yerel depolamasında tutar (mobilde
+  <em>AsyncStorage</em>, tarayıcıda <em>localStorage</em>). Bu kayıtlar yalnızca
+  hisse/kripto <strong>sembolleri</strong> ve arayüz ayarlarından oluşur;
+  içinde kimlik bilgisi, adet, maliyet ya da finansal hesap bilgisi yoktur.
+</p>
+<p>
+  Bu veriler <strong>sunucumuza gönderilmez</strong> ve biz onlara erişemeyiz.
+  Uygulamayı kaldırdığınızda ya da tarayıcı verilerini temizlediğinizde silinirler.
+</p>
+
+<h2>2. Senkronizasyon kodu (isteğe bağlı)</h2>
+<p>
+  Listelerinizi birden fazla cihazda görmek isterseniz kendi seçtiğiniz bir
+  <em>senkronizasyon kodu</em> kullanabilirsiniz. Bu özelliği kullanırsanız
+  sembol listeniz, seçtiğiniz kodun altında sunucu tarafındaki anahtar–değer
+  deposunda saklanır.
+</p>
+<ul>
+  <li>Kodu siz belirlersiniz; bize bir kimlik vermez.</li>
+  <li>Saklanan içerik sembol listesinden ibarettir.</li>
+  <li><strong>Önemli:</strong> kodu bilen herkes o listeyi görebilir ve değiştirebilir.
+      Bu nedenle kodu tahmin edilmesi güç seçin ve <strong>kimseyle paylaşmayın</strong>.
+      Bu özellik bir güvenlik duvarı değil, bir kolaylıktır.</li>
+  <li>Özelliği kullanmazsanız sunucuya hiçbir liste yazılmaz.</li>
+</ul>
+<p>Bir kodun silinmesini istiyorsanız aşağıdaki iletişim adresinden kodu bildirerek talep edebilirsiniz.</p>
+
+<h2>3. Sunucu kayıtları</h2>
+<p>
+  Uygulamanın analiz uçları Vercel Inc. altyapısında (Frankfurt bölgesi)
+  çalışır. Her teknik istekte olduğu gibi, barındırma sağlayıcısı altyapı
+  güvenliği ve hata ayıklama amacıyla standart sunucu kayıtları tutar:
+  <strong>IP adresi, tarayıcı/uygulama tanıtıcısı (user-agent), istek yolu,
+  zaman damgası ve HTTP durum kodu</strong>.
+</p>
+<p>
+  Bu kayıtlar reklam veya profilleme için <strong>kullanılmaz</strong>, başka
+  verilerle birleştirilerek kimliğinize bağlanmaz ve sağlayıcının saklama
+  süresi sonunda silinir. Ayrıca sorguladığınız semboller için hesaplanan
+  skorlar, maliyeti ve yanıt süresini düşürmek amacıyla sunucuda geçici olarak
+  önbelleğe alınır; bu önbellek <strong>sembole göre</strong> anahtarlanır,
+  kullanıcıya göre değil ve içinde kullanıcı bilgisi yoktur.
+</p>
+
+<h2>4. Veri işleyenler ve veri kaynakları</h2>
+<p>
+  Uygulama kendi verisini üretmez; piyasa verisini ve haber başlıklarını
+  kamuya açık kaynaklardan sunucu üzerinden çeker. Bu istekler
+  <strong>sunucumuz</strong> tarafından yapılır, cihazınız bu kaynaklara
+  doğrudan bağlanmaz; dolayısıyla IP adresiniz bu kaynaklara iletilmez.
+</p>
+<table>
+  <thead><tr><th>Kuruluş</th><th>Rolü</th><th>Aktarılan kişisel veri</th></tr></thead>
+  <tbody>
+    <tr><td>Vercel Inc.</td><td>Barındırma, sunucu kayıtları, önbellek deposu</td><td>IP adresi, user-agent (standart sunucu kaydı)</td></tr>
+    <tr><td>Yahoo Finance, SEC EDGAR, İş Yatırım, KAP, CoinGecko, Truncgil, Mynet</td><td>Piyasa, bilanço ve fiyat verisi kaynağı</td><td>Yok — istekler sunucumuzdan gider</td></tr>
+    <tr><td>Google News, BBC, DW, CNBC, BloombergHT, Dünya, Sözcü, Cumhuriyet, T24</td><td>Haber başlığı akışı</td><td>Yok — istekler sunucumuzdan gider</td></tr>
+    <tr><td>Anthropic PBC</td><td>Tema keşfi özelliğinde metin modeli</td><td>Yalnızca yazdığınız tema ifadesi (örn. “savunma sanayi”). Kimlik bilgisi gönderilmez.</td></tr>
+  </tbody>
+</table>
+<p>
+  Bu kuruluşların bir bölümü Türkiye dışında (ABD/AB) bulunur; dolayısıyla
+  teknik veriler yurt dışına aktarılabilir. Aktarım, hizmetin çalışması için
+  gereken teknik veriyle sınırlıdır.
+</p>
+
+<h2>5. Çerezler ve izleme</h2>
+<p>
+  Uygulamada ve web sürümünde <strong>reklam çerezi, piksel, parmak izi
+  çıkarma veya üçüncü taraf izleme kodu kullanılmaz</strong>. Web sürümünde
+  yalnızca tarayıcınızın yerel depolaması (tercihlerinizi hatırlamak için)
+  ve çevrimdışı çalışma için bir hizmet çalışanı (service worker) önbelleği
+  kullanılır. Reklam kimliği (IDFA / Android Advertising ID) <strong>okunmaz</strong>.
+</p>
+
+<h2>6. İzinler</h2>
+<p>
+  Uygulama çalışmak için <strong>internet erişimi dışında bir izin
+  istemez</strong>. Konum, bildirim, kişiler, takvim, kamera, mikrofon,
+  fotoğraflar ve dosya erişimi talep edilmez.
+</p>
+
+<h2>7. Haklarınız</h2>
+<p>
+  6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) ve — Avrupa Birliği’nde
+  bulunuyorsanız — GDPR kapsamında; işlenen verilere erişme, düzeltilmesini,
+  silinmesini ve işlemenin kısıtlanmasını isteme hakkınız vardır.
+</p>
+<p>
+  Uygulamanın tasarımı gereği sizi tanımlayan bir kayıt tutulmadığından,
+  cihazınızdaki verileri <strong>uygulamayı kaldırarak ya da uygulama içinden
+  listelerinizi silerek doğrudan kendiniz silebilirsiniz</strong>. Senkronizasyon
+  kodu kullandıysanız, silme talebinizi kodu belirterek iletebilirsiniz.
+</p>
+
+<h2>8. Çocukların gizliliği</h2>
+<p>
+  Uygulama 13 yaşın (Avrupa Birliği’nde 16 yaşın) altındaki kişilere yönelik
+  değildir ve bu yaş grubundan bilerek veri toplanmaz.
+</p>
+
+<h2>9. Güvenlik</h2>
+<p>
+  Tüm ağ trafiği HTTPS üzerinden şifrelenir. Buna karşın hiçbir sistemin
+  mutlak güvenlikte olmadığını açıkça belirtiyoruz; bu yüzden uygulamada
+  parola, kart bilgisi, aracı kurum hesabı ya da kimlik numarası gibi hassas
+  veriler <strong>hiç toplanmamaktadır</strong>.
+</p>
+
+<h2>10. Bu politikadaki değişiklikler</h2>
+<p>
+  Politika değişirse bu sayfadaki “son güncelleme” tarihi yenilenir. Veri
+  işleme biçiminde esaslı bir değişiklik olursa, değişiklik uygulama
+  güncellemesiyle birlikte yürürlüğe girer.
+</p>
+
+<h2>11. İletişim</h2>
+<p id="iletisim">
+  Gizlilikle ilgili soru, silme talebi ve destek için:
+  <strong><a href="mailto:atahasnokar@gmail.com">atahasnokar@gmail.com</a></strong>
+</p>
+
+<div class="yasal">
+  <strong>Bilgi amaçlıdır, yatırım tavsiyesi değildir.</strong><br />
+  Sabah Bülteni kamuya açık verileri derleyen bir bilgi aracıdır; yatırım
+  danışmanlığı, portföy yöneticiliği veya aracılık hizmeti sunmaz ve bu
+  faaliyetler için yetkilendirilmiş değildir. Uygulamadaki skorlar, sıralamalar
+  ve metinler alım–satım önerisi değildir.
+</div>
+
+<footer>
+  Sabah Bülteni · <a href="https://day-starter.vercel.app">day-starter.vercel.app</a>
+</footer>
+
+</div>
+</body>
+</html>
