@@ -8,6 +8,34 @@ export const config = {
   maxDuration: 30,
 };
 
+// ---------------------------------------------------------------------
+//  BIRLESIK FONKSIYON: /api/proxy + /api/yfin
+//
+//  NEDEN: Vercel Hobby plani bir deploy'a en fazla 12 serverless fonksiyon
+//  aliyor; api/ altinda 13 rota olmustu ve 2026-10-19'dan beri her deploy
+//  "Deploying outputs" adiminda SESSIZCE patliyordu (build basariyla bitiyor,
+//  logda tek satir hata yok). Hatanin sozu sozune, `vercel deploy` preview
+//  ile yuzeye cikarildi:
+//    "No more than 12 Serverless Functions can be added to a Deployment on
+//     the Hobby plan. Create a team (Pro plan) to deploy more."
+//  `vercel inspect --logs` ve `--json` bu metni GOSTERMIYOR.
+//
+//  COZUM: api/yfin.js -> api/_yfin.js (tasiyici; `_` dosyalari rotaya
+//  cevrilmez, fonksiyon sayilmaz) ve /api/yfin yolu vercel.json'daki rewrite
+//  ile /api/proxy?__rota=yfin'e gidiyor. GENEL YOL DEGISMEDI: app.js hala
+//  /api/yfin cagiriyor. Motor uclarinin 9'una dokunulmadi.
+//
+//  NEDEN BU IKISI: ikisi de I/O-bound dis rolesi, ikisi de maxDuration 30,
+//  ikisi de CORS `*` ile tarayicidan cagriliyor -> ayni butceyi paylasmalari
+//  dogal. Yan fayda: _yfin.js'in modul duzeyi crumb onbellegi artik proxy
+//  trafigiyle de sicak kaliyor.
+//
+//  `__rota` TASARIM NOTU: istemci /api/proxy?__rota=yfin'i dogrudan da
+//  cagirabilir; zararsiz, yalnizca yfin davranisi alir. Yetki yukseltmesi
+//  yok, iki yolun izinleri de ayni.
+// ---------------------------------------------------------------------
+import { yfinHandler } from './_yfin.js';
+
 const UPSTREAM_TIMEOUT_MS = 25000;
 const CACHE_TTL_SEC       = 300;
 const CACHE_ERR_TTL_SEC   = 30;
@@ -57,6 +85,10 @@ const IZINLI_KONAKLAR = new Set([
 ]);
 
 export default async function handler(req, res) {
+  // /api/yfin rewrite'i buraya dusuyor -> tasiyiciya devret. CORS basliklarini
+  // yfinHandler kendisi kuruyor (ayni kume: *, GET/OPTIONS, 86400).
+  if (req.query?.__rota === 'yfin') return yfinHandler(req, res);
+
   // CORS
   res.setHeader('Access-Control-Allow-Origin',  '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

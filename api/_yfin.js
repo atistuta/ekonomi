@@ -1,10 +1,28 @@
-// Vercel Node serverless — Yahoo Finance "fundamentals" endpoint
-// URL: https://<app>.vercel.app/api/yfin?symbols=NVDA,ASELS.IS
+// Yahoo Finance "fundamentals" TASIYICISI — artik kendi basina bir rota DEGIL.
+// Genel yol AYNI kaldi: https://<app>.vercel.app/api/yfin?symbols=NVDA,ASELS.IS
+//
+// NEDEN TASIYICIYA DONDU: Vercel Hobby plani bir deploy'a en fazla 12
+// serverless fonksiyon aliyor. api/ altinda 13 rota olmustu (news.js 13.'ydi)
+// ve 2026-10-19'dan beri HER deploy "Deploying outputs" adiminda sessizce
+// patliyordu. Hatanin sozu sozune (vercel deploy preview ile olculdu):
+//   "No more than 12 Serverless Functions can be added to a Deployment on
+//    the Hobby plan. Create a team (Pro plan) to deploy more."
+// `_` ile baslayan dosyalar Vercel'de rotaya CEVRILMEZ -> fonksiyon sayilmaz.
+// Bu dosya artik api/proxy.js icinden cagriliyor; /api/yfin yolunu
+// vercel.json'daki rewrite /api/proxy?__rota=yfin'e tasiyor. Motor uclarinin
+// 9'una (score/recommend/analyze/theme/compare/causal/chart/pulse/news)
+// DOKUNULMADI; onlar tests/uc-test.mjs tarafindan dosya dosya denetleniyor.
+//
+// ESLESME: proxy ve yfin ikisi de I/O-bound dis rolesi ve ikisi de
+// maxDuration 30 idi -> ayni butcede birlesiyorlar. Yan fayda: asagidaki
+// modul duzeyi CRUMB onbellegi artik proxy trafigiyle de sicak kaliyor.
 // Yahoo v10 quoteSummary artık crumb+cookie ister (aksi halde 401 "Invalid Crumb").
 // Bu handshake tarayıcıdan/CORS proxy'den yapılamaz; sunucu tarafında yapıp
 // P/E, forward P/E, PEG, sektör, marj vb. temel kıyas metriklerini temiz JSON döneriz.
 
-export const config = { runtime: 'nodejs', maxDuration: 30 };
+// config BURADAN KALKTI: Vercel yalniz rota dosyalarinin `config`'ini okur,
+// bu dosya rota degil. Birlesik fonksiyonun butcesi api/proxy.js'te duruyor
+// (runtime nodejs, maxDuration 30 — yfin'in eski degeriyle AYNI).
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36';
 const MODULES = 'summaryDetail,defaultKeyStatistics,summaryProfile,financialData,price';
@@ -93,7 +111,7 @@ async function fetchOne(sym, ck, deep) {
   };
 }
 
-export default async function handler(req, res) {
+export async function yfinHandler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Max-Age', '86400');
