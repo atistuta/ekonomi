@@ -2965,6 +2965,29 @@ select.bm-input { cursor: pointer; }
 .ts-news a:hover { color: var(--accent); text-decoration: underline; }
 .ts-news-m { font-size: 11px; color: var(--text-dim); }
 
+/* --- 🔭 Tema haberleri sekmesi + Bugün'deki tematik başlık araması ---
+   Yalnız sunum: yeni sınıflar, mevcut kural ezilmiyor. (2026-10-25) */
+.ts-tabs { display: flex; gap: 8px; margin: 2px 0 10px; }
+.ts-tab { font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text-dim); transition: border-color .15s, color .15s, background .15s; }
+.ts-tab:hover { border-color: var(--accent); color: var(--text); }
+.ts-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ts-nblock { border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; margin-bottom: 10px;
+  background: var(--card, rgba(255,255,255,0.025)); }
+.ts-nblock-h { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.ts-nsym { font-size: 13.5px; font-weight: 700; color: var(--text); background: none; border: none; padding: 0; cursor: pointer; }
+.ts-nsym:hover { color: var(--accent); }
+.ts-nblock-n { font-size: 12.5px; color: var(--text-dim); }
+.ts-nblock-c { margin-left: auto; font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.ts-togen, .gt-todisc { font-size: 12.5px; font-weight: 600; padding: 8px 12px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text); transition: border-color .15s; }
+.ts-togen:hover, .gt-todisc:hover { border-color: var(--accent); }
+.gt-search { margin: 0 0 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.gt-search-h { font-size: 14.5px; font-weight: 700; margin-bottom: 9px; }
+.gt-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0 8px; }
+.gt-q { font-size: 13px; font-weight: 700; color: var(--text); }
+.gt-hint { font-size: 11.5px; line-height: 1.5; color: var(--text-dim); margin-top: 10px; }
+
 /* ===================================================================
    8 OPTİMİZASYON — görsel katman (motor/skor DEĞİŞMEDİ)
    Hiçbir mevcut kural ezilmez; yalnız yeni sınıflar tanımlanır.
@@ -3031,3 +3054,6 @@ select.bm-input { cursor: pointer; }
 .sug-note { font-size: 10.5px; line-height: 1.45; color: var(--text-dim); opacity: .85; padding: 6px 10px 3px; border-top: 1px solid var(--border); margin-top: 4px; }
 .sug-list:empty + .sug-note { border-top: 0; margin-top: 0; }
 
+/* Karsilastir madalyasinin dururluk notu (yama 2026-10-25): hicbiri
+   bandinda degilken birinciligin ne DEMEDIGINI yazar. Salt sunum. */
+.cvk-warn { display:block; font-size:11px; opacity:.8; }

@@ -5065,38 +5065,57 @@
   //  dilinde kuracak — sunucudan Türkçe HTML almayacak.
   //  Eskiden bu cümle buyZoneProximity'nin `txt` alanıydı ve satır 5447 ile 7134'te
   //  BİREBİR AYNI iki satır olarak sarılıyordu; tek tanım o iki kopyayı da kapatır.
-  // ===== ATR uzakligini GUN diline ceviren TEK kaynak =====
-  // NEDEN: "0.9×ATR" dogru olcu ama kotu dil. ATR = hissenin ortalama GUNLUK
-  // hareket mesafesi; 0.9×ATR = "siradan bir gunluk dusus neredeyse tam bandin
-  // icine indirir". Yuzde yerine ATR kullaniliyor cunku yuzde hisseler arasi
-  // kiyaslanabilir DEGIL: %2,7 uzaklik, gunluk %3 oynayan hissede ~1 gun,
-  // gunluk %0,8 oynayanda ~3-4 gundur. Ayni sayiyi UC ekran gosteriyor
-  // (hisse sayfasi / Firsatlar / Karsilastir) -> dil TEK YERDEN uretilir,
-  // yoksa uc kopya uc ayri cumle demekti.
-  // pct OPSIYONEL: yalniz Karsilastir'da bandin yuzde uzakligi elde hazir.
-  function atrDaysTxt(dAtr, pct) {
-    const d = Math.abs(Number(dAtr) || 0);
-    // COZUNURLUK: gun sayisi ayni zamanda Karsilastir'in SIRALAMA anahtaridir.
-    // Yuvarlamak kusurluydu (olculdu): dAtr 0,80 / 1,00 / 1,30 -> ucu de "~1 gunluk"
-    // yaziyordu, yani siralamayi belirleyen bilgi EKRANDA kayboluyordu; yanindaki
-    // yuzde (%7 / %3,6 / %3,4) ters yonde aktigi icin sira rastgele gorunuyordu.
-    // 3 gunun altinda ondalik yaz -> sira ekranda okunur olsun. 3 gunun ustunde
-    // 0,1 gun ayrimi anlamsiz, tam sayi yeterli.
-    const gun = d > 10 ? '10+ günlük'
-      : d < 3 ? `~${d.toFixed(1).replace('.', ',')} günlük`
-      : `~${Math.round(d)} günlük`;
-    const yz = (pct != null && pct > 0.05)
-      ? ` (%${pct < 10 ? pct.toFixed(1).replace('.', ',') : Math.round(pct)})`
-      : '';
-    return `${gun} düşüş kadar uzak${yz}`;
+  // ===== Alım bandına UZAKLIĞIN tek sunum kaynağı =====
+  // ESKİ DİL YANLIŞTI — "~0,9 günlük düşüş kadar uzak". Üç ayrı kusur:
+  //  1) BİRİM: ATR bir GÜNÜN SALINIM GENİŞLİĞİ (yüksek−düşük / önceki kapanışa
+  //     göre boşluk), günlük NET düşüş DEĞİL. Kapanış-kapanış net hareket tipik
+  //     olarak ATR'nin ~0,6-0,7 katıdır; "0,9×ATR = 0,9 gün" eşitliği kurulamaz.
+  //  2) ÖLÇEK: fiyat hareketi yön taşımayan bir yürüyüşse D mesafesini kat etme
+  //     süresi D ile DOĞRUSAL değil, yaklaşık KARESEL ölçeklenir. Yani 3×ATR
+  //     "3 gün" değil, onlarca gün mertebesindedir. Eski dil hatayı HER ZAMAN
+  //     "sandığından yakın" yönüne yapıyordu ve uzaklık arttıkça hata büyüyordu
+  //     ("10+ günlük" ibaresi en kötü durumda en iyimser cümleydi).
+  //  3) YÖN: "düşüş" sözcüğü gerçekleşecek bir düşüşü varsayar. Bu bir koşullu
+  //     MESAFE bilgisidir, yön ya da olasılık iddiası değildir.
+  // YENİ DİL: yüzde (sezgi, paraya çevrilebilir) + "tipik bir günlük salınımın
+  // N katı" (hisseler arası kıyaslanabilirlik). "GÜN" sözcüğü geçmez.
+  // SIRALAMA DEĞİŞMEDİ: sıra hâlâ ham `dAtr` ile kuruluyor; burada yalnız o
+  // sayının OKUNUŞU var — eşik, ölçek, yuvarlama kararı motorun.
+  // pct OPSİYONEL: yalnız Karşılaştır'da hazır (`aboveGap` = (fiyat ÷ bant üst
+  // sınırı − 1) × 100, yani YÜZDE PAYDASI BANDIN ÜSTÜ). Hisse sayfası ve
+  // Fırsatlar'da `prox` yalnız {state, cls, dAtr} taşır → orada yüzde YOKTUR,
+  // uydurulmaz; eksikse cümle yalnız salınım katını söyler.
+  // kisa=true: Karşılaştır'ın 148px hücresi ve Fırsatlar rozeti için kırpılmış dil.
+  function bandUzaklikTxt(dAtr, pct, kisa) {
+    const dn = Number(dAtr);
+    const d = Number.isFinite(dn) ? Math.abs(dn) : null;
+    const pn = Number(pct);
+    // ÇÖZÜNÜRLÜK: 3 katın altında ondalık yaz — sıralamayı belirleyen ayrım
+    // (0,8 / 1,0 / 1,3) ekranda kaybolmasın. Üstünde 0,1 ayrımı anlamsız.
+    const kat = d == null ? null
+      : d >= 10 ? '10 katından fazla'
+      : `${(d < 3 ? d.toFixed(1) : d.toFixed(0)).replace('.', ',')} katı`;
+    const yz = (pct != null && Number.isFinite(pn) && pn > 0.05)
+      ? `%${pn < 10 ? pn.toFixed(1).replace('.', ',') : String(Math.round(pn))}`
+      : null;
+    // "VERİ YOK" ASLA 0 DEĞİL: eski kod `Number(dAtr) || 0` yazıyordu, yani
+    // ölçülemeyen uzaklık ekranda "~0,0 günlük" = "sıfır uzaklık" görünüyordu.
+    if (yz == null && kat == null) return 'banda uzaklığı ölçülemedi';
+    if (kat == null) return kisa ? `Bandın ${yz} üstünde` : `bandın ${yz} üstünde`;
+    if (yz == null) {
+      return kisa ? `Bandın üstünde · günlük salınımın ${kat}`
+                  : `bandın üstünde, tipik bir günlük salınımın ${kat} kadar uzakta`;
+    }
+    return kisa ? `Bandın ${yz} üstünde · günlük salınımın ${kat}`
+                : `bandın ${yz} üstünde — tipik bir günlük salınımın ${kat} kadar uzakta`;
   }
 
   function buyZoneProximityHtml(prox) {
     if (!prox) return '';
     const txt = prox.state === 'below' ? '🟢 Fiyat alım bandının altında — hedeften ucuz'
       : prox.state === 'in' ? '🟢 Fiyat şu an alım bölgesinde'
-      : prox.state === 'near' ? `🟢 Uygun bölge — fiyat banda ${atrDaysTxt(prox.dAtr)}; normal bir geri çekilmede alım aralığına iner`
-      : `🟡 Fiyat banda ${atrDaysTxt(prox.dAtr)}; belirgin bir geri çekilme daha uygun`;
+      : prox.state === 'near' ? `🟢 Uygun bölge — fiyat ${bandUzaklikTxt(prox.dAtr)}; sıradan büyüklükte bir geri çekilme bandın içine indirir`
+      : `🟡 Fiyat ${bandUzaklikTxt(prox.dAtr)} — bandın içine inmesi için belirgin bir geri çekilme gerekir`;
     return `<div class="rp-nowpos ${prox.cls}">${txt}</div>`;
   }
 
@@ -8477,6 +8496,42 @@
     return null;
   }
 
+  // NE: bir adayın haberde geçtiği TÜM başlıkları döndürür (themeMatchNews
+  //     yalnız ilkini veriyordu — "Tema haberleri" sekmesi hisse başına
+  //     birden çok başlık gösterdiği için tamamı gerekiyor).
+  // NEDEN AYRI İŞLEV: themeMatchNews'in davranışı (ilk kanıt başlığı, hisse
+  //     kartındaki 📰 satırı) DEĞİŞMEDEN kalsın. Eşleşme KURALI ortak:
+  //     sembol kelime-sınırı ya da ad sözcüğü (≥4 harf) başlıkta geçiyor mu.
+  // ÖLÇÜLDÜ 2026-10-25: /api/theme cevabı yalnız {symbol, market, name,
+  //     reason} taşıyor — hisse↔haber ilişkisi UÇTAN GELMİYOR. Eşleşme bu
+  //     dosyada, başlık metni üzerinde yapılıyor; ekranda da böyle yazıyor.
+  function themeNewsHits(cand, news, max) {
+    const sym = cand.base.toLowerCase();
+    const re = new RegExp('\\b' + sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+    const nameWords = String(cand.name || '').toLowerCase().split(/[\s,.\-&]+/).filter((w) => w.length >= 4);
+    const out = [];
+    for (const it of news) {
+      const t = (it.title || '').toLowerCase();
+      let hit = re.test(t);
+      if (!hit) { for (const w of nameWords) { if (t.includes(w)) { hit = true; break; } } }
+      if (hit) { out.push(it); if (out.length >= (max || 4)) break; }
+    }
+    return out;
+  }
+
+  // NE: insan-okunur Google Haberler SAYFASI (RSS DEĞİL).
+  // NEDEN: googleNewsUrl() `news.google.com/rss/search` döndürüyor ve o adres
+  //     `application/xml` ile yanıt veriyor (ÖLÇÜLDÜ 2026-10-25: 200
+  //     application/xml). Bu adresi `target="_blank"` ile açmak tarayıcıda
+  //     HAM XML ağacı gösteriyordu — kullanıcının "terminal benzeri kod
+  //     sayfası" dediği şey tam olarak bu. `/search` yolu text/html döner.
+  function googleNewsPageUrl(query, market) {
+    const lang = market === 'US' ? 'en' : 'tr';
+    const gl   = market === 'US' ? 'US' : 'TR';
+    const ceid = market === 'US' ? 'US:en' : 'TR:tr';
+    return `https://news.google.com/search?q=${encodeURIComponent(query)}&hl=${lang}&gl=${gl}&ceid=${ceid}`;
+  }
+
   const themeEngine = {
     async search(query) {
       const q = query.trim();
@@ -8522,7 +8577,10 @@
 
       const result = {
         query: q, heat,
-        news: news.slice(0, 6),
+        // NEDEN 6 DEĞİL 24: "Tema haberleri" sekmesi başlıkları hisselere
+        // eşleştiriyor; 6 başlıkla alt sıradaki hisselerin kanıtı hiç
+        // görünmüyordu. Aday yok dalında yine ilk 6 basılıyor (altta).
+        news: news.slice(0, 24),
         candidates,
         llmError: llm.error, // 'no_key' | 'llm_error' | 'fetch_error' | null
       };
@@ -8555,7 +8613,9 @@
     }));
   }
 
-  async function runThemeSearch(query) {
+  // `view`: 'stocks' (varsayılan) | 'news' — Bugün'den gelen köprü haber
+  // sekmesini açık getirir (bkz. gotoThemeDiscovery).
+  async function runThemeSearch(query, view) {
     const q = (query || '').trim();
     const box = document.getElementById('themeResult'); if (!box) return;
     if (q.length < 2) { renderThemeIntro(); return; }
@@ -8563,22 +8623,63 @@
     let data;
     try { data = await themeEngine.search(q); }
     catch (e) { box.innerHTML = `<div class="empty" style="padding:14px">Tarama şu an yapılamadı. Birazdan tekrar deneyin.</div>`; return; }
-    renderThemeResults(data);
+    renderThemeResults(data, view);
   }
 
-  function renderThemeResults(data) {
+  function renderThemeResults(data, view) {
     const box = document.getElementById('themeResult'); if (!box) return;
     const q = data.query;
     const heatCls = 'ts-heat-' + (data.heat.lvl || 'na');
-    const newsLink = googleNewsUrl(q, 'TR');
+    // ÖLÇÜLDÜ 2026-10-25: eski `googleNewsUrl(q,'TR')` = /rss/search → 200
+    // application/xml. Artık insan-okunur /search sayfası kullanılıyor.
+    const newsLink = googleNewsPageUrl(q, 'TR');
+
+    // Hisse ↔ başlık eşleşmesi (hisse başına en çok 4 başlık).
+    const allNews = data.news || [];
+    const groups = data.candidates
+      .map((c) => ({ c, items: themeNewsHits(c, allNews, 4) }))
+      .filter((g) => g.items.length);
+    const usedKeys = new Set();
+    groups.forEach((g) => g.items.forEach((it) => usedKeys.add((it.title || '') + '|' + (it.link || ''))));
+    const otherNews = allNews.filter((it) => !usedKeys.has((it.title || '') + '|' + (it.link || '')));
+    const temaHaberAdet = usedKeys.size;
 
     const head = `
       <div class="ts-head">
         <span class="ts-badge ${heatCls}">${data.heat.txt}</span>
         <span class="ts-count">${data.candidates.length ? data.candidates.length + ' ilişkili hisse' : 'tema akışı'}</span>
-        <a class="ts-newslink" href="${newsLink}" target="_blank" rel="noopener">📰 Tüm haberler ↗</a>
+        <a class="ts-newslink" href="${newsLink}" target="_blank" rel="noopener">Google Haberler'de aç ↗</a>
       </div>
+      ${data.candidates.length ? `<div class="ts-tabs" role="tablist">
+        <button class="ts-tab active" data-tsview="stocks">İlişkili hisseler</button>
+        <button class="ts-tab" data-tsview="news">📰 Tema haberleri${temaHaberAdet ? ' (' + temaHaberAdet + ')' : ''}</button>
+      </div>` : ''}
       <div class="ts-note">Keşif aracı — “${escapeHtml(q)}” temasıyla <b>ilişkili / haberde geçen</b> hisseler. Yatırım tavsiyesi değildir; skor motorunu etkilemez.</div>`;
+
+    // 📰 Tema haberleri gövdesi — aşağıdaki hisseleri DESTEKLEYEN başlıklar.
+    // DÜRÜSTLÜK NOTU: /api/theme hisse↔haber ilişkisi döndürmüyor (ÖLÇÜLDÜ
+    // 2026-10-25); eşleşme başlık metni üzerinden bu sayfada yapılıyor ve
+    // kullanıcıya da böyle yazılıyor — uydurma bir "uç ilişkisi" sunulmuyor.
+    const newsBody = `
+      <div class="ts-info">Aşağıdaki başlıklar, bu temada listelenen <b>hisseleri destekleyen</b> haberlerdir.
+        Eşleşme <b>uçtan gelmiyor</b>: <code>/api/theme</code> yalnız sembol/ad/gerekçe döndürüyor, haber–hisse
+        bağı bu sayfada başlık metninde sembol ya da şirket adı aranarak kuruluyor. Bilgi amaçlıdır, yatırım tavsiyesi değildir.</div>
+      ${groups.length ? groups.map((g) => `
+        <div class="ts-nblock">
+          <div class="ts-nblock-h">
+            <button class="ts-nsym" data-nsym="${escapeHtml(g.c.base)}" data-nmkt="${escapeHtml(g.c.market)}">${escapeHtml(g.c.base)} <span class="badge">${escapeHtml(g.c.market)}</span></button>
+            <span class="ts-nblock-n">${escapeHtml(g.c.name || '')}</span>
+            <span class="ts-nblock-c">${g.items.length} başlık</span>
+          </div>
+          <ul class="ts-news">${g.items.map((n) => `<li><a href="${n.link}" target="_blank" rel="noopener">${escapeHtml(n.title || '')}</a><span class="ts-news-m">${n.author ? escapeHtml(n.author) + ' · ' : ''}${fmtTime(n.pubDate)}</span></li>`).join('')}</ul>
+        </div>`).join('')
+        : `<div class="empty" style="padding:10px">Listelenen hisselerin hiçbiri güncel başlıklarda geçmiyor — bu temanın haberleri aşağıda.</div>`}
+      ${otherNews.length ? `
+        <div class="ts-nblock">
+          <div class="ts-nblock-h"><span class="ts-nblock-n">Temayla ilgili diğer başlıklar (hisse eşleşmesi yok)</span><span class="ts-nblock-c">${Math.min(otherNews.length, 8)} başlık</span></div>
+          <ul class="ts-news">${otherNews.slice(0, 8).map((n) => `<li><a href="${n.link}" target="_blank" rel="noopener">${escapeHtml(n.title || '')}</a><span class="ts-news-m">${n.author ? escapeHtml(n.author) + ' · ' : ''}${fmtTime(n.pubDate)}</span></li>`).join('')}</ul>
+        </div>` : ''}
+      <div class="ts-actions"><button class="ts-togen" type="button">📡 Bugün ▸ Haberler'de aç</button></div>`;
 
     let body = '';
     if (data.candidates.length) {
@@ -8597,6 +8698,11 @@
             <button class="ts-add" data-i="${i}">+ Listeye ekle</button>
           </div>
         </div>`).join('')}</div>`;
+      // İki görünüm aynı anda basılıyor, görünürlük `hidden` ile değişiyor:
+      // sekme değiştirmek YENİ İSTEK ATMIYOR (tema taraması RSS + /api/theme
+      // demek; sekme tıklaması o maliyeti tekrar ödemesin).
+      body = `<div class="ts-view" data-tsview="stocks">${body}</div>`
+           + `<div class="ts-view" data-tsview="news" hidden>${newsBody}</div>`;
     } else {
       // Aday yok → nedeni + haber katmanı (anahtar yoksa bilgilendir)
       let why = '';
@@ -8608,7 +8714,7 @@
         why = `<div class="ts-info">Bu tema için doğrulanmış (kote) bir hisse eşleşmedi. Daha belirgin bir tema deneyin (ör. “nükleer enerji”, “savunma sanayi”). Aşağıda haber akışı var.</div>`;
       }
       const nl = (data.news || []).length
-        ? `<ul class="ts-news">${data.news.map((n) => `<li><a href="${n.link}" target="_blank" rel="noopener">${escapeHtml(n.title || '')}</a><span class="ts-news-m">${n.author ? escapeHtml(n.author) + ' · ' : ''}${fmtTime(n.pubDate)}</span></li>`).join('')}</ul>`
+        ? `<ul class="ts-news">${data.news.slice(0, 6).map((n) => `<li><a href="${n.link}" target="_blank" rel="noopener">${escapeHtml(n.title || '')}</a><span class="ts-news-m">${n.author ? escapeHtml(n.author) + ' · ' : ''}${fmtTime(n.pubDate)}</span></li>`).join('')}</ul>`
         : `<div class="empty" style="padding:10px">Bu tema için güncel haber bulunamadı.</div>`;
       body = why + nl;
     }
@@ -8623,6 +8729,99 @@
     box.querySelectorAll('.ts-add').forEach((b) => b.addEventListener('click', () => {
       const c = cs[+b.dataset.i]; if (c) openListMenu(b, c.base, c.market, c.base);
     }));
+
+    // Sekme değişimi: yalnız görünürlük (yeni istek yok).
+    const setView = (v) => {
+      box.querySelectorAll('.ts-tab').forEach((t) => t.classList.toggle('active', t.dataset.tsview === v));
+      box.querySelectorAll('.ts-view').forEach((d) => { d.hidden = d.dataset.tsview !== v; });
+    };
+    box.querySelectorAll('.ts-tab').forEach((t) => t.addEventListener('click', () => setView(t.dataset.tsview)));
+    if (view === 'news' && data.candidates.length) setView('news');
+
+    // Haber bloğundaki sembol → hisse sayfası (hisse kartındakiyle aynı yol).
+    box.querySelectorAll('.ts-nsym').forEach((b) => b.addEventListener('click', () => {
+      const sym = b.dataset.nsym, mkt = b.dataset.nmkt;
+      if (sym) openStockPage(sym, mkt, sym);
+    }));
+
+    // 🔗 İKİ YÜZEYİ BAĞLAYAN YÖN 2: tema → "Bugün ▸ Haberler".
+    box.querySelectorAll('.ts-togen').forEach((b) => b.addEventListener('click', () => gotoGeneralTheme(q)));
+  }
+
+  // =====================================================================
+  //  🔗 TEMATİK HABER KÖPRÜSÜ — "Bugün ▸ Haberler" ⇄ "Arama ▸ Tematik keşif"
+  // ---------------------------------------------------------------------
+  //  NE: aynı tema metni iki yüzeyde aynı kaynağa gider. Bugün'deki arama
+  //  alanı `themeFetchNews()` çağırıyor — 🔭 tematik keşfin KULLANDIĞI
+  //  AYNI işlev (Google News US+TR, aynı tekilleştirme). İki yerde iki
+  //  farklı haber kaynağı olsaydı aynı tema iki farklı liste gösterirdi.
+  //
+  //  NEDEN SEKME DÜĞMESİ `.click()` İLE: sekme geçişinin TEK sahibi
+  //  app.js sonundaki `.tab` dinleyicisi (grup butonu aktifleme, menü
+  //  kapatma, tembel `init*` çağrıları hep orada). İkinci bir geçiş yolu
+  //  yazmak o kuralların yarısını kopyalamak olurdu.
+  //  ÖLÇÜLDÜ 2026-10-25.
+  // =====================================================================
+  let genThemeInited = false;
+
+  // Bugün ▸ Haberler → Arama ▸ 🔭 Tematik keşif (haber sekmesi açık gelir)
+  function gotoThemeDiscovery(q) {
+    const tab = document.querySelector('.tab[data-tab="search"]');
+    if (tab) tab.click();
+    const inp = document.getElementById('themeInput');
+    if (inp) inp.value = q;
+    runThemeSearch(q, 'news');
+    const box = document.getElementById('themeResult');
+    if (box && box.scrollIntoView) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Arama ▸ 🔭 Tematik keşif → Bugün ▸ Haberler (aynı tema, aynı kaynak)
+  function gotoGeneralTheme(q) {
+    const tab = document.querySelector('.tab[data-tab="general"]');
+    if (tab) tab.click();
+    const inp = document.getElementById('generalThemeInput');
+    if (inp) inp.value = q;
+    runGeneralThemeNews(q);
+  }
+
+  // Bugün ▸ Haberler içindeki tematik başlık araması
+  async function runGeneralThemeNews(query) {
+    const box = document.getElementById('generalThemeBox'); if (!box) return;
+    const q = (query || '').trim();
+    if (q.length < 2) {
+      box.innerHTML = `<div class="gt-hint">Bir tema yazın (en az 2 harf): ör. “savunma sanayi”, “veri merkezi”. Başlıklar 🔭 Tematik keşifle AYNI kaynaktan okunur. Bilgi amaçlıdır, yatırım tavsiyesi değildir.</div>`;
+      return;
+    }
+    box.innerHTML = '<div class="loading" style="padding:12px">🔭 Tema başlıkları taranıyor…</div>';
+    let items = [];
+    try { items = await themeFetchNews(q); }
+    catch (e) { items = []; }
+    const link = googleNewsPageUrl(q, 'TR');
+    box.innerHTML = `
+      <div class="gt-head">
+        <span class="gt-q">🔭 “${escapeHtml(q)}” tema başlıkları</span>
+        <span class="ts-count">${items.length} başlık</span>
+        <a class="ts-newslink" href="${link}" target="_blank" rel="noopener">Google Haberler'de aç ↗</a>
+      </div>
+      ${items.length
+        ? `<ul class="ts-news">${items.slice(0, 12).map((n) => `<li><a href="${n.link}" target="_blank" rel="noopener">${escapeHtml(n.title || '')}</a><span class="ts-news-m">${n.author ? escapeHtml(n.author) + ' · ' : ''}${fmtTime(n.pubDate)}</span></li>`).join('')}</ul>`
+        : `<div class="empty" style="padding:10px">Bu tema için güncel başlık bulunamadı.</div>`}
+      <div class="ts-actions"><button class="gt-todisc" type="button">🔭 Tematik keşifte aç (ilişkili hisseler + tema haberleri)</button></div>
+      <div class="gt-hint">Bu liste yalnız BAŞLIK taramasıdır; hangi hissenin hangi başlıkla ilişkili olduğu 🔭 Tematik keşif ekranında gösterilir. Bilgi amaçlıdır, yatırım tavsiyesi değildir.</div>`;
+    const btn = box.querySelector('.gt-todisc');
+    if (btn) btn.addEventListener('click', () => gotoThemeDiscovery(q));
+  }
+
+  function initGeneralThemeSearch() {
+    if (genThemeInited) return;
+    const inp = document.getElementById('generalThemeInput');
+    const btn = document.getElementById('generalThemeBtn');
+    if (!inp && !btn) return;
+    const go = () => runGeneralThemeNews(inp ? inp.value : '');
+    if (btn) btn.addEventListener('click', go);
+    if (inp) inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    genThemeInited = true;
+    runGeneralThemeNews('');
   }
 
   function initThemeSearch() {
@@ -8774,8 +8973,8 @@
     const map = {
       below: { cls: 'in',   t: '🟢 Alım bandının altında — ucuz' },
       in:    { cls: 'in',   t: '🟢 Fiyat alım bölgesinde' },
-      near:  { cls: 'near', t: `🟢 Banda ${atrDaysTxt(prox.dAtr)}` },
-      far:   { cls: 'far',  t: `🟡 Banda ${atrDaysTxt(prox.dAtr)}` },
+      near:  { cls: 'near', t: `🟢 ${bandUzaklikTxt(prox.dAtr, null, true)}` },
+      far:   { cls: 'far',  t: `🟡 ${bandUzaklikTxt(prox.dAtr, null, true)}` },
     };
     const m = map[prox.state];
     return m ? `<span class="opp-prox ${m.cls}">${m.t}</span>` : '';
@@ -12695,18 +12894,26 @@
       const rankByCi = {};
       rankable.forEach((x, i) => { rankByCi[x.ci] = i + 1; });
       const rankBestCi = rankable.length ? rankable[0].ci : -1;
+      // DÜRÜSTLÜK KAPISI: madalya her zaman takılıyor, oysa "en yakın" ile
+      // "alınabilir" aynı şey değil. Yeni eşik YOK — yalnız motorun hâlihazırda
+      // kurduğu üç bayrak okunuyor: hiçbiri bandında/altında/banda yakın değilse
+      // birinciliğin ne demediğini yazarız.
+      const hicBandaYakinYok = rankable.length > 0 && !rankable.some((x) =>
+        x.v.inBuy || x.v.belowGap > 0.05 || x.v.nearBuy);
       const medal = (r) => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : ('#' + r);
-      g += '<div class="compare-cell compare-mlabel cmp-c0 cmp-mlbl2" title="Yan yana hisseleri, ŞU ANKİ fiyatın uygun-alım bandına uzaklığına göre sıralar (orta vade). Bandın içinde veya altında olanlar \'şu an alınabilir\' sayılır ve en üste gelir; eşitlik Temel Uygunluk skoruyla çözülür. Bandın üstündekiler tavana yakınlığına göre sıralanır — yakınlık, hissenin kendi ortalama GÜNLÜK hareket mesafesi (ATR) cinsinden ölçülür, yüzdeyle değil: aynı %2,7 uzaklık oynak bir hissede ~1 gün, sakin bir hissede ~3-4 gün demektir. Bu yalnızca FİYAT-UZAKLIK kıyasıdır — olasılık ya da tavsiye değildir; \'düşük fiyat\' düşen bıçak da olabilir. Yatırım tavsiyesi değildir."><span class="cml-t">🥇 Alım sırası <em>(şu an)</em></span><span class="cml-s">fiyata göre: hangisi alım aralığında / en yakın</span></div>';
+      g += '<div class="compare-cell compare-mlabel cmp-c0 cmp-mlbl2" title="Yan yana hisseleri, ŞU ANKİ fiyatın uygun-alım bandına uzaklığına göre sıralar (orta vade). Bandın içinde veya altında olanlar \'şu an alınabilir\' sayılır ve en üste gelir; eşitlik Temel Uygunluk skoruyla çözülür. Bandın üstündekiler bant tavanına yakınlığına göre sıralanır. İKİ ÖLÇÜ BİRLİKTE YAZILIR: (1) yüzde uzaklık — fiyat, bandın üst sınırının yüzde kaçı üstünde; (2) o uzaklığın hissenin KENDİ tipik bir günlük salınımının (ATR) kaç katı olduğu. İkincisi hisseler arası kıyas için gerekli: aynı %2,7 uzaklık, günlük geniş salınan bir hissede salınımın ~1 katı, sakin bir hissede ~3-4 katıdır. Bu bir SÜRE tahmini DEĞİLDİR — \'kaç gün\' demez; ATR bir günün salınım genişliğidir, günlük net düşüş değil ve mesafe-süre ilişkisi doğrusal değildir. Yalnızca FİYAT-UZAKLIK kıyasıdır — olasılık ya da tavsiye değildir; \'düşük fiyat\' düşen bıçak da olabilir. Yatırım tavsiyesi değildir."><span class="cml-t">🥇 Alım sırası <em>(şu an)</em></span><span class="cml-s">fiyata göre: hangisi alım aralığında / en yakın</span></div>';
       verds.forEach((v, ci) => {
         if (v === undefined) { g += '<div class="compare-cell cmp-vrank">…</div>'; return; }
         if (!v || !v.ok || rankByCi[ci] == null) { g += '<div class="compare-cell cmp-vrank">—</div>'; return; }
         const r = rankByCi[ci];
+        const yakinNotu = (hicBandaYakinYok && ci === rankBestCi)
+          ? '<span class="cvk-warn">en yakın — ama hiçbiri bandında değil</span>' : '';
         const best = ci === rankBestCi && rankable.length > 1 ? ' cmp-best' : '';
         let stCls, stTxt;
         if (v.inBuy) { stCls = 'in'; stTxt = '✓ Alım bandında'; }
         else if (v.belowGap > 0.05) { stCls = 'below'; stTxt = `▼ %${Math.round(v.belowGap)} band altı (ucuz)`; }
-        else if (v.nearBuy) { stCls = 'near'; stTxt = `🟢 ${atrDaysTxt(v.dAtr, v.aboveGap)}`; }
-        else if (v.aboveGap > 0.05) { stCls = 'above'; stTxt = `▲ ${atrDaysTxt(v.dAtr, v.aboveGap)}`; }
+        else if (v.nearBuy) { stCls = 'near'; stTxt = `🟢 ${bandUzaklikTxt(v.dAtr, v.aboveGap, true)}`; }
+        else if (v.aboveGap > 0.05) { stCls = 'above'; stTxt = `▲ ${bandUzaklikTxt(v.dAtr, v.aboveGap, true)}`; }
         else { stCls = 'in'; stTxt = '✓ Alım bandında'; }
         // 🎯 Alım hedefi ("yeşil ışık"): bandın hesaplandığı fiyat — kullanıcı bu banda
         // alarm kurup alım emri verir, aşağıdaki "Kâr-al / satış" bölgesine de satış emri
@@ -12719,6 +12926,7 @@
         g += `<div class="compare-cell cmp-vrank ${stCls}${best}"${tip ? ` title="${tip.replace(/"/g, '&quot;')}"` : ''}>`
           + `<span class="cvk-medal">${medal(r)}</span>`
           + `<span class="cvk-st">${stTxt}</span>`
+          + yakinNotu
           + tgtLine
           + `</div>`;
       });
@@ -13102,7 +13310,10 @@
       document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
       if (btn.dataset.tab === 'calendar') renderCalendar();
       if (btn.dataset.tab === 'news' && !newsCache.length) loadUnifiedNews();
-      if (btn.dataset.tab === 'general' && !generalLoaded) { generalLoaded = true; loadGeneral(); }
+      if (btn.dataset.tab === 'general') {
+        if (!generalLoaded) { generalLoaded = true; loadGeneral(); }
+        initGeneralThemeSearch();
+      }
       if (btn.dataset.tab === 'technical') initTechnical();
       if (btn.dataset.tab === 'fundamental') initFundamental();
       if (btn.dataset.tab === 'opps') initOpportunities();

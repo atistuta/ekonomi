@@ -33,31 +33,38 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { router } from 'expo-router';
-import { useCallback } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
+  AZAMI_HABER_SORGU,
   fetchCompare,
+  fetchNews,
   fetchPulse,
+  haberOlcumEksik,
   useHazir,
   useIstek,
   useListe,
+  type HaberMadde,
   type NabizSorguHaber,
   type SiraKayit,
 } from '@/api';
 import {
   Card,
   DISCLAIMER_TEXT,
+  Dugme,
   Durum,
   HaberOlcumEksikRozet,
+  OlcemedimKutu,
   OlcumEksikRozet,
   Pill,
   ScreenShell,
   VeriYok,
 } from '@/components';
+import { HaberSatiri } from '@/components/kesfet';
 import { formatOran, formatScore } from '@/lib/format';
-import { space, type, useTheme } from '@/theme';
+import { radius, space, type, useTheme } from '@/theme';
 
 /** Yakınlık durumu — SABİT KÜME (motor), yalnız Türkçeye çevriliyor. */
 const DURUM_METIN: Record<string, string> = {
@@ -121,7 +128,7 @@ export default function BugunScreen() {
       note="Öne çıkan sektör kartı için motor ucu henüz yok; uydurma kart konmadı.">
       <Card
         title="Fiyata yakınlık sırası"
-        subtitle="Anahtar: alım bandına ATR uzaklığı (motor kararı)"
+        subtitle="Anahtar: alım bandına uzaklık — tipik günlük salınımın katı (motor kararı)"
         right={
           durum === 'veri' && veri ? (
             <Pill label={veri.vade} tone="info" glyph={null} size="sm" />
@@ -149,7 +156,7 @@ export default function BugunScreen() {
                 <Text
                   key={s.sym}
                   accessibilityRole="button"
-                  onPress={() => router.push({ pathname: '/analiz', params: { sym: s.sym } })}
+                  onPress={() => router.push({ pathname: '/hisse/[sembol]', params: { sembol: s.sym } })}
                   style={[styles.sira, { color: colors.text, borderBottomColor: colors.border }]}>
                   <Text style={type.smallBold}>{s.sira + '. ' + s.sym}</Text>
                   <Text style={{ color: colors.textDim }}>
@@ -183,6 +190,8 @@ export default function BugunScreen() {
       </Card>
 
       <MakroNabizKarti />
+
+      <TematikHaberKarti />
 
       <Card title="Henüz ölçülmeyen kartlar" subtitle="Dürüst eksik listesi">
         <Text style={[type.small, { color: colors.textDim }]}>
@@ -359,6 +368,154 @@ function MakroNabizKarti() {
   );
 }
 
+/**
+ * 🔭 TEMATİK HABER BAŞLIĞI ARAMA — `/api/news`.
+ *
+ * NE: tema yazılır, uç o temayla manşet tarar; satırlar olduğu gibi
+ * basılır. Alt düğme AYNI temayı 🔎 Arama ekranındaki 🔭 tematik keşifte
+ * açar (iki yüzey köprüsü: `/arama` + `tema` parametresi).
+ *
+ * NEDEN AYRI İSTEK (kıyas/nabız turundan bağımsız): kullanıcı tema
+ * yazdıkça kıyas sırası ya da nabız yeniden çekilmesin; tersi de geçerli
+ * (⚡ Makro Nabız kartıyla aynı gerekçe).
+ *
+ * NEDEN HİSSE EŞLEŞTİRMESİ YOK: ÖLÇÜLDÜ 2026-10-25 — `/api/theme`
+ * cevabı yalnız `{symbol, market, name, reason}` taşıyor, `/api/news`
+ * cevabı da yalnız manşet maddeleri; HİÇBİRİ "bu manşet şu hisseyi
+ * destekliyor" ilişkisini VERMİYOR. Bu ilişkiyi burada başlık metninde
+ * sembol/şirket adı arayarak kurmak İSTEMCİDE HESAP olurdu (native
+ * tarafta yasak) — o yüzden bu ekran yalnız başlıkları basıyor, eşleşme
+ * iddiası etmiyor ve bunu kart altında AÇIKÇA yazıyor. Eşleşmeyi uç
+ * verirse (öneri raporda) burada gösterilir.
+ *
+ * BURADA HESAP YOK: manşet sayısı (`adet`), sayaçlar ve tarihler uçtan;
+ * tarih biçimlemesi `lib/format.ts`e ait.
+ */
+function TematikHaberKarti() {
+  const { colors } = useTheme();
+
+  // Gelen `tema` parametresi: 🔎 Arama ekranındaki 🔭 tematik keşiften
+  // bu ekrana köprü kurulduğunda alan ONUNLA DOLUYOR ve arama kendi
+  // kendine koşuyor — kullanıcı aynı temayı iki kez yazmasın.
+  const params = useLocalSearchParams<{ tema?: string }>();
+  const gelenTema = (params.tema ?? '').trim().slice(0, AZAMI_HABER_SORGU);
+
+  const [metin, setMetin] = useState(gelenTema);
+  const [sorgu, setSorgu] = useState(gelenTema);
+  // Parametre DEĞİŞTİĞİNDE (aynı ekran açıkken yeni tema geldiğinde)
+  // alanı yenilemek için son görülen değeri tutuyoruz. `useEffect`
+  // yerine bu: efektle yazmak bir kare eski metni gösterirdi.
+  const [sonGelen, setSonGelen] = useState(gelenTema);
+  if (gelenTema && gelenTema !== sonGelen) {
+    setSonGelen(gelenTema);
+    setMetin(gelenTema);
+    setSorgu(gelenTema);
+  }
+
+  const cagri = useCallback(
+    (signal: AbortSignal) => fetchNews(sorgu, { market: 'TR', signal }),
+    [sorgu],
+  );
+  const { durum, veri, hata, yenile } = useIstek(cagri, 'tema-haber:' + sorgu, {
+    etkin: sorgu.length > 0,
+  });
+
+  const maddeler: HaberMadde[] = veri?.maddeler ?? [];
+  const eksik = haberOlcumEksik(veri ?? null);
+
+  return (
+    <Card
+      title="🔭 Tematik haber başlığı ara"
+      subtitle="Tema yaz, manşetleri gör — ilişkili hisseler için 🔎 Arama'daki tematik keşif">
+      <TextInput
+        value={metin}
+        onChangeText={setMetin}
+        placeholder="Tema: ör. savunma sanayi, veri merkezi, nükleer enerji"
+        placeholderTextColor={colors.textFaint}
+        autoCorrect={false}
+        maxLength={AZAMI_HABER_SORGU}
+        returnKeyType="search"
+        onSubmitEditing={() => setSorgu(metin.trim())}
+        accessibilityLabel="Tematik haber başlığı arama alanı"
+        style={[
+          styles.alan,
+          type.body,
+          { color: colors.text, backgroundColor: colors.bgElevated, borderColor: colors.border },
+        ]}
+      />
+      <View style={styles.dugmeler}>
+        <Dugme label="Başlık ara" onPress={() => setSorgu(metin.trim())} disabled={!metin.trim()} />
+        <Dugme
+          label="🔭 Tematik keşifte aç"
+          variant="outline"
+          tone="info"
+          // AYNI TEMA, AYNI PARAMETRE: Arama ekranı `tema`yı okuyup
+          // 🔭 keşfi (`/api/theme`) o temayla koşturuyor.
+          onPress={() => router.navigate({ pathname: '/arama', params: { tema: metin.trim() } })}
+          disabled={!metin.trim()}
+        />
+      </View>
+
+      <Durum
+        durum={durum}
+        hata={hata}
+        yenile={yenile}
+        kartsiz
+        iskelet={3}
+        sekil="metin"
+        bosMetin="Bir tema yaz ve 'Başlık ara'ya bas."
+      />
+
+      {/* Rozet MANŞETLERİN ÜSTÜNDE: eksik taramayı başlıkları okuduktan
+          SONRA öğrenmek, eksik ölçümü tam ölçüm gibi sunmak olurdu. */}
+      {durum === 'veri' && veri ? <HaberOlcumEksikRozet kaynak={veri} /> : null}
+
+      {durum === 'veri' && veri ? (
+        eksik ? (
+          // ÖLÇEMEDİM ≠ "haber yok": ucun kendi bildirdiği eksik.
+          <OlcemedimKutu
+            metin={
+              'Manşet taraması TAMAMLANMADI — ' +
+              (veri.uyari ?? 'uç tam tarama bildirmedi') +
+              '. Aşağıdaki başlıklar gelenlerin tamamı değil.'
+            }
+            yenile={yenile}
+          />
+        ) : null
+      ) : null}
+
+      {durum === 'veri' && veri && veri.adet === 0 && !eksik ? (
+        <VeriYok metin={'“' + sorgu + '” için uç manşet bulamadı — bu da ÖLÇÜLMÜŞ bir cevap.'} />
+      ) : null}
+
+      {durum === 'veri' && maddeler.length ? (
+        <View style={styles.haberler}>
+          {maddeler.map((m, i) => (
+            <HaberSatiri key={(m.link || '') + '#' + i} madde={m} />
+          ))}
+        </View>
+      ) : null}
+
+      {durum === 'veri' && veri ? (
+        <Text style={[type.micro, { color: colors.textFaint, marginTop: space.sm }]}>
+          {'Uç ' + veri.adet + ' manşet döndü · sorgu “' + veri.q + '” · ' + veri.market +
+            ' · ' + veri.ms + ' ms'}
+        </Text>
+      ) : null}
+
+      <Text style={[type.micro, { color: colors.textDim, marginTop: space.sm }]}>
+        {'Bu liste TEMANIN manşetleri — hangi manşetin hangi hisseyi desteklediği UÇTAN ' +
+          'GELMİYOR, o yüzden burada hisse eşleştirmesi iddia edilmiyor. Temayla ilişkili ' +
+          'hisseler için “🔭 Tematik keşifte aç”a bas.'}
+      </Text>
+
+      <Text style={[type.micro, { color: colors.textFaint, marginTop: space.md }]}>
+        {DISCLAIMER_TEXT}
+      </Text>
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
   kaydir: { maxHeight: 320 },
   nabiz: { gap: space.xs, paddingTop: space.sm },
@@ -369,4 +526,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   notlar: { gap: space.xs, marginTop: space.sm },
+  // 🔭 tematik haber kartı — SALT SUNUM ölçüleri (Arama ekranındaki
+  // arama alanıyla aynı: aynı iş aynı görünsün).
+  alan: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    minHeight: 44,
+  },
+  dugmeler: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap', paddingTop: space.sm },
+  haberler: { paddingTop: space.xs },
 });

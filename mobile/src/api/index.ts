@@ -17,6 +17,22 @@
 // çağrılar (fetchScore … fetchChart) bu tek satırdan geçiyor. İkinci bir
 // `export` satırı yazmak aynı adı iki yerden açmak olurdu.
 export * from './client';
+
+// NEDEN AYRI SATIR: `yfin.ts` skor zincirinin DIŞINDA bir uç (Yahoo
+// künyesi: yaklaşan bilanço + temettü oranı) ve `client.ts`'in sembol
+// kapısından geçmiyor — kendi sembol sınırı (12) ve kendi bütçesi
+// (28 sn) var. `client.ts` içine katmak, skor sözleşmesiyle künye
+// sözleşmesini aynı dosyada karıştırmak olurdu.
+export {
+  YFIN_AZAMI_SEMBOL,
+  YFIN_TIMEOUT_MS,
+  fetchYfin,
+  yfinSozluk,
+  type YfinEarnings,
+  type YfinKunye,
+  type YfinOptions,
+  type YfinResponse,
+} from './yfin';
 export { useIstek, type IstekAyar, type IstekDurum, type IstekSonuc } from './istek';
 export {
   BASLANGIC_LISTE,

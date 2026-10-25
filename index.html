@@ -308,7 +308,18 @@
         <button class="chip" data-region="TR">Türkiye</button>
         <button class="chip" data-region="WORLD">Dünya</button>
       </div>
+      <!-- 🔭 Tematik haber başlığı araması — 🔭 Tematik keşif ile AYNI
+           kaynağı (themeFetchNews) kullanır; iki yüzey köprülüdür. -->
+      <div class="gt-search">
+        <div class="gt-search-h">🔭 Tematik haber başlığı ara <span class="theme-search-sub">tema yaz, başlıkları gör; keşifte ilişkili hisseleri aç</span></div>
+        <div class="search-controls">
+          <input id="generalThemeInput" type="text" maxlength="60" placeholder="Tema: ör. savunma sanayi, veri merkezi, nükleer enerji" />
+          <button id="generalThemeBtn" class="primary-btn">Başlık ara</button>
+        </div>
+        <div id="generalThemeBox"></div>
+      </div>
       <div id="generalFeed" class="feed"></div>
+      <p class="hint ta-disclaimer">Haber akışı kamuya açık başlıklardan derlenir; tematik başlık araması bir eşleştirme değil metin taramasıdır. Yalnızca bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
     </section>
 
     <section id="tab-technical" class="tab-content">

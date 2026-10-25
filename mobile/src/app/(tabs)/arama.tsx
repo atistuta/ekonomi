@@ -15,6 +15,21 @@
 //  diye göstermek YALAN olurdu: aranmadı. `client.ts`in `temaKodMetni`
 //  çevirisi bu ayrımı taşıyor.
 //
+//  NEDEN BİR DE 📰 TEMA HABERLERİ KARTI VAR: aynı tema için manşetler
+//  (/api/news) ayrı bir uçta duruyor; aynı ekranda görünmezse kullanıcı
+//  "ilişkili hisseler" ile "temanın haberleri" arasında iki ekran
+//  gezinir. Kart AYNI `temaSorgu` ile besleniyor — iki uç, tek tema.
+//
+//  HİSSE↔HABER İLİŞKİSİ UÇTAN GELMİYOR: ÖLÇÜLDÜ 2026-10-25 —
+//  /api/theme yalnız {symbol, market, name, reason}, /api/news yalnız
+//  manşet maddeleri döndürüyor; "bu manşet şu hisseyi destekliyor"
+//  bilgisi HİÇBİR uçta yok. Başlık metninde sembol/şirket adı aramak
+//  İSTEMCİDE HESAP olurdu (native kuralı) — o yüzden kart eşleşme
+//  İDDİA ETMİYOR ve bunu ekranda açıkça yazıyor.
+//
+//  KÖPRÜ: 📡 Bugün ekranındaki 🔭 tematik haber arama alanı ile bu ekran
+//  `tema` yol parametresiyle bağlı — iki yönde de aynı tema taşınıyor.
+//
 //  NEDEN SEMBOL SONUCU TEK SATIR: istek tek sembolle gidiyor; sözleşme
 //  sınırı 8 ve o sınır listenin işi (bkz. api/liste.ts).
 //
@@ -24,23 +39,28 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
+  AZAMI_HABER_SORGU,
   AZAMI_SEMBOL,
   ekle,
+  fetchNews,
   fetchRecommend,
   fetchTheme,
+  haberOlcumEksik,
   temaKodMetni,
   useIstek,
   useListe,
+  type HaberMadde,
 } from '@/api';
 import {
   Card,
   Dugme,
   Durum,
+  HaberOlcumEksikRozet,
   OlcemedimKutu,
   OlcumEksikRozet,
   Pill,
@@ -48,16 +68,40 @@ import {
   TickerRow,
   VeriYok,
 } from '@/components';
+import { HaberSatiri } from '@/components/kesfet';
 import { formatPrice, formatScore } from '@/lib/format';
 import { radius, space, type, useTheme } from '@/theme';
 
 export default function AramaScreen() {
   const { colors } = useTheme();
   const liste = useListe();
-  const [metin, setMetin] = useState('');
+  // 📡 Bugün ekranından gelen tema: alan ONUNLA doluyor ve 🔭 keşif
+  // kendi kendine koşuyor — kullanıcı aynı temayı iki kez yazmasın.
+  // `useEffect` yerine "son görülen parametre" deseni: efektle yazmak
+  // bir kare eski metni gösterirdi.
+  //
+  // ── TAZE MOUNT TUZAĞI (ÖLÇÜLDÜ 2026-10-25, 127.0.0.1:8081) ──
+  // Önceki hâlde `sonGelen` başlangıç değeri `gelenTema` idi. Bugün'den
+  // gelindiğinde bu ekran İLK KEZ parametre ZATEN doluyken kuruluyor,
+  // dolayısıyla `gelenTema !== sonGelen` daha ilk karede yanlış oluyor ve
+  // tema alana HİÇ düşmüyordu: URL `?tema=savunma sanayi` olurken ekranda
+  // "Bir tema yaz" yazıyordu. Düzeltme: içerik durumları doğrudan
+  // `gelenTema` ile tohumlanıyor, `sonGelen` de aynı değerle — böylece ilk
+  // kare dolu geliyor, sonraki parametre DEĞİŞİMLERİ ise yine yakalanıyor.
+  const params = useLocalSearchParams<{ tema?: string }>();
+  const gelenTema = (params.tema ?? '').trim().slice(0, AZAMI_HABER_SORGU);
+
+  const [metin, setMetin] = useState(gelenTema);
   const [sembolSorgu, setSembolSorgu] = useState('');
-  const [temaSorgu, setTemaSorgu] = useState('');
+  const [temaSorgu, setTemaSorgu] = useState(gelenTema);
   const [bildirim, setBildirim] = useState<string | null>(null);
+
+  const [sonGelen, setSonGelen] = useState(gelenTema);
+  if (gelenTema && gelenTema !== sonGelen) {
+    setSonGelen(gelenTema);
+    setMetin(gelenTema);
+    setTemaSorgu(gelenTema);
+  }
 
   const sembolCagri = useCallback(
     (signal: AbortSignal) => fetchRecommend([sembolSorgu], { vade: 'orta', signal }),
@@ -149,7 +193,12 @@ export default function AramaScreen() {
                 price={satir.plan?.seviye?.price ?? satir.fa.price}
                 currency={satir.market === 'BIST' ? 'TRY' : null}
                 changePct={null}
-                onPress={() => router.push({ pathname: '/analiz', params: { sym: satir.sym } })}
+                onPress={() => router.push({
+                    pathname: '/hisse/[sembol]',
+                    // `pazar`: uc BIST sembolunu sonek SILEREK donduruyor; detay
+                    // ekrani bu bilgiyle `.IS`'i geri kazaniyor (bkz. o ekran).
+                    params: { sembol: satir.sym, pazar: satir.market },
+                  })}
                 right={
                   <View style={styles.sag}>
                     {/* `right` verilince TickerRow fiyati kendi basmiyor. */}
@@ -238,7 +287,107 @@ export default function AramaScreen() {
           )
         ) : null}
       </Card>
+
+      <TemaHaberleriKarti sorgu={temaSorgu} />
     </ScreenShell>
+  );
+}
+
+/**
+ * 📰 TEMA HABERLERİ — `/api/news`, aynı tema.
+ *
+ * NEDEN AYRI İSTEK: 🔭 keşif turu (/api/theme) yavaş ve anahtara bağlı;
+ * manşetler onu beklemesin, o da manşetleri beklemesin. Kendi
+ * `useIstek`i var (Bugün'deki kartlarla aynı desen).
+ *
+ * NEDEN EŞLEŞME İDDİA EDİLMİYOR: dosya başlığındaki ÖLÇÜLDÜ notu —
+ * hisse↔manşet ilişkisi hiçbir uçtan gelmiyor, istemcide kurmak hesap
+ * olurdu. Kart bunu ekranda yazıyor.
+ *
+ * BURADA HESAP YOK: manşet sayısı, sayaçlar ve tarihler uçtan.
+ */
+function TemaHaberleriKarti({ sorgu }: { sorgu: string }) {
+  const { colors } = useTheme();
+
+  const cagri = useCallback(
+    (signal: AbortSignal) => fetchNews(sorgu, { market: 'TR', signal }),
+    [sorgu],
+  );
+  const { durum, veri, hata, yenile } = useIstek(cagri, 'tema-haber:' + sorgu, {
+    etkin: sorgu.length > 0,
+  });
+
+  const maddeler: HaberMadde[] = veri?.maddeler ?? [];
+  const eksik = haberOlcumEksik(veri ?? null);
+
+  return (
+    <Card
+      title="📰 Tema haberleri"
+      subtitle={sorgu ? sorgu + ' · /api/news' : 'Tema arandığında manşetler buraya gelir'}>
+      <Durum
+        durum={durum}
+        hata={hata}
+        yenile={yenile}
+        kartsiz
+        iskelet={3}
+        sekil="metin"
+        bosMetin="Bir tema yaz ve 'Tema ara'ya bas — manşetler de aynı temayla gelir."
+      />
+
+      {/* Rozet MANŞETLERİN ÜSTÜNDE: eksik taramayı başlıkları okuduktan
+          sonra öğrenmek, eksik ölçümü tam ölçüm gibi sunmak olurdu. */}
+      {durum === 'veri' && veri ? <HaberOlcumEksikRozet kaynak={veri} /> : null}
+
+      {durum === 'veri' && veri && eksik ? (
+        <OlcemedimKutu
+          metin={
+            'Manşet taraması TAMAMLANMADI — ' +
+            (veri.uyari ?? 'uç tam tarama bildirmedi') +
+            '. Aşağıdaki başlıklar gelenlerin tamamı değil.'
+          }
+          yenile={yenile}
+        />
+      ) : null}
+
+      {durum === 'veri' && veri && veri.adet === 0 && !eksik ? (
+        <VeriYok
+          kartsiz
+          metin={'“' + sorgu + '” için uç manşet bulamadı — bu da ÖLÇÜLMÜŞ bir cevap.'}
+        />
+      ) : null}
+
+      {durum === 'veri' && maddeler.length ? (
+        <View style={styles.haberler}>
+          {maddeler.map((m, i) => (
+            <HaberSatiri key={(m.link || '') + '#' + i} madde={m} />
+          ))}
+        </View>
+      ) : null}
+
+      {durum === 'veri' && veri ? (
+        <Text style={[type.micro, { color: colors.textFaint, marginTop: space.sm }]}>
+          {'Uç ' + veri.adet + ' manşet döndü · sorgu “' + veri.q + '” · ' + veri.market +
+            ' · ' + veri.ms + ' ms'}
+        </Text>
+      ) : null}
+
+      <Text style={[type.micro, { color: colors.textDim, marginTop: space.sm }]}>
+        {'Bu başlıklar TEMANIN manşetleri. Hangi manşetin yukarıdaki hangi hisseyi ' +
+          'desteklediği UÇTAN GELMİYOR — eşleşme iddia edilmiyor.'}
+      </Text>
+
+      <Dugme
+        label="📡 Bugün ▸ tematik başlık aramasında aç"
+        variant="outline"
+        tone="info"
+        size="sm"
+        // AYNI TEMA, AYNI PARAMETRE: Bugün ekranı `tema`yı okuyup aynı
+        // ucu (/api/news) aynı sorguyla koşturuyor.
+        onPress={() => router.navigate({ pathname: '/bugun', params: { tema: sorgu } })}
+        disabled={!sorgu}
+        style={{ marginTop: space.md }}
+      />
+    </Card>
   );
 }
 
@@ -253,4 +402,5 @@ const styles = StyleSheet.create({
   dugmeler: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
   sag: { alignItems: 'flex-end', gap: 2 },
   aday: { gap: 2, paddingVertical: space.sm },
+  haberler: { paddingTop: space.xs },
 });

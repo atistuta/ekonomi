@@ -95,6 +95,30 @@ export function formatOran(value: number | null | undefined, digits = 2): string
   }).format(value);
 }
 
+/**
+ * Alım bandına uzaklığın TÜRKÇESİ. Motorun `dAtr` alanı =
+ * (fiyat − bant üst sınırı) ÷ ATR, yani "uzaklık, hissenin tipik bir
+ * günlük SALINIMININ kaç katı".
+ *
+ * NEDEN "GÜN" DEMİYOR: ATR bir günün salınım genişliğidir (yüksek−düşük),
+ * günlük net düşüş değil; ayrıca mesafe ile geçecek süre doğrusal değil
+ * yaklaşık karesel ölçeklenir. "0,9×ATR = 0,9 günlük düşüş" cümlesi bu iki
+ * sebepten yanlıştı ve hatayı daima "sandığından yakın" yönüne yapıyordu.
+ *
+ * BURADA HESAP YOK: gelen sayı yalnız biçimlenir — ölçek değişmez, eşik
+ * yoktur. `dAtr` uçta bandın içinde/altında olanlar için 0'a kırpılıyor
+ * (api/compare.js), o yüzden 0 "uzaklık yok" diye okunur.
+ * YÜZDE UZAKLIK UÇTAN GELMİYOR; türetilmez (bkz. motor şeridi önerisi).
+ */
+export function formatBandUzakligi(dAtr: number | null | undefined): string {
+  if (!isNum(dAtr)) return 'banda uzaklığı ölçülmedi';
+  const d = Math.abs(dAtr);
+  if (d < 0.05) return 'bandın içinde ya da altında — uzaklık yok';
+  if (d >= 10) return 'tipik günlük salınımın 10 katından fazla uzakta';
+  // 3 katın altında ondalık: sıralamayı belirleyen ayrım ekranda kaybolmasın.
+  return `tipik günlük salınımın ${formatOran(d, d < 3 ? 1 : 0)} katı kadar uzakta`;
+}
+
 /** Hacim / piyasa değeri gibi büyük sayılar: 1,2 Mr · 340 Mn · 12 B. */
 export function formatCompact(value: number | null | undefined): string {
   if (!isNum(value)) return EMPTY;

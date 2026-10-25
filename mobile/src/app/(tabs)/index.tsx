@@ -192,7 +192,12 @@ function Satir({ satir }: { satir: RecommendRow }) {
         currency={satir.market === 'BIST' ? 'TRY' : null}
         changePct={null}
         style={styles.satirTicker}
-        onPress={() => router.push({ pathname: '/analiz', params: { sym: satir.sym } })}
+        onPress={() => router.push({
+                    pathname: '/hisse/[sembol]',
+                    // `pazar`: uc BIST sembolunu sonek SILEREK donduruyor; detay
+                    // ekrani bu bilgiyle `.IS`'i geri kazaniyor (bkz. o ekran).
+                    params: { sembol: satir.sym, pazar: satir.market },
+                  })}
         right={
           <View style={styles.sag}>
             {/* NEDEN FIYAT BURADA: `right` verildiginde TickerRow kendi fiyat

@@ -1,19 +1,29 @@
 // =====================================================================
 //  KEŞFET — 3. sekme, MOTORA BAĞLI                    (FAZ 2 / native)
 // ---------------------------------------------------------------------
-//  NE: takip listesinde FIRSAT ayrıştırması: /api/recommend turundan
-//  gelen `plan.yakinlik` (alım bandına uzaklık) ve `plan.momentum`
-//  (trend-devam rejimi) alanları.
+//  NE: takip listesinin TEK `/api/recommend` turu, üç yüzeye dağıtılıyor:
+//  🌍 Radar (tek bakışta hâl) · 🔥 Fırsatlar (risk/ödül dizilimi) ·
+//  🔎 Tarama (ölçüt süzgeci). Üçü de `@/components/kesfet` altında.
 //
-//  NEDEN BU İKİSİ: web tarafındaki "Fırsatlar" ve "⚡ momentum girişi"
-//  katmanlarının motor karşılıkları bunlar. İkisi de UCUN KARARI:
-//  `yakinlik.state` ve `momentum.active` sabit küme değerler; istemci
-//  "fırsat mı" sorusuna kendi eşiğiyle cevap VERMİYOR, yalnız motorun
-//  cevabını gruplandırıyor.
+//  NEDEN TEK TUR, ÜÇ KART: üç kartın hiçbiri veri ÇEKMİYOR; satırları
+//  prop olarak alıyor. Aksi hâlde aynı tur için üç istek ödenir ve üç
+//  kart birbirinden farklı üç anlık görüntü gösterebilirdi.
 //
-//  NEDEN GRUPLAMA HESAP DEĞİL: `state === 'in'` olanları bir başlık
-//  altında toplamak yeni bir eşik üretmez — motorun zaten söylediği
-//  kategoriyi okur. Tek bir sayı burada türetilmiyor.
+//  NEDEN GRUPLAMA/SÜZME HESAP DEĞİL: kartlar motorun zaten söylediği
+//  alanları (`composite.blendedShown`, `ta.score`, `fa.score`,
+//  `plan.yakinlik.state`, `plan.momentum.active`, `tam`) okuyup
+//  karşılaştırıyor. Tarama'nın ≥70 çipi KULLANICI SÜZGECİNİN ayarı,
+//  skor eşiği değil — tek bir sayı burada türetilmiyor.
+//
+//  NEDEN ESKİ İKİ KART GİTTİ: bu ekranda elle yazılmış "Alım bandına
+//  yakın" + "Momentum" kartları vardı; ikisinin içeriği de Tarama'nın
+//  `bandaYakin` / `momentum` ölçütleri ve Radar'ın yakınlık sütunu
+//  tarafından kapsanıyor. Aynı kararı iki ayrı yerde basmak, biri
+//  yarın değişince sessiz bir çelişki bırakırdı.
+//
+//  ESKİ ÖLÇÜM DÜZELTMESİ: başlık "Radar (tarama) için hâlâ uç yok"
+//  diyordu. O ölçüm ESKİDİ — radar/tarama için AYRI bir uç gerekmiyordu;
+//  ikisi de `/api/recommend` satırlarının okunmasıyla çiziliyor.
 //
 //  NEDEN "gündem" ARTIK BURADA: eski başlık "radar/gündem için uç YOK
 //  (api/ altında haber/radar ucu bulunmuyor)" diyordu. O ÖLÇÜM ESKİDİ —
@@ -49,16 +59,14 @@ import {
   DISCLAIMER_TEXT,
   Durum,
   OlcemedimKutu,
-  OlcumEksikRozet,
-  Pill,
   ScreenShell,
   VeriYok,
 } from '@/components';
-import { formatHaberTarih, formatPercent, formatPrice, formatScore } from '@/lib/format';
+import { FirsatlarKart, RadarKart, TaramaKart } from '@/components/kesfet';
+import { formatHaberTarih } from '@/lib/format';
 import { radius, space, type, useTheme } from '@/theme';
 
 export default function KesfetScreen() {
-  const { colors } = useTheme();
   const liste = useListe();
   const hazir = useHazir();
 
@@ -72,18 +80,19 @@ export default function KesfetScreen() {
   });
 
   const satirlar: RecommendRow[] = veri?.sonuclar ?? [];
-  // Gruplama = motorun `state` değerini okumak. Yeni eşik ÜRETİLMİYOR.
-  const bandaYakin = satirlar.filter((r) => {
-    const s = r.plan?.yakinlik?.state;
-    return s === 'in' || s === 'near' || s === 'below';
-  });
-  const momentumlu = satirlar.filter((r) => r.plan?.momentum?.active === true);
+
+  // Satır dokunuşunun karşılığı SEKMENİN kararı (kartlar yönlendirme
+  // bilmiyor): hisse detay ekranı. `/analiz` değil — orada sembol
+  // karşılaştırması var, tek sembolün TA+FA+tez dökümü detayda.
+  const sembolAc = useCallback((sym: string) => {
+    router.push({ pathname: '/hisse/[sembol]', params: { sembol: sym } });
+  }, []);
 
   return (
     <ScreenShell
       title="Keşfet"
       subtitle="Motorun fırsat ve momentum kararları — eşikler motorda."
-      note="Tarama (radar) katmanı için motor ucu yok; tematik keşif Arama sekmesinde.">
+      note="Üç kart TEK recommend turunu okur; tematik keşif Arama sekmesinde.">
       {/* `sekil="sira"`: beklenen içerik sembol + rozet + iki künye
           satırı; fiyat/değişim sütunlu liste satırı değil. */}
       <Durum
@@ -105,36 +114,38 @@ export default function KesfetScreen() {
         <VeriYok metin="Motor bu semboller için sonuç döndürmedi; ayrıştırılacak satır yok." />
       ) : null}
 
+      {/* NEDEN YALNIZ `veri` DALINDA: yükleniyor/hata/boş hâlleri ekran
+          üstündeki TEK `Durum` anlatıyor. Kartlar da durum alıyor (kendi
+          sözleşmeleri bu) ama üçünü birden çizmek aynı yüklenmeyi üç
+          iskeletle, aynı arızayı üç hata kutusuyla tekrar basardı. */}
       {durum === 'veri' && satirlar.length ? (
         <>
-          {veri ? <OlcumEksikRozet kaynak={veri} /> : null}
-          <Card title="Alım bandına yakın" subtitle="Motorun `yakinlik` kararı">
-            {bandaYakin.length ? (
-              bandaYakin.map((r) => <FirsatSatiri key={r.sym} satir={r} />)
-            ) : (
-              <VeriYok kartsiz metin="Listede alım bandına yakın sembol yok." />
-            )}
-          </Card>
-
-          <Card title="Momentum / trend-devam" subtitle="Motorun `momentum.active` kararı">
-            {momentumlu.length ? (
-              momentumlu.map((r) => (
-                <View key={r.sym} style={styles.satir}>
-                  <Text style={[type.smallBold, { color: colors.text }]}>{r.sym}</Text>
-                  <Text style={[type.micro, { color: colors.textDim }]}>
-                    {'ADX ' +
-                      formatScore(r.ta.adx) +
-                      ' · rejim ' +
-                      (r.ta.regime ?? 'ölçülemedi') +
-                      ' · TA ' +
-                      formatScore(r.ta.score)}
-                  </Text>
-                </View>
-              ))
-            ) : (
-              <VeriYok kartsiz metin="Listede momentum rejimi etkin olan sembol yok." />
-            )}
-          </Card>
+          <RadarKart
+            satirlar={satirlar}
+            durum={durum}
+            hata={hata}
+            yenile={yenile}
+            kaynak={veri}
+            liste={liste}
+            atlanan={veri?.atlanan}
+            onSembol={sembolAc}
+          />
+          <FirsatlarKart
+            satirlar={satirlar}
+            durum={durum}
+            hata={hata}
+            yenile={yenile}
+            kaynak={veri}
+            onSembol={sembolAc}
+          />
+          <TaramaKart
+            satirlar={satirlar}
+            durum={durum}
+            hata={hata}
+            yenile={yenile}
+            kaynak={veri}
+            onSembol={sembolAc}
+          />
         </>
       ) : null}
 
@@ -146,43 +157,8 @@ export default function KesfetScreen() {
   );
 }
 
-function FirsatSatiri({ satir }: { satir: RecommendRow }) {
-  const { colors } = useTheme();
-  const yk = satir.plan?.yakinlik;
-  const band = satir.plan?.seviye?.buyZone;
-  const up = satir.plan?.riskOdul?.sellUpPct;
-  const brk = satir.plan?.riskOdul?.brkPct;
-
-  return (
-    <View style={styles.satir}>
-      <View style={styles.ust}>
-        <Text
-          accessibilityRole="button"
-          onPress={() => router.push({ pathname: '/analiz', params: { sym: satir.sym } })}
-          style={[type.smallBold, { color: colors.text }]}>
-          {satir.sym}
-        </Text>
-        <Pill label={yk?.state ?? 'ölçülemedi'} tone="info" glyph={null} size="sm" />
-      </View>
-      <Text style={[type.micro, { color: colors.textDim }]}>
-        {'Alım bandı: ' +
-          (band && band.length === 2
-            ? formatPrice(band[0], satir.market === 'BIST' ? 'TRY' : null) +
-              ' – ' +
-              formatPrice(band[1], satir.market === 'BIST' ? 'TRY' : null)
-            : 'ölçülemedi')}
-      </Text>
-      {/* ▲/▼ bilinçli: yön rengin yanında İŞARETLE de taşınıyor. */}
-      <Text style={[type.micro, { color: colors.textFaint }]}>
-        {'▲ kâr-al ' + formatPercent(up) + '   ▼ kırılma ' + formatPercent(brk)}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   satir: { gap: 2, paddingVertical: space.sm },
-  ust: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   cipler: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingBottom: space.sm },
   cip: {
     paddingHorizontal: space.md,

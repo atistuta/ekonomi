@@ -36,6 +36,27 @@
 //  "ekranlar ister, komponentler çizer" (`components/` içinde `fetch`
 //  yok). `FiyatGrafigi` saf sunum: durum/veri/hata props'tan gelir.
 //
+//  ÜÇ LİSTE KARTI DAHA (⚖️ Karşılaştır · 📅 Bilanço · 💰 Temettü):
+//  bunlar TEK sembolün değil TAKİP LİSTESİNİN kartları ve ayrı uçlardan
+//  besleniyor — `/api/compare` (sıralama) ve `/api/yfin` (künye). Üçü de
+//  derin dalışın ALTINDA, çünkü seçilen sembolün dökümü ekranın konusu;
+//  liste karşılaştırması bağlamı.
+//
+//  NEDEN BİLANÇO VE TEMETTÜ TEK İSTEK PAYLAŞIYOR: ikisi de aynı
+//  `/api/yfin` künyesinin farklı alanlarını okuyor (`earnings` ve
+//  `dividendYield`). İki istek atmak aynı veri için iki kez ödemek ve
+//  iki kartın farklı anlık görüntü göstermesi riskiydi.
+//
+//  NEDEN AYRI İSTEKLER (analizden bağımsız): analiz turu 45-55 sn,
+//  compare/yfin saniyeler. Biri düşerken öteki durabilir ve ekranda
+//  AYRI anlatılmalı — tek `durum` üçünü birbirine bağlardı.
+//
+//  BURADA DA HESAP YOK: `dividendYield` 0-1 ORANI olarak geliyor ve
+//  `formatOran` ile basılıyor; 100 ile çarpıp "%" yazmak ölçek
+//  değiştirmek olurdu (motorun işi). Bilanço tarihi uçtan gelen unix
+//  saniye; "kaç gün kaldı" sayacı YOK — cihaz saatiyle motor damgasını
+//  karıştırmak ölçüm uydurmaktır.
+//
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
@@ -47,6 +68,8 @@ import {
   VARSAYILAN_ARALIK,
   fetchAnalyze,
   fetchChart,
+  fetchCompare,
+  fetchYfin,
   useIstek,
   useListe,
   type AnalyzeRow,
@@ -65,6 +88,7 @@ import {
   ScreenShell,
   VeriYok,
 } from '@/components';
+import { BilancoKart, KarsilastirKart, TemettuKart } from '@/components/analiz';
 import { formatOran, formatPercent, formatPrice, formatScore } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
 
@@ -111,6 +135,26 @@ export default function AnalizScreen() {
   const grafik = useIstek(grafikCagri, (sembol ?? '') + '|' + aralik, {
     etkin: grafiklenebilir,
   });
+
+  // ── LİSTE KARTLARI: iki ayrı uç, ikisi de takip listesinin tamamı ──
+  // NEDEN `liste` ANAHTARI: liste değişmedikçe yeniden sorulmuyor;
+  // sembol seçimi bu iki turu TETİKLEMİYOR (seçim tek sembolün dökümünü
+  // değiştirir, listeyi değiştirmez).
+  const karsilastirCagri = useCallback(
+    (signal: AbortSignal) => fetchCompare(liste, { vade: 'orta', signal }),
+    [liste],
+  );
+  const karsilastir = useIstek(karsilastirCagri, 'compare:' + liste.join(','), {
+    etkin: liste.length > 0,
+  });
+
+  // TEK yfin turu, İKİ kart: Bilanço `earnings`, Temettü `dividendYield`
+  // okuyor. `deep` varsayılan açık — `earnings` yalnız onunla geliyor.
+  const kunyeCagri = useCallback(
+    (signal: AbortSignal) => fetchYfin(liste, { signal }),
+    [liste],
+  );
+  const kunye = useIstek(kunyeCagri, 'yfin:' + liste.join(','), { etkin: liste.length > 0 });
 
   return (
     <ScreenShell
@@ -268,6 +312,30 @@ export default function AnalizScreen() {
           <VeriYok metin={(sembol ?? 'Sembol') + ' için motor sonuç döndürmedi.'} />
         )
       ) : null}
+
+      {/* Liste kartları: derin dalışın DURUMUNA bağlı değil — kendi
+          istekleri, kendi durum/hata kutuları. */}
+      <KarsilastirKart
+        veri={karsilastir.veri}
+        durum={karsilastir.durum}
+        hata={karsilastir.hata}
+        yenile={karsilastir.yenile}
+        semboller={liste}
+      />
+      <BilancoKart
+        veri={kunye.veri}
+        durum={kunye.durum}
+        hata={kunye.hata}
+        yenile={kunye.yenile}
+        semboller={liste}
+      />
+      <TemettuKart
+        veri={kunye.veri}
+        durum={kunye.durum}
+        hata={kunye.hata}
+        yenile={kunye.yenile}
+        semboller={liste}
+      />
     </ScreenShell>
   );
 }
