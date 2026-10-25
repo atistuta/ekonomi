@@ -22,11 +22,13 @@ export { Dugme, type DugmeProps } from './Dugme';
 // türü) + eksik ölçüm rozeti/künyesi.
 export {
   Durum,
+  HaberOlcumEksikRozet,
   OlcemedimKutu,
   OlcumEksikRozet,
   OlcumNotu,
   VeriYok,
   type DurumProps,
+  type HaberOlcumNotuProps,
   type IskeletSekil,
   type OlcemedimKutuProps,
   type OlcumNotuProps,

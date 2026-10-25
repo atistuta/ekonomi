@@ -581,3 +581,196 @@ export function haberOlcumEksik(
   if (!s) return false;
   return (s.hata ?? 0) > 0 || (s.zamanAsimi ?? 0) > 0 || (s.kisa ?? 0) > 0;
 }
+
+// =====================================================================
+//  /api/pulse SÖZLEŞME TİPLERİ — ⚡ MAKRO NABIZ        (FAZ 3 / native)
+// ---------------------------------------------------------------------
+//  NE: `api/pulse.js` uç noktasının cevabının TypeScript karşılığı.
+//  Alanlar TAHMİN EDİLMEDİ: uç dosyasının SÖZLEŞME bloğundan
+//  (api/pulse.js:128-174) ve 200 cevabını kuran gövdeden
+//  (api/pulse.js:595-622) okundu; ayrıca canlı ölçüldü (2026-10-25,
+//  üretim): POST {q:'Fed faiz'} → 200, `kaynak:'sunucu'`,
+//  `haberler.tam:true`, dönen anahtarlar
+//  `durus,taze,pencere,degerlendirilen,konjonktur,kaynak,haberler,
+//   eksik,surum,ms,uyari`.
+//
+//  ── `degerlendirilen` BİR SAYI DEĞİL ───────────────────────────────
+//  `{ faiz, enflasyon }` NESNESİ: duruş matematiğine GİREN taze manşet
+//  sayıları, ayrı ayrı (api/pulse.js:613 — `faizTaze.length` /
+//  `enfTaze.length`). Tek sayı sanıp `degerlendirilen` yazmak ekrana
+//  "[object Object]" basmak olurdu; bu hata bir kez yapıldı, tip onu
+//  derleme zamanında imkânsız kılıyor.
+//
+//  ── POST, GET DEĞİL ────────────────────────────────────────────────
+//  Uç yalnız POST kabul ediyor (api/pulse.js:434 → 405
+//  `method_not_allowed`). Girdi manşet LİSTESİ taşıyabildiği için sorgu
+//  dizgisine sığmıyor — uç başlığının (b) kararı.
+//
+//  ── İKİ YOL VAR, HANGİSİ KULLANILDI CEVAPTA YAZIYOR ───────────────
+//  `kaynak: 'istemci'` → manşetleri İSTEMCİ gönderdi, uç ağa HİÇ
+//  çıkmadı ve `haberler` null. `kaynak: 'sunucu'` → uç manşeti KENDİ
+//  taradı ve ölçümünü `haberler` içinde bildirdi. Native istemci RSS
+//  tarayamadığı için (uç başlığı, 2026-10-24 kararı) DAİMA sunucu
+//  yolunu kullanıyor — yani bu uygulamada `kaynak` her zaman 'sunucu'
+//  bekleniyor, ama alan yine de okunup ekranda GÖSTERİLİYOR: tahmin
+//  edilmiyor.
+//
+//  ── `haberler.sayac` SKOR SAYACI DEĞİL ────────────────────────────
+//  `HaberSayac` şeklinde (`api/_haber.js bosHaberSayac`): `yahoo/sec/
+//  bist` alanları YOK. Bu yüzden `olcumEksik()` BU GÖVDEDE ÇALIŞMAZ;
+//  doğru soru `haberOlcumEksik(veri.haberler)`.
+//
+//  ── `konjonktur: null` ARIZA DEĞİL ────────────────────────────────
+//  Uç `genislik` / `enflasyonBaskisi` / `risk` girdilerini İSTEMCİDEN
+//  istiyor (uç başlığı: onları manşetten üretmek app.js'in yapmadığı
+//  bir hesabı yapmak olurdu). Verilmezlerse blok `null` döner ve
+//  `eksik` dizisi nesi eksik olduğunu SÖYLER. Varsayılan sayı koymak
+//  "ölçmedim"i "ölçtüm" gibi göstermek olurdu.
+//
+//  ── BOŞ CEVAP ARIZA DEĞİL ─────────────────────────────────────────
+//  Taze manşet yoksa yönler 0 ve `kod: 'neu'` döner (uç başlığı) —
+//  dürüst sessizlik, "hata" değil.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/** Duruş kodu — SABİT KÜME, motordan (app.js `pulseStance` → `cls`). */
+export const NABIZ_KODLAR = ['hawk', 'dove', 'neu'] as const;
+export type NabizKod = (typeof NABIZ_KODLAR)[number];
+
+/** Konjonktür fazı — SABİT KÜME, motordan (`macroPhase` / CYCLE_PHASES). */
+export const KONJONKTUR_FAZLAR = ['early', 'mid', 'late', 'recession'] as const;
+export type KonjonkturFaz = (typeof KONJONKTUR_FAZLAR)[number];
+
+/** Manşetleri KİM topladı (api/pulse.js `kaynak`). */
+export type NabizKaynak = 'istemci' | 'sunucu';
+
+/**
+ * ⚡ Nabız duruşu. `faizYon`/`enflasyonYon`/`baski` -1..+1 HAM sayı —
+ * yüzde DEĞİL, biçimleme `lib/format.ts`in işi. `kod` sabit kümeden
+ * geliyor ama tip `NabizKod | string`: uç bir gün küme büyütürse ekran
+ * kodu olduğu gibi basar, çökmez.
+ *
+ * `egilimYukari`/`egilimAsagi` MAKİNE SEKTÖR KODLARI (ör. 'banks',
+ * 'gold'). Serbest Türkçe etiketler (`CYCLE_PHASES.label`,
+ * `PMAC_STANCE_TR`) BİLEREK tele çıkmıyor (uç başlığı: HAM SAYI kuralı).
+ */
+export type NabizDurus = {
+  faizYon: number;
+  enflasyonYon: number;
+  baski: number;
+  kod: NabizKod | string;
+  egilimYukari: string[];
+  egilimAsagi: string[];
+};
+
+/** Son 2 gündeki manşet SAYISI (app.js `fresh2d` ile aynı pencere). */
+export type NabizTaze = {
+  faiz2g: number;
+  enflasyon2g: number;
+};
+
+/** Tazelik penceresi — ucun KULLANDIĞI sayılar, istemci seçmiyor. */
+export type NabizPencere = {
+  /** Yön matematiğine giren gün penceresi (uç: PENCERE_GUN = 14). */
+  gun: number;
+  tazelikSaat: number;
+  tazelikAgirlik: number;
+};
+
+/**
+ * Duruş matematiğine GİREN taze manşet sayıları. NESNE — tek sayı DEĞİL
+ * (bkz. dosya başlığındaki uyarı).
+ */
+export type NabizDegerlendirilen = {
+  faiz: number;
+  enflasyon: number;
+};
+
+/** Konjonktür boyutları — HAM; `rate` -1..+1, diğerleri 0..1. */
+export type NabizBoyutlar = {
+  rate: number;
+  infl: number;
+  growth: number;
+  risk: number;
+};
+
+export type NabizKonjonktur = {
+  faz: KonjonkturFaz | string;
+  boyutlar: NabizBoyutlar;
+  /** MAKİNE sektör kodları (CYCLE_PHASES[faz].sectors). */
+  sektorler: string[];
+};
+
+/**
+ * Sunucu yolunun çağırana özel sorgusu için okunan manşetler.
+ * DİKKAT: bunlar DURUŞ MATEMATİĞİNE GİRMİYOR (uç başlığı) — sembol
+ * haberinden makro duruş çıkarmak app.js'in yapmadığı bir hesap olurdu.
+ */
+export type NabizSorguHaber = {
+  sorgu: string;
+  market: HaberPazar;
+  /** `maddeler.length` — sunucunun saydığı; istemci yeniden saymaz. */
+  adet: number;
+  maddeler: HaberMadde[];
+};
+
+/**
+ * Sunucu yolunun ÖLÇÜMÜ. `kaynak === 'istemci'` iken `null`.
+ * `faiz`/`enflasyon` = duruşa giren manşet SAYILARI (metin değil).
+ * `tam: false` → manşet taraması eksik: duruş yine döndü ama DAHA AZ
+ * manşetle hesaplandı. Bu bir HATA DEĞİL; veriyi gizlemez.
+ */
+export type NabizHaberler = {
+  faiz: number;
+  enflasyon: number;
+  sorgu: NabizSorguHaber[];
+  sayac: HaberSayac;
+  tam: boolean;
+};
+
+export type PulseResponse = {
+  durus: NabizDurus;
+  taze: NabizTaze;
+  pencere: NabizPencere;
+  /** NESNE: `{faiz, enflasyon}`. */
+  degerlendirilen: NabizDegerlendirilen;
+  /** `null` → konjonktür girdileri verilmedi; nesi eksik `eksik` dizisinde. */
+  konjonktur: NabizKonjonktur | null;
+  kaynak: NabizKaynak;
+  haberler: NabizHaberler | null;
+  /** Verilmeyen konjonktür girdileri: 'genislik' | 'enflasyonBaskisi' | 'risk'. */
+  eksik: string[];
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};
+
+/**
+ * Uç noktanın makine hata kodları (api/pulse.js). Hepsi 4xx ÜRETİR
+ * (yalnız `nabiz_hesaplanamadi` 502, `motor_kurulamadi` 503).
+ * `girdi_yok` İSTEMCİ TARAFINDA oluşur: uç bu kodda sunucu yolunu
+ * açmayıp eski 400 `faizHaberleri_yok`a düşüyor (api/pulse.js:478-483),
+ * yani telde görülmez — yerel kapı aynı adı taşıyor ki iki yerde iki ad
+ * olmasın.
+ */
+export type PulseErrorCode =
+  | 'govde_yok'
+  | 'bozuk_json'
+  | 'govde_buyuk'
+  | 'faizHaberleri_yok'
+  | 'enflasyonHaberleri_yok'
+  | 'cok_baslik'
+  | 'bad_baslik'
+  | 'bad_haberPazari'
+  | 'bad_semboller'
+  | 'cok_sembol'
+  | 'too_long'
+  | 'girdi_yok'
+  | 'bad_genislik'
+  | 'bad_enflasyonBaskisi'
+  | 'bad_risk'
+  | 'bad_simdi'
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'nabiz_hesaplanamadi';

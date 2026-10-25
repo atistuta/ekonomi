@@ -54,6 +54,7 @@ import {
   type HaberPazar,
   type Market,
   type NewsResponse,
+  type PulseResponse,
   type RecommendResponse,
   type ScoreErrorBody,
   type ScoreResponse,
@@ -102,6 +103,10 @@ export const ENDPOINTS = {
   // başlığı): metin döner, hiçbir skora girdi vermez. Yol adı İngilizce,
   // öteki uçlarla aynı dilde.
   news: '/api/news',
+  // ⚡ Makro Nabız ucu. TEK POST UCU (bkz. `apiPost` gerekçesi): gövdesi
+  // manşet LİSTESİ taşıyabildiği için sorgu dizgisine sığmıyor
+  // (api/pulse.js başlığı). Yol adı İngilizce, öteki uçlarla aynı dilde.
+  pulse: '/api/pulse',
 } as const;
 
 export type EndpointName = keyof typeof ENDPOINTS;
@@ -213,6 +218,36 @@ function kodMetni(code: string | undefined, azami?: number, istenen?: number): s
       return 'En çok ' + (azami ?? AZAMI_MADDE) + ' manşet istenebilir (' + (istenen ?? 0) + ' istendi).';
     case 'haber_alinamadi':
       return 'Haber beslemesi okunamadı — ölçüm yapılamadı.';
+    // --- /api/pulse kodları (api/pulse.js). `too_long` ve `cok_sembol`
+    // BİLEREK burada yeniden tanımlanmadı: skor tarafında "sembol
+    // listesi" demek, nabız tarafında "sorgu metni". Nabız kendi
+    // cümlesini `fetchPulse` kapısında veriyor.
+    case 'govde_yok':
+    case 'bozuk_json':
+      return 'İstek gövdesi okunamadı.';
+    case 'govde_buyuk':
+      return 'İstek gövdesi çok büyük.';
+    case 'faizHaberleri_yok':
+    case 'enflasyonHaberleri_yok':
+    case 'girdi_yok':
+      return 'Nabız için girdi verilmedi.';
+    case 'cok_baslik':
+      return azami == null
+        ? 'Gönderilen manşet sayısı ucun sınırını aştı.'
+        : 'En çok ' + azami + ' manşet gönderilebilir (' + (istenen ?? 0) + ' gönderildi).';
+    case 'bad_baslik':
+      return 'Manşet biçimi geçersiz.';
+    case 'bad_haberPazari':
+      return 'Geçersiz pazar.';
+    case 'bad_semboller':
+      return 'Sembol listesi biçimi geçersiz.';
+    case 'bad_genislik':
+    case 'bad_enflasyonBaskisi':
+    case 'bad_risk':
+    case 'bad_simdi':
+      return 'Konjonktür girdisi geçersiz.';
+    case 'nabiz_hesaplanamadi':
+      return 'Nabız hesaplanamadı — ölçüm alınamadı.';
     case 'motor_kurulamadi':
     case 'skor_hesaplanamadi':
       return 'Motor çalıştırılamadı — ölçüm alınamadı.';
@@ -231,14 +266,27 @@ async function hataKodu(res: Response): Promise<ScoreErrorBody | null> {
 }
 
 /**
- * Ham GET. `T` varsayılan olarak `unknown`; skor için tipli sarmalayıcı
- * `fetchScore` var. Çağıran kendi daraltmasını yapar.
+ * İstek çekirdeği — TEK GÖVDE. `apiGet` ve `apiPost` bunun ince
+ * sarmalayıcıları.
+ *
+ * NEDEN AYRI BİR `apiPost` GÖVDESİ YAZILMADI: zaman aşımı, çağıran
+ * iptali, 404/204 → `no-data`, 4xx → `bad-request`, 5xx/bozuk gövde →
+ * `unmeasured` eşlemesi bu dosyanın TEK dürüstlük sözleşmesi. İkinci bir
+ * kopya, bir gün biri iki kopyadan yalnız birini düzelttiğinde POST
+ * uçlarının GET uçlarından FARKLI hata felsefesi taşımasına yol açardı.
+ * Yöntem ve gövde dışında hiçbir şey değişmiyor.
  */
-export async function apiGet<T = unknown>(
+type IstekSecenek = RequestOptions & {
+  method?: 'GET' | 'POST';
+  /** POST gövdesi. JSON'a çevrilip gönderilir; GET'te yok sayılır. */
+  govde?: unknown;
+};
+
+async function apiIstek<T = unknown>(
   path: string,
-  options: RequestOptions = {},
+  options: IstekSecenek = {},
 ): Promise<ApiResult<T>> {
-  const { query, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const { query, timeoutMs = DEFAULT_TIMEOUT_MS, signal, method = 'GET', govde } = options;
   const url = buildUrl(path, query);
 
   // Zaman aşımı + çağıranın iptali birlikte: ikisinden biri tetiklenirse
@@ -250,8 +298,13 @@ export async function apiGet<T = unknown>(
 
   try {
     const res = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
+      method,
+      headers:
+        method === 'POST'
+          ? { Accept: 'application/json', 'Content-Type': 'application/json' }
+          : { Accept: 'application/json' },
+      // GET'te `undefined` — `fetch` gövdesiz istek kurar.
+      body: method === 'POST' ? JSON.stringify(govde ?? {}) : undefined,
       signal: controller.signal,
     });
 
@@ -346,6 +399,30 @@ export async function apiGet<T = unknown>(
     clearTimeout(timer);
     signal?.removeEventListener('abort', onOuterAbort);
   }
+}
+
+/**
+ * Ham GET. `T` varsayılan olarak `unknown`; skor için tipli sarmalayıcı
+ * `fetchScore` var. Çağıran kendi daraltmasını yapar.
+ */
+export async function apiGet<T = unknown>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<ApiResult<T>> {
+  return apiIstek<T>(path, { ...options, method: 'GET' });
+}
+
+/**
+ * Ham POST. `apiGet` ile BİREBİR aynı hata/zaman aşımı/iptal davranışı —
+ * tek fark yöntem ve JSON gövde. Yalnız POST isteyen uçlar için
+ * (bugün: `/api/pulse`).
+ */
+export async function apiPost<T = unknown>(
+  path: string,
+  govde: unknown,
+  options: RequestOptions = {},
+): Promise<ApiResult<T>> {
+  return apiIstek<T>(path, { ...options, method: 'POST', govde });
 }
 
 /**
@@ -810,4 +887,94 @@ export async function fetchNews(
     timeoutMs,
     signal,
   });
+}
+
+export type PulseOptions = Omit<RequestOptions, 'query'> & {
+  /** Sembol haberinin yereli. Verilmezse uç noktanın varsayılanı (TR). */
+  haberPazari?: HaberPazar;
+};
+
+/**
+ * `/api/pulse` — ⚡ Makro Nabız. `fetchNews` deseninin aynısı: kesin 400
+ * üretecek istekler AĞA ÇIKMADAN burada kesilir, kalanı `apiPost`a
+ * devredilir (tek hata eşlemesi orada: 400 → `bad-request` [yeniden
+ * deneme YOK], 502/ağ/zaman aşımı → `unmeasured` [yeniden deneme VAR]).
+ *
+ * NEDEN `apiGet` DEĞİL: uç yalnız POST kabul ediyor (api/pulse.js → 405
+ * `method_not_allowed`).
+ *
+ * NEDEN MANŞET GÖNDERMİYORUZ: uç iki yol sunuyor (istemci manşeti verir
+ * / uç kendi tarar). Native istemci RSS tarayamaz — tarasa bile ölçümü
+ * (kaç besleme hata verdi, kaçı zaman aşımına uğradı) raporlayamaz.
+ * Bu yüzden `q` ile SUNUCU YOLU açılıyor; cevap `kaynak: 'sunucu'` ve
+ * `haberler.sayac` ile ölçümünü kendisi bildiriyor.
+ *
+ * NEDEN KONJONKTÜR GİRDİSİ (`genislik`/`enflasyonBaskisi`/`risk`)
+ * GÖNDERMİYORUZ: o sayılar ÖLÇÜLMÜŞ piyasa genişliği / baskı / risk
+ * girdileri ve bu uygulamada ölçen bir kaynak YOK. Uydurma sayı
+ * göndermek, ucu kandırıp ekrana "ölçülmüş" görünen bir faz bastırmak
+ * olurdu. Verilmeyince uç `konjonktur: null` + `eksik` döner; ekran da
+ * bunu AÇIKÇA "ölçülmedi" diye yazar.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS` (12 sn): uç `maxDuration: 10` ile çalışıyor
+ * (ÖLÇÜLDÜ 2026-10-25: `q='Fed faiz'` → 200, 960 ms). /api/news ile aynı
+ * kademe; skorun 58 sn'si buraya kopyalanmaz.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır, yeni kod uydurulmadı):
+ *   · boş q                   → `girdi_yok`  (uç bu durumda sunucu
+ *     yolunu açmayıp 400 `faizHaberleri_yok` döner; yerel kapı asıl
+ *     nedeni söylüyor)
+ *   · q uzunluğu > 256        → `too_long`
+ *   · küme dışı haberPazari   → `bad_haberPazari`
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchPulse(
+  query: string,
+  options: PulseOptions = {},
+): Promise<ApiResult<PulseResponse>> {
+  const { haberPazari = VARSAYILAN_HABER_PAZAR, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.pulse;
+
+  // `q` SERBEST METİN — sembol kapısından geçirilmiyor ("Fed faiz"
+  // geçerli bir makro sorgu).
+  const q = String(query ?? '').trim();
+
+  if (!q) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('girdi_yok') ?? 'Nabız için girdi verilmedi.',
+        endpoint: path,
+        code: 'girdi_yok',
+      },
+    };
+  }
+  if (q.length > AZAMI_HABER_SORGU) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        // `kodMetni('too_long')` SKOR cümlesini ("sembol listesi çok
+        // uzun") döndürür; makro sorgu için yanlış olur.
+        message: 'Nabız sorgusu çok uzun (en çok ' + AZAMI_HABER_SORGU + ' karakter).',
+        endpoint: path,
+        code: 'too_long',
+      },
+    };
+  }
+  if (!(HABER_PAZARLAR as readonly string[]).includes(haberPazari)) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('bad_haberPazari') ?? 'Geçersiz pazar.',
+        endpoint: path,
+        code: 'bad_haberPazari',
+      },
+    };
+  }
+
+  return apiPost<PulseResponse>(path, { q, haberPazari }, { timeoutMs, signal });
 }

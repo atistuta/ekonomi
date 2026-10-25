@@ -58,7 +58,13 @@ import {
 } from './Skeleton';
 import type { ApiError } from '@/api/client';
 import type { IstekDurum } from '@/api/istek';
-import { kesintiSayisi, olcumEksik, type Sayac } from '@/api/types';
+import {
+  haberOlcumEksik,
+  kesintiSayisi,
+  olcumEksik,
+  type HaberSayac,
+  type Sayac,
+} from '@/api/types';
 import { space, type, useTheme } from '@/theme';
 
 /**
@@ -348,6 +354,57 @@ export function OlcumEksikRozet({ kaynak }: OlcumNotuProps) {
       <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>{cumleler.join(' ')}</Text>
     </View>
   );
+}
+
+export type HaberOlcumNotuProps = {
+  /** `tam` + `sayac` taşıyan HABER gövdesi (`/api/news`, `/api/pulse`). */
+  kaynak: { tam?: boolean; sayac?: HaberSayac } | null | undefined;
+};
+
+/**
+ * EKSİK ÖLÇÜM ROZETİ — HABER SAYACI sürümü.
+ *
+ * NEDEN AYRI BİR BİLEŞEN: iki sayaç şekli var ve KARIŞTIRILAMAZ.
+ * Skor sayacı `{yahoo, sec, bist, tekrar}`, haber sayacı
+ * `{istek, basari, hata, zamanAsimi, kisa, bayt}` (api/_haber.js
+ * `bosHaberSayac`). `OlcumEksikRozet`e haber sayacı vermek derlemede
+ * patlar — iyi ki patlıyor: `kesintiSayisi()` haber sayacında olmayan
+ * alanları okuyup "0 kesinti" diye YANLIŞ bir dürüstlük raporu verirdi.
+ *
+ * Rozetin GÖVDESİ ve yeri aynı (`styles.rozet`): verinin ÜSTÜNDE durur
+ * ve veriyi GİZLEMEZ — gelen manşetler gerçekten okundu.
+ */
+export function HaberOlcumEksikRozet({ kaynak }: HaberOlcumNotuProps) {
+  const { colors } = useTheme();
+  const cumleler = haberEksikCumleleri(kaynak);
+  if (!cumleler.length) return null;
+
+  return (
+    <View style={[styles.rozet, { borderColor: colors.border }]}>
+      <Pill label="ölçüm eksik" tone="gold" glyph={null} size="sm" />
+      <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>{cumleler.join(' ')}</Text>
+    </View>
+  );
+}
+
+/**
+ * Haber tarafının eksik ölçüm cümleleri. "Eksik mi?" sorusunun cevabı
+ * TEK YERDE: `haberOlcumEksik()` (api/types.ts) — burada eşik yeniden
+ * yazılmıyor.
+ */
+function haberEksikCumleleri(
+  kaynak: { tam?: boolean; sayac?: HaberSayac } | null | undefined,
+): string[] {
+  if (!kaynak || !haberOlcumEksik(kaynak)) return [];
+
+  const s = kaynak.sayac;
+  const cumleler: string[] = [];
+  if ((s?.hata ?? 0) > 0) cumleler.push(s!.hata + ' besleme isteği hata verdi.');
+  if ((s?.zamanAsimi ?? 0) > 0)
+    cumleler.push(s!.zamanAsimi + ' besleme isteği zaman aşımına uğradı.');
+  if ((s?.kisa ?? 0) > 0) cumleler.push(s!.kisa + ' besleme gövdesi okunamadı (kısa/bozuk).');
+  if (!cumleler.length) cumleler.push('Manşet taraması eksik tamamlandı.');
+  return cumleler;
 }
 
 /**
