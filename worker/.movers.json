@@ -1,15 +1,4 @@
 {
-  "date": "2026-10-25",
-  "levels": {
-    "SKHY.US": 1,
-    "FTNT.US": 1,
-    "AMLX.US": -1,
-    "CRWD.US": 2,
-    "ZS.US": 2,
-    "NET.US": 2,
-    "OKTA.US": 1,
-    "CHKP.US": 1,
-    "TENB.US": 2,
-    "SSNC.US": -2
-  }
+  "date": "2026-10-26",
+  "levels": {}
 }
