@@ -9,7 +9,11 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "bundleIdentifier": "com.sabahbulteni.app",
-      "icon": "./assets/images/icon.png"
+      "icon": "./assets/images/icon.png",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.sabahbulteni.app",

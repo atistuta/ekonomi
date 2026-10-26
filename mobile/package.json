@@ -41,7 +41,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/format-test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/liste-test.mjs"
   },
   "private": true
 }

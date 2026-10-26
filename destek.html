@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0b1220" />
+<title>Destek — Sabah Bülteni</title>
+<meta name="description" content="Sabah Bülteni uygulaması için destek: sık sorulanlar, bilinen sınırlar ve iletişim." />
+<!--
+  BU SAYFA KASITLI OLARAK KENDİ KENDİNE YETERLİ (bkz. gizlilik.html başlığı).
+  Apple App Store Connect "Support URL" alanı bu adresi ister ve inceleyici
+  sayfayı uygulamadan bağımsız açar; harici CSS = kırık sayfa riski.
+
+  İÇERİK KURALI: buradaki her cümle ÖLÇÜLMÜŞ davranışı anlatır.
+    · liste nerede saklanıyor -> mobile/src/lib/kalici.ts
+    · senkron kodu            -> api/watchlist.js
+    · skor üretimi            -> api/score.js, api/_motor.js
+    · veri kaynakları         -> api/proxy.js IZINLI_KONAKLAR
+  Gizlilik metniyle ÇELİŞMEMELİ: /gizlilik tek doğruluk kaynağıdır.
+-->
+<style>
+  :root{
+    --bg:#0b1220; --kart:#121c2e; --cizgi:#1e2d45;
+    --metin:#e6edf7; --soluk:#9fb0c9; --vurgu:#5aa9ff;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f6f8fc; --kart:#ffffff; --cizgi:#dde4ee;
+      --metin:#101828; --soluk:#51607a; --vurgu:#1259c3;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--metin);
+    font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  .sarmal{max-width:760px; margin:0 auto; padding:32px 16px 64px}
+  header.ust{border-bottom:1px solid var(--cizgi); padding-bottom:20px; margin-bottom:28px}
+  h1{font-size:26px; line-height:1.3; margin:0 0 8px}
+  h2{font-size:19px; margin:34px 0 10px; padding-top:6px}
+  h3{font-size:16px; margin:22px 0 6px}
+  p,li{color:var(--metin)}
+  .tarih{color:var(--soluk); font-size:14px; margin:0}
+  .ozet{
+    background:var(--kart); border:1px solid var(--cizgi); border-left:3px solid var(--vurgu);
+    border-radius:10px; padding:14px 16px; margin:22px 0;
+  }
+  .ozet ul{margin:8px 0 0; padding-left:20px}
+  .ozet li{margin:4px 0}
+  table{width:100%; border-collapse:collapse; margin:12px 0; font-size:14.5px; display:block; overflow-x:auto}
+  th,td{border:1px solid var(--cizgi); padding:9px 10px; text-align:left; vertical-align:top}
+  th{background:var(--kart); font-weight:600}
+  code{
+    background:var(--kart); border:1px solid var(--cizgi); border-radius:5px;
+    padding:1px 5px; font-size:13.5px;
+  }
+  a{color:var(--vurgu)}
+  .yasal{
+    margin-top:40px; padding:14px 16px; border:1px solid var(--cizgi);
+    border-radius:10px; background:var(--kart); color:var(--soluk); font-size:14px;
+  }
+  footer{margin-top:32px; padding-top:18px; border-top:1px solid var(--cizgi); color:var(--soluk); font-size:14px}
+</style>
+</head>
+<body>
+<div class="sarmal">
+
+<header class="ust">
+  <h1>Destek — Sabah Bülteni</h1>
+  <p class="tarih">Son güncelleme: 25 Ekim 2026</p>
+</header>
+
+<p>
+  <strong>Sabah Bülteni</strong> (<code>com.sabahbulteni.app</code>) bir bireysel
+  geliştirici tarafından yürütülüyor. Sorunuz, hata bildiriminiz veya veri
+  talebiniz için tek iletişim kanalı aşağıdaki e-posta adresidir.
+</p>
+
+<div class="ozet">
+  <strong>Doğrudan iletişim</strong>
+  <ul>
+    <li>E-posta: <strong><a href="mailto:atahasnokar@gmail.com">atahasnokar@gmail.com</a></strong></li>
+    <li>Yanıt süresi: genellikle <strong>3 iş günü</strong> içinde.</li>
+    <li>Dil: Türkçe ve İngilizce.</li>
+    <li>Gizlilik politikası: <a href="/gizlilik">day-starter.vercel.app/gizlilik</a></li>
+  </ul>
+</div>
+
+<h2>1. Hata bildirirken ne yazmalıyım?</h2>
+<p>
+  Sorunu tekrar üretebilmek için şunlar yeterli oluyor:
+</p>
+<ul>
+  <li>Hangi ekrandaydınız (Listeler · Bugün · Keşfet · Analiz · Arama)?</li>
+  <li>Hangi sembolde oldu (ör. <code>THYAO.IS</code>, <code>AAPL</code>)?</li>
+  <li>Cihaz ve iOS sürümü, uygulama sürümü.</li>
+  <li>Varsa ekran görüntüsü.</li>
+</ul>
+<p>
+  <strong>Lütfen e-postaya şifre, kimlik bilgisi veya hesap numarası
+  yazmayın.</strong> Uygulama bunların hiçbirini istemez ve işlemez.
+</p>
+
+<h2>2. Sık sorulanlar</h2>
+
+<h3>Hesap açmam gerekiyor mu?</h3>
+<p>
+  Hayır. Uygulama hesapsız çalışır; ad, e-posta veya telefon istemez.
+</p>
+
+<h3>Listelerim nerede saklanıyor?</h3>
+<p>
+  Kendi cihazınızda. Uygulamayı silerseniz liste de silinir — sunucuda bir
+  yedeği tutulmaz. İsteğe bağlı senkron kodunu kullanırsanız listeniz
+  sunucuda o kodun altında tutulur; ayrıntısı
+  <a href="/gizlilik">gizlilik politikasında</a>.
+</p>
+
+<h3>Skorlar nasıl üretiliyor?</h3>
+<p>
+  Her sayı sunucudaki kural motorundan gelir; uygulama ekranında hesap
+  yapılmaz. Motorun hangi sürümle ölçtüğü ekranın üstünde
+  <code>motor sha256:…</code> künyesiyle gösterilir. Aynı girdiye her zaman
+  aynı çıktıyı verir.
+</p>
+
+<h3>Neden bazı yerlerde “ölçüm eksik” yazıyor?</h3>
+<p>
+  Çünkü o veri kaynağından yanıt gelmemiştir. Bu durumda uygulama
+  <strong>tahmini bir sayı uydurmaz</strong> — eksiği açıkça söyler. Boş
+  kalan alan hata değil, dürüstlüktür.
+</p>
+
+<h3>Veriler ne kadar günceldir?</h3>
+<p>
+  Fiyatlar <strong>gecikmeli</strong> olabilir ve gün içi alım satım için
+  uygun değildir. Uygulama bir aracı kurum değildir; emir iletmez, işlem
+  yapmaz, hesabınıza erişmez.
+</p>
+
+<h3>Verimin silinmesini istiyorum.</h3>
+<p>
+  Uygulamayı silmeniz cihazdaki tüm verinizi kaldırır. Senkron kodu
+  kullandıysanız, o kodu e-posta ile bildirin; sunucudaki kaydı silelim.
+</p>
+
+<h2>3. Bilinen sınırlar</h2>
+<table>
+  <tr><th>Konu</th><th>Durum</th></tr>
+  <tr><td>Borsa İstanbul temel verisi</td><td>Bazı semboller için kaynak yanıt vermiyor; o hisselerde temel skor eksik görünür.</td></tr>
+  <tr><td>Gün içi (intraday)</td><td>Sınırlı; vade “günici” seçildiğinde teknik plan üretilmeyebilir.</td></tr>
+  <tr><td>İlk açılış</td><td>Motor uçları ilk istekte yavaş olabilir; sonraki istekler önbellekten gelir.</td></tr>
+  <tr><td>Senkron kodu</td><td>Parola korumalı değildir; kodu bilen herkes listeyi görebilir. Paylaşmayın.</td></tr>
+</table>
+
+<h2>4. Yasal</h2>
+<p>
+  Gizlilik politikası: <a href="/gizlilik">day-starter.vercel.app/gizlilik</a>
+</p>
+
+<div class="yasal">
+  <strong>Bilgi amaçlıdır, yatırım tavsiyesi değildir.</strong><br />
+  Sabah Bülteni bir bilgi aracıdır; yatırım danışmanlığı hizmeti vermez,
+  aracılık faaliyeti yürütmez ve hiçbir finansal ürünü almanızı veya
+  satmanızı önermez. Burada yer alan değerlendirmeler, kişisel yatırım
+  hedeflerinize ve risk tercihlerinize göre üretilmemiştir. Yatırım
+  kararlarınızdan yalnızca siz sorumlusunuz.
+</div>
+
+<footer>
+  Sabah Bülteni · <a href="/gizlilik">Gizlilik</a> ·
+  <a href="mailto:atahasnokar@gmail.com">atahasnokar@gmail.com</a>
+</footer>
+
+</div>
+</body>
+</html>
