@@ -79,6 +79,78 @@ export const AZAMI_SORGU = 128; // api/theme.js'in `too_long` eşiğiyle aynı f
 export const SEMBOL_BICIM = /^[A-Z][A-Z0-9.\-]{0,7}$/;
 
 // ---------------------------------------------------------------------
+//  ENDEKS / EMTİA SÖZLÜĞÜ — YALNIZ /api/chart İÇİN. KAPALI KÜME.
+//
+//  ÖLÇÜLEN SORUN: yukarıdaki `SEMBOL_BICIM` '^' ve '=' kabul etmiyor
+//  (`/^[A-Z][A-Z0-9.\-]{0,7}$/`), dolayısıyla `^GSPC` · `^IXIC` · `GC=F`
+//  sunucuda KESİN 400 `bad_symbol` alıyordu. Native'in "📊 Endeks Nabzı"
+//  kartı bu yüzden dört kalemden üçünü `destekli:false` işaretliyordu;
+//  web tarafı aynı mumları (tarayıcı vekiliyle) ÇİZİYOR, yani eksik olan
+//  veri değil KAPIYDI.
+//
+//  NİYE SÖZLÜK, NİYE DESEN DEĞİL — iki yol tartışıldı:
+//    (a) chart yoluna ayrı bir `ENDEKS_BICIM` deseni, ör. '^' ve '=' de
+//        kabul eden gevşek bir düzenli ifade. REDDEDİLDİ: desen KEYFİ
+//        girdiye kapı açar — `^FOO`, `A=B`, kaçışı bozuk her şey kapıdan
+//        geçer, üst kaynağa gider ve ne istendiğini ancak Yahoo bilir.
+//    (b) İZİNLİ SÖZLÜK — SEÇİLDİ. Kapalı küme: ne geldiğini TAM biliyoruz,
+//        her kalem için üst kaynağın beklediği sembol BURADA yazılı, ve
+//        yeni bir kalem ancak ELLE (ölçülerek) eklenebiliyor.
+//
+//  `SEMBOL_BICIM` ve `temizleSembol()` BU DEĞİŞİKLİKTE HİÇ ELLENMEDİ.
+//  Gerekçe: skor zinciri (/api/score ⊂ recommend ⊂ analyze ⊂ compare ·
+//  ayrıca /api/theme) `temizleSembol`ü çağırıyor. Biçimi genişletmek '^'
+//  ve '='i ALTI ucun sembol sözleşmesine sızdırırdı — mali tablo yolu,
+//  İş Yatırım companyCode'u ve SEC CIK eşlemesi endeks sembolü için
+//  anlamsızdır. Bu yüzden sözlük AYRI bir işlevle (`cozEndeks`) çözülüyor
+//  ve onu YALNIZ `api/chart.js` çağırıyor. uc-test ⑫g③ skor yollarının
+//  `^GSPC`yi HÂLÂ reddettiğini bekçiliyor — gevşemenin sızmadığının kanıtı.
+//
+//  `market` alanı SÜSLEME DEĞİL, motoru sürüyor: `_motor.js` yahooSymbol()
+//  yalnız 'BIST' için '.IS' ekliyor, başka her pazarda sembolü HAM geçiyor.
+//  Yani `XU100` ancak market 'BIST' ile `XU100.IS` olur; `^GSPC` ise
+//  market 'US' ile HAM kalır (adres kaçışı — `%5E` — motorda).
+//  `yahoo` alanı o beklentinin YAZILI hâli: testin motor kaçışını
+//  uydurmadan ölçebilmesi için duruyor, kodda adres kurmuyor.
+//
+//  Pazar değerleri PAZARLAR kümesinden: cevap gövdesinin `market` alanı
+//  ve önbellek anahtarı bu yüzden değişmiyor.
+// ---------------------------------------------------------------------
+export const ENDEKS_SOZLUGU = Object.freeze({
+  // S&P 500 — ABD geniş pazar endeksi. Yahoo: ^GSPC (adreste %5EGSPC).
+  '^GSPC': Object.freeze({ sym: '^GSPC', market: 'US', yahoo: '^GSPC' }),
+  // NASDAQ Composite. Yahoo: ^IXIC.
+  '^IXIC': Object.freeze({ sym: '^IXIC', market: 'US', yahoo: '^IXIC' }),
+  // Altın ons — COMEX vadeli sürekli sözleşme. Yahoo: GC=F.
+  'GC=F': Object.freeze({ sym: 'GC=F', market: 'US', yahoo: 'GC=F' }),
+  // BIST 100. Yahoo: XU100.IS — '.IS' ekini MOTOR koyuyor (market BIST),
+  // bu yüzden `sym` ÇIPLAK. Çıplak `XU100` `SEMBOL_BICIM`den geçerdi ama
+  // varsayılan pazar US olduğu için üst kaynağa EKSİZ giderdi; sözlükte
+  // olması pazarı kesinleştiriyor.
+  'XU100': Object.freeze({ sym: 'XU100', market: 'BIST', yahoo: 'XU100.IS' }),
+});
+
+/**
+ * Sözlükteki bir endeks/emtia kalemini çöz. AYRI KAPI: `SEMBOL_BICIM`e
+ * HİÇ bakmıyor, `temizleSembol`ü HİÇ çağırmıyor ve onu HİÇ etkilemiyor.
+ * Sözlükte yoksa `null` — çağıran o zaman normal sembol kapısını dener.
+ *
+ * Pazar sorgudan GELMİYOR, sözlükten geliyor: `?symbol=^GSPC&market=BIST`
+ * `^GSPC.IS` gibi olmayan bir sembol üretirdi. Kapalı kümenin anlamı
+ * tam da bu — kalemin pazarını kalem söyler.
+ *
+ * SAF: ağa çıkmaz, motora dokunmaz (tests/uc-test.mjs ⑫g ağsız ölçüyor).
+ */
+export function cozEndeks(ham) {
+  const s = String(ham ?? '').toUpperCase().trim();
+  // hasOwnProperty: düz nesne araması `'CONSTRUCTOR'`/`'TOSTRING'` gibi
+  // prototip adlarında SAHTE isabet verirdi — kapalı küme gerçekten kapalı.
+  if (!Object.prototype.hasOwnProperty.call(ENDEKS_SOZLUGU, s)) return null;
+  const e = ENDEKS_SOZLUGU[s];
+  return { sym: e.sym, market: e.market };
+}
+
+// ---------------------------------------------------------------------
 //  Girdi ayrıştırma — AĞA ÇIKMAZ, bu yüzden ayrı ve dışa aktarılmış:
 //  tests/uc-test.mjs doğrulamayı fikstür ya da ağ olmadan sınayabiliyor.
 //  Üç uç bu TEK bağlamayı yeniden dışa aktarıyor, yani `score.ayristir`,

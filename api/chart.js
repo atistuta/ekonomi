@@ -48,15 +48,22 @@
 //  (`cok_sembol`), sessizce ilki alınmıyor — sessiz kırpma istemcinin
 //  farketmediği eksik veridir.
 //
-//  ENDEKS (^GSPC, ^XU100) BU UÇTAN İSTENEMEZ — ÖLÇÜLDÜ, GİZLENMİYOR:
-//  ortak `SEMBOL_BICIM` (_girdi.js) '^' kabul etmiyor. Motor endeksi
-//  çizebilir (yahooSymbol kaçışı var, app.js 'RAW' pazarıyla çağırıyor)
-//  ama biçimi burada genişletmek ALTI UCUN sembol sözleşmesini
-//  değiştirmek olurdu. Ayrı bir iş; ELITE_ROADMAP'te AÇIK bırakıldı.
+//  ENDEKS — AÇIK KAPANDI (B5), AMA SÖZLÜKLE, DESEN GEVŞETMEDEN:
+//  bu uç eskiden `^GSPC` · `^IXIC` · `GC=F` için KESİN 400 `bad_symbol`
+//  veriyordu, çünkü ortak `SEMBOL_BICIM` (_girdi.js) '^' ve '=' kabul
+//  etmiyor. Biçimi genişletmek ALTI UCUN sembol sözleşmesini değiştirmek
+//  olurdu — o yüzden GENİŞLETİLMEDİ. Yerine `_girdi.js`e KAPALI bir
+//  `ENDEKS_SOZLUGU` + ona bakan AYRI bir işlev (`cozEndeks`) kondu ve onu
+//  YALNIZ bu uç çağırıyor. Sözlükte OLMAYAN hiçbir '^'/'=' girdisi
+//  geçmiyor (`^FOO`, `A=B` → 400), skor yolları ise `^GSPC`yi HÂLÂ
+//  reddediyor. Gerekçe ve iki yolun karşılaştırması: api/_girdi.js.
 //
 //  SÖZLEŞME
 //    GET /api/chart?symbol=AAPL[&market=US][&range=6mo][&interval=1d]
-//      symbol   tek sembol (AAPL · THYAO.IS · ASELS:BIST)
+//      symbol   tek sembol (AAPL · THYAO.IS · ASELS:BIST) ya da
+//               `ENDEKS_SOZLUGU`deki bir kalem (^GSPC · ^IXIC · GC=F ·
+//               XU100) — endeks kaleminde `market` sorgusu YOK SAYILIR,
+//               pazarı sözlük söyler.
 //      range    ARALIKLAR kümesinden (varsayılan 6mo — motorun kendi
 //               varsayılanı, _motor.js:103)
 //      interval ADIMLAR kümesinden (varsayılan 1d)
@@ -88,8 +95,8 @@ import { canliAg, bosSayac, sayacTam } from './_ag.js';
 
 // DİKKAT — `export { ... } from` YETMEZ: yerel bağlama yaratmaz, handler
 // `temizleSembol`ü çağırıyor. (Gerekçe: api/analyze.js:190.)
-import { AZAMI_SORGU, PAZARLAR, temizleSembol } from './_girdi.js';
-export { AZAMI_SORGU, PAZARLAR, temizleSembol };
+import { AZAMI_SORGU, PAZARLAR, temizleSembol, cozEndeks, ENDEKS_SOZLUGU } from './_girdi.js';
+export { AZAMI_SORGU, PAZARLAR, temizleSembol, cozEndeks, ENDEKS_SOZLUGU };
 
 // ÖNBELLEK — uçların PAYLAŞTIĞI taşıyıcı; bu dosyada kopya mantık YOK.
 // TTL gerekçesi (ve bu uç için "iç gün TTL'si neden İCAT EDİLMEDİ")
@@ -227,7 +234,15 @@ export default async function handler(req, res) {
     return;
   }
 
-  const hedef = temizleSembol(ham, gPazar || 'US');
+  // İKİ KAPI, TEK SIRA — endeks SÖZLÜĞÜ önce, normal sembol sonra.
+  //  ① `cozEndeks` (yalnız bu uçta çağrılıyor): kapalı kümedeki endeks /
+  //     emtia kalemleri. Pazarı KALEM söyler, sorgudaki `market` değil.
+  //  ② `temizleSembol`: ortak kapı, BİREBİR eskisi gibi — `SEMBOL_BICIM`
+  //     ellenmedi, skor zinciri bu değişiklikten hiç etkilenmiyor.
+  // Sıra önemli: `XU100` ikinci kapıdan da geçerdi ama varsayılan pazar US
+  // olduğu için üst kaynağa eksik ekle giderdi.
+  // İKİSİ DE değilse eski davranış: 400 bad_symbol.
+  const hedef = cozEndeks(ham) || temizleSembol(ham, gPazar || 'US');
   if (!hedef) {
     kisaOnbellek(res);
     res.status(400).json({ error: 'bad_symbol', gecersiz: [ham.slice(0, 16)], uyari: UYARI });

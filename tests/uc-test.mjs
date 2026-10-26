@@ -111,7 +111,10 @@ import temaHandler, {
   config as temaConfig, extractArray, cleanCandidates,
   AZAMI_SORGU as temaAzamiSorgu, AZAMI_ADAY, LLM_ISTEK_MS,
 } from '../api/theme.js';
-import { AZAMI_SORGU, PAZARLAR as girdiPazarlar, temizleSembol as girdiTemizle } from '../api/_girdi.js';
+import {
+  AZAMI_SORGU, PAZARLAR as girdiPazarlar, temizleSembol as girdiTemizle,
+  cozEndeks as girdiCozEndeks, ENDEKS_SOZLUGU as girdiSozluk, SEMBOL_BICIM,
+} from '../api/_girdi.js';
 // ⑫ /api/chart — fiyat serisi ucu. Modül düzeyinde motor kuruyor ama TEK
 // istek atmıyor (öteki uçlarla aynı: ağ ancak handler bir seri çekerken açılır).
 import grafikHandler, {
@@ -119,6 +122,7 @@ import grafikHandler, {
   suzKunye, KUNYE_ALANLARI,
   AZAMI_SORGU as grafikAzamiSorgu, PAZARLAR as grafikPazarlar,
   temizleSembol as grafikTemizle,
+  cozEndeks as grafikCozEndeks, ENDEKS_SOZLUGU as grafikSozluk,
 } from '../api/chart.js';
 // ⑬ /api/pulse — piyasa nabzı / konjonktür ucu. SIFIR dış istek: girdiyi
 // istemci veriyor, uç yalnız akıl yürütüyor (bkz. dosya başlığı).
@@ -2121,13 +2125,19 @@ ok('⑫a · `PAZARLAR` taşıyıcıyla AYNI DİZİ NESNESİ', grafikPazarlar ===
       (await e({ symbol: 'AAPL', range: '10y' })) === 'bad_range');
     ok('⑫c · beyaz liste dışı adım → bad_interval',
       (await e({ symbol: 'AAPL', interval: '1s' })) === 'bad_interval');
-    // ENDEKS SINIRI DÜRÜSTÇE ÖLÇÜLÜYOR: `^GSPC` paylaşılan `SEMBOL_BICIM`e
-    // takılıyor. Bu bir ARIZA değil, BİLİNEN AÇIK — uç başlığında ve
-    // ELITE_ROADMAP.md'de yazılı. Biçimi genişletmek ALTI ucun sembol
-    // sözleşmesini değiştirirdi; o yüzden burada beklenen davranış olarak
-    // sabitleniyor, bir gün kasten değişirse bu denetim haber verir.
-    ok('⑫c · endeks sembolü (^GSPC) ŞİMDİLİK reddediliyor (bilinen açık, sessiz değil)',
-      (await e({ symbol: '^GSPC' })) === 'bad_symbol');
+    // ENDEKS KAPISI SÖZLÜKLE AÇILDI (B5) — AMA KAPALI KÜME OLARAK.
+    // `^GSPC` artık GEÇİYOR (ölçümü ⑫g'de, çünkü geçince ağa çıkıyor ve
+    // bu blokta ağ YASAK). BURADA ölçülen şey TERSİ: sözlükte OLMAYAN
+    // hiçbir '^'/'=' girdisi geçmiyor. Desen gevşetilmediğinin kanıtı —
+    // gevşek bir `ENDEKS_BICIM` konsaydı bu üç satır kırmızı yanardı.
+    ok('⑫c · sözlükte OLMAYAN endeks (^FOO) → bad_symbol',
+      (await e({ symbol: '^FOO' })) === 'bad_symbol');
+    ok('⑫c · sözlükte OLMAYAN vadeli (A=B) → bad_symbol',
+      (await e({ symbol: 'A=B' })) === 'bad_symbol');
+    ok('⑫c · sözlüğe benzeyen çöp (^GSPC.X) → bad_symbol',
+      (await e({ symbol: '^GSPC.X' })) === 'bad_symbol');
+    ok("⑫c · enjeksiyon denemesi (';DROP') → bad_symbol",
+      (await e({ symbol: "';DROP'" })) === 'bad_symbol');
 
     const bm = await cagirUc(grafikHandler, 'GET', { symbol: 'AAPL', market: 'TOKYO' });
     ok('⑫c · bad_market izinli pazarları BİLDİRİYOR',
@@ -2402,6 +2412,153 @@ ok('⑫a · `PAZARLAR` taşıyıcıyla AYNI DİZİ NESNESİ', grafikPazarlar ===
     /async function fetchYahooOHLC\s*\(/.test(motorSrc));
   ok('⑫f · motora SVG/DOM çizimi sızmadı (`makeSparkline`/`makeDetailChart` yok)',
     !/makeSparkline/.test(motorSrc) && !/makeDetailChart/.test(motorSrc));
+}
+
+// --- ⑫g ENDEKS SÖZLÜĞÜ — AYRI KAPI, KAPALI KÜME (B5) -------------------
+// BU BLOK NE: /api/chart'ın endeks/emtia kapısı. ÖLÇÜLEN SORUN: ortak
+// `SEMBOL_BICIM` '^' ve '=' kabul etmiyor, bu yüzden `^GSPC` · `^IXIC` ·
+// `GC=F` sunucuda KESİN 400 alıyordu (native "📊 Endeks Nabzı" kartı dört
+// kalemden üçünü `destekli:false` işaretliyordu).
+//
+// İKİ YOL VARDI: (a) chart yolunda gevşek bir `ENDEKS_BICIM` deseni,
+// (b) izinli SÖZLÜK. (b) seçildi — kapalı küme, ne geldiğini tam biliyoruz.
+// ÜÇ ŞEY birlikte ölçülüyor, çünkü biri olmadan öteki yanıltıcı:
+//   ① sözlüğün DÖRDÜ de chart yolundan GEÇİYOR ve üst kaynağa doğru
+//      sembolle gidiyor (yoksa "kapı açıldı" sözü boş olurdu),
+//   ② sözlükte OLMAYAN '^'/'=' girdileri GEÇMİYOR (yoksa (b) aslında
+//      gizli bir (a) olurdu),
+//   ③ SKOR YOLLARI `^GSPC`yi HÂLÂ REDDEDİYOR — en pahalı denetim.
+//      Gevşemenin skor zincirine SIZMADIĞININ kanıtı budur.
+{
+  // --- ⑫g⓪ yüzey + kimlik (ağsız, saf) --------------------------------
+  ok('⑫g⓪ · `cozEndeks` taşıyıcıyla AYNI FONKSİYON NESNESİ (yerel kopya yok)',
+    grafikCozEndeks === girdiCozEndeks);
+  ok('⑫g⓪ · `ENDEKS_SOZLUGU` taşıyıcının TA KENDİSİ', grafikSozluk === girdiSozluk);
+  const SOZLUK_BEKLENEN = { '^GSPC': '^GSPC', '^IXIC': '^IXIC', 'GC=F': 'GC=F', 'XU100': 'XU100.IS' };
+  ok('⑫g⓪ · sözlük görevin istediği DÖRT kalemi taşıyor',
+    Object.keys(SOZLUK_BEKLENEN).every((k) => girdiSozluk[k]),
+    Object.keys(girdiSozluk).join(' '));
+  ok('⑫g⓪ · her kalem için üst kaynağın BEKLEDİĞİ tam sembol YAZILI',
+    Object.entries(SOZLUK_BEKLENEN).every(([k, y]) => girdiSozluk[k].yahoo === y),
+    Object.entries(girdiSozluk).map(([k, v]) => `${k}→${v.yahoo}`).join(' '));
+  ok('⑫g⓪ · her kalemin pazarı PAZARLAR kümesinden (gövde/anahtar sözleşmesi bozulmuyor)',
+    Object.values(girdiSozluk).every((v) => girdiPazarlar.includes(v.market)));
+  ok('⑫g⓪ · sözlük DONDURULMUŞ (koşarken kalem eklenemez)',
+    Object.isFrozen(girdiSozluk) && Object.values(girdiSozluk).every((v) => Object.isFrozen(v)));
+  // Prototip adları: düz `sozluk[s]` araması `'CONSTRUCTOR'`de SAHTE
+  // isabet verirdi. Handler'dan ölçülemez (harf sembolü normal kapıdan
+  // geçer), o yüzden işlev DOĞRUDAN sınanıyor.
+  ok('⑫g⓪ · prototip adı sözlükte SAHTE isabet vermiyor',
+    girdiCozEndeks('constructor') === null && girdiCozEndeks('toString') === null
+    && girdiCozEndeks('__proto__') === null);
+  ok('⑫g⓪ · `cozEndeks` sözlük dışına null veriyor',
+    girdiCozEndeks('^FOO') === null && girdiCozEndeks('AAPL') === null
+    && girdiCozEndeks('') === null && girdiCozEndeks(null) === null);
+  ok('⑫g⓪ · `cozEndeks` küçük harfi de çözüyor (kapı büyük/küçük duyarsız)',
+    girdiCozEndeks('gc=f') && girdiCozEndeks('gc=f').sym === 'GC=F');
+  ok('⑫g⓪ · `cozEndeks` pazarı SÖZLÜKTEN veriyor (XU100 → BIST)',
+    girdiCozEndeks('XU100').market === 'BIST' && girdiCozEndeks('^GSPC').market === 'US');
+
+  // --- ⑫g① sözlüğün dördü chart yolundan GEÇİYOR (sahte Yahoo) --------
+  const gercekFetch = globalThis.fetch;
+  const ortamUrl = process.env.KV_REST_API_URL;
+  const ortamTok = process.env.KV_REST_API_TOKEN;
+  try {
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+    let son = null;
+    globalThis.fetch = async (url) => {
+      son = String(url);
+      const txt = JSON.stringify({
+        chart: { result: [{
+          meta: { currency: 'USD', symbol: 'X' },
+          timestamp: [1, 2],
+          indicators: { quote: [{ open: [1, 2], high: [1, 2], low: [1, 2], close: [1, 2], volume: [1, 2] }] },
+        }] },
+      });
+      return { ok: true, status: 200, text: async () => txt, json: async () => JSON.parse(txt) };
+    };
+
+    for (const [giris, yahoo] of Object.entries(SOZLUK_BEKLENEN)) {
+      son = null;
+      const r = await cagirUc(grafikHandler, 'GET', { symbol: giris });
+      ok(`⑫g① · sözlük kalemi ${giris} chart yolundan GEÇİYOR → 200`,
+        r.kod === 200 && r.govde.adet === 2, `kod ${r.kod} · ${JSON.stringify(r.govde && r.govde.error)}`);
+      ok(`⑫g① · ${giris} cevapta sembol olarak GERİ BİLDİRİLİYOR`,
+        r.govde.sym === giris, String(r.govde.sym));
+      // ÖLÇÜM: üst kaynağa giden adres GERÇEKTEN beklenen sembolü taşıyor.
+      // Kaçış motorda (^ → %5E), `.IS` eki de motorda — uç ikisini de yazmıyor.
+      ok(`⑫g① · ÖLÇÜM · ${giris} üst kaynağa ${yahoo} olarak gidiyor`,
+        son !== null && son.includes(encodeURIComponent(yahoo)),
+        `${son} (beklenen parça: ${encodeURIComponent(yahoo)})`);
+    }
+
+    // Gövde SÖZLEŞMESİ büyümedi: endeks cevabı normal cevapla aynı alanlar.
+    const endeksCevap = await cagirUc(grafikHandler, 'GET', { symbol: '^GSPC' });
+    const normalCevap = await cagirUc(grafikHandler, 'GET', { symbol: 'AAPL' });
+    ok('⑫g① · endeks gövdesi normal gövdeyle AYNI ALANLAR (sözleşme büyümedi)',
+      anahtarlar(endeksCevap.govde) === anahtarlar(normalCevap.govde),
+      anahtarlar(endeksCevap.govde));
+
+    // Endeks kaleminde sorgudaki `market` YOK SAYILIYOR: `^GSPC&market=BIST`
+    // `^GSPC.IS` gibi olmayan bir sembol üretirdi.
+    son = null;
+    const zorlanan = await cagirUc(grafikHandler, 'GET', { symbol: '^GSPC', market: 'BIST' });
+    ok('⑫g① · endekste sorgudaki `market` YOK SAYILIYOR (pazarı sözlük söyler)',
+      zorlanan.kod === 200 && zorlanan.govde.market === 'US' && !son.includes('GSPC.IS'),
+      `${zorlanan.govde.market} · ${son}`);
+
+    // Aralık/adım kapısı endeks için de AYNEN geçerli — ayrı kapı sembolü
+    // çözüyor, ötekİ sınırları ATLAMIYOR.
+    const kotuAralik = await cagirUc(grafikHandler, 'GET', { symbol: '^GSPC', range: '10y' });
+    ok('⑫g① · endeks de aralık kapısına TAKILIYOR (ayrı kapı sınır atlatmıyor)',
+      kotuAralik.kod === 400 && kotuAralik.govde.error === 'bad_range', `kod ${kotuAralik.kod}`);
+    const cokEndeks = await cagirUc(grafikHandler, 'GET', { symbol: '^GSPC,^IXIC' });
+    ok('⑫g① · endeks listesi de cok_sembol (sessiz kırpma yok)',
+      cokEndeks.kod === 400 && cokEndeks.govde.error === 'cok_sembol', `kod ${cokEndeks.kod}`);
+  } finally {
+    globalThis.fetch = gercekFetch;
+    if (ortamUrl === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = ortamUrl;
+    if (ortamTok === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = ortamTok;
+  }
+
+  // --- ⑫g③ SKOR YOLLARI HÂLÂ REDDEDİYOR — asıl kilit ------------------
+  // Çözüm "chart yoluna AYRI kapı" olarak istendi. Ortak `SEMBOL_BICIM`i
+  // genişletmek ya da `temizleSembol`ü sözlüğe bakacak hâle getirmek,
+  // '^' ve '='i skor zincirine (score ⊂ recommend ⊂ analyze ⊂ compare)
+  // ve /api/theme'e SIZDIRIRDI. Aşağıdakiler o sızıntıyı bekçiliyor.
+  for (const [ad, fn] of [['score', ayristir], ['recommend', recAyristir],
+    ['analyze', anaAyristir], ['compare', kiyAyristir]]) {
+    for (const s of ['^GSPC', '^IXIC', 'GC=F']) {
+      const r = fn({ symbols: s });
+      ok(`⑫g③ · ${ad} yolu ${s} sembolünü HÂLÂ reddediyor (gevşeme sızmadı)`,
+        !!(r.hata && r.hata.govde.error === 'bad_symbol'), JSON.stringify(r.hata && r.hata.govde));
+    }
+  }
+  ok('⑫g③ · ortak `temizleSembol` sözlüğe BAKMIYOR (ayrı kapı gerçekten ayrı)',
+    girdiTemizle('^GSPC', 'US') === null && girdiTemizle('GC=F', 'US') === null
+    && girdiTemizle('XU100', 'US') !== null);
+  ok('⑫g③ · `SEMBOL_BICIM` BİREBİR eski desen (genişletilmedi)',
+    String(SEMBOL_BICIM) === String(/^[A-Z][A-Z0-9.\-]{0,7}$/), String(SEMBOL_BICIM));
+  ok("⑫g③ · `SEMBOL_BICIM` '^' ve '=' karakterlerini HÂLÂ geçirmiyor",
+    !SEMBOL_BICIM.test('^GSPC') && !SEMBOL_BICIM.test('GC=F'));
+  // Statik: sözlük yalnız chart yolundan çağrılıyor. Skor uçlarının biri
+  // `cozEndeks`i içe alsa bu denetim kırmızı yanar.
+  {
+    const skorKodu = [SCORE_PATH, RECOMMEND_PATH, ANALYZE_PATH, COMPARE_PATH, THEME_PATH]
+      .map((y) => readFileSync(y, 'utf8').split(/\r?\n/)
+        .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n'));
+    ok('⑫g③ · skor/tema uçlarının HİÇBİRİ `cozEndeks`/`ENDEKS_SOZLUGU` çağırmıyor',
+      skorKodu.every((k) => !/cozEndeks|ENDEKS_SOZLUGU/.test(k)));
+    const chartKodu = readFileSync(CHART_PATH, 'utf8').split(/\r?\n/)
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+    ok('⑫g③ · chart yolu sözlüğü GERÇEKTEN çağırıyor (olumsuz kontrol)',
+      /cozEndeks\(/.test(chartKodu));
+    ok('⑫g③ · sözlük UÇTA kopyalanmamış (kalemler yalnız `_girdi.js`te)',
+      !/'\^GSPC'|"\^GSPC"/.test(chartKodu));
+  }
 }
 
 

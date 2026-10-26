@@ -25,6 +25,22 @@
 //  girdinin eksik olduğunu döndürüyor, kart da bunu AÇIKÇA yazıyor.
 //  Uydurma bir sayı göndermek tam olarak yasak olan şey: sahte veri.
 //
+//  NEDEN 📊 ENDEKS NABZI BURADA: büyük endekslerin günlük hareketi
+//  "bugün" sorusunun ilk cevabı. Kartın KENDİ isteği YOK (components
+//  içinde `fetch` yasak) — ölçümleri bu ekran `fetchChart` ile SIRAYLA
+//  topluyor, çünkü uç TEK sembol alıyor (`cok_sembol`, azami 1); dört
+//  çağrıyı aynı anda atmak istek fırtınası olurdu.
+//
+//  DESTEKLENMEYEN ENDEKSE AĞA GİDİLMİYOR (ÖLÇÜLDÜ 2026-10-26, kaynak
+//  okuması): ortak sembol kapısı `SEMBOL_BICIM = /^[A-Z][A-Z0-9.\-]{0,7}$/`
+//  (api/_girdi.js:79) `^` ve `=` KABUL ETMİYOR, yani `^GSPC` · `^IXIC` ·
+//  `GC=F` kesin 400 `bad_symbol` alır; yalnız `XU100` geçer. Karar TEK
+//  YERDE yazılı: `ENDEKS_NABIZ` kaleminin `destekli` bayrağı
+//  (components/bugun/EndeksNabziKarti.tsx). Bu ekran o bayrağa bakıp
+//  isteği atlıyor ve kalemi "ölçülemedi" ölçümü olarak kartta BASTIRIYOR
+//  — satırı gizlemek "altın hareket etmedi" demek olurdu. Sunucu kapısı
+//  açıldığında bu dosyada DEĞİŞİKLİK GEREKMEZ: bayrak `true` olur.
+//
 //  BURADA HESAP YOK: sıra, durum, skor10, duruş kodu, yönler, faz —
 //  hepsi uç alanları. Nabız kartında da eşik/ortalama/işaret kararı
 //  YOK; yalnız sabit kümeden Türkçe karşılık seçiliyor ve biçimleme
@@ -39,6 +55,7 @@ import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
   AZAMI_HABER_SORGU,
+  fetchChart,
   fetchCompare,
   fetchNews,
   fetchPulse,
@@ -46,6 +63,9 @@ import {
   useHazir,
   useIstek,
   useListe,
+  type Adim,
+  type ApiResult,
+  type Aralik,
   type HaberMadde,
   type NabizSorguHaber,
   type SiraKayit,
@@ -62,6 +82,7 @@ import {
   ScreenShell,
   VeriYok,
 } from '@/components';
+import { ENDEKS_NABIZ, EndeksNabziKarti, type EndeksOlcum } from '@/components/bugun';
 import { HaberSatiri } from '@/components/kesfet';
 import { formatOran, formatScore } from '@/lib/format';
 import { radius, space, type, useTheme } from '@/theme';
@@ -104,6 +125,18 @@ const FAZ_METIN: Record<string, string> = {
  * kartta ayrı, açıkça öyle yazılarak gösteriliyor.
  */
 const NABIZ_SORGU = 'Fed faiz';
+
+/**
+ * 📊 Endeks Nabzı penceresi. SABİT ve GÖRÜNÜR (kart satırında `range/
+ * interval` olduğu gibi yazılıyor). "Günlük hareket" sorusunun karşılığı
+ * bu pencere: günlük mum = o günün açılışı → kapanışı. Pencere seçimi
+ * bir GÖSTERGE AYARI DEĞİL, ucun `range` parametresi.
+ */
+const ENDEKS_ARALIK: Aralik = '1d';
+const ENDEKS_ADIM: Adim = '1d';
+
+/** Sıralı turun çıktısı — kartın `olcumler` + `turMs` props'ları. */
+type EndeksTuru = { olcumler: EndeksOlcum[]; turMs: number };
 
 export default function BugunScreen() {
   const { colors } = useTheme();
@@ -189,6 +222,8 @@ export default function BugunScreen() {
         ) : null}
       </Card>
 
+      <EndeksNabziBolumu />
+
       <MakroNabizKarti />
 
       <TematikHaberKarti />
@@ -202,6 +237,76 @@ export default function BugunScreen() {
         </Text>
       </Card>
     </ScreenShell>
+  );
+}
+
+/**
+ * 📊 ENDEKS NABZI — `/api/chart`, endeks başına BİR çağrı, SIRAYLA.
+ *
+ * NEDEN TEK `useIstek` İÇİNDE DÖRT ÇAĞRI DEĞİL DE DÖRT `useIstek`
+ * DEĞİL: kart tek bir `durum` alıyor ve turun ÖLÇÜLEN süresini yazıyor;
+ * dört kanca dört ayrı durum demekti ve "tur süresi" diye yazılacak bir
+ * şey kalmazdı. Tur burada tek bir ölçüm: başı ve sonu var.
+ *
+ * NEDEN SIRAYLA (`for` döngüsü, `Promise.all` DEĞİL): uç tek sembol
+ * alıyor (`cok_sembol`, azami 1) ve dördünü aynı anda atmak, ilk
+ * açılışta dört dış kaynak isteği demekti.
+ *
+ * DESTEKLENMEYEN KALEME İSTEK ATILMIYOR: karar `destekli` bayrağında
+ * (TEK yer, ekran başlığındaki ölçüm notu). O kalem için `{veri:null,
+ * hata:null}` ölçümü basılıyor — kartın sözleşmesinde bu hâl "hiç
+ * sorulmadı" demek ve "ölçtüm, boş geldi"den AYRI yazılıyor.
+ *
+ * BURADA HESAP YOK: ekran tek bir sayı türetmiyor. Yüzde değişimi kartın
+ * kendisi künye aritmetiğiyle yazıyor (serinin iki ucu); eşik, ağırlık,
+ * rozet kararı hiçbir yerde yok. `turMs` bir ÖLÇÜM (duvar saati farkı),
+ * gösterge değil.
+ *
+ * İPTAL HATA DEĞİL: tur ortasında ekran kapanırsa `canceled` olduğu gibi
+ * geri veriliyor; `useIstek` onu durum bozmadan yutuyor (istek.ts).
+ * Yarım bir turu "ölçüm" diye kartta basmak eksik ölçümü tam ölçüm gibi
+ * sunmak olurdu.
+ */
+function EndeksNabziBolumu() {
+  const cagri = useCallback(async (signal: AbortSignal): Promise<ApiResult<EndeksTuru>> => {
+    const basladi = Date.now();
+    const olcumler: EndeksOlcum[] = [];
+
+    for (const tanim of ENDEKS_NABIZ) {
+      if (!tanim.destekli) {
+        // AĞA GİTMİYORUZ: sembol biçimi ucun kapısından geçmiyor.
+        olcumler.push({ key: tanim.key, veri: null, hata: null });
+        continue;
+      }
+      const sonuc = await fetchChart(tanim.sembol, {
+        range: ENDEKS_ARALIK,
+        interval: ENDEKS_ADIM,
+        market: tanim.pazar,
+        signal,
+      });
+      if (sonuc.ok) {
+        olcumler.push({ key: tanim.key, veri: sonuc.data, hata: null });
+        continue;
+      }
+      if (sonuc.error.kind === 'canceled') return { ok: false, error: sonuc.error };
+      // Bir endeksin düşmesi turu bitirmiyor: kalanı ölçülüp o satır
+      // kendi hatasını yazıyor.
+      olcumler.push({ key: tanim.key, veri: null, hata: sonuc.error });
+    }
+
+    return { ok: true, data: { olcumler, turMs: Date.now() - basladi } };
+  }, []);
+
+  const { durum, veri, hata, yenile } = useIstek(cagri, 'endeks-nabiz:' + ENDEKS_ARALIK);
+
+  return (
+    <EndeksNabziKarti
+      olcumler={veri?.olcumler ?? []}
+      durum={durum}
+      hata={hata}
+      yenile={yenile}
+      turMs={veri?.turMs ?? null}
+    />
   );
 }
 

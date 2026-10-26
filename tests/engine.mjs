@@ -89,6 +89,61 @@ export const SLICES = [
   // esikleri YENIDEN YAZMASI gerekmiyor, motordan cagiriyor.
   ['makro-faz', '  const CYCLE_PHASES = {', '  // Makro nabzını hesapla'],
   ['nabiz-yon', "  const RATE_SENSITIVE = ['tech'", '  async function computePulseMacro(force) {'],
+
+  // --- B1 (2026-10-26): sekiz SAF blok daha devredildi. Hepsinde OLCULDU:
+  // document./innerHTML/getElementById/querySelector/localStorage/
+  // addEventListener/fetchRSS/proxy(/setDiag/taAllSymbols/getPortfolio/
+  // loadLists desenlerinin HICBIRI yok. app.js mantigina dokunulmadi —
+  // yalniz dilim sinirlari eklendi, motorun urettigi sayilar aynidir.
+
+  // Backtest cekirdegi. Sinir YUKARI genisletildi: computeBacktest
+  // TA_HORIZON + BT_CFG + spearmanIC'i cagiriyor, ucu dilimde olmazsa
+  // fonksiyon kurulur ama cagrilinca patlar. Bitis imi runBacktest'ten
+  // ONCE: runBacktest panel DOM'u yazar, dilimin DISINDA kaldi.
+  ['backtest', '  // ===== Doğruluk testi (backtest) =====', '  async function runBacktest(symbol, market, vade) {'],
+
+  // shortNum: kripto NOT metinlerini bununla kuruyor (fmt dilimindeki
+  // fmtTL/fmtUSD ile ayni gerekce — skora GIRMEZ ama yoksa model hic
+  // kurulamaz). Kendi dilimi, cunku 6800-6930 arasi kripto EKRANI (DOM).
+  ['fmt-kisa', '  const shortNum = (v) => {', "  // CoinGecko piyasa verisi (market cap / hacim / arz / ATH) — cache'li"],
+
+  // Kripto deger/tokenomik skoru. Sinir YUKARI genisletildi: scoreBand ve
+  // cryptoCategory computeCryptoValue'nun on kosulu. Bitis imi
+  // valuePanelHTML'den ONCE — panel HTML'i dilimin disinda.
+  ['crypto', '  function scoreBand(s, labels) {', '  function valuePanelHTML(title, res, srcNote, tailNote) {'],
+
+  // Maden makro rejimi. Sinir YUKARI genisletildi: METAL_MACRO_W agirliklari
+  // ve computeMetalMacro (asil skorlayici) iceride. metalMacroInputs de
+  // iceride ama DISA VERILMIYOR: changeFor/getQuote tasima katmanini
+  // cagiriyor, onlar motorda yok — girdi uca `d` olarak gelir.
+  ['metal', '  const METAL_MACRO_W = {', '  function metalMacroHTML(key, d) {'],
+
+  // Haber duygu sozlugu + basliga puan. Sinir YUKARI genisletildi:
+  // SENTI_POS/SENTI_NEG sozlukleri olmadan scoreHeadline calismaz.
+  // Bitis imi computeNewsSentiment'tan ONCE — o RSS'e gidiyor.
+  ['haber-skor', '  const SENTI_POS = {', "  // Bir hisse için haber duyarlılık skoru (cache'li, 30 dk)"],
+
+  // Firsat etiketi + fiyat uygunlugu puani. priceOppChip de iceride ama
+  // DISA VERILMIYOR: bandUzaklikTxt (5089) dilimin cok disinda ve chip
+  // zaten HTML uretir. Bitis imi renderOpportunities'ten ONCE.
+  ['firsat', '  function oppTag(score) {', '  async function renderOpportunities(force) {'],
+
+  // Tarama (Deger/Buyume/Kalite) presetleri + alt-skorlar. Tek dis
+  // bagimliligi faInterp — fa-core diliminde zaten var. Bitis imi
+  // initScan'den ONCE: initScan chip'lere olay bagliyor.
+  ['scan', '  const SCAN_PRESETS = {', '  function initScan() {'],
+
+  // Sektor gruplama/siralama. Sinir YUKARI genisletildi: SEK_META +
+  // sekMedian + sekClassify olmadan gruplar kurulamaz. sekBuildGroups
+  // DISA VERILMIYOR: modul seviyesindeki sekMem onbellegini okur, motorda
+  // o onbellek bos kalir — uca sessizce bos liste donmesin.
+  ['sektor', '  const SEK_META = {', '  function sekMiniHtml(g, lead) {'],
+
+  // Radar sozlukleri: SECTORS + SYMBOL_SECTORS + RADAR_THEMES. Dilim
+  // 10303'te BITER. 10304'teki radarUniverse/recommendUniverse
+  // taAllSymbols() ile KULLANICININ listesini okuyor; motor kullanici
+  // verisi okumaz, evren uca `symbols` parametresi olarak gelir.
+  ['radar', '  const SECTORS = {', '  function radarUniverse() {'],
 ];
 
 // Dilimlerden dışarı verilecek motor sembolleri.
@@ -123,6 +178,19 @@ export const EXPORTS = [
   'FADE_WIN', 'fadedAround', 'rateDirection', 'inflDirection',
   'RATE_SENSITIVE', 'pulseRecentCount',
   'PULSE_FRESH_H', 'PULSE_FRESH_W', 'pulseFreshWithin', 'pulseFreshWeight', 'pulseStance',
+  // B1 (2026-10-26) sekiz yeni dilimden DISA VERILENLER. Hicbiri skoru
+  // degistirmez — composite/vade skorunu ne okur ne yazar. Disa VERILMEYENLER
+  // ve nedenleri dilim yorumlarinda yazili (metalMacroInputs, priceOppChip,
+  // sekBuildGroups, scanCrit, valuePanelHTML tarafi).
+  'TA_HORIZON', 'BT_CFG', 'spearmanIC', 'computeBacktest',
+  'shortNum',
+  'scoreBand', 'cryptoCategory', 'computeCryptoValue',
+  'METAL_MACRO_W', 'computeMetalMacro',
+  'SENTI_POS', 'SENTI_NEG', 'scoreHeadline', 'sentiLabel',
+  'oppTag', 'priceOppAdj',
+  'SCAN_PRESETS', 'scanBlend', 'scanScore', 'scanTag',
+  'SEK_META', 'sekMedian', 'sekClassify', 'sekSortGroups',
+  'SECTORS', 'SYMBOL_SECTORS', 'RADAR_THEMES',
 ];
 
 function countOf(src, needle) {

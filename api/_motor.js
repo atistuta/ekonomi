@@ -10,7 +10,7 @@
 //  üretim testi zaten kırmızı yanar. Motor davranışı değişecekse app.js
 //  değişir, sonra bu dosya yeniden üretilir.
 //
-//  Dilimler (12):
+//  Dilimler (21):
 //    util           19 satır
 //    ysym            6 satır
 //    ta            923 satır
@@ -23,13 +23,22 @@
 //    causal         68 satır
 //    makro-faz      97 satır
 //    nabiz-yon      88 satır
-//    TOPLAM       1868 satır
-//  Dışa verilen sembol: 47
+//    backtest       99 satır
+//    fmt-kisa       11 satır
+//    crypto        117 satır
+//    metal         100 satır
+//    haber-skor     36 satır
+//    firsat         40 satır
+//    scan           92 satır
+//    sektor        216 satır
+//    radar          98 satır
+//    TOPLAM       2677 satır
+//  Dışa verilen sembol: 74
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:faa38d4cf9408912';
+export const IMZA = 'sha256:4a212c4e9296ae23';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
@@ -45,6 +54,15 @@ export const DILIMLER = [
   { name: 'causal', lines: 68 },
   { name: 'makro-faz', lines: 97 },
   { name: 'nabiz-yon', lines: 88 },
+  { name: 'backtest', lines: 99 },
+  { name: 'fmt-kisa', lines: 11 },
+  { name: 'crypto', lines: 117 },
+  { name: 'metal', lines: 100 },
+  { name: 'haber-skor', lines: 36 },
+  { name: 'firsat', lines: 40 },
+  { name: 'scan', lines: 92 },
+  { name: 'sektor', lines: 216 },
+  { name: 'radar', lines: 98 },
 ];
 
 /**
@@ -1951,5 +1969,823 @@ const navigator = H.dead("navigator");
   }
 
 
-return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, CYCLE_PHASES, macroGrowth, macroPhase, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance };
+// ===== dilim: backtest =====
+  // ===== Doğruluk testi (backtest) =====
+  // Her tarihsel barda skoru YALNIZ o güne kadarki veriyle hesaplar (look-ahead yok),
+  // vadeye uygun ileri getiriyle eşler ve öngörü gücünü ölçer.
+  const TA_HORIZON = { kisa: 10, orta: 45, uzun: 120, gunici: 14 }; // ileri getiri ufku (bar)
+  // Vadeye göre backtest parametreleri. gunici: saatlik seri, H1 tek-zaman yaklaşımı.
+  const BT_CFG = {
+    kisa:   { warmup: 210, stride: 5 },
+    orta:   { warmup: 210, stride: 5 },
+    uzun:   { warmup: 210, stride: 5 },
+    gunici: { warmup: 120, stride: 3, intraday: true },
+  };
+
+  function spearmanIC(a, b) {
+    const n = a.length;
+    if (n < 3) return 0;
+    const rank = (arr) => {
+      const idx = arr.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]);
+      const r = new Array(n);
+      for (let k = 0; k < n; k++) r[idx[k][1]] = k;
+      return r;
+    };
+    const ra = rank(a), rb = rank(b), m = (n - 1) / 2;
+    let num = 0, da = 0, db = 0;
+    for (let i = 0; i < n; i++) { const x = ra[i] - m, y = rb[i] - m; num += x * y; da += x * x; db += y * y; }
+    return (da && db) ? num / Math.sqrt(da * db) : 0;
+  }
+
+  async function computeBacktest(series, vade) {
+    const H = TA_HORIZON[vade] || 45;
+    const p = BT_CFG[vade] || { warmup: 210, stride: 5 };
+    const warmup = p.warmup, stride = p.stride, intraday = !!p.intraday, n = series.length;
+    if (n < warmup + H + 40) return null;
+    const closes = series.map(c => c.close);
+    const samples = [];
+    let iter = 0;
+    for (let i = warmup; i + H < n; i += stride) {
+      // intraday: canlı H1+M15 karışımı yerine H1 tek-zaman (M15 tarihsel hizalama zor);
+      // aynı normalize/ağırlık mantığı, yaklaşık ama look-ahead'siz.
+      const r = intraday
+        ? computeVadeScore(null, vade, { H1: series.slice(0, i + 1), M15: null })
+        : computeVadeScore(series.slice(0, i + 1), vade);
+      if (r) samples.push({ i, score: r.score, fwd: closes[i + H] / closes[i] - 1 });
+      if (++iter % 40 === 0) await new Promise(res => setTimeout(res)); // UI'yı bloklama
+    }
+    if (samples.length < 12) return null;
+
+    const baseUp = samples.filter(s => s.fwd > 0).length / samples.length;
+    const al = samples.filter(s => s.score >= 55), sat = samples.filter(s => s.score <= 45);
+    const alHit = al.length ? al.filter(s => s.fwd > 0).length / al.length : null;
+    const satHit = sat.length ? sat.filter(s => s.fwd < 0).length / sat.length : null;
+    const dir = samples.filter(s => s.score >= 52 || s.score <= 48);
+    const dirHit = dir.length ? dir.filter(s => (s.score > 50) === (s.fwd > 0)).length / dir.length : null;
+
+    const bucketDefs = [
+      { lo: 0, hi: 40, label: '0–40 · güçlü SAT' },
+      { lo: 40, hi: 48, label: '40–48 · SAT' },
+      { lo: 48, hi: 52, label: '48–52 · nötr' },
+      { lo: 52, hi: 60, label: '52–60 · AL' },
+      { lo: 60, hi: 100.01, label: '60–100 · güçlü AL' },
+    ];
+    const buckets = bucketDefs.map(b => {
+      const xs = samples.filter(s => s.score >= b.lo && s.score < b.hi);
+      return { label: b.label, n: xs.length,
+        avg: xs.length ? xs.reduce((a, s) => a + s.fwd, 0) / xs.length : null,
+        pos: xs.length ? xs.filter(s => s.fwd > 0).length / xs.length : null };
+    });
+    const validB = buckets.filter(b => b.n >= 5 && b.avg != null);
+    let monotonic = validB.length >= 2;
+    for (let k = 1; k < validB.length; k++) if (validB[k].avg < validB[k - 1].avg - 1e-9) monotonic = false;
+
+    const ic = spearmanIC(samples.map(s => s.score), samples.map(s => s.fwd));
+
+    // basit strateji: skor>55 long, <45 flat (histerezis), %0.1 durum-değişim maliyeti
+    let pos = 0, switches = 0, stratEq = 1, bhEq = 1, peak = 1, mdd = 0, wins = 0, longIv = 0;
+    const perRet = [], cost = 0.001;
+    for (let k = 0; k < samples.length - 1; k++) {
+      const sc = samples[k].score;
+      let np = pos;
+      if (sc > 55) np = 1; else if (sc < 45) np = 0;
+      if (np !== pos) { stratEq *= (1 - cost); switches++; }
+      pos = np;
+      const rr = closes[samples[k + 1].i] / closes[samples[k].i] - 1;
+      bhEq *= (1 + rr);
+      if (pos === 1) { stratEq *= (1 + rr); perRet.push(rr); longIv++; if (rr > 0) wins++; } else perRet.push(0);
+      if (stratEq > peak) peak = stratEq;
+      const dd = (peak - stratEq) / peak; if (dd > mdd) mdd = dd;
+    }
+    const mean = perRet.reduce((a, b) => a + b, 0) / (perRet.length || 1);
+    const sd = Math.sqrt(perRet.reduce((a, b) => a + (b - mean) ** 2, 0) / (perRet.length || 1)) || 1e-9;
+    const barsPerYear = intraday ? 1638 : 252; // ~6.5 saatlik bar/gün × 252
+    const sharpe = mean / sd * Math.sqrt(barsPerYear / stride);
+
+    return { H, stride, warmup, intraday, nSamples: samples.length, baseUp,
+      alN: al.length, alHit, satN: sat.length, satHit, dirN: dir.length, dirHit,
+      buckets, monotonic, ic, stratRet: stratEq - 1, bhRet: bhEq - 1, sharpe, mdd,
+      switches, winRate: longIv ? wins / longIv : null, longIv };
+  }
+
+
+// ===== dilim: fmt-kisa =====
+  const shortNum = (v) => {
+    if (v == null || !isFinite(v)) return '—';
+    const a = Math.abs(v);
+    if (a >= 1e12) return (v / 1e12).toFixed(2) + 'T';
+    if (a >= 1e9)  return (v / 1e9).toFixed(2) + 'B';
+    if (a >= 1e6)  return (v / 1e6).toFixed(2) + 'M';
+    if (a >= 1e3)  return (v / 1e3).toFixed(1) + 'K';
+    return v.toFixed(0);
+  };
+
+
+// ===== dilim: crypto =====
+  function scoreBand(s, labels) {
+    const L = labels || ['Güçlü', 'İyi', 'Nötr', 'Zayıf', 'Kırılgan'];
+    if (s >= 70) return { cls: 'strong', label: L[0] };
+    if (s >= 56) return { cls: 'good', label: L[1] };
+    if (s >= 45) return { cls: 'neutral', label: L[2] };
+    if (s >= 35) return { cls: 'weak', label: L[3] };
+    return { cls: 'bad', label: L[4] };
+  }
+  function cryptoCategory(j) {
+    const cats = (j.categories || []).filter(Boolean).map((c) => String(c).toLowerCase());
+    const has = (kw) => cats.some((c) => c.includes(kw));
+    if (has('stablecoin')) return 'stablecoin';
+    if (has('meme')) return 'meme';
+    if (has('smart contract') || has('layer 1') || has('layer-1')) return 'l1';
+    if (has('defi') || has('decentralized finance')) return 'defi';
+    return 'other';
+  }
+  let cryptoDetailCache = {};
+  async function cryptoDetail(id) {
+    const c = cryptoDetailCache[id];
+    if (c && Date.now() - c.ts < 300000) return c.data;
+    try {
+      const r = await fetch(`https://api.coingecko.com/api/v3/coins/${encodeURIComponent(id)}?localization=false&tickers=false&market_data=true&community_data=true&developer_data=true&sparkline=false`);
+      const j = await r.json();
+      if (j && j.id) { cryptoDetailCache[id] = { ts: Date.now(), data: j }; return j; }
+    } catch (e) {}
+    return null;
+  }
+  function computeCryptoValue(j) {
+    const md = j.market_data || {};
+    const N = (x) => (typeof x === 'number' && isFinite(x)) ? x : null;
+    const usd = (o) => o ? N(o.usd) : null;
+    const mcap = usd(md.market_cap), vol = usd(md.total_volume), fdv = usd(md.fully_diluted_valuation);
+    const circ = N(md.circulating_supply), maxs = N(md.max_supply);
+    const rank = N(j.market_cap_rank);
+    const athPct = usd(md.ath_change_percentage);
+    const chg24 = N(md.price_change_percentage_24h);
+    const chg1y = N(md.price_change_percentage_1y_in_currency && md.price_change_percentage_1y_in_currency.usd) ?? N(md.price_change_percentage_1y);
+    const dev = j.developer_data || {}, comm = j.community_data || {};
+    const category = cryptoCategory(j);
+    const warnings = [];
+
+    // 1) Ağ & likidite
+    const rankScore = rank == null ? 40 : rank <= 10 ? 100 : rank <= 25 ? 88 : rank <= 50 ? 74 : rank <= 100 ? 60 : rank <= 250 ? 45 : rank <= 600 ? 32 : 22;
+    const liq = (vol != null && mcap) ? vol / mcap : null;
+    const liqScore = liq == null ? 45 : liq >= 0.15 ? 100 : liq >= 0.08 ? 85 : liq >= 0.04 ? 70 : liq >= 0.02 ? 58 : liq >= 0.008 ? 45 : 30;
+    const c1 = 0.6 * rankScore + 0.4 * liqScore;
+    const c1note = `Sıralama ${rank != null ? '#' + rank : '—'} · likidite (hacim/piyasa değeri) ${liq != null ? (liq * 100).toFixed(1) + '%' : '—'}${liq != null && liq < 0.008 ? ' — çok düşük, çıkışta kayma riski.' : ''}`;
+
+    // 2) Arz & seyrelme
+    let c2, c2note;
+    if (maxs && circ) {
+      const r = circ / maxs;
+      c2 = r >= 0.9 ? 100 : r >= 0.75 ? 86 : r >= 0.6 ? 72 : r >= 0.4 ? 56 : r >= 0.2 ? 42 : 30;
+      c2note = `Dolaşan/maks arz %${(r * 100).toFixed(0)} — ${r >= 0.75 ? 'gelecekteki enflasyon düşük.' : r >= 0.4 ? 'orta düzey seyrelme riski.' : 'yüksek gelecek seyrelmesi (kilitli arz açılacak).'}`;
+    } else if (fdv && mcap) {
+      const d = fdv / mcap;
+      c2 = d <= 1.05 ? 95 : d <= 1.25 ? 80 : d <= 1.6 ? 62 : d <= 2.2 ? 46 : d <= 3.5 ? 34 : 24;
+      c2note = `FDV/piyasa değeri ${d.toFixed(2)}× — ${d <= 1.25 ? 'tam seyreltilmiş değere yakın.' : 'tam arz açıldığında ciddi seyrelme baskısı.'}`;
+      if (d > 1.6) warnings.push('Dolaşan arz, toplam arzın küçük kısmı — vesting/kilit açılışları satış baskısı yaratabilir.');
+    } else {
+      c2 = 45; c2note = 'Maksimum arz sınırsız/bilinmiyor — seyrelme net değerlendirilemiyor.';
+      warnings.push('Sabit arz tavanı yok (uncapped) — uzun vadeli seyrelme belirsiz.');
+    }
+
+    // 3) Geliştirici & benimseme
+    const commits = N(dev.commit_count_4_weeks), stars = N(dev.stars);
+    const devKnown = (commits != null || stars != null);
+    let devScore = 45;
+    if (devKnown) {
+      const cs = commits == null ? 30 : commits >= 120 ? 100 : commits >= 40 ? 82 : commits >= 10 ? 60 : commits > 0 ? 42 : 22;
+      const ss = stars == null ? 40 : stars >= 25000 ? 100 : stars >= 8000 ? 82 : stars >= 2000 ? 64 : stars >= 300 ? 48 : 35;
+      devScore = 0.6 * cs + 0.4 * ss;
+    } else { warnings.push('Geliştirici (GitHub) verisi izlenmiyor — bu alt-bileşen nötr alındı.'); }
+    const tw = N(comm.twitter_followers), rd = N(comm.reddit_subscribers);
+    let commScore = 45;
+    if (tw != null || rd != null) {
+      const ts = tw == null ? 40 : tw >= 1e6 ? 100 : tw >= 3e5 ? 84 : tw >= 8e4 ? 66 : tw >= 1.5e4 ? 50 : 36;
+      const rs = rd == null ? 45 : rd >= 5e5 ? 100 : rd >= 1e5 ? 82 : rd >= 2e4 ? 62 : rd >= 3e3 ? 48 : 36;
+      commScore = 0.5 * ts + 0.5 * rs;
+    }
+    const c3 = 0.5 * devScore + 0.5 * commScore;
+    const c3note = `Geliştirme: ${commits != null ? commits + ' commit/4h' : 'veri yok'}${stars != null ? ' · ⭐' + shortNum(stars) : ''} · topluluk: ${tw != null ? shortNum(tw) + ' X' : '—'}${rd != null ? ' · ' + shortNum(rd) + ' Reddit' : ''}`;
+
+    // 4) Değerleme konumu (ATH’ye uzaklık — dürüstçe: temel değer değil, tarihsel konum)
+    let c4, c4note;
+    if (athPct == null) { c4 = 50; c4note = 'ATH verisi yok.'; }
+    else {
+      const below = -athPct;
+      c4 = below <= 10 ? 42 : below <= 30 ? 52 : below <= 55 ? 62 : below <= 75 ? 58 : below <= 90 ? 48 : 34;
+      c4note = `ATH’nin %${below.toFixed(0)} altında — ${below <= 15 ? 'zirveye yakın (geç/pahalı bölge olabilir).' : below <= 60 ? 'zirveden makul geri çekilme; tarihsel olarak yukarı alan var.' : below <= 90 ? 'derin düşüş — potansiyel değer ama trend zayıf.' : 'zirveden %90+ düşük — çoğu kez kırılmış döngüyü işaret eder.'}`;
+      if (chg1y != null) { if (chg1y > 0 && below > 30) c4 = Math.min(100, c4 + 6); if (chg1y < -60) c4 = Math.max(20, c4 - 6); }
+    }
+
+    // 5) Olgunluk & istikrar
+    const matRank = rank == null ? 35 : rank <= 20 ? 100 : rank <= 50 ? 82 : rank <= 100 ? 66 : rank <= 250 ? 50 : 36;
+    const volAbs = chg24 == null ? null : Math.abs(chg24);
+    const stab = volAbs == null ? 55 : volAbs <= 3 ? 90 : volAbs <= 6 ? 72 : volAbs <= 12 ? 54 : volAbs <= 20 ? 40 : 28;
+    const c5 = 0.6 * matRank + 0.4 * stab;
+    const c5note = `Sıralama olgunluğu + son 24s oynaklık ${volAbs != null ? '±' + volAbs.toFixed(1) + '%' : '—'}`;
+
+    let weights = [0.20, 0.25, 0.20, 0.20, 0.15];
+    if (category === 'stablecoin') { weights = [0.45, 0.10, 0.15, 0.05, 0.25]; warnings.unshift('Stabilcoin — fiyatı ~$1’e sabittir; “değer” skoru peg istikrarı + likidite odaklıdır, sermaye kazancı beklenmez.'); }
+    if (category === 'meme') warnings.unshift('Meme coin — tokenomik/temel dayanağı zayıf, fiyat büyük ölçüde spekülatiftir; skor yüksek olsa da risk çok yüksektir.');
+
+    const comps = [
+      { label: 'Ağ & likidite', score: c1, note: c1note, w: weights[0] },
+      { label: 'Arz & seyrelme', score: c2, note: c2note, w: weights[1] },
+      { label: 'Geliştirici & benimseme', score: c3, note: c3note, w: weights[2] },
+      { label: 'Değerleme konumu', score: c4, note: c4note, w: weights[3] },
+      { label: 'Olgunluk & istikrar', score: c5, note: c5note, w: weights[4] },
+    ];
+    const score = Math.round(comps.reduce((a, c) => a + c.score * c.w, 0));
+    const CATL = { stablecoin: 'Stabilcoin', meme: 'Meme', l1: 'Katman-1 / Akıllı sözleşme', defi: 'DeFi', other: 'Genel' };
+    return { score, band: scoreBand(score), comps, category, catLabel: CATL[category], warnings };
+  }
+
+// ===== dilim: metal =====
+  const METAL_MACRO_W = {
+    // [Dolar, Faiz, Risk, Metaller-arası oran, Kendi trend]
+    'gram-altin': [0.28, 0.28, 0.18, 0.06, 0.20], // altın = saf makro/haven
+    'gumus':      [0.22, 0.20, 0.10, 0.23, 0.25], // gümüş = +sınai talep
+    'platin':     [0.18, 0.16, 0.08, 0.28, 0.30], // platin = ağır sınai / oto
+  };
+  function computeMetalMacro(key, d) {
+    // d: { dxyChg, tnxChg, vix, gsr, pgr, cuChg, ownM, ownH }
+    const N = (x) => (typeof x === 'number' && isFinite(x)) ? x : null;
+    const industrial = key !== 'gram-altin';
+    const warnings = [];
+
+    // 1) Dolar (DXY aylık değişim) — metaller dolara ters
+    const dxy = N(d.dxyChg);
+    const c1 = dxy == null ? 50 : dxy <= -3 ? 90 : dxy <= -1 ? 75 : dxy <= 1 ? 55 : dxy <= 3 ? 38 : 22;
+    const c1note = dxy == null ? 'Dolar endeksi (DXY) verisi yok.' : `Dolar endeksi son 1 ayda ${fmtPct(dxy)} — ${dxy <= -1 ? 'zayıf dolar madenler için destekleyici.' : dxy >= 1 ? 'güçlü dolar madenlere baskı.' : 'yatay dolar, nötr.'}`;
+
+    // 2) Faizler (10Y yön — reel faiz vekili) — yükselen faiz getirisiz metale baskı
+    const tnx = N(d.tnxChg);
+    const c2 = tnx == null ? 50 : tnx <= -8 ? 88 : tnx <= -3 ? 72 : tnx <= 3 ? 55 : tnx <= 8 ? 38 : 24;
+    const c2note = tnx == null ? '10Y tahvil getirisi verisi yok.' : `10Y getiri son 1 ayda ${fmtPct(tnx)} — ${tnx <= -3 ? 'düşen faiz getirisiz metali destekler.' : tnx >= 3 ? 'yükselen faiz baskı yapar.' : 'yatay faiz, nötr.'} (nominal — reel faiz vekili)`;
+
+    // 3) Risk / VIX — altın için haven; sınai metaller için risk-off olumsuz
+    const vix = N(d.vix);
+    let c3, c3note;
+    if (vix == null) { c3 = 50; c3note = 'VIX (korku endeksi) verisi yok.'; }
+    else if (!industrial) {
+      c3 = vix >= 30 ? 82 : vix >= 22 ? 68 : vix >= 16 ? 55 : 45;
+      c3note = `VIX ${vix.toFixed(1)} — ${vix >= 22 ? 'yüksek korku altına güvenli-liman talebi getirir.' : 'sakin piyasa, haven talebi düşük.'}`;
+    } else {
+      c3 = vix >= 30 ? 38 : vix >= 22 ? 48 : vix >= 16 ? 58 : 62;
+      c3note = `VIX ${vix.toFixed(1)} — ${vix >= 22 ? 'risk-off ortamı sınai metal talebine olumsuz.' : 'sakin piyasa sınai talebe olumlu.'}`;
+    }
+
+    // 4) Metaller-arası oran (ortalamaya dönüş)
+    const gsr = N(d.gsr), pgr = N(d.pgr);
+    let c4, c4note;
+    if (key === 'gumus') {
+      c4 = gsr == null ? 50 : gsr >= 90 ? 85 : gsr >= 80 ? 72 : gsr >= 65 ? 55 : gsr >= 50 ? 42 : 32;
+      c4note = gsr == null ? 'Altın/gümüş oranı yok.' : `Altın/gümüş oranı ${gsr.toFixed(0)} — ${gsr >= 80 ? 'gümüş altına göre tarihsel olarak ucuz (yukarı ayrışma potansiyeli).' : gsr <= 55 ? 'gümüş görece pahalı.' : 'oran normal aralıkta.'}`;
+    } else if (key === 'platin') {
+      c4 = pgr == null ? 50 : pgr <= 0.5 ? 85 : pgr <= 0.65 ? 72 : pgr <= 0.85 ? 55 : pgr <= 1.0 ? 42 : 32;
+      c4note = pgr == null ? 'Platin/altın oranı yok.' : `Platin/altın oranı ${pgr.toFixed(2)} — ${pgr <= 0.65 ? 'platin altına göre tarihi iskontoda (ucuz).' : pgr >= 1 ? 'platin altına göre pahalı.' : 'oran orta bölgede.'}`;
+    } else {
+      c4 = gsr == null ? 50 : gsr >= 100 ? 42 : gsr >= 85 ? 50 : gsr >= 65 ? 58 : gsr >= 50 ? 55 : 48;
+      c4note = gsr == null ? 'Altın/gümüş oranı yok.' : `Altın/gümüş oranı ${gsr.toFixed(0)} — değerli metal kompleksinin genel sağlığı ${gsr >= 100 ? 'gergin.' : 'normal.'}`;
+    }
+
+    // 5) Kendi trendi (aylık + 6 aylık) + sınai metaller için bakır modifikatörü
+    const om = N(d.ownM), oh = N(d.ownH);
+    let trend = null;
+    if (om != null && oh != null) trend = 0.5 * om + 0.5 * oh;
+    else if (om != null) trend = om;
+    else if (oh != null) trend = oh;
+    let c5 = trend == null ? 50 : trend >= 10 ? 85 : trend >= 4 ? 70 : trend >= -2 ? 55 : trend >= -8 ? 42 : 30;
+    const cu = N(d.cuChg);
+    if (industrial && cu != null) {
+      const bump = cu >= 5 ? 6 : cu >= 1 ? 3 : cu <= -5 ? -6 : cu <= -1 ? -3 : 0;
+      c5 = Math.max(20, Math.min(100, c5 + bump));
+    }
+    const c5note = `Kendi trendi (1 ay + 6 ay): ${trend != null ? fmtPct(trend) : '—'}${industrial && cu != null ? ` · bakır (sınai talep vekili) 1 ay ${fmtPct(cu)}` : ''}`;
+
+    if (tnx != null) warnings.push('Faiz bileşeni nominal 10Y kullanır; gerçek "reel faiz" (TIPS) ücretli veri ister — bu bir vekildir.');
+
+    const w = METAL_MACRO_W[key] || [0.25, 0.25, 0.15, 0.15, 0.20];
+    const catLabel = key === 'gram-altin' ? 'Güvenli liman / makro' : key === 'gumus' ? 'Yarı-sınai' : 'Ağır sınai';
+    const comps = [
+      { label: 'Dolar (DXY)', score: c1, note: c1note, w: w[0] },
+      { label: 'Faizler (10Y)', score: c2, note: c2note, w: w[1] },
+      { label: 'Risk iştahı (VIX)', score: c3, note: c3note, w: w[2] },
+      { label: 'Metaller-arası oran', score: c4, note: c4note, w: w[3] },
+      { label: 'Kendi trendi', score: c5, note: c5note, w: w[4] },
+    ];
+    const score = Math.round(comps.reduce((a, c) => a + c.score * c.w, 0));
+    const LAB = ['Elverişli rejim', 'Ilımlı destek', 'Nötr rejim', 'Zayıf rejim', 'Baskı altında'];
+    return { score, band: scoreBand(score, LAB), comps, catLabel, warnings };
+  }
+  async function metalMacroInputs(info) {
+    const pct = (r) => (r && typeof r.pct === 'number' && isFinite(r.pct)) ? r.pct : null;
+    const [dxyM, tnxM, vixQ, goldQ, silverQ, platQ, cuM, ownM, ownH] = await Promise.all([
+      changeFor('DX-Y.NYB', 'US', 'aylik').catch(() => null),
+      changeFor('^TNX', 'US', 'aylik').catch(() => null),
+      getQuote('^VIX', 'US').catch(() => null),
+      getQuote('GC=F', 'US').catch(() => null),
+      getQuote('SI=F', 'US').catch(() => null),
+      getQuote('PL=F', 'US').catch(() => null),
+      changeFor('HG=F', 'US', 'aylik').catch(() => null),
+      changeFor(info.ysym, 'US', 'aylik').catch(() => null),
+      changeFor(info.ysym, 'US', 'alti').catch(() => null),
+    ]);
+    const gp = goldQ && goldQ.price, sp = silverQ && silverQ.price, pp = platQ && platQ.price;
+    return {
+      dxyChg: pct(dxyM), tnxChg: pct(tnxM),
+      vix: vixQ && vixQ.price,
+      gsr: (gp && sp) ? gp / sp : null,
+      pgr: (pp && gp) ? pp / gp : null,
+      cuChg: pct(cuM), ownM: pct(ownM), ownH: pct(ownH),
+    };
+  }
+
+// ===== dilim: haber-skor =====
+  const SENTI_POS = {
+    'rekor':2,'zirve':2,'yükseliş':1.5,'yükseldi':1.5,'arttı':1,'artış':1,'kâr':1.5,'kar payı':1.5,'temettü':1.5,
+    'büyüme':1.5,'büyüdü':1.5,'anlaşma':1.5,'imzaladı':1,'sözleşme':1,'ihale':1.5,'kazandı':1.5,'onay':1.5,'onaylandı':1.5,
+    'ruhsat':1.5,'yeni yatırım':1.5,'kapasite art':1.5,'ihracat':1,'talep art':1.5,'güçlü':1,'beklenti üzeri':2,'sürpriz kâr':2,
+    'geri alım':1.5,'bedelsiz':2,'teşvik':1,'iş birliği':1,'ortaklık':1,'primli':1.5,'hedef fiyat yüksel':2,'al tavsiye':2,
+    'record':2,'surge':2,'soar':2,'soars':2,'rally':1.5,'jumps':1.5,'beat':2,'beats':2,'upgrade':2,'upgraded':2,'outperform':1.5,
+    'buy rating':2,'raises guidance':2,'strong':1,'growth':1.5,'profit':1.5,'dividend':1.5,'buyback':1.5,'approval':1.5,'approved':1.5,
+    'wins':1.5,'contract':1,'deal':1.5,'expansion':1,'bullish':2,'all-time high':2,'tops estimates':2,'price target raise':2,
+  };
+  const SENTI_NEG = {
+    'düşüş':1.5,'düştü':1.5,'geriledi':1.5,'zarar':2,'kayıp':1.5,'iflas':3,'konkordato':3,'soruşturma':2,'ceza':2,'dava':1.5,
+    'zayıf':1,'beklenti altı':2,'satış baskı':1.5,'kâr uyarı':2.5,'küçülme':1.5,'daralma':1.5,'temerrüt':3,'gözaltı':2,
+    'durduruldu':2,'geri çağır':2,'grev':1.5,'yaptırım':2,'sermaye azalt':2,'değer kayb':1.5,'hedef fiyat düşür':2,'sat tavsiye':2,
+    'plunge':2,'plunges':2,'crash':2.5,'slump':2,'falls':1.5,'drops':1.5,'tumble':2,'miss':2,'misses':2,'downgrade':2,'downgraded':2,
+    'loss':2,'losses':2,'lawsuit':1.5,'probe':2,'investigation':2,'recall':2,'bankruptcy':3,'default':3,'warning':1.5,'profit warning':2.5,
+    'cuts guidance':2.5,'weak':1,'bearish':2,'layoffs':1.5,'fraud':3,'sec charges':2.5,'halted':2,'selloff':1.5,'underperform':1.5,
+  };
+
+  function scoreHeadline(text) {
+    const t = ' ' + (text || '').toLowerCase() + ' ';
+    let s = 0, hits = 0;
+    for (const w in SENTI_POS) if (t.includes(w)) { s += SENTI_POS[w]; hits++; }
+    for (const w in SENTI_NEG) if (t.includes(w)) { s -= SENTI_NEG[w]; hits++; }
+    return { s, hits };
+  }
+
+  function sentiLabel(score, hits) {
+    if (!hits) return { label: 'Haber sinyali yok', cls: 'neutral' };
+    if (score >= 0.35)  return { label: 'Pozitif haber akışı', cls: 'bull' };
+    if (score >= 0.12)  return { label: 'Hafif pozitif', cls: 'bull' };
+    if (score > -0.12)  return { label: 'Nötr haber akışı', cls: 'neutral' };
+    if (score > -0.35)  return { label: 'Hafif negatif', cls: 'bear' };
+    return { label: 'Negatif haber akışı', cls: 'bear' };
+  }
+
+
+// ===== dilim: firsat =====
+  function oppTag(score) {
+    if (score >= 66) return { txt: '🔥 Güçlü Fırsat', cls: 'strong' };
+    if (score >= 56) return { txt: '🟢 Fırsat oluşuyor', cls: 'good' };
+    if (score > 52)  return { txt: '🟡 İzle', cls: 'watch' };
+    if (score >= 48) return { txt: '⚪ Nötr', cls: 'neutral' };
+    if (score > 44)  return { txt: '🔻 Zayıf', cls: 'weak' };
+    return { txt: '⛔ Uzak dur', cls: 'risk' };
+  }
+
+  // ===== Fiyat uygunluğu = fırsatın kilit parçası =====
+  // Teknik skor güçlü olsa bile fiyat "uygun alım bölgesi"nin çok üstündeyse bu bir ALIM
+  // fırsatı değil, kovalamadır. buyZoneProximity ile fiyatın banda ATR-ölçekli uzaklığını
+  // puana çeviririz: içinde/altında = asıl fırsat fiyatı (+), banda yakın = hafif (+),
+  // uzak = ceza (−). Güçlü momentum rejiminde derin geri çekilme gelmeyebilir → uzaklık
+  // cezası yumuşatılır (sadece iskonto beklemek fırsatı kaçırabilir). Sınır ±8 puan
+  // (haber nabzı ±7 ile aynı ağırlık düzeyi). YALNIZ Fırsatlar sıralama katmanı;
+  // computeVadeScore skorunu, alım bandını ve TA/FA bileşke skorunu DEĞİŞTİRMEZ (bilgi amaçlı).
+  function priceOppAdj(prox, mom) {
+    if (!prox || prox.dAtr == null) return 0;
+    const d = prox.dAtr; // fiyatın bandın kaç ATR üstünde olduğu (≤0 = içinde/altında)
+    let pts;
+    if (d <= 0)      pts = 8;                         // içinde/altında — asıl fırsat fiyatı
+    else if (d <= 1) pts = 6 * (1 - d);               // banda yakın: +6 → 0
+    else             pts = -Math.min(8, (d - 1) * 4); // banda uzak: her ATR −4, −8 tavan
+    if (pts < 0 && mom && mom.active) pts *= 0.4;     // güçlü trend → cezayı yumuşat
+    return pts;
+  }
+  function priceOppChip(prox) {
+    if (!prox) return '';
+    const map = {
+      below: { cls: 'in',   t: '🟢 Alım bandının altında — ucuz' },
+      in:    { cls: 'in',   t: '🟢 Fiyat alım bölgesinde' },
+      near:  { cls: 'near', t: `🟢 ${bandUzaklikTxt(prox.dAtr, null, true)}` },
+      far:   { cls: 'far',  t: `🟡 ${bandUzaklikTxt(prox.dAtr, null, true)}` },
+    };
+    const m = map[prox.state];
+    return m ? `<span class="opp-prox ${m.cls}">${m.t}</span>` : '';
+  }
+
+
+// ===== dilim: scan =====
+  const SCAN_PRESETS = {
+    value: {
+      emoji: '💰', name: 'Değer',
+      desc: '<b>💰 Değer taraması:</b> izleme evrenini ucuzluk göstergelerine göre sıralar — F/K, PD/DD, FD/FAVÖK düşük + temettü verimi artı. <b>Zarar eden (negatif F/K) şirketler "ucuz" sayılmaz</b>, ayrıca işaretlenir.',
+      tags: [{ min: 70, txt: '💎 Belirgin ucuz', cls: 'strong' }, { min: 50, txt: '🟢 Makul-ucuz', cls: 'good' }, { min: 0, txt: '🔴 Pahalı', cls: 'weak' }],
+    },
+    growth: {
+      emoji: '🚀', name: 'Büyüme',
+      desc: '<b>🚀 Büyüme taraması:</b> gelir büyümesi yüksek + kazancın hızlandığı (İleri F/K < F/K) + büyümeye göre ucuz (PEG düşük) hisseleri öne çıkarır.',
+      tags: [{ min: 70, txt: '🚀 Güçlü büyüme', cls: 'strong' }, { min: 50, txt: '🟢 Ilımlı büyüme', cls: 'good' }, { min: 0, txt: '🔴 Zayıf büyüme', cls: 'weak' }],
+    },
+    quality: {
+      emoji: '🏅', name: 'Kalite',
+      desc: '<b>🏅 Kalite taraması:</b> özsermaye kârlılığı (ROE) yüksek + net kâr marjı yüksek + borç/özsermaye düşük şirketleri sıralar. Sağlam bilanço + verimli sermaye.',
+      tags: [{ min: 70, txt: '🏅 Yüksek kalite', cls: 'strong' }, { min: 50, txt: '🟢 Orta kalite', cls: 'good' }, { min: 0, txt: '🔴 Düşük kalite', cls: 'weak' }],
+    },
+  };
+
+  // Bir alt-skoru ✓/~/✗ ölçüt rozetine çevir (65+ geçer, 45+ orta, altı kalır)
+  function scanCrit(label, valTxt, sc) {
+    if (sc == null) return { label, cls: 'na', html: `<span class="crit na">${label} —</span>` };
+    const cls = sc >= 65 ? 'pass' : sc >= 45 ? 'mid' : 'fail';
+    const mk = cls === 'pass' ? '✓' : cls === 'fail' ? '✗' : '~';
+    return { label, cls, html: `<span class="crit ${cls}">${label} ${valTxt} ${mk}</span>` };
+  }
+
+  // Ağırlıklı ortalama (yalnız mevcut alt-skorlar)
+  function scanBlend(parts) {
+    let w = 0, s = 0, n = 0;
+    for (const p of parts) if (p.sc != null) { w += p.wt; s += p.wt * p.sc; n++; }
+    return { score: w > 0 ? s / w : null, present: n };
+  }
+
+  // m = compareMem kaydı (Yahoo). fmtCell konvansiyonu: pct/roe/marj/temettü/büyüme = KESİR,
+  // debtToEquity = yüzde (÷100 = gerçek oran), F/K·PD/DD·FD/FAVÖK·PEG = ham sayı.
+  function scanScore(preset, m) {
+    if (!m || m.ok === false) return { ok: false, reason: 'no-data' };
+    if (preset === 'value') {
+      const pe = m.trailingPE;
+      if (pe == null || pe <= 0) return { ok: false, reason: 'neg-earnings' };
+      const peSc = faInterp(pe, [[5, 95], [8, 88], [12, 78], [16, 68], [20, 58], [28, 42], [40, 25], [60, 10]]);
+      const pbSc = faInterp(m.priceToBook, [[0.8, 95], [1.5, 85], [2.5, 72], [4, 55], [7, 35], [12, 15]]);
+      const evSc = faInterp(m.evEbitda, [[4, 95], [7, 82], [10, 68], [14, 52], [20, 32], [30, 12]]);
+      const divPct = m.dividendYield != null ? m.dividendYield * 100 : null;
+      const divSc = divPct == null ? null : faInterp(divPct, [[0, 48], [2, 62], [4, 75], [6, 85], [9, 95]]);
+      const blend = scanBlend([{ sc: peSc, wt: 0.40 }, { sc: pbSc, wt: 0.25 }, { sc: evSc, wt: 0.25 }, { sc: divSc, wt: 0.10 }]);
+      const crits = [
+        scanCrit('F/K', pe.toFixed(1), peSc),
+        scanCrit('PD/DD', m.priceToBook != null ? m.priceToBook.toFixed(1) : '', pbSc),
+        scanCrit('FD/FAVÖK', m.evEbitda != null ? m.evEbitda.toFixed(1) : '', evSc),
+        scanCrit('Temettü', divPct != null ? '%' + divPct.toFixed(1) : '', divSc),
+      ];
+      return { ok: blend.score != null, score: blend.score, crits, present: blend.present };
+    }
+    if (preset === 'growth') {
+      const rg = m.revenueGrowth != null ? m.revenueGrowth * 100 : null;
+      const rgSc = rg == null ? null : faInterp(rg, [[-10, 8], [0, 25], [8, 50], [15, 65], [25, 80], [40, 92], [60, 98]]);
+      const fwd = m.forwardPE, ttm = m.trailingPE;
+      const ratio = (fwd != null && fwd > 0 && ttm != null && ttm > 0) ? fwd / ttm : null;
+      const accSc = ratio == null ? null : faInterp(ratio, [[0.5, 95], [0.7, 85], [0.85, 70], [1.0, 50], [1.2, 30], [1.5, 12]]);
+      const peg = m.peg;
+      const pegSc = (peg == null || peg <= 0) ? null : faInterp(peg, [[0.5, 95], [1, 80], [1.5, 62], [2, 45], [3, 25], [5, 10]]);
+      const blend = scanBlend([{ sc: rgSc, wt: 0.50 }, { sc: accSc, wt: 0.25 }, { sc: pegSc, wt: 0.25 }]);
+      const crits = [
+        scanCrit('Gelir büy.', rg != null ? '%' + rg.toFixed(0) : '', rgSc),
+        scanCrit('İleri F/K', ratio != null ? '×' + ratio.toFixed(2) : '', accSc),
+        scanCrit('PEG', (peg != null && peg > 0) ? peg.toFixed(2) : '', pegSc),
+      ];
+      return { ok: blend.score != null, score: blend.score, crits, present: blend.present };
+    }
+    // quality
+    const roe = m.returnOnEquity != null ? m.returnOnEquity * 100 : null;
+    const roeSc = roe == null ? null : faInterp(roe, [[0, 10], [8, 40], [15, 60], [22, 75], [30, 88], [45, 97]]);
+    const pm = m.profitMargin != null ? m.profitMargin * 100 : null;
+    const pmSc = pm == null ? null : faInterp(pm, [[0, 12], [5, 40], [10, 58], [18, 74], [28, 88], [40, 97]]);
+    const d2e = m.debtToEquity != null ? m.debtToEquity / 100 : null;
+    const d2eSc = d2e == null ? null : faInterp(d2e, [[0, 95], [0.3, 85], [0.6, 72], [1, 55], [1.8, 35], [3, 15]]);
+    const blend = scanBlend([{ sc: roeSc, wt: 0.40 }, { sc: pmSc, wt: 0.35 }, { sc: d2eSc, wt: 0.25 }]);
+    const crits = [
+      scanCrit('ROE', roe != null ? '%' + roe.toFixed(0) : '', roeSc),
+      scanCrit('Net marj', pm != null ? '%' + pm.toFixed(0) : '', pmSc),
+      scanCrit('Borç/Öz', d2e != null ? d2e.toFixed(2) + 'x' : '', d2eSc),
+    ];
+    return { ok: blend.score != null, score: blend.score, crits, present: blend.present };
+  }
+
+  function scanTag(preset, score) {
+    for (const t of SCAN_PRESETS[preset].tags) if (score >= t.min) return t;
+    return SCAN_PRESETS[preset].tags[SCAN_PRESETS[preset].tags.length - 1];
+  }
+
+
+// ===== dilim: sektor =====
+  const SEK_META = {
+    'Technology': { e: '💻', n: 'Teknoloji' },
+    'Financial Services': { e: '🏦', n: 'Banka/Finans' },
+    'Healthcare': { e: '🧬', n: 'Sağlık' },
+    'Consumer Cyclical': { e: '🛍️', n: 'Tüketici (Döngüsel)' },
+    'Consumer Defensive': { e: '🛒', n: 'Temel Tüketim' },
+    'Energy': { e: '⛽', n: 'Enerji/Petrol' },
+    'Industrials': { e: '🏭', n: 'Sanayi' },
+    'Basic Materials': { e: '⛏️', n: 'Temel Malzeme' },
+    'Utilities': { e: '🔌', n: 'Altyapı/Elektrik' },
+    'Real Estate': { e: '🏢', n: 'Gayrimenkul' },
+    'Communication Services': { e: '📡', n: 'İletişim' },
+    '_other': { e: '📦', n: 'Fon/ETF & Diğer' },
+  };
+  let sektorInited = false, sektorSort = 'cheap', sektorScanId = 0;
+  const sekMem = new Map();          // "MKT:SYM" -> yfinQuery res | {ok:false}
+  const sekOpen = new Set();         // açık sektör anahtarları
+
+  function sekMedian(arr) {
+    const a = arr.filter((v) => v != null && isFinite(v)).sort((x, y) => x - y);
+    if (!a.length) return null;
+    const m = Math.floor(a.length / 2);
+    return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+  }
+  const sekPe = (v) => v == null || !isFinite(v) ? '—' : (v >= 100 ? v.toFixed(0) : v.toFixed(1));
+  const sekPct = (v) => v == null || !isFinite(v) ? '—' : (v >= 0 ? '+' : '') + Math.round(v) + '%';
+  const sekPeg = (v) => v == null || !isFinite(v) || v <= 0 ? '—' : v.toFixed(1);
+
+  async function fetchSekBatch(items) {
+    const need = items.filter((it) => !sekMem.has(it.market + ':' + it.symbol));
+    for (let i = 0; i < need.length; i += 10) {
+      const batch = need.slice(i, i + 10);
+      let res;
+      try { res = await yfinQuery(batch.map((it) => yahooSym(it.symbol, it.market))); }
+      catch (_) { res = {}; }
+      batch.forEach((it) => {
+        const r = res[yahooSym(it.symbol, it.market)];
+        sekMem.set(it.market + ':' + it.symbol, r && r.ok ? r : { ok: false });
+      });
+    }
+  }
+
+  // ===== Item 3: kademeli SEKTÖR SINIFLANDIRICI + "ne iş yapıyor" satırı =====
+  // SORUN: Yahoo'nun `sector` alanı birçok ADR/OTC (YASKY, NJDCY, TTDKY, SHECY…) ve
+  // bütün ETF'ler için BOŞ gelir. Eski kod tek bir `SEK_META[res.sector]` bakışı yapıp
+  // boş olan HER ŞEYİ 📦 "Fon/ETF & Diğer" kutusuna atıyordu — yani gerçek şirketler
+  // yanlış sektörde görünüyordu.
+  // ÇÖZÜM: kademeli çıkarım — ① Yahoo sektörü ② Yahoo alt-alanı (industry)
+  // ③ gerçek fon/ETF tespiti ④ radar sembol etiketi (SYMBOL_SECTORS)
+  // ⑤ şirket profili metni (bizSummary). Hiçbiri tutmazsa 📦.
+  // Fonlar bilerek 📦'de KALIR: F/K ve marjları olmadığı (ya da sepet ortalaması olduğu)
+  // için sektör ortancalarını bozarlar — modülün varlık sebebi o ortancalar.
+  // SALT SUNUM/SINIFLAMA KATMANI — TA/FA/bileşke skoruna DOKUNMAZ.
+
+  // Yahoo alt-alan (industry) → sektör. Sıra önemli: daha özgül olan üstte.
+  const SEK_IND_RULES = [
+    [['semiconduct', 'software', 'computer hardware', 'consumer electronic', 'electronic component', 'electronics & computer', 'information technology', 'scientific & technical', 'communication equipment', 'solar'], 'Technology'],
+    [['bank', 'capital markets', 'insurance', 'asset management', 'credit services', 'mortgage', 'financial data', 'financial conglomerate', 'shell companies'], 'Financial Services'],
+    [['biotechnolog', 'drug manufactur', 'diagnostics & research', 'medical device', 'medical instrument', 'medical care', 'medical distribution', 'healthcare', 'health information', 'pharmaceutical retail'], 'Healthcare'],
+    [['telecom', 'entertainment', 'broadcasting', 'advertising', 'publishing', 'electronic gaming', 'internet content'], 'Communication Services'],
+    [['reit', 'real estate'], 'Real Estate'],
+    [['utilities'], 'Utilities'],
+    [['steel', 'copper', 'aluminum', 'gold', 'silver', 'mining', 'chemical', 'agricultural inputs', 'paper', 'lumber', 'building materials', 'coking coal'], 'Basic Materials'],
+    [['oil & gas', 'uranium', 'coal'], 'Energy'],
+    [['aerospace', 'defense', 'airlines', 'airport', 'railroad', 'trucking', 'marine shipping', 'integrated freight', 'machinery', 'engineering & construction', 'building products', 'electrical equipment', 'industrial distribution', 'waste management', 'pollution', 'security & protection', 'metal fabrication', 'business services', 'consulting services', 'staffing', 'rental & leasing', 'conglomerates', 'infrastructure operations', 'tools & accessories'], 'Industrials'],
+    [['beverages', 'food', 'grocery', 'household & personal', 'tobacco', 'confectioners', 'farm products', 'discount stores', 'education & training'], 'Consumer Defensive'],
+    [['auto', 'apparel', 'restaurant', 'lodging', 'resorts & casinos', 'gambling', 'leisure', 'travel services', 'footwear', 'furnishings', 'home improvement', 'specialty retail', 'internet retail', 'department stores', 'luxury goods', 'packaging & containers', 'recreational vehicles', 'residential construction', 'personal services', 'textile'], 'Consumer Cyclical'],
+  ];
+
+  // Radar sembol etiketi (SYMBOL_SECTORS) → sektör. 'intl' bilerek yok: coğrafya, sektör değil.
+  const SEK_TAG_SEK = {
+    semis: 'Technology', tech: 'Technology', software: 'Technology', crypto: 'Technology',
+    banks: 'Financial Services', biotech: 'Healthcare', energy: 'Energy', clean: 'Energy',
+    gold: 'Basic Materials', materials: 'Basic Materials', utilities: 'Utilities',
+    reit: 'Real Estate', auto: 'Consumer Cyclical', staples: 'Consumer Defensive',
+    defense: 'Industrials', space: 'Industrials', industrials: 'Industrials',
+  };
+
+  // Şirket profili metni (bizSummary, İngilizce) → sektör. En son başvurulan kademe.
+  const SEK_BIZ_RULES = [
+    [['semiconductor', 'microchip', 'chipset', 'wafer', 'foundry', 'software', 'saas', 'cloud computing', 'cybersecur', 'artificial intelligence', 'photonic', 'optical transceiver', 'electronic components'], 'Technology'],
+    [['bank', 'insurance', 'asset management', 'brokerage', 'lending', 'payment network'], 'Financial Services'],
+    [['biotechnolog', 'pharmaceutic', 'clinical-stage', 'therapeutic', 'vaccine', 'medical device', 'gene editing', 'diagnostic'], 'Healthcare'],
+    [['telecommunication', 'satellite communication', 'broadcast', 'advertising', 'streaming'], 'Communication Services'],
+    [['real estate', 'reit'], 'Real Estate'],
+    [['electric utility', 'power generation', 'nuclear reactor', 'small modular reactor', 'transmission grid'], 'Utilities'],
+    [['mining', 'steel', 'copper', 'chemical', 'fertilizer', 'cement'], 'Basic Materials'],
+    [['oil and gas', 'crude', 'petroleum', 'natural gas', 'refining', 'uranium'], 'Energy'],
+    [['robot', 'automation', 'aerospace', 'defense', 'unmanned', 'machinery', 'industrial equipment', 'airline', 'logistics', 'space launch', 'satellite', 'motion control', 'servo'], 'Industrials'],
+    [['beverage', 'food product', 'grocery', 'household product', 'tobacco'], 'Consumer Defensive'],
+    [['automobile', 'vehicle', 'apparel', 'restaurant', 'hotel', 'e-commerce', 'retail'], 'Consumer Cyclical'],
+  ];
+
+  // Fon/ETF tespiti: büyük-küçük harfe DUYARLI, yalnız güçlü marka/yapı sözcükleri.
+  // ("Fundamental" → \bFund\b eşleşmez; "Northern Trust" gibi gerçek şirketler zaten
+  //  Yahoo sektörüyle ① kademesinde sınıflanır.)
+  const SEK_FUND_RE = /\b(ETF|ETFs|Fund|Funds|iShares|SPDR|ProShares|Invesco|Vanguard|ARK|Index Trust|Unit Trust|Select Sector)\b/;
+  // Fonun NEYİ izlediğini adından okur (📦 kutusunu anlamlı kılar).
+  // Sıra önemli: 'aerospace' içinde 'space' geçtiği için savunma kuralı üstte.
+  const SEK_FUND_TR = [
+    [['semiconductor', 'chip'], 'Çip/yarı iletken fonu'],
+    [['aerospace', 'defense'], 'Savunma & havacılık fonu'],
+    [['space', 'satellite'], 'Uzay/uydu fonu'],
+    [['robot', 'automation'], 'Robotik & otomasyon fonu'],
+    [['clean energy', 'clean edge', 'green energy', 'alternative energy', 'renewable', 'solar', 'wind power', 'hydrogen'], 'Temiz enerji fonu'],
+    [['genomic', 'biotech', 'health'], 'Biyoteknoloji/sağlık fonu'],
+    [['gold', 'precious metal'], 'Altın/değerli maden fonu'],
+    [['bitcoin', 'ethereum', 'crypto', 'blockchain'], 'Kripto/blok zinciri fonu'],
+    [['bond', 'treasury', 'aggregate'], 'Tahvil fonu'],
+    [['dividend'], 'Temettü odaklı fon'],
+    [['real estate', 'reit'], 'Gayrimenkul fonu'],
+    [['energy', 'oil'], 'Enerji/petrol fonu'],
+    [['information technology', 'technology'], 'Teknoloji fonu'],
+    [['international', 'total world', 'emerging', 'ex-us'], 'Global/uluslararası hisse fonu'],
+    [['s&p 500', 'total stock market', 'nasdaq', 'russell'], 'Geniş endeks fonu'],
+  ];
+
+  function sekMatchRules(rules, txt) {
+    if (!txt) return null;
+    const t = String(txt).toLowerCase();
+    for (let i = 0; i < rules.length; i++) {
+      const words = rules[i][0];
+      for (let j = 0; j < words.length; j++) if (t.indexOf(words[j]) !== -1) return rules[i][1];
+    }
+    return null;
+  }
+
+  function sekFundTheme(name) {
+    const t = String(name || '').toLowerCase();
+    for (let i = 0; i < SEK_FUND_TR.length; i++) {
+      const words = SEK_FUND_TR[i][0];
+      for (let j = 0; j < words.length; j++) if (t.indexOf(words[j]) !== -1) return SEK_FUND_TR[i][1];
+    }
+    return 'Fon/ETF (sepet)';
+  }
+
+  // → { key: SEK_META anahtarı, basis: hangi kademeden geldi, fund?: fon tema etiketi }
+  function sekClassify(res, u) {
+    if (res.sector && SEK_META[res.sector]) return { key: res.sector, basis: 'sector' };
+    const byInd = sekMatchRules(SEK_IND_RULES, res.industry);
+    if (byInd) return { key: byInd, basis: 'industry' };
+    const nm = String(res.name || '');
+    if (SEK_FUND_RE.test(nm)) return { key: '_other', basis: 'fund', fund: sekFundTheme(nm) };
+    const sym = String((u && u.symbol) || res.symbol || '').toUpperCase().replace(/\.IS$/, '');
+    const tags = SYMBOL_SECTORS[sym] || [];
+    for (let i = 0; i < tags.length; i++) if (SEK_TAG_SEK[tags[i]]) return { key: SEK_TAG_SEK[tags[i]], basis: 'tag' };
+    const byBiz = sekMatchRules(SEK_BIZ_RULES, res.bizSummary);
+    if (byBiz) return { key: byBiz, basis: 'biz' };
+    return { key: '_other', basis: null };
+  }
+
+  // 🏢 "Ne iş yapıyor?" satırı — hisse sayfasındaki şirket profili bölümünün
+  // sektör manzarasına taşınmış tek-cümlelik hali (aynı firstSentence motoru).
+  // BİLGİ AMAÇLI; temel/teknik/bileşke skora DAHİL DEĞİL.
+  function sekBizHtml(s) {
+    const ind = s.fund ? s.fund : trIndustry(s.industry, { symbol: s.symbol });
+    const one = s.biz ? firstSentence(s.biz) : '';
+    const lbl = (ind && ind !== '—') ? ind : '';
+    if (!lbl && !one) return '';
+    const src = s.basis === 'biz' ? ' <i class="sb-src">profil metninden sınıflandı</i>'
+      : s.basis === 'tag' ? ' <i class="sb-src">sembol etiketinden sınıflandı</i>' : '';
+    return '<div class="sbiz">' + (lbl ? '<b class="sb-ind">' + tzEsc(lbl) + '</b>' : '')
+      + (lbl && one ? ' · ' : '') + (one ? tzEsc(one) : '') + src + '</div>';
+  }
+
+  // Sektör gruplarını sekMem'den kurar (yalnız verisi gelmiş hisseler)
+  function sekBuildGroups(universe) {
+    const groups = new Map();
+    universe.forEach((u) => {
+      const res = sekMem.get(u.market + ':' + u.symbol);
+      if (!res || !res.ok) return;
+      // ① Yahoo sektörü → ② alt-alan → ③ fon → ④ sembol etiketi → ⑤ profil metni
+      const cl = sekClassify(res, u);
+      const key = cl.key;
+      if (!groups.has(key)) groups.set(key, { key, meta: SEK_META[key], stocks: [] });
+      const pe = (res.trailingPE != null && isFinite(res.trailingPE) && res.trailingPE > 0) ? res.trailingPE
+        : (res.forwardPE != null && isFinite(res.forwardPE) && res.forwardPE > 0 ? res.forwardPE : null);
+      groups.get(key).stocks.push({
+        symbol: u.symbol, market: u.market, name: res.name || u.symbol,
+        pe, fpe: (res.forwardPE != null && isFinite(res.forwardPE) && res.forwardPE > 0) ? res.forwardPE : null,
+        growth: res.revenueGrowth != null && isFinite(res.revenueGrowth) ? res.revenueGrowth * 100 : null,
+        margin: res.profitMargin != null && isFinite(res.profitMargin) ? res.profitMargin * 100 : null,
+        peg: res.peg,
+        // sunum için: alt-alan + şirket profili (skora GİRMEZ)
+        industry: res.industry || null,
+        biz: res.bizSummary || null,
+        basis: cl.basis,
+        fund: cl.fund || null,
+      });
+    });
+    // sektör başına özet
+    groups.forEach((g) => {
+      g.n = g.stocks.length;
+      g.medPe = sekMedian(g.stocks.map((s) => s.pe));
+      g.medGrowth = sekMedian(g.stocks.map((s) => s.growth));
+      g.medMargin = sekMedian(g.stocks.map((s) => s.margin));
+      g.medPeg = sekMedian(g.stocks.map((s) => s.peg));
+      const withPe = g.stocks.filter((s) => s.pe != null);
+      g.cheapest = withPe.length ? withPe.reduce((a, b) => b.pe < a.pe ? b : a) : null;
+      g.richest = withPe.length ? withPe.reduce((a, b) => b.pe > a.pe ? b : a) : null;
+      const withMargin = g.stocks.filter((s) => s.margin != null);
+      g.topMargin = withMargin.length ? withMargin.reduce((a, b) => b.margin > a.margin ? b : a) : null;
+    });
+    return [...groups.values()];
+  }
+
+  function sekSortGroups(groups, mode) {
+    const arr = groups.slice();
+    if (mode === 'growth') arr.sort((a, b) => (b.medGrowth ?? -1e9) - (a.medGrowth ?? -1e9));
+    else if (mode === 'margin') arr.sort((a, b) => (b.medMargin ?? -1e9) - (a.medMargin ?? -1e9));
+    else if (mode === 'count') arr.sort((a, b) => b.n - a.n);
+    else arr.sort((a, b) => (a.medPe ?? 1e9) - (b.medPe ?? 1e9)); // cheap
+    return arr;
+  }
+
+
+// ===== dilim: radar =====
+  const SECTORS = {
+    energy: 'Enerji/Petrol', defense: 'Savunma', tech: 'Teknoloji', semis: 'Çip/Yarı İletken',
+    clean: 'Temiz Enerji', gold: 'Altın/Değerli Maden', banks: 'Banka/Finans', staples: 'Temel Tüketim',
+    auto: 'Otomotiv', reit: 'Gayrimenkul', utilities: 'Elektrik/Altyapı', space: 'Uzay/Uydu',
+    biotech: 'Biyotek/Sağlık', industrials: 'Sanayi', intl: 'Global/Gelişen Piyasa',
+    software: 'Yazılım/Siber', crypto: 'Kripto/Blok Zinciri', materials: 'Metal/Madencilik',
+  };
+  // İzleme evrenindeki bilinen sembollerin sektör etiketleri (genişletilebilir)
+  const SYMBOL_SECTORS = {
+    // BIST
+    TUPRS: ['energy'], DOAS: ['auto'], BIMAS: ['staples'], HLGYO: ['reit'],
+    ENJSA: ['utilities', 'energy'], ASELS: ['defense', 'tech'], KCHOL: ['banks', 'industrials', 'energy'],
+    THYAO: ['industrials'], EREGL: ['industrials'], SISE: ['industrials'], SASA: ['industrials'],
+    GARAN: ['banks'], AKBNK: ['banks'], YKBNK: ['banks'], ISCTR: ['banks'], FROTO: ['auto'], TOASO: ['auto'],
+    // ABD (çoğu ETF)
+    SOXX: ['semis', 'tech'], UFO: ['space', 'defense'], VGT: ['tech'], QCLN: ['clean', 'energy'],
+    VXUS: ['intl'], ARKG: ['biotech'], NVDA: ['semis', 'tech'], TSLA: ['auto', 'tech'],
+    XLE: ['energy'], ITA: ['defense'], GLD: ['gold'], SMH: ['semis', 'tech'],
+    // ABD/ADR — izleme evreninin gerçek sembolleri (tohumlu listelerden: 🤖 Robot,
+    // 🇺🇸 Amerika V1, 🇺🇸 Amerika Gelecek Tema). radarUniverse() yalnız hem etiketli
+    // HEM listede olan sembolleri eşler; eskiden tech/semis kesişimi tek başına NVDA'ya
+    // düşüyordu → her gündem kartında aynı isim. Gerçek evreni etiketleyince çeşitlilik
+    // gelir. Yalnız "ilgili takip" ilişkisi içindir; FA/TA skoruna DOKUNMAZ.
+    TSM: ['semis', 'tech'], SKHY: ['semis', 'tech'], MRVL: ['semis', 'tech'], STM: ['semis', 'tech'],
+    SONY: ['tech'], ZBRA: ['tech', 'industrials'], HSAI: ['tech', 'auto'], RXRX: ['biotech', 'tech'],
+    IONQ: ['tech'], RGTI: ['tech'], QBTS: ['tech'], ROBO: ['industrials', 'tech'], SYM: ['industrials', 'tech'],
+    SERV: ['industrials', 'tech'], RR: ['industrials', 'tech'], YASKY: ['industrials'], HSYDF: ['industrials'],
+    NJDCY: ['industrials'], TTDKY: ['tech', 'industrials'], SHECY: ['semis', 'industrials'],
+    GEV: ['utilities', 'industrials'], ONDS: ['defense', 'tech'], RCAT: ['defense'],
+    KTOS: ['defense'], AVAV: ['defense'], RKLB: ['space', 'defense'], ASTS: ['space', 'tech'],
+    LUNR: ['space', 'defense'], OKLO: ['utilities', 'energy', 'clean'], SMR: ['utilities', 'energy', 'clean'],
+    NNE: ['utilities', 'energy', 'clean'], LEU: ['energy', 'industrials'], CRSP: ['biotech'], NTLA: ['biotech'],
+    BEAM: ['biotech'],
+    // --- Genişletme (v95): izleme evreninin kalan gerçek sembolleri ---
+    // Çip & yarı iletken ekipman/bellek/IP
+    AMAT: ['semis', 'tech'], KLAC: ['semis', 'tech'], LRCX: ['semis', 'tech'], MU: ['semis', 'tech'],
+    INTC: ['semis', 'tech'], TXN: ['semis', 'tech'], AVGO: ['semis', 'tech'], ARM: ['semis', 'tech'],
+    ASML: ['semis', 'tech'], AMKR: ['semis', 'tech'], MXL: ['semis', 'tech'], SIMO: ['semis', 'tech'],
+    CRDO: ['semis', 'tech'], SNDK: ['semis', 'tech'], TER: ['semis', 'tech'],
+    // Optik / fotonik / ağ donanımı
+    AAOI: ['tech', 'semis'], COHR: ['tech', 'semis'], LITE: ['tech', 'semis'], LWLG: ['tech', 'semis'],
+    FN: ['tech', 'industrials'], GLW: ['tech', 'industrials'], APH: ['tech', 'industrials'],
+    ANET: ['tech'], VIAV: ['tech'], DELL: ['tech'],
+    // Yazılım / siber güvenlik / bulut
+    CRWD: ['software', 'tech'], PANW: ['software', 'tech'], FTNT: ['software', 'tech'], ZS: ['software', 'tech'],
+    NOW: ['software', 'tech'], CRWV: ['software', 'tech'], RXT: ['software', 'tech'], ZETA: ['software', 'tech'],
+    IBM: ['tech', 'software'], PLTR: ['software', 'tech', 'defense'],
+    // Yapay zeka altyapısı — veri merkezi güç/soğutma/elektrik
+    VRT: ['industrials', 'tech'], ETN: ['industrials', 'utilities'], POWL: ['industrials', 'utilities'],
+    VST: ['utilities', 'energy'], CEG: ['utilities', 'energy', 'clean'],
+    // Kripto / blok zinciri / madencilik
+    COIN: ['crypto', 'tech'], IREN: ['crypto', 'tech'],
+    // Fintech
+    SOFI: ['banks', 'tech'],
+    // Temiz enerji / batarya / yakıt hücresi
+    BE: ['clean', 'energy'], AMPX: ['clean', 'tech'],
+    // Metal / madencilik / nadir toprak / lityum
+    ALB: ['materials', 'clean'], FCX: ['materials', 'industrials'], MP: ['materials', 'industrials'],
+    REMX: ['materials', 'industrials'], GFI: ['gold', 'materials'],
+    // Biyoteknoloji / sağlık
+    IOVA: ['biotech'], SMMT: ['biotech'], SRRK: ['biotech'], AMLX: ['biotech'], OTLK: ['biotech'],
+    XLV: ['biotech'], VHT: ['biotech'],
+    // Havacılık / savunma / uzay
+    BA: ['defense', 'industrials'], RDW: ['space', 'defense'], FLY: ['space', 'defense'],
+    SPCX: ['space'], UMAC: ['defense', 'tech'],
+    // Enerji ETF
+    USO: ['energy'],
+  };
+
+  // Gündem temaları — her biri bir haber sorgusu + etkilediği sektörler (yön: up/down)
+  const RADAR_THEMES = [
+    { key: 'hormuz', emoji: '🛢️', label: 'Hürmüz / Petrol Arz Riski', lang: 'tr',
+      q: '"Hürmüz Boğazı" OR "Strait of Hormuz" petrol',
+      impacts: [['energy', 'up'], ['gold', 'up'], ['defense', 'up'], ['auto', 'down']] },
+    { key: 'war', emoji: '⚔️', label: 'Aktif Savaşlar / Jeopolitik Gerilim', lang: 'tr',
+      q: 'savaş OR çatışma OR "askeri operasyon" OR "geopolitical tension"',
+      impacts: [['defense', 'up'], ['energy', 'up'], ['gold', 'up'], ['tech', 'down']] },
+    { key: 'trump', emoji: '🇺🇸', label: 'Trump / Tarifeler / Ticaret', lang: 'tr',
+      q: 'Trump tarife OR tariff OR "gümrük vergisi" OR yaptırım',
+      impacts: [['industrials', 'up'], ['banks', 'up'], ['semis', 'down'], ['intl', 'down']] },
+    { key: 'musk', emoji: '🚀', label: 'Elon Musk / Tesla / SpaceX', lang: 'en',
+      q: 'Elon Musk OR Tesla OR SpaceX',
+      impacts: [['auto', 'up'], ['space', 'up'], ['tech', 'up'], ['clean', 'up']] },
+    { key: 'fed', emoji: '🏦', label: 'Fed / Faiz Kararı', lang: 'tr',
+      q: 'Fed faiz OR "interest rate" OR "rate cut" OR "faiz kararı"',
+      impacts: [['tech', 'up'], ['gold', 'up'], ['banks', 'up'], ['reit', 'up']] },
+    { key: 'gold', emoji: '🥇', label: 'Altın / Güvenli Liman', lang: 'tr',
+      q: 'altın rekor OR "gold price" OR "ons altın"',
+      impacts: [['gold', 'up']] },
+    { key: 'ai', emoji: '🤖', label: 'Yapay Zeka / Çip Yarışı', lang: 'en',
+      q: '"AI chip" OR semiconductor Nvidia OR "artificial intelligence" datacenter',
+      impacts: [['semis', 'up'], ['tech', 'up']] },
+    { key: 'oil', emoji: '⚡', label: 'OPEC / Petrol Fiyatı', lang: 'tr',
+      q: 'OPEC petrol OR "oil price" OR Brent OR "ham petrol"',
+      impacts: [['energy', 'up'], ['utilities', 'up'], ['auto', 'down']] },
+  ];
+
+
+return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, CYCLE_PHASES, macroGrowth, macroPhase, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance, TA_HORIZON, BT_CFG, spearmanIC, computeBacktest, shortNum, scoreBand, cryptoCategory, computeCryptoValue, METAL_MACRO_W, computeMetalMacro, SENTI_POS, SENTI_NEG, scoreHeadline, sentiLabel, oppTag, priceOppAdj, SCAN_PRESETS, scanBlend, scanScore, scanTag, SEK_META, sekMedian, sekClassify, sekSortGroups, SECTORS, SYMBOL_SECTORS, RADAR_THEMES };
 }

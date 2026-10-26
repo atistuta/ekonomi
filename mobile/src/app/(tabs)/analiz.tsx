@@ -195,6 +195,20 @@ export default function AnalizScreen() {
           yenile={grafik.yenile}
           aralik={aralik}
           onAralik={setAralik}
+          // MOTORUN BANDI, İSTEMCİNİN DEĞİL: `plan.seviye.buyZone` /
+          // `sellZone` sözleşmede VAR (api/types.ts:228-229, `PlanSeviye`)
+          // ve bu ekran onu ZATEN aynı turdan okuyor. Burada bir eşik
+          // hesaplanmıyor, alan OLDUĞU GİBİ geçiliyor; `plan.seviye`
+          // yoksa `null` gidiyor ve grafik şeridi HİÇ çizilmiyor —
+          // olmayan bandı çizmek uydurma olurdu.
+          bant={
+            satir?.plan?.seviye
+              ? {
+                  buyZone: satir.plan.seviye.buyZone,
+                  sellZone: satir.plan.seviye.sellZone,
+                }
+              : null
+          }
         />
       ) : null}
 
