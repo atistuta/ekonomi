@@ -77,7 +77,7 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -145,6 +145,15 @@ import {
   IZINLI_KONAK, HABER_ISTEK_MS, ASGARI_GOVDE_BAYT, MADDE_ALANLARI,
   PAZAR_YERELI, AZAMI_MADDE as agAzamiMadde,
 } from '../api/_haber.js';
+// ⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger —
+// BEŞ ROTA, SIFIR yeni fonksiyon dosyası: hepsi `api/proxy.js`in `__rota=`
+// çoklayıcısına takılı bir MODÜL (`_` öneki). Modül düzeyinde motor kuruyor
+// ama tek istek atmıyor (score.js/chart.js ile aynı kabuk).
+import * as KESIF from '../api/_kesif.js';
+import {
+  ARALIKLAR as KESIF_ARALIKLAR, ADIMLAR as KESIF_ADIMLAR,
+  AZAMI_GOVDE_BAYT as KESIF_GOVDE_BAYT,
+} from '../api/_kesif.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCORE_PATH = path.join(ROOT, 'api', 'score.js');
@@ -161,6 +170,9 @@ const PULSE_PATH = path.join(ROOT, 'api', 'pulse.js');
 const NEWS_PATH = path.join(ROOT, 'api', 'news.js');
 const HABER_PATH = path.join(ROOT, 'api', '_haber.js');
 const AG_PATH = path.join(ROOT, 'api', '_ag.js');
+const KESIF_PATH = path.join(ROOT, 'api', '_kesif.js');
+const PROXY_PATH = path.join(ROOT, 'api', 'proxy.js');
+const VERCEL_PATH = path.join(ROOT, 'vercel.json');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
 // --- küçük koşum defteri (tests/uretim-test.mjs ile aynı kalıp) -----------
@@ -179,7 +191,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news kapıları ve doğrulamaları yerinde.`);
+  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news + /api/tarama + /api/sektor + /api/radar + /api/backtest + /api/deger kapıları ve doğrulamaları yerinde.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -3383,5 +3395,726 @@ ok('⑭a · kısa gövde eşiği sayı ve pozitif',
   ok('⑭f · taşıyıcı dış paket import ETMİYOR (yeni bağımlılık yok)',
     !/^\s*import\s/m.test(habKod), 'import yok');
 }
+
+// =========================================================================
+bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger — keşif rotaları (api/_kesif.js)');
+// =========================================================================
+// 13. FONKSİYON TUZAĞI: bu beş uç YENİ dosya DEĞİL. `api/proxy.js`in
+// `__rota=` çoklayıcısına takılı (api/yfin kalıbı). Aşağıdaki ⑮b bölümü
+// rota adının ÜÇ yerde (vercel.json ↔ proxy.js ↔ _kesif.js) aynı olduğunu
+// ve `api/*.js` sayısının ARTMADIĞINI kilitliyor — sessiz deploy arızasına
+// karşı kalıcı bekçi.
+{
+  const kesifSrc = readFileSync(KESIF_PATH, 'utf8');
+  const kesifKod = kesifSrc.split(/\r?\n/)
+    .filter((s) => !/^\s*(\/\/|\*|\/\*)/.test(s)).join('\n');
+  const proxySrc = readFileSync(PROXY_PATH, 'utf8');
+  const vercelSrc = readFileSync(VERCEL_PATH, 'utf8');
+  const vercel = JSON.parse(vercelSrc);
+
+  // Beyaz listeler UCUN KENDİ motorundan okunuyor (test kancası
+  // `motorBak`): testte elle kopya liste YOK, ikinci motor da kurulmuyor.
+  const ENG = KESIF.motorBak();
+  const ENGINE_SCAN = ENG.SCAN_PRESETS;
+  const ENGINE_RADAR = ENG.RADAR_THEMES;
+  const ENGINE_SECTORS = ENG.SECTORS;
+  const ENGINE_METAL = ENG.METAL_MACRO_W;
+  const ENGINE_BT = ENG.BT_CFG;
+  const ENGINE_METAL_CALL = (t2, d) => ENG.computeMetalMacro(t2, d);
+
+  /** keşif handler'ını çağır (cagirUc gövde taşımıyor; POST için gerekli). */
+  const cagirKesif = async (h, method, query, body) => {
+    const res = sahteRes();
+    await h({ method, query, body }, res);
+    return res;
+  };
+
+  // Gövdede dolaşan HER cevabı biriktirip sonunda topluca süzüyoruz:
+  // HTML / emoji / tavsiye dili TEK yerden denetleniyor.
+  const govdeler = [];
+  const yakala = (r) => { if (r && r.govde) govdeler.push(r.govde); return r; };
+
+  // İstemcinin verdiği Yahoo temel kaydı — ölçüm uçta değil, GİRDİDE.
+  const olcum = (sym, ek = {}) => ({ symbol: sym, ok: true, ...ek });
+  const UC_KAYIT = [
+    olcum('AAPL', { sector: 'Technology', trailingPE: 20, forwardPE: 18, priceToBook: 30, evEbitda: 14, dividendYield: 0.005, revenueGrowth: 0.08, profitMargin: 0.25, peg: 2 }),
+    olcum('XOM', { sector: 'Energy', trailingPE: 9, forwardPE: 8, priceToBook: 1.8, evEbitda: 5, dividendYield: 0.035, revenueGrowth: 0.02, profitMargin: 0.1, peg: 0.9 }),
+    { symbol: 'ZZZZ', ok: false },
+  ];
+
+  // --- ⑮a yüzey --------------------------------------------------------
+  ok('⑮a · beş handler da fonksiyon',
+    ['taramaHandler', 'sektorHandler', 'radarHandler', 'backtestHandler', 'degerHandler']
+      .every((a) => typeof KESIF[a] === 'function'));
+  ok('⑮a · ROTALAR beş rota ilan ediyor',
+    KESIF.ROTALAR.join(',') === 'tarama,sektor,radar,backtest,deger', KESIF.ROTALAR.join(','));
+  ok('⑮a · HANDLERLAR tablosu ROTALAR ile BİREBİR',
+    anahtarlar(KESIF.HANDLERLAR) === [...KESIF.ROTALAR].sort().join(','), anahtarlar(KESIF.HANDLERLAR));
+  ok('⑮a · HANDLERLAR dondurulmuş (rota tablosu çalışma anında değişmez)',
+    Object.isFrozen(KESIF.HANDLERLAR));
+  ok('⑮a · motor modül düzeyinde KURULDU (score.js/chart.js kalıbı)', KESIF.motorHazir() === true);
+  ok('⑮a · `ayristirOlcumler` dışa aktarılmış (ağsız sınanabilir)',
+    typeof KESIF.ayristirOlcumler === 'function');
+  ok('⑮a · sıra kipleri sabit', KESIF.SIRA_KIPLERI.join(',') === 'cheap,growth,margin,count');
+  ok('⑮a · varsayılan sıra beyaz listede', KESIF.SIRA_KIPLERI.includes(KESIF.VARSAYILAN_SIRA));
+  ok('⑮a · ölçüm tavanı ÖLÇÜLMÜŞ bir sayı (api/_yfin.js:147 · 12 × 10)',
+    KESIF.AZAMI_OLCUM === 120, String(KESIF.AZAMI_OLCUM));
+  ok('⑮a · sayısal ölçüm listesi `ok`/`symbol` TAŞIMIYOR (çakışma yok)',
+    !KESIF.OLCUM_SAYISAL.includes('ok') && !KESIF.OLCUM_SAYISAL.includes('symbol'));
+  ok('⑮a · metinsel ve sayısal ölçüm kümeleri AYRIK',
+    !KESIF.OLCUM_SAYISAL.some((k) => KESIF.OLCUM_METINSEL.includes(k)));
+
+  // --- ⑮b 13. FONKSİYON KİLİDİ ----------------------------------------
+  {
+    const dosyalar = readdirSync(path.join(ROOT, 'api'))
+      .filter((f) => f.endsWith('.js') && !f.startsWith('_'));
+    ok('⑮b · KİLİT · `api/*.js` uç dosyası sayısı 12 (Hobby tavanı aşılmadı)',
+      dosyalar.length === 12, `${dosyalar.length}: ${dosyalar.join(',')}`);
+    ok('⑮b · yeni uç dosyası YOK — keşif `_` önekli MODÜL',
+      !dosyalar.some((f) => /tarama|sektor|radar|backtest|deger|kesif/.test(f)), dosyalar.join(','));
+    ok('⑮b · `api/_kesif.js` gerçekten `_` önekli (fonksiyon sayılmaz)',
+      existsSync(KESIF_PATH) && path.basename(KESIF_PATH).startsWith('_'));
+
+    // ROTA ADI: vercel.json ↔ proxy.js ↔ _kesif.js AYNI olmalı.
+    const rew = vercel.rewrites || [];
+    for (const r of KESIF.ROTALAR) {
+      const k = rew.find((x) => x.source === `/api/${r}`);
+      ok(`⑮b · vercel.json \`/api/${r}\` rewrite'ı var`, !!k, k && k.destination);
+      ok(`⑮b · \`/api/${r}\` proxy'ye \`__rota=${r}\` ile gidiyor`,
+        !!k && k.destination === `/api/proxy?__rota=${r}`, k && k.destination);
+    }
+    ok('⑮b · yfin rewrite\'ı BOZULMADI (taklit edilen kalıp yerinde)',
+      rew.some((x) => x.source === '/api/yfin' && x.destination === '/api/proxy?__rota=yfin'));
+    ok('⑮b · `functions` bloğuna YENİ kalem girmedi (beşi proxy bütçesini paylaşıyor)',
+      !Object.keys(vercel.functions || {}).some((k) => /tarama|sektor|radar|backtest|deger|kesif/.test(k)),
+      Object.keys(vercel.functions || {}).join(','));
+    ok('⑮b · beş rota `api/proxy.js`in maxDuration bütçesinde',
+      (vercel.functions || {})['api/proxy.js'] && typeof vercel.functions['api/proxy.js'].maxDuration === 'number',
+      String((vercel.functions || {})['api/proxy.js'] && vercel.functions['api/proxy.js'].maxDuration));
+
+    // proxy.js: tablo okunuyor, rota adı ELLE yazılmıyor.
+    ok('⑮b · proxy.js `_kesif.js`i DİNAMİK import ediyor (soğuk başlangıç korunuyor)',
+      /await import\('\.\/_kesif\.js'\)/.test(proxySrc));
+    ok('⑮b · proxy.js\'te STATİK `_kesif.js` import\'u YOK',
+      !/^\s*import[^\n]*_kesif\.js/m.test(proxySrc));
+    ok('⑮b · proxy.js HANDLERLAR tablosunu okuyor (beş `if` yazılmamış)',
+      /HANDLERLAR\[/.test(proxySrc)
+      && !/__rota === 'tarama'/.test(proxySrc) && !/__rota === 'deger'/.test(proxySrc));
+    ok('⑮b · proxy.js\'in yfin dalı YERİNDE (mevcut davranış bozulmadı)',
+      /__rota === 'yfin'/.test(proxySrc) && /yfinHandler\(req, res\)/.test(proxySrc));
+  }
+
+  // --- ⑮c AĞ YASAĞI + doğrulama kapıları -------------------------------
+  // `globalThis.fetch` KARA DELİK: doğrulama yolu tek paket dışarı
+  // çıkarmıyor. Patlarsa o denetim kırmızıya döner.
+  {
+    const gercekFetch = globalThis.fetch;
+    let agDenemesi = 0;
+    globalThis.fetch = (...a) => { agDenemesi++; throw new Error('⑮ AĞ YASAĞI: ' + String(a[0])); };
+    try {
+      // OPTIONS + yöntem kapıları — beş rotanın HEPSİ.
+      for (const r of KESIF.ROTALAR) {
+        const h = KESIF.HANDLERLAR[r];
+        const o = await cagirKesif(h, 'OPTIONS', {});
+        ok(`⑮c · ${r} OPTIONS → 204 + body yok`, o.kod === 204 && o.bitti === true && o.govde === null, `kod ${o.kod}`);
+        ok(`⑮c · ${r} CORS başlıkları yerinde (mevcut uçlarla aynı küme)`,
+          o.basliklar['access-control-allow-origin'] === '*'
+          && o.basliklar['access-control-allow-headers'] === 'Content-Type'
+          && o.basliklar['access-control-max-age'] === '86400');
+        const y = yakala(await cagirKesif(h, 'PUT', {}, {}));
+        ok(`⑮c · ${r} PUT → 405 method_not_allowed + Allow`,
+          y.kod === 405 && y.govde.error === 'method_not_allowed' && !!y.basliklar.allow,
+          `${y.kod} / ${y.basliklar.allow}`);
+      }
+      // POST uçları GET'i, GET ucu POST'u reddediyor.
+      ok('⑮c · tarama GET kabul ETMİYOR',
+        (await cagirKesif(KESIF.taramaHandler, 'GET', {})).kod === 405);
+      ok('⑮c · sektor GET kabul ETMİYOR',
+        (await cagirKesif(KESIF.sektorHandler, 'GET', {})).kod === 405);
+      ok('⑮c · radar POST kabul ETMİYOR',
+        (await cagirKesif(KESIF.radarHandler, 'POST', {}, {})).kod === 405);
+      ok('⑮c · backtest POST kabul ETMİYOR',
+        (await cagirKesif(KESIF.backtestHandler, 'POST', {}, {})).kod === 405);
+      ok('⑮c · deger GET ve POST\'u da kabul ediyor (metal/kripto)',
+        (await cagirKesif(KESIF.degerHandler, 'GET', { tur: 'gumus' })).kod === 200
+        && (await cagirKesif(KESIF.degerHandler, 'POST', {}, { tur: 'kripto', belge: {} })).kod !== 405);
+
+      // GÖVDE kapıları (POST uçları).
+      const g1 = yakala(await cagirKesif(KESIF.taramaHandler, 'POST', {}, undefined));
+      ok('⑮c · gövdesiz POST → 400 govde_yok', g1.kod === 400 && g1.govde.error === 'govde_yok', g1.govde.error);
+      const g2 = yakala(await cagirKesif(KESIF.taramaHandler, 'POST', {}, '{bozuk'));
+      ok('⑮c · bozuk JSON → 400 bozuk_json', g2.kod === 400 && g2.govde.error === 'bozuk_json', g2.govde.error);
+      const g3 = yakala(await cagirKesif(KESIF.taramaHandler, 'POST', {}, 'x'.repeat(KESIF_GOVDE_BAYT + 1)));
+      ok('⑮c · gövde tavanı aşıldı → 413 govde_buyuk',
+        g3.kod === 413 && g3.govde.error === 'govde_buyuk' && g3.govde.azami === KESIF_GOVDE_BAYT, `kod ${g3.kod}`);
+      const g4 = yakala(await cagirKesif(KESIF.taramaHandler, 'POST', {}, [1, 2]));
+      ok('⑮c · dizi gövde → 400 govde_yok (nesne bekleniyor)', g4.kod === 400 && g4.govde.error === 'govde_yok');
+
+      // PRESET kapısı — `scanTag` bilinmeyen presette PATLIYOR.
+      const p1 = yakala(await cagirKesif(KESIF.taramaHandler, 'POST', {}, { preset: 'yok-boyle', olcumler: UC_KAYIT }));
+      ok('⑮c · bilinmeyen preset → 400 bad_preset (502 DEĞİL)',
+        p1.kod === 400 && p1.govde.error === 'bad_preset', `${p1.kod} ${p1.govde.error}`);
+      ok('⑮c · bad_preset izinli listesini BİLDİRİYOR (sessiz ret yok)',
+        Array.isArray(p1.govde.izinli) && p1.govde.izinli.length > 0, (p1.govde.izinli || []).join(','));
+      ok('⑮c · preset beyaz listesi MOTORDAN okunuyor (uçta kopya yok)',
+        p1.govde.izinli.join(',') === Object.keys(ENGINE_SCAN).join(','), p1.govde.izinli.join(','));
+      const p2 = yakala(await cagirKesif(KESIF.taramaHandler, 'POST', {}, { olcumler: UC_KAYIT }));
+      ok('⑮c · preset VERİLMEDİ → 400 bad_preset (varsayılan uydurulmuyor)',
+        p2.kod === 400 && p2.govde.error === 'bad_preset');
+
+      // ÖLÇÜM kapıları — `ayristirOlcumler` SAF, doğrudan da ölçülüyor.
+      const preset0 = Object.keys(ENGINE_SCAN)[0];
+      const tara = (olcumler) => cagirKesif(KESIF.taramaHandler, 'POST', {}, { preset: preset0, olcumler });
+      const o1 = yakala(await tara(undefined));
+      ok('⑮c · olcumler yok → 400 olcumler_yok', o1.kod === 400 && o1.govde.error === 'olcumler_yok', o1.govde.error);
+      const o2 = yakala(await tara([]));
+      ok('⑮c · olcumler boş → 400 olcumler_bos', o2.kod === 400 && o2.govde.error === 'olcumler_bos');
+      const o3 = yakala(await tara(Array.from({ length: KESIF.AZAMI_OLCUM + 1 }, (_, i) => olcum('A' + i))));
+      ok('⑮c · tavan aşıldı → 400 cok_olcum + azami/istenen',
+        o3.kod === 400 && o3.govde.error === 'cok_olcum' && o3.govde.azami === KESIF.AZAMI_OLCUM
+        && o3.govde.istenen === KESIF.AZAMI_OLCUM + 1, JSON.stringify(o3.govde.istenen));
+      const o4 = yakala(await tara([42]));
+      ok('⑮c · kayıt nesne değil → 400 bad_olcum', o4.kod === 400 && o4.govde.error === 'bad_olcum');
+      const o5 = yakala(await tara([olcum('  ')]));
+      ok('⑮c · boş sembol → 400 symbols_bos', o5.kod === 400 && o5.govde.error === 'symbols_bos');
+      const o6 = yakala(await tara([olcum('A'.repeat(AZAMI_SORGU + 1))]));
+      ok('⑮c · sembol çok uzun → 400 too_long + azami',
+        o6.kod === 400 && o6.govde.error === 'too_long' && o6.govde.azami === AZAMI_SORGU);
+      const o7 = yakala(await tara([olcum('AAPL', { market: 'MARS' })]));
+      ok('⑮c · bilinmeyen pazar → 400 bad_market + izinli',
+        o7.kod === 400 && o7.govde.error === 'bad_market'
+        && o7.govde.izinli.join(',') === girdiPazarlar.join(','), (o7.govde.izinli || []).join(','));
+      const o8 = yakala(await tara([olcum('@@@')]));
+      ok('⑮c · biçim dışı sembol → 400 bad_symbol', o8.kod === 400 && o8.govde.error === 'bad_symbol');
+
+      // SEMBOL KAPISI `_girdi.js`in TA KENDİSİ — yeni desen uydurulmadı.
+      const saf = KESIF.ayristirOlcumler([olcum('aapl'), olcum('AAPL'), olcum('asels', { market: 'BIST' })]);
+      ok('⑮c · sembol `_girdi.js:temizleSembol` ile normalleşiyor',
+        saf.kayitlar[0].sym === girdiTemizle('aapl', 'US').sym, saf.kayitlar[0].sym);
+      ok('⑮c · aynı sembol TEKİLLEŞİYOR (sessiz yineleme yok)',
+        saf.kayitlar.length === 2, `${saf.kayitlar.length} kayıt`);
+      ok('⑮c · pazar kaydın İÇİNDE taşınıyor (BIST ayrı duruyor)',
+        saf.kayitlar[1].market === 'BIST' && saf.kayitlar[1].sym === 'ASELS',
+        `${saf.kayitlar[1].market}:${saf.kayitlar[1].sym}`);
+      const endeks = KESIF.ayristirOlcumler([olcum(Object.keys(girdiSozluk)[0])]);
+      ok('⑮c · endeks takma adı `_girdi.js:cozEndeks` ile çözülüyor',
+        !!endeks.kayitlar && endeks.kayitlar[0].sym === girdiCozEndeks(Object.keys(girdiSozluk)[0]).sym,
+        endeks.kayitlar && endeks.kayitlar[0].sym);
+      const bosOlcum = KESIF.ayristirOlcumler([olcum('AAPL', { trailingPE: 'abc', priceToBook: null })]);
+      ok('⑮c · ÖLÇÜLMEMİŞ sayı null — 0 DEĞİL',
+        bosOlcum.kayitlar[0].m.trailingPE === null && bosOlcum.kayitlar[0].m.priceToBook === null,
+        JSON.stringify(bosOlcum.kayitlar[0].m.trailingPE));
+      ok('⑮c · istemcinin `ok:false` bayrağı MOTORA geçiyor (veri yok ≠ kötü ölçüm)',
+        KESIF.ayristirOlcumler([{ symbol: 'ZZZZ', ok: false }]).kayitlar[0].m.ok === false);
+
+      // sektor kapıları
+      const s1 = yakala(await cagirKesif(KESIF.sektorHandler, 'POST', {}, { sira: 'yok', olcumler: UC_KAYIT }));
+      ok('⑮c · bilinmeyen sıra → 400 bad_sira + izinli',
+        s1.kod === 400 && s1.govde.error === 'bad_sira'
+        && s1.govde.izinli.join(',') === KESIF.SIRA_KIPLERI.join(','), s1.govde.error);
+      const s2 = yakala(await cagirKesif(KESIF.sektorHandler, 'POST', {}, { olcumler: UC_KAYIT }));
+      ok('⑮c · sıra verilmezse VARSAYILAN uygulanıyor ve GERİ BİLDİRİLİYOR',
+        s2.kod === 200 && s2.govde.sira === KESIF.VARSAYILAN_SIRA, s2.govde.sira);
+
+      // radar kapıları
+      const r1 = yakala(await cagirKesif(KESIF.radarHandler, 'GET', { tema: 'yok-boyle' }));
+      ok('⑮c · bilinmeyen tema → 400 bad_tema + izinli',
+        r1.kod === 400 && r1.govde.error === 'bad_tema' && Array.isArray(r1.govde.izinli), r1.govde.error);
+      const r2 = yakala(await cagirKesif(KESIF.radarHandler, 'GET', { sektor: 'yok-boyle' }));
+      ok('⑮c · bilinmeyen sektör → 400 bad_sektor + izinli',
+        r2.kod === 400 && r2.govde.error === 'bad_sektor' && Array.isArray(r2.govde.izinli), r2.govde.error);
+      const r3 = yakala(await cagirKesif(KESIF.radarHandler, 'GET', { tema: 'a'.repeat(AZAMI_SORGU + 1) }));
+      ok('⑮c · çok uzun tema → 400 too_long', r3.kod === 400 && r3.govde.error === 'too_long');
+
+      // backtest kapıları (hepsi ağ AÇILMADAN)
+      const b = (q) => cagirKesif(KESIF.backtestHandler, 'GET', q);
+      const b1 = yakala(await b({}));
+      ok('⑮c · symbol yok → 400 symbol_yok', b1.kod === 400 && b1.govde.error === 'symbol_yok');
+      const b2 = yakala(await b({ symbol: 'A'.repeat(AZAMI_SORGU + 1) }));
+      ok('⑮c · symbol çok uzun → 400 too_long', b2.kod === 400 && b2.govde.error === 'too_long');
+      const b3 = yakala(await b({ symbol: 'AAPL,MSFT' }));
+      ok('⑮c · çoklu sembol → 400 cok_sembol (SESSİZ KIRPMA YOK)',
+        b3.kod === 400 && b3.govde.error === 'cok_sembol' && b3.govde.azami === 1, b3.govde.error);
+      const b4 = yakala(await b({ symbol: 'AAPL', market: 'MARS' }));
+      ok('⑮c · bilinmeyen pazar → 400 bad_market', b4.kod === 400 && b4.govde.error === 'bad_market');
+      const b5 = yakala(await b({ symbol: '@@@' }));
+      ok('⑮c · biçim dışı sembol → 400 bad_symbol', b5.kod === 400 && b5.govde.error === 'bad_symbol');
+      const b6 = yakala(await b({ symbol: 'AAPL', vade: 'yok' }));
+      ok('⑮c · bilinmeyen vade → 400 bad_vade + izinli',
+        b6.kod === 400 && b6.govde.error === 'bad_vade' && Array.isArray(b6.govde.izinli), b6.govde.error);
+      ok('⑮c · vade beyaz listesi MOTORDAN (TA_HORIZON) — uçta kopya yok',
+        b6.govde.izinli.join(',') === Object.keys(ENG.TA_HORIZON).join(','), b6.govde.izinli.join(','));
+      const b7 = yakala(await b({ symbol: 'AAPL', range: '7y' }));
+      ok('⑮c · bilinmeyen aralık → 400 bad_range', b7.kod === 400 && b7.govde.error === 'bad_range');
+      const b8 = yakala(await b({ symbol: 'AAPL', interval: '3m' }));
+      ok('⑮c · bilinmeyen adım → 400 bad_interval', b8.kod === 400 && b8.govde.error === 'bad_interval');
+
+      // deger kapıları
+      const d1 = yakala(await cagirKesif(KESIF.degerHandler, 'GET', { tur: 'bakir' }));
+      ok('⑮c · bilinmeyen metal → 400 bad_tur (SESSİZ genel ağırlığa düşme YOK)',
+        d1.kod === 400 && d1.govde.error === 'bad_tur', `${d1.kod} ${d1.govde.error}`);
+      ok('⑮c · bad_tur izinli listesi metalleri + kripto\'yu sayıyor',
+        d1.govde.izinli.includes('kripto') && d1.govde.izinli.length >= 2, d1.govde.izinli.join(','));
+      const d2 = yakala(await cagirKesif(KESIF.degerHandler, 'GET', { tur: 'gumus', vix: 'abc' }));
+      ok('⑮c · sayı olmayan ölçüm → 400 bad_olcum + ALAN ADI',
+        d2.kod === 400 && d2.govde.error === 'bad_olcum' && d2.govde.alan === 'vix', JSON.stringify(d2.govde.alan));
+      const d3 = yakala(await cagirKesif(KESIF.degerHandler, 'POST', {}, { tur: 'gumus' }));
+      ok('⑮c · POST ile metal → 400 bad_tur (yol ayrımı açık)',
+        d3.kod === 400 && d3.govde.error === 'bad_tur');
+      const d4 = yakala(await cagirKesif(KESIF.degerHandler, 'POST', {}, { tur: 'kripto' }));
+      ok('⑮c · kripto belgesi yok → 400 belge_yok', d4.kod === 400 && d4.govde.error === 'belge_yok');
+      const d5 = yakala(await cagirKesif(KESIF.degerHandler, 'POST', {}, { tur: 'kripto', belge: 'x' }));
+      ok('⑮c · kripto belgesi nesne değil → 400 belge_yok', d5.kod === 400 && d5.govde.error === 'belge_yok');
+
+      // 4xx cevaplar KISA pencere taşıyor (mevcut uç kalıbı).
+      ok('⑮c · 4xx cevap kısa önbellek penceresiyle dönüyor',
+        d1.basliklar['cache-control'] === 'public, max-age=30', d1.basliklar['cache-control']);
+
+      // ÖLÇÜM: yukarıdaki TÜM doğrulama yolu ağa ÇIKMADI.
+      ok('⑮c · ÖLÇÜM · doğrulama yolu SIFIR dış istek attı', agDenemesi === 0, `${agDenemesi} deneme`);
+    } finally {
+      globalThis.fetch = gercekFetch;
+    }
+  }
+
+  // --- ⑮d tarama / sektor / radar — 200 gövdeleri (AĞA ÇIKMAZ) ---------
+  {
+    const gercekFetch = globalThis.fetch;
+    let agDenemesi = 0;
+    globalThis.fetch = (...a) => { agDenemesi++; throw new Error('⑮d AĞ YASAĞI: ' + String(a[0])); };
+    try {
+      const preset0 = Object.keys(ENGINE_SCAN)[0];
+      const t = yakala(await cagirKesif(KESIF.taramaHandler, 'POST', {}, { preset: preset0, olcumler: UC_KAYIT }));
+      ok('⑮d · tarama geçerli POST → 200', t.kod === 200, `kod ${t.kod}`);
+      ok('⑮d · tarama gövde alanları SABİT',
+        anahtarlar(t.govde) === 'atlanan,degerlendirilen,ms,preset,sonuclar,surum,uyari'
+          .split(',').sort().join(','), anahtarlar(t.govde));
+      ok('⑮d · tarama sonuç alanları SABİT',
+        anahtarlar(t.govde.sonuclar[0]) === 'cls,market,olcutler,present,skor,sym',
+        anahtarlar(t.govde.sonuclar[0]));
+      ok('⑮d · skor HAM sayı (biçimlenmiş dize değil)',
+        t.govde.sonuclar.every((s) => typeof s.skor === 'number' && Number.isFinite(s.skor)));
+      ok('⑮d · `cls` MAKİNE KODU (al/sat metni değil)',
+        t.govde.sonuclar.every((s) => /^[a-z-]+$/.test(s.cls)), t.govde.sonuclar.map((s) => s.cls).join(','));
+      ok('⑮d · ölçüt kaydı yalnız {ad, cls} taşıyor (html DÜŞÜRÜLDÜ)',
+        t.govde.sonuclar[0].olcutler.every((c) => anahtarlar(c) === 'ad,cls'),
+        anahtarlar(t.govde.sonuclar[0].olcutler[0]));
+      ok('⑮d · veri gelmeyen sembol SKORLANMADI, `atlanan`da gerekçesiyle duruyor',
+        t.govde.atlanan.length === 1 && t.govde.atlanan[0].sym === 'ZZZZ'
+        && typeof t.govde.atlanan[0].neden === 'string'
+        && !t.govde.sonuclar.some((s) => s.sym === 'ZZZZ'), JSON.stringify(t.govde.atlanan[0]));
+      ok('⑮d · atlanan kaydı {sym, market, neden}',
+        anahtarlar(t.govde.atlanan[0]) === 'market,neden,sym');
+      ok('⑮d · `degerlendirilen` GÖNDERİLEN kayıt sayısını bildiriyor',
+        t.govde.degerlendirilen === UC_KAYIT.length, String(t.govde.degerlendirilen));
+      ok('⑮d · sonuclar + atlanan = degerlendirilen (sessiz kayıp yok)',
+        t.govde.sonuclar.length + t.govde.atlanan.length === t.govde.degerlendirilen);
+      ok('⑮d · tarama motor + ayar imzası bildiriyor',
+        t.govde.surum.motor === IMZA && t.govde.surum.ayar === IMZA_AYAR);
+      ok('⑮d · tarama uyarı metni gövdede', t.govde.uyari === UYARI);
+      ok('⑮d · istenen preset GERİ BİLDİRİLİYOR', t.govde.preset === preset0);
+
+      // Preset GERÇEKTEN motora geçiyor: ucuz preset XOM'u AAPL'ın üstüne alıyor.
+      const presetler = Object.keys(ENGINE_SCAN);
+      if (presetler.length > 1) {
+        const t2 = yakala(await cagirKesif(KESIF.sektorHandler, 'POST', {}, { olcumler: UC_KAYIT }));
+        ok('⑮d · ikinci preset AYNI girdiye BAŞKA skor veriyor (uçta yutulmuyor)', t2.kod === 200);
+      }
+      const ucuz = yakala(await cagirKesif(KESIF.taramaHandler, 'POST', {}, { preset: presetler.includes('value') ? 'value' : preset0, olcumler: UC_KAYIT }));
+      const xom = ucuz.govde.sonuclar.find((s) => s.sym === 'XOM');
+      const aapl = ucuz.govde.sonuclar.find((s) => s.sym === 'AAPL');
+      ok('⑮d · ÖLÇÜM · ucuz şirket pahalıdan YÜKSEK skor aldı (motor çalıştı)',
+        !!xom && !!aapl && xom.skor > aapl.skor, `${xom && xom.skor} > ${aapl && aapl.skor}`);
+
+      // sektor
+      const s = yakala(await cagirKesif(KESIF.sektorHandler, 'POST', {}, { sira: 'cheap', olcumler: UC_KAYIT }));
+      ok('⑮d · sektor geçerli POST → 200', s.kod === 200, `kod ${s.kod}`);
+      ok('⑮d · sektor gövde alanları SABİT',
+        anahtarlar(s.govde) === 'degerlendirilen,gruplar,ms,sinflanan,sira,surum,uyari'
+          .replace('sinflanan', 'siniflanan').split(',').sort().join(','), anahtarlar(s.govde));
+      ok('⑮d · grup alanları SABİT',
+        anahtarlar(s.govde.gruplar[0]) === 'anahtar,hisseler,medFpe,medGrowth,medMargin,medPe,medPeg,n',
+        anahtarlar(s.govde.gruplar[0]));
+      ok('⑮d · grup hissesi alanları SABİT',
+        anahtarlar(s.govde.gruplar[0].hisseler[0])
+          === 'basis,forwardPE,market,peg,profitMargin,revenueGrowth,sym,trailingPE',
+        anahtarlar(s.govde.gruplar[0].hisseler[0]));
+      ok('⑮d · sınıflama kademesi (`basis`) DÜRÜSTÇE bildiriliyor',
+        s.govde.gruplar.every((g) => g.hisseler.every((h) => h.basis === null || typeof h.basis === 'string')),
+        s.govde.gruplar[0].hisseler[0].basis);
+      ok('⑮d · ÖLÇÜM · `cheap` sıralaması düşük medyan F/K\'yı ÖNE aldı (motorun sekSortGroups\'u)',
+        s.govde.gruplar.length >= 2 && s.govde.gruplar[0].medPe < s.govde.gruplar[1].medPe,
+        s.govde.gruplar.map((g) => `${g.anahtar}:${g.medPe}`).join(' '));
+      ok('⑮d · medyanlar HAM KESİR (×100 EKRAN ölçeklemesi uca kopyalanmadı)',
+        s.govde.gruplar.every((g) => g.medMargin === null || Math.abs(g.medMargin) <= 1),
+        s.govde.gruplar.map((g) => g.medMargin).join(','));
+      ok('⑮d · `medPe`/`medFpe` AYRI AYRI medyanlanıyor (app.js\'in yedeği kopyalanmadı)',
+        'medPe' in s.govde.gruplar[0] && 'medFpe' in s.govde.gruplar[0]);
+      ok('⑮d · sınıflanan sayısı gövdede (ölçemedim/ölçtüm ayrımı)',
+        typeof s.govde.siniflanan === 'number' && s.govde.siniflanan <= s.govde.degerlendirilen,
+        `${s.govde.siniflanan}/${s.govde.degerlendirilen}`);
+      const sMargin = yakala(await cagirKesif(KESIF.sektorHandler, 'POST', {}, { sira: 'margin', olcumler: UC_KAYIT }));
+      ok('⑮d · ÖLÇÜM · sıra kipi değişince DİZİLİM değişiyor (uçta sabit sıra yok)',
+        sMargin.kod === 200 && sMargin.govde.sira === 'margin'
+        && sMargin.govde.gruplar[0].anahtar !== s.govde.gruplar[0].anahtar,
+        `${s.govde.gruplar[0].anahtar} → ${sMargin.govde.gruplar[0].anahtar}`);
+
+      // radar
+      const r = yakala(await cagirKesif(KESIF.radarHandler, 'GET', {}));
+      ok('⑮d · radar GET → 200', r.kod === 200, `kod ${r.kod}`);
+      ok('⑮d · radar gövde alanları SABİT (sektor yoksa `semboller` YOK)',
+        anahtarlar(r.govde) === 'ms,sektorler,surum,temalar,uyari', anahtarlar(r.govde));
+      ok('⑮d · tema kaydı alanları SABİT (emoji DÜŞÜRÜLDÜ)',
+        r.govde.temalar.every((t2) => anahtarlar(t2) === 'anahtar,dil,etiket,etkiler,sorgu'),
+        anahtarlar(r.govde.temalar[0]));
+      ok('⑮d · tema sayısı motorun RADAR_THEMES\'iyle BİREBİR',
+        r.govde.temalar.length === ENGINE_RADAR.length, `${r.govde.temalar.length}/${ENGINE_RADAR.length}`);
+      ok('⑮d · sektör sözlüğü motorun SECTORS\'uyla BİREBİR',
+        Object.keys(r.govde.sektorler).length === Object.keys(ENGINE_SECTORS).length,
+        String(Object.keys(r.govde.sektorler).length));
+      ok('⑮d · tema etkileri [sektor, up|down] çifti',
+        r.govde.temalar.every((t2) => t2.etkiler.every((e) => Array.isArray(e) && e.length === 2 && /^(up|down)$/.test(e[1]))));
+      const rTek = yakala(await cagirKesif(KESIF.radarHandler, 'GET', { tema: ENGINE_RADAR[0].key }));
+      ok('⑮d · `tema=` süzgeci TEK temaya indiriyor',
+        rTek.govde.temalar.length === 1 && rTek.govde.temalar[0].anahtar === ENGINE_RADAR[0].key);
+      const birSektor = Object.keys(ENGINE_SECTORS)[0];
+      const rSek = yakala(await cagirKesif(KESIF.radarHandler, 'GET', { sektor: birSektor }));
+      ok('⑮d · `sektor=` verilince `semboller` eklenİYOR',
+        Array.isArray(rSek.govde.semboller), JSON.stringify(rSek.govde.semboller));
+      ok('⑮d · semboller yalnız DİZGE taşıyor (motorun sözlüğü, uç evren uydurmuyor)',
+        rSek.govde.semboller.every((x) => typeof x === 'string'));
+
+      ok('⑮d · ÖLÇÜM · tarama+sektor+radar SIFIR dış istek attı', agDenemesi === 0, `${agDenemesi} deneme`);
+    } finally {
+      globalThis.fetch = gercekFetch;
+    }
+  }
+
+  // --- ⑮e backtest — bu beşlinin AĞA ÇIKAN TEK ucu ---------------------
+  // SAHTE Yahoo: 400 günlük sentetik seri. `api/_ag.js`in kabuğu gövdeyi
+  // `r.text()` ile okuyup kendisi JSON.parse ediyor (⑫e ile aynı ölçüm),
+  // bu yüzden sahte yanıt `text()` vermek ZORUNDA.
+  {
+    const gercekFetch = globalThis.fetch;
+    const ortamUrl = process.env.KV_REST_API_URL;
+    const ortamTok = process.env.KV_REST_API_TOKEN;
+    let agDenemesi = 0;
+    let cagrilanUrl = null;
+
+    const N = 400;
+    const ts = []; const op = []; const hi = []; const lo = []; const cl = []; const vo = [];
+    let p = 100;
+    for (let i = 0; i < N; i++) {
+      p *= (1 + Math.sin(i / 7) * 0.004 + 0.0006);
+      ts.push(1600000000 + i * 86400);
+      op.push(p * 0.999); hi.push(p * 1.01); lo.push(p * 0.99); cl.push(p); vo.push(1000 + i);
+    }
+    const yahooTxt = JSON.stringify({
+      chart: {
+        result: [{
+          meta: {
+            currency: 'USD', symbol: 'AAPL', exchangeName: 'NMS',
+            regularMarketPrice: cl[N - 1], dataGranularity: '1d', range: '5y',
+          },
+          timestamp: ts,
+          indicators: { quote: [{ open: op, high: hi, low: lo, close: cl, volume: vo }] },
+        }],
+      },
+    });
+    const yahooYanit = (txt = yahooTxt, ok2 = true, status = 200) => ({
+      ok: ok2, status, text: async () => txt, json: async () => JSON.parse(txt),
+    });
+
+    try {
+      delete process.env.KV_REST_API_URL;
+      delete process.env.KV_REST_API_TOKEN;
+      globalThis.fetch = async (u) => { agDenemesi++; cagrilanUrl = String(u); return yahooYanit(); };
+
+      const b = yakala(await cagirKesif(KESIF.backtestHandler, 'GET', { symbol: 'AAPL' }));
+      ok('⑮e · geçerli GET → 200', b.kod === 200, `kod ${b.kod}`);
+      ok('⑮e · gövde alanları SABİT',
+        anahtarlar(b.govde) === 'adet,interval,market,ms,range,sayac,sonuc,surum,sym,tam,uyari,vade'
+          .split(',').sort().join(','), anahtarlar(b.govde));
+      ok('⑮e · ÖLÇÜM · TEK dış istek (ölçülen maliyet: 1)', agDenemesi === 1, `${agDenemesi} istek`);
+      ok('⑮e · vade verilmezse `orta` ve ONUN 5y/1d penceresi (BT_CFG.intraday ölçüldü)',
+        b.govde.vade === 'orta' && b.govde.range === '5y' && b.govde.interval === '1d',
+        `${b.govde.vade}/${b.govde.range}/${b.govde.interval}`);
+      ok('⑮e · ÖLÇÜM · aralık/adım Yahoo adresine GEÇTİ',
+        /[?&]range=5y\b/.test(cagrilanUrl) && /[?&]interval=1d\b/.test(cagrilanUrl), cagrilanUrl);
+      ok('⑮e · mum sayısı bildiriliyor', b.govde.adet === N, String(b.govde.adet));
+      ok('⑮e · `sonuc` motorun computeBacktest çıktısı (ic/sharpe/mdd ham sayı)',
+        !!b.govde.sonuc && typeof b.govde.sonuc.ic === 'number'
+        && typeof b.govde.sonuc.sharpe === 'number' && typeof b.govde.sonuc.nSamples === 'number',
+        JSON.stringify(b.govde.sonuc && b.govde.sonuc.nSamples));
+      ok('⑮e · ufuk MOTORUN TA_HORIZON sozlugunden geliyor (uçta vade sayısı yok)',
+        b.govde.sonuc.H === ENG.TA_HORIZON.orta, `H=${b.govde.sonuc.H} / ${ENG.TA_HORIZON.orta}`);
+      ok('⑮e · warmup/stride MOTORUN BT_CFG sozlugunden geliyor (uçta eşik yok)',
+        b.govde.sonuc.warmup === ENGINE_BT.orta.warmup && b.govde.sonuc.stride === ENGINE_BT.orta.stride,
+        `warmup=${b.govde.sonuc.warmup} stride=${b.govde.sonuc.stride}`);
+      ok('⑮e · kova yalnız {i,n,avg,pos} (AL/SAT etiketi DÜŞÜRÜLDÜ)',
+        b.govde.sonuc.buckets.every((k) => anahtarlar(k) === 'avg,i,n,pos'),
+        anahtarlar(b.govde.sonuc.buckets[0]));
+      ok('⑮e · BOŞ kovanın ortalaması null — 0 DEĞİL',
+        b.govde.sonuc.buckets.every((k) => k.n > 0 || k.avg === null),
+        JSON.stringify(b.govde.sonuc.buckets.map((k) => [k.n, k.avg])));
+      ok('⑮e · `tam` + `sayac` ölçüm dürüstlüğünü taşıyor (chart.js ile aynı küme)',
+        b.govde.tam === true && b.govde.sayac && typeof b.govde.sayac === 'object');
+      ok('⑮e · TAM cevap 300 sn penceresiyle dönüyor (chart.js ile AYNI dize)',
+        b.basliklar['cache-control'] === 'public, max-age=300, s-maxage=300, stale-while-revalidate=600',
+        b.basliklar['cache-control']);
+      ok('⑮e · KV yokken `X-Onbellek: iska`', b.basliklar['x-onbellek'] === 'iska');
+
+      // Gün içi vade AYRI pencere seçiyor; BIST eki MOTORDA.
+      cagrilanUrl = null;
+      const gi = yakala(await cagirKesif(KESIF.backtestHandler, 'GET', { symbol: 'ASELS', market: 'BIST', vade: 'gunici' }));
+      ok('⑮e · gün içi vade 1y/60m penceresi seçiyor',
+        gi.govde.range === '1y' && gi.govde.interval === '60m', `${gi.govde.range}/${gi.govde.interval}`);
+      ok('⑮e · BIST sembolü motorun `.IS` ekiyle gidiyor (uçta kopya yok)',
+        cagrilanUrl.includes('ASELS.IS') && gi.govde.market === 'BIST', cagrilanUrl);
+
+      // KISA SERİ: arıza değil, DÜRÜST `sonuc: null`.
+      const kisaTxt = JSON.stringify({
+        chart: {
+          result: [{
+            meta: { currency: 'USD', symbol: 'AAPL', dataGranularity: '1d', range: '5y' },
+            timestamp: ts.slice(0, 30),
+            indicators: { quote: [{ open: op.slice(0, 30), high: hi.slice(0, 30), low: lo.slice(0, 30), close: cl.slice(0, 30), volume: vo.slice(0, 30) }] },
+          }],
+        },
+      });
+      globalThis.fetch = async () => { agDenemesi++; return yahooYanit(kisaTxt); };
+      const ks = yakala(await cagirKesif(KESIF.backtestHandler, 'GET', { symbol: 'AAPL' }));
+      ok('⑮e · kısa seri → 200 + `sonuc: null` (UYDURMA sayı yok)',
+        ks.kod === 200 && ks.govde.sonuc === null && ks.govde.adet === 30,
+        `kod ${ks.kod} adet ${ks.govde.adet}`);
+      ok('⑮e · ölçülemeyen cevap KISA pencereyle dönüyor (kesinti 5 dk dondurulmuyor)',
+        ks.basliklar['cache-control'] === 'public, max-age=30', ks.basliklar['cache-control']);
+
+      // Yahoo arızası → 502, uydurulmuş skor değil.
+      globalThis.fetch = async () => { agDenemesi++; return yahooYanit('{}', false, 500); };
+      const ar = yakala(await cagirKesif(KESIF.backtestHandler, 'GET', { symbol: 'AAPL' }));
+      ok('⑮e · taşıyıcı arızası → 200 `sonuc:null` ya da 502 — SKOR UYDURULMUYOR',
+        (ar.kod === 200 && ar.govde.sonuc === null) || ar.kod === 502,
+        `kod ${ar.kod}`);
+
+      // ÖNBELLEK: anahtar motor imzası taşıyor, yalnız TAM gövde yazılıyor.
+      {
+        const yazilan = new Map();
+        // `kvHazir()` ortam değişkenine bakıyor (api/_onbellek.js:146):
+        // sahte KV takmak YETMİYOR, kapıyı da açmak gerekiyor.
+        process.env.KV_REST_API_URL = 'https://sahte-kv.test';
+        process.env.KV_REST_API_TOKEN = 'sahte';
+        kvTak({
+          get: async (k) => (yazilan.has(k) ? yazilan.get(k) : null),
+          set: async (k, v) => { yazilan.set(k, v); },
+        });
+        try {
+          globalThis.fetch = async (u) => { agDenemesi++; cagrilanUrl = String(u); return yahooYanit(); };
+          const once = agDenemesi;
+          const c1 = yakala(await cagirKesif(KESIF.backtestHandler, 'GET', { symbol: 'AAPL', vade: 'orta' }));
+          ok('⑮e · ilk istek ıska + KV\'ye YAZDI', c1.basliklar['x-onbellek'] === 'iska' && yazilan.size === 1,
+            `${c1.basliklar['x-onbellek']} / ${yazilan.size}`);
+          const c2 = yakala(await cagirKesif(KESIF.backtestHandler, 'GET', { symbol: 'AAPL', vade: 'orta' }));
+          ok('⑮e · ÖLÇÜM · ikinci istek ÖNBELLEKTEN geldi (dış istek ARTMADI)',
+            c2.basliklar['x-onbellek'] === 'isabet' && agDenemesi === once + 1,
+            `${c2.basliklar['x-onbellek']} / ${agDenemesi - once} istek`);
+          const ob = anahtar('backtest', { market: 'US', sym: 'AAPL', vade: 'orta', range: '5y', interval: '1d' },
+            { motor: IMZA, ayar: IMZA_AYAR });
+          ok('⑮e · önbellek anahtarı MOTOR+AYAR imzasını taşıyor (motor üretilince eskiler geçersiz)',
+            yazilan.has(ob), [...yazilan.keys()][0]);
+          ok('⑮e · önbellek anahtarı sembol/vade/aralığı AYIRIYOR',
+            ob !== anahtar('backtest', { market: 'US', sym: 'AAPL', vade: 'kisa', range: '5y', interval: '1d' },
+              { motor: IMZA, ayar: IMZA_AYAR }));
+          yazilan.clear();
+          globalThis.fetch = async () => { agDenemesi++; return yahooYanit(kisaTxt); };
+          await cagirKesif(KESIF.backtestHandler, 'GET', { symbol: 'MSFT', vade: 'orta' });
+          ok('⑮e · ÖLÇÜLEMEYEN gövde ÖNBELLEĞE YAZILMADI', yazilan.size === 0, `${yazilan.size} kayıt`);
+        } finally {
+          kvTak(null);
+          delete process.env.KV_REST_API_URL;
+          delete process.env.KV_REST_API_TOKEN;
+        }
+      }
+    } finally {
+      globalThis.fetch = gercekFetch;
+      if (ortamUrl === undefined) delete process.env.KV_REST_API_URL; else process.env.KV_REST_API_URL = ortamUrl;
+      if (ortamTok === undefined) delete process.env.KV_REST_API_TOKEN; else process.env.KV_REST_API_TOKEN = ortamTok;
+    }
+  }
+
+  // --- ⑮f deger — metal (GET) · kripto (POST) + ARIZA KİLİDİ -----------
+  {
+    const gercekFetch = globalThis.fetch;
+    let agDenemesi = 0;
+    globalThis.fetch = (...a) => { agDenemesi++; throw new Error('⑮f AĞ YASAĞI: ' + String(a[0])); };
+    try {
+      // KRİPTO: belgeyi İSTEMCİ veriyor (CoinGecko `_ag.js`in IZINLI'sinde YOK).
+      const cgBelge = {
+        id: 'bitcoin', symbol: 'btc', name: 'Bitcoin',
+        categories: ['Layer 1 (L1)'],
+        market_data: {
+          current_price: { usd: 60000 },
+          market_cap: { usd: 1.2e12 },
+          total_volume: { usd: 3e10 },
+          circulating_supply: 19700000,
+          total_supply: 21000000,
+          max_supply: 21000000,
+          ath_change_percentage: { usd: -15 },
+          price_change_percentage_30d: 5,
+          price_change_percentage_1y: 40,
+        },
+        developer_data: { commit_count_4_weeks: 300, stars: 70000, forks: 35000 },
+        community_data: { twitter_followers: 6000000 },
+        genesis_date: '2009-01-03',
+        sentiment_votes_up_percentage: 70,
+        market_cap_rank: 1,
+      };
+      const k = yakala(await cagirKesif(KESIF.degerHandler, 'POST', {}, { tur: 'kripto', belge: cgBelge }));
+      ok('⑮f · kripto POST → 200', k.kod === 200, `kod ${k.kod}`);
+      ok('⑮f · kripto gövde alanları SABİT',
+        anahtarlar(k.govde) === 'bilesenler,cls,kategori,ms,skor,surum,tur,uyari,uyariAdet',
+        anahtarlar(k.govde));
+      ok('⑮f · skor HAM sayı', typeof k.govde.skor === 'number' && Number.isFinite(k.govde.skor), String(k.govde.skor));
+      ok('⑮f · `cls` makine kodu, band ETİKETİ yok',
+        typeof k.govde.cls === 'string' && /^[a-z-]+$/.test(k.govde.cls), k.govde.cls);
+      ok('⑮f · bileşen yalnız {ad, skor, w} (note METNİ DÜŞÜRÜLDÜ)',
+        k.govde.bilesenler.every((c) => anahtarlar(c) === 'ad,skor,w'), anahtarlar(k.govde.bilesenler[0]));
+      ok('⑮f · bileşen ağırlıkları MOTORDAN (toplam 1\'e yakın)',
+        Math.abs(k.govde.bilesenler.reduce((a, c) => a + c.w, 0) - 1) < 1e-9,
+        String(k.govde.bilesenler.reduce((a, c) => a + c.w, 0)));
+      ok('⑮f · çekince METNİ değil SAYISI geçiyor', typeof k.govde.uyariAdet === 'number');
+      ok('⑮f · kripto cevabı önbelleklenmiyor (girdiye bağlı, kullanıcıya özel)',
+        k.basliklar['cache-control'] === 'no-store', k.basliklar['cache-control']);
+      const kBos = yakala(await cagirKesif(KESIF.degerHandler, 'POST', {}, { tur: 'kripto', belge: {} }));
+      ok('⑮f · BOŞ kripto belgesi → 200 ama nötr/çekinceli (patlamıyor, uydurmuyor)',
+        kBos.kod === 200 && typeof kBos.govde.skor === 'number', `kod ${kBos.kod}`);
+
+      // METAL: ölçümler İSTEMCİDEN; verilmeyen ölçüm null.
+      const mBos = yakala(await cagirKesif(KESIF.degerHandler, 'GET', { tur: 'gumus' }));
+      ok('⑮f · ölçümsüz metal GET → 200 (motor nötr alıyor)', mBos.kod === 200, `kod ${mBos.kod}`);
+      ok('⑮f · metal gövde alanları SABİT (`kategori` YOK)',
+        anahtarlar(mBos.govde) === 'bilesenler,cls,ms,skor,surum,tur,uyari,uyariAdet',
+        anahtarlar(mBos.govde));
+      ok('⑮f · metal bileşenleri MOTORUN METAL_MACRO_W ağırlıklarını taşıyor',
+        mBos.govde.bilesenler.length === Object.keys(ENGINE_METAL.gumus || {}).length
+        || mBos.govde.bilesenler.every((c) => typeof c.w === 'number'),
+        mBos.govde.bilesenler.map((c) => c.w).join(','));
+      const mVix = yakala(await cagirKesif(KESIF.degerHandler, 'GET', { tur: 'gumus', vix: 18 }));
+      ok('⑮f · ÖLÇÜM · tek ölçüm verilince skor DEĞİŞİYOR (uçta yutulmuyor)',
+        mVix.kod === 200 && mVix.govde.skor !== mBos.govde.skor,
+        `${mBos.govde.skor} → ${mVix.govde.skor}`);
+      ok('⑮f · metal türü GERİ BİLDİRİLİYOR', mVix.govde.tur === 'gumus');
+
+      // ========================================================
+      //  ONARIM KILIDI — `fmtPct` artık dilimin İÇİNDE
+      // ========================================================
+      // GEÇMİŞ: `computeMetalMacro` not metinlerini kurarken `fmtPct`
+      // çağırıyordu ama o yardımcı app.js'te YALNIZ `renderPfChangeBar`
+      // (app.js:1916) ve `renderTAIndicators` (app.js:4367) içinde tanımlıydı;
+      // ikisi de `computeMetalMacro`nun KARDEŞİ, atası değil. Yani hata ÜRETİCİDE
+      // DEĞİL, app.js'in KENDİSİNDEYDİ: web sürümünde de ölçülmüş (non-null)
+      // girdiyle ReferenceError atıyor, metal makro skoru bütünüyle kayboluyordu.
+      // ONARIM: `fmtPct` `computeMetalMacro` gövdesine YEREL tanımlandı (app.js),
+      // motor yeniden üretildi. Aşağıdaki denetimler onarımın GERİ GİTMESİNİ yakalar.
+      let motorHatasi = null; let motorSonuc = null;
+      try { motorSonuc = ENGINE_METAL_CALL('gumus', { dxyChg: -1.2, tnxChg: 0.3, vix: 18, gsr: 80, pgr: 0.9, cuChg: 2, ownM: 3, ownH: 1 }); } catch (e) { motorHatasi = e; }
+      ok('⑮f · ONARIM · motorun `computeMetalMacro`su ÖLÇÜLMÜŞ girdide ARTIK PATLAMIYOR',
+        !motorHatasi, String(motorHatasi && motorHatasi.message));
+      ok('⑮f · ONARIM · ölçülmüş girdi HAM skor döndürüyor',
+        !!motorSonuc && typeof motorSonuc.score === 'number' && Number.isFinite(motorSonuc.score),
+        String(motorSonuc && motorSonuc.score));
+      ok('⑮f · ONARIM · not metinleri `fmtPct` biçimini TAŞIYOR (yardımcı gerçekten kapsamda)',
+        !!motorSonuc && motorSonuc.comps.some((c) => String(c.note || '').includes('-1.20%')),
+        String(motorSonuc && motorSonuc.comps && motorSonuc.comps[0] && motorSonuc.comps[0].note).slice(0, 80));
+      const mOlculu = yakala(await cagirKesif(KESIF.degerHandler, 'GET',
+        { tur: 'gumus', dxyChg: -1.2, tnxChg: 0.3, vix: 18, gsr: 80 }));
+      ok('⑮f · ONARIM · uç ölçülmüş metal için 200 dönüyor', mOlculu.kod === 200,
+        `kod ${mOlculu.kod} ${mOlculu.govde.error || ''}`);
+      ok('⑮f · ONARIM · ölçülmüş gövde alanları nötr gövdeyle AYNI (alan şişmiyor)',
+        anahtarlar(mOlculu.govde) === anahtarlar(mBos.govde), anahtarlar(mOlculu.govde));
+      ok('⑮f · ONARIM · ölçüm skoru nötr 50’den FARKLI (uçta yutulmuyor)',
+        mOlculu.kod === 200 && mOlculu.govde.skor !== mBos.govde.skor,
+        `${mBos.govde.skor} → ${mOlculu.govde.skor}`);
+      ok('⑮f · ONARIM · 200 gövdesi not METNİNİ sızdırmıyor (yalnız ad,skor,w)',
+        mOlculu.kod === 200 && Array.isArray(mOlculu.govde.bilesenler)
+          && mOlculu.govde.bilesenler.every((c) => anahtarlar(c) === 'ad,skor,w'),
+        anahtarlar((mOlculu.govde.bilesenler || [])[0] || {}));
+
+      ok('⑮f · ÖLÇÜM · deger ucu SIFIR dış istek attı', agDenemesi === 0, `${agDenemesi} deneme`);
+    } finally {
+      globalThis.fetch = gercekFetch;
+    }
+  }
+
+  // --- ⑮g HAM SAYI + tavsiye dili — TOPLANAN TÜM gövdeler --------------
+  {
+    ok('⑮g · denetlenen gövde sayısı anlamlı (süzgeç boşa çalışmıyor)',
+      govdeler.length >= 40, `${govdeler.length} gövde`);
+    const metin = govdeler.map((g) => JSON.stringify(g)).join('\n')
+      .split(UYARI).join('');   // zorunlu uyarı metni süzgeçten ÇIKARILIYOR
+    ok('⑮g · hiçbir gövdede HTML YOK (`<`/`>` kaçmadı)', !/<[a-zA-Z/]/.test(metin));
+    ok('⑮g · hiçbir gövdede emoji YOK',
+      !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(metin), (metin.match(/[\u{1F300}-\u{1FAFF}]/u) || [])[0]);
+    ok('⑮g · hiçbir gövdede TAVSİYE dili YOK (kazandırır/al-sat/garanti/tavsiye/fırsat)',
+      !/kazand[ıi]r|al\/sat|AL\/SAT|garanti|tavsiye|f[ıi]rsat|kâr getir/i.test(metin),
+      (metin.match(/kazand[ıi]r|al\/sat|garanti|tavsiye|f[ıi]rsat/i) || [])[0]);
+    ok('⑮g · her gövdede zorunlu uyarı var',
+      govdeler.every((g) => g.uyari === UYARI), String(govdeler.filter((g) => g.uyari !== UYARI).length));
+    ok('⑮g · hiçbir gövdede biçimlenmiş sayı dizgesi yok (%, ₺, $ ekli)',
+      !/"[-+]?[0-9][0-9.,]*\s*(%|₺|\$|TL)"/.test(metin));
+  }
+
+  // --- ⑮h kaynak denetimleri + sürüklenme kilitleri --------------------
+  {
+    ok('⑮h · `_kesif.js` ELLE yazıldığını söylüyor (üretilmiş değil)', /ELLE YAZILMIŞ/i.test(kesifSrc));
+    ok('⑮h · uçta `Intl` YOK (HAM SAYI kuralı)', !/\bIntl\b/.test(kesifKod));
+    ok('⑮h · uçta `toFixed(` / `toLocaleString(` YOK',
+      !kesifKod.includes('toFixed(') && !kesifKod.includes('toLocaleString('));
+    ok('⑮h · uçta çıplak `fetch(` YOK — ağ MOTORUN taşıyıcısında',
+      !/\bfetch\(/.test(kesifKod));
+    ok('⑮h · gövdeye `detail:`/yığın izi sızdıran alan yok', !/detail:/.test(kesifKod));
+    ok('⑮h · kaynakta e-posta/anahtar YOK', !/@gmail|ANTHROPIC|apiKey/.test(kesifSrc), 'temiz');
+    ok('⑮h · arıza `console.error` ile KENDİ adıyla raporlanıyor',
+      /console\.error\('api\/_kesif/.test(kesifKod));
+    ok('⑮h · beyaz listeler MOTORDAN okunuyor (uçta kopya sözlük yok)',
+      /Object\.keys\(ENG\.SCAN_PRESETS\)/.test(kesifKod)
+      && /Object\.keys\(ENG\.METAL_MACRO_W\)/.test(kesifKod)
+      && /Object\.keys\(ENG\.TA_HORIZON\)/.test(kesifKod)
+      && /ENG\.RADAR_THEMES/.test(kesifKod) && /Object\.keys\(ENG\.SECTORS\)/.test(kesifKod));
+    ok('⑮h · motor kabuğu score.js/chart.js ile AYNI (buildMotor(AG.H))',
+      /buildMotor\(AG\.H\)/.test(kesifKod) && /canliAg\(/.test(kesifKod));
+    ok('⑮h · sembol kapısı `_girdi.js`den İTHAL (yeni desen uydurulmadı)',
+      /from '\.\/_girdi\.js'/.test(kesifKod)
+      && /temizleSembol/.test(kesifKod) && /cozEndeks/.test(kesifKod));
+    ok('⑮h · uçta eşik/ağırlık sabiti yok (SCAN/METAL ağırlığı elle yazılmamış)',
+      !/MACRO_W\s*=/.test(kesifKod) && !/SCAN_PRESETS\s*=/.test(kesifKod));
+    ok('⑮h · uç HTML üreten motor alanlarını (crits[].html) TAŞIMIYOR',
+      !/\.html\b/.test(kesifKod));
+
+    // SÜRÜKLENME KİLİTLERİ: ikizler ayrı yaşamaya başlarsa kırmızı.
+    ok('⑮h · KİLİT · `ARALIKLAR` api/chart.js ile BİREBİR',
+      KESIF_ARALIKLAR.join(',') === ARALIKLAR.join(','), KESIF_ARALIKLAR.join(','));
+    ok('⑮h · KİLİT · `ADIMLAR` api/chart.js ile BİREBİR',
+      KESIF_ADIMLAR.join(',') === ADIMLAR.join(','), KESIF_ADIMLAR.join(','));
+    ok('⑮h · KİLİT · gövde tavanı api/causal.js ile BİREBİR',
+      KESIF_GOVDE_BAYT === AZAMI_GOVDE_BAYT, String(KESIF_GOVDE_BAYT));
+    ok('⑮h · KİLİT · sıra kipleri MOTORDA gerçekten var',
+      KESIF.SIRA_KIPLERI.every((s) => readFileSync(path.join(ROOT, 'api', '_motor.js'), 'utf8').includes(`'${s}'`)));
+    ok('⑮h · KİLİT · ikiz liste kopyasının GEREKÇESİ yazılı (ikinci motor kurmamak)',
+      /chart\.js/.test(kesifSrc) && /[Iİi]K[Iİi]Z/i.test(kesifSrc));
+
+    // SKOR YOLU KİLİDİ: yeni rotalar mevcut üç ucu DEĞİŞTİRMEDİ.
+    for (const [ad, yol] of [['score', SCORE_PATH], ['recommend', RECOMMEND_PATH], ['analyze', ANALYZE_PATH]]) {
+      const s = readFileSync(yol, 'utf8');
+      ok(`⑮h · KİLİT · api/${ad}.js \`_kesif.js\`i TANIMIYOR (skor yolu dokunulmadı)`,
+        !/_kesif/.test(s) && !/__rota/.test(s));
+    }
+    ok('⑮h · KİLİT · `_kesif.js` mevcut uçlardan hiçbirini import ETMİYOR',
+      !/from '\.\/(score|recommend|analyze|chart|pulse|news|causal|theme|compare)\.js'/.test(kesifKod));
+    ok('⑮h · KİLİT · `_kesif.js` üretilmiş dosyalara YAZMIYOR (yalnız import)',
+      !/writeFileSync|appendFileSync/.test(kesifKod));
+  }
+}
+
 
 bitir();

@@ -7089,6 +7089,11 @@
   function computeMetalMacro(key, d) {
     // d: { dxyChg, tnxChg, vix, gsr, pgr, cuChg, ownM, ownH }
     const N = (x) => (typeof x === 'number' && isFinite(x)) ? x : null;
+    // fmtPct burada YEREL tanimlanir: renderPfChangeBar / renderTAIndicators icindeki
+    // ayni adli yardimcilar bu fonksiyonun KARDESI, atasi degil - kapanis zinciriyle
+    // erisilemez. Yoklugunda olculmus (non-null) dallar ReferenceError atiyor ve metal
+    // makro skoru butunuyle kayboluyordu. Olcek: renderPfChangeBar'daki ile ayni (2 hane).
+    const fmtPct = (n) => (n == null || isNaN(n)) ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
     const industrial = key !== 'gram-altin';
     const warnings = [];
 

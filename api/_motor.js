@@ -26,19 +26,19 @@
 //    backtest       99 satır
 //    fmt-kisa       11 satır
 //    crypto        117 satır
-//    metal         100 satır
+//    metal         105 satır
 //    haber-skor     36 satır
 //    firsat         40 satır
 //    scan           92 satır
 //    sektor        216 satır
 //    radar          98 satır
-//    TOPLAM       2677 satır
+//    TOPLAM       2682 satır
 //  Dışa verilen sembol: 74
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:4a212c4e9296ae23';
+export const IMZA = 'sha256:a68c4529b1909cab';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
@@ -57,7 +57,7 @@ export const DILIMLER = [
   { name: 'backtest', lines: 99 },
   { name: 'fmt-kisa', lines: 11 },
   { name: 'crypto', lines: 117 },
-  { name: 'metal', lines: 100 },
+  { name: 'metal', lines: 105 },
   { name: 'haber-skor', lines: 36 },
   { name: 'firsat', lines: 40 },
   { name: 'scan', lines: 92 },
@@ -2209,6 +2209,11 @@ const navigator = H.dead("navigator");
   function computeMetalMacro(key, d) {
     // d: { dxyChg, tnxChg, vix, gsr, pgr, cuChg, ownM, ownH }
     const N = (x) => (typeof x === 'number' && isFinite(x)) ? x : null;
+    // fmtPct burada YEREL tanimlanir: renderPfChangeBar / renderTAIndicators icindeki
+    // ayni adli yardimcilar bu fonksiyonun KARDESI, atasi degil - kapanis zinciriyle
+    // erisilemez. Yoklugunda olculmus (non-null) dallar ReferenceError atiyor ve metal
+    // makro skoru butunuyle kayboluyordu. Olcek: renderPfChangeBar'daki ile ayni (2 hane).
+    const fmtPct = (n) => (n == null || isNaN(n)) ? '—' : (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
     const industrial = key !== 'gram-altin';
     const warnings = [];
 

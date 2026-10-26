@@ -108,6 +108,42 @@
 //  SÖYLER. Varsayılan 50 koymak, ölçülmemiş bir genişlikten faz üretmek
 //  olurdu — "veri yok" ile "ölçtüm" karışırdı.
 //
+//  ---------------------------------------------------------------------
+//  NİYE BU ÜÇ ALAN HÂLÂ İSTEMCİDEN GELİYOR — ÖLÇÜLDÜ (2026-10-27)
+//
+//  Soru: `genislik` / `enflasyonBaskisi` / `risk` UÇTA hesaplanabilir mi?
+//  Üç formülün de app.js'te NEREDE olduğu bulundu (satır numaraları o
+//  günün dosyasına göredir; kilit `tests/nabiz-alan-test.mjs` ②'de
+//  DESENLE tutuluyor, satırla değil):
+//    · enflasyon baskısı   app.js ~10642-10645  (`inflN / 10`, petrol
+//      tonu 0.15 üstündeyse +0.15)
+//    · jeopolitik risk      app.js ~10646       (`(war + hormuz) / 10`)
+//    · piyasa genişliği     app.js ~10648-10651 (evrenin ORTALAMA TA
+//      skoru; `taAllSymbols()` + sembol başına bir TA çağrısı)
+//    · yardımcı `themeHeat` app.js ~10327-10335 (3 günlük pencere)
+//
+//  ÖLÇÜM: bu dördünün HİÇBİRİ `api/_motor.js` içinde YOK (`inflN`,
+//  war/hormuz sayımı, `taVals`, `themeHeat` dizgeleri üretilmiş motorda
+//  aranıp bulunamadı). `makro-faz` dilimi `CYCLE_PHASES`te başlıyor ve
+//  "Makro nabzını hesapla" yorumunda BİTİYOR — yani `computeMacro`
+//  gövdesi, dolayısıyla üç formül de dilimin DIŞINDA kalıyor.
+//
+//  SONUÇ: hesabı buraya YAZMAK yasak ("motorda hesap, uçta taşıma") ve
+//  motorda da yok. O yüzden bu uç değişmedi; üçü GİRDİ olarak kalıyor,
+//  gelmezlerse `konjonktur` null + `eksik` konuşuyor. Uydurma formül
+//  yazmak yerine BULGU bırakıldı — motor şeridine devredilecek:
+//    · `themeHeat` (app.js 10327-10335) SAF (yalnız Date.now()) → olduğu
+//      gibi dilimlenebilir.
+//    · enflasyon baskısı + risk aritmetiği ÖNCE app.js içinde kendi saf
+//      yardımcısına çıkarılmalı: `computeMacro` ağa çıkıyor
+//      (`fetchThemesData`) ve modül durumu yazıyor; `macroGrowth` /
+//      `macroPhase` için aynı iş zaten 2026-10-19'da böyle yapılmış.
+//    · piyasa genişliği SUNUCUDA HESAPLANAMAZ: evren `taAllSymbols()` →
+//      `loadLists()` → localStorage, yani KULLANICIYA ÖZEL liste; üstüne
+//      sembol başına bir TA çağrısı gerekir ve bu maxDuration 10'u aşar.
+//      Bu alan ya istemciden gelmeli ya da ayrı bir sözleşmeyle
+//      (kullanıcı listesi + bütçe ölçümü) ele alınmalı.
+//
 //  HAM SAYI KURALI (BAGIMLILIK_GRAFIGI.md §5.1): gövdede Intl/toFixed/
 //  yüzde/para simgesi ve serbest Türkçe YOK. Duruş `kod` olarak dönüyor
 //  (hawk|dove|neu), faz `kod` olarak dönüyor (early|mid|late|recession),

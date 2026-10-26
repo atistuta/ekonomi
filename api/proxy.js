@@ -34,6 +34,16 @@ export const config = {
 //  cagirabilir; zararsiz, yalnizca yfin davranisi alir. Yetki yukseltmesi
 //  yok, iki yolun izinleri de ayni.
 // ---------------------------------------------------------------------
+//  DALGA-B2 EKİ — /api/tarama · /api/sektor · /api/radar · /api/backtest
+//  · /api/deger de AYNI yola bindi. Beşi de api/_kesif.js taşıyıcısında
+//  (`_` dosyası → rotaya çevrilmez, fonksiyon SAYILMAZ). Fonksiyon sayısı
+//  12'de KALDI; tests/uc-test.mjs ⑮ bunu kilitliyor.
+//
+//  NİYE DİNAMİK import: _kesif.js modül düzeyinde `buildMotor()` kuruyor
+//  (api/score.js/chart.js ile aynı kabuk). Statik import olsaydı DÜZ
+//  /api/proxy?url= trafiği de her soğuk başlangıçta o kurulumu ÖDERDİ.
+//  `await import` ile bedel yalnız keşif rotalarına düşüyor; ESM modül
+//  önbelleği sayesinde ikinci çağrıda kurulum yinelenmiyor.
 import { yfinHandler } from './_yfin.js';
 
 const UPSTREAM_TIMEOUT_MS = 25000;
@@ -88,6 +98,17 @@ export default async function handler(req, res) {
   // /api/yfin rewrite'i buraya dusuyor -> tasiyiciya devret. CORS basliklarini
   // yfinHandler kendisi kuruyor (ayni kume: *, GET/OPTIONS, 86400).
   if (req.query?.__rota === 'yfin') return yfinHandler(req, res);
+
+  // Keşif rotaları (tarama/sektor/radar/backtest/deger) -> _kesif.js.
+  // CORS başlıklarını taşıyıcının kendisi kuruyor (aynı küme + POST için
+  // Content-Type). Rota adı burada ELLE yazılmıyor: tablo _kesif.js'te,
+  // vercel.json'daki rewrite'lar ve test onunla aynı listeyi okuyor.
+  const rota = req.query?.__rota;
+  if (rota) {
+    const { HANDLERLAR } = await import('./_kesif.js');
+    const h = HANDLERLAR[rota];
+    if (h) return h(req, res);
+  }
 
   // CORS
   res.setHeader('Access-Control-Allow-Origin',  '*');

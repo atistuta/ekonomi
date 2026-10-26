@@ -20,7 +20,13 @@
     }
   },
   "rewrites": [
-    { "source": "/api/yfin", "destination": "/api/proxy?__rota=yfin" }
+    { "source": "/api/yfin", "destination": "/api/proxy?__rota=yfin" },
+
+    { "source": "/api/tarama",   "destination": "/api/proxy?__rota=tarama" },
+    { "source": "/api/sektor",   "destination": "/api/proxy?__rota=sektor" },
+    { "source": "/api/radar",    "destination": "/api/proxy?__rota=radar" },
+    { "source": "/api/backtest", "destination": "/api/proxy?__rota=backtest" },
+    { "source": "/api/deger",    "destination": "/api/proxy?__rota=deger" }
   ],
   "regions": ["fra1"],
   "headers": [
