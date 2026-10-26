@@ -774,3 +774,285 @@ export type PulseErrorCode =
   | 'method_not_allowed'
   | 'motor_kurulamadi'
   | 'nabiz_hesaplanamadi';
+
+// =====================================================================
+//  /api/causal SÖZLEŞME TİPLERİ — 📉 Günün Nedeni   (ŞERİT 4 / native)
+// ---------------------------------------------------------------------
+//  NE: `api/causal.js` ucunun İSTEK GÖVDESİ + cevabının TypeScript
+//  karşılığı. Uç, belirgin hareket eden endeksleri istemcinin verdiği
+//  gündem konseptleriyle eşleştiriyor.
+//
+//  DÜRÜSTLÜK: uç başlığının kendi sözü — bu bir KORELASYON okumasıdır,
+//  kanıtlanmış nedensellik DEĞİL ve TA/FA/bileşke skoruna DAHİL DEĞİL
+//  (api/causal.js:9-11). Ekran bunu kesinleşmiş bir neden gibi sunmamalı.
+//
+//  ── ÖLÇÜLDÜ (2026-10-26, KAYNAK OKUMA — canlı istek ATILMADI) ──────
+//  · Yöntem: YALNIZ POST. GET/PUT → 405 `method_not_allowed`
+//    (api/causal.js:211-216). OPTIONS → 204.
+//  · Gövde doğrulaması: `ayristirGovde` (api/causal.js:144-201).
+//    - gövde nesne değil / dizi      → 400 `govde_yok`      (:146)
+//    - `hareketler` dizi değil       → 400 `hareketler_yok` (:150)
+//    - `gundem` dizi değil           → 400 `gundem_yok`     (:151)
+//    - hareketler.length > 12        → 400 `cok_hareket` + azami/istenen (:152)
+//    - gundem.length > 60            → 400 `cok_konsept` + azami/istenen (:155)
+//    - hareket öğesi nesne değil     → 400 `bad_hareket`    (:165)
+//    - `kind` küme dışı              → 400 `bad_kind` + izinli[] (:167)
+//    - `pct` sonlu sayı değil        → 400 `bad_pct`        (:169)
+//    - `notable` sonlu/≥0 değil      → 400 `bad_notable`    (:171)
+//    - konsept öğesi nesne değil     → 400 `bad_konsept`    (:180)
+//    - `key` boş                     → 400 `konsept_key_yok` (:182)
+//    - dizge gövde > 65536 bayt      → 413 `govde_buyuk`    (:229-233)
+//    - dizge gövde JSON değil        → 400 `bozuk_json`     (:237)
+//    - motor kurulamadı              → 503 `motor_kurulamadi` (:221)
+//    - hesap patladı                 → 502 `neden_hesaplanamadi` (:278)
+//  · `kind` İZİNLİ KÜME = motorun `CAUSAL_INDEX_AFFINITY` anahtarları
+//    (api/_motor.js:1699-1704): equity_tech · equity_us · equity_tr · gold.
+//  · Cevap (api/causal.js:254-274): `baglar` · `degerlendirilen` ·
+//    `eslesen` · `surum` · `ms` · `uyari`. BAŞKA ÜST ALAN YOK —
+//    `tam` YOK, `sayac` YOK (uç ağa HİÇ çıkmıyor, ölçecek taşıma yok),
+//    bu yüzden `olcumEksik()` BU GÖVDEDE ÇALIŞMAZ.
+//  · Cevapta `null` dönen alan YOK: `pct` istemcinin gönderdiği sonlu
+//    sayının aynısı, `skor` motorun ham çarpımı, `sektorler` dizi
+//    (boş olabilir — `matchedSecs` başlangıçta boş, api/_motor.js:1718).
+//    Bu yüzden burada hiçbir alan `| null` YAZILMADI; yazmak ucun
+//    döndürmediği bir durumu türe sokmak olurdu.
+//  · `baglar` BOŞ olabilir ve bu ARIZA DEĞİL (api/causal.js:80-81):
+//    ya belirgin hareket yok, ya gürültü eşiğini (1.6) geçen eşleşme yok.
+//    Ekran bunu hata diye göstermemeli — dürüst sessizlik.
+//  · Motorun ürettiği `why` (serbest Türkçe) ve konseptin başlığı/emojisi
+//    TELE KONMADI (api/causal.js:46-55). Dönen tek metinler makine kodu:
+//    `kind` ve `sektorler[]`.
+//
+//  GÜNDEMİ BU KATMAN ÜRETMEZ: girdi ÇAĞIRANDAN gelir (bkz. `fetchCausal`
+//  başlığı). Gündem taraması sunucu işi ve ayrı bir şeride devredilecek.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/**
+ * Endeks türü — SABİT KÜME. Motorun yakınlık tablosunun anahtarları
+ * (api/_motor.js:1699-1704); küme dışı değer 400 `bad_kind` ile
+ * REDDEDİLİYOR (sessizce 0 skora düşmüyor), o yüzden tür de dar.
+ */
+export const NEDEN_KINDLER = ['equity_tech', 'equity_us', 'equity_tr', 'gold'] as const;
+export type NedenKind = (typeof NEDEN_KINDLER)[number];
+
+/** Konseptin bir sektöre bakışı. */
+export type NedenSektorYon = 'up' | 'down';
+
+/** Gündem ısısı. Küme dışı değer ucta sessizce 'cool' sayılır (:195). */
+export const NEDEN_ISILAR = ['hot', 'warm', 'cool'] as const;
+export type NedenIsi = (typeof NEDEN_ISILAR)[number];
+
+/** Risk tonu. Küme dışı değer ucta `null` sayılır (:193). */
+export type NedenRisk = 'on' | 'off';
+
+/** İstek sınırları — UCUN KENDİ SABİTLERİ (api/causal.js:113-115). */
+export const AZAMI_HAREKET = 12;
+export const AZAMI_KONSEPT = 60;
+export const AZAMI_GOVDE_BAYT = 65536;
+
+/**
+ * Bir endeks hareketi — İSTEK girdisi.
+ * `pct` günlük değişim yüzdesi (HAM sayı; istemci yuvarlamaz),
+ * `notable` belirginlik eşiği (yüzde, ≥0). Eşiği AŞMAYAN hareket ucta
+ * elenir (api/_motor.js:1752) — bu bir hata değil, kapsam dışı.
+ */
+export type NedenHareketGirdi = {
+  kind: NedenKind;
+  pct: number;
+  notable: number;
+};
+
+/** Konseptin bir manşeti — ucun OKUDUĞU tek alan saat yaşı (:188). */
+export type NedenBaslikGirdi = {
+  ageH: number;
+};
+
+/**
+ * Bir gündem konsepti — İSTEK girdisi. `key` ZORUNLU (boşsa 400
+ * `konsept_key_yok`); gerisi isteğe bağlı çünkü uç eksik alanı kendi
+ * varsayılanına indiriyor (`sectors: []`, `risk: null`, `tone: null`,
+ * `heat: 'cool'`, `heads: []` — api/causal.js:183-197).
+ *
+ * `sectors` demet (tuple) dizisi: uzunluğu 2 olmayan öğeler ucta
+ * SÜZÜLÜYOR (:184) — üç elemanlı bir dizi göndermek sessiz veri kaybı
+ * olurdu, tür bunu derlemede engelliyor.
+ *
+ * `tone` -1..+1 HAM sayı. Sonlu değilse uç `null` sayar.
+ */
+export type NedenKonseptGirdi = {
+  key: string;
+  sectors?: [string, NedenSektorYon][];
+  risk?: NedenRisk | null;
+  tone?: number | null;
+  heat?: NedenIsi;
+  heads?: NedenBaslikGirdi[];
+};
+
+/** `/api/causal` isteğinin TAM gövdesi. İki alan da ZORUNLU dizi. */
+export type CausalRequest = {
+  hareketler: NedenHareketGirdi[];
+  gundem: NedenKonseptGirdi[];
+};
+
+/**
+ * Hareket ⇄ konsept bağı. `key` İSTEMCİNİN gönderdiği konsept anahtarı
+ * (api/causal.js:52-55: konseptin kendisi tele geri konmuyor; başlık ve
+ * manşetler çağıranın elinde zaten var).
+ *
+ * `skor` motorun HAM hizalama çarpımı (api/_motor.js:1744) — ölçeksiz,
+ * yuvarlanmamış. Eşik/bant kararı MOTORUN; istemci bu sayıyla
+ * karşılaştırma YAPMAZ.
+ *
+ * `sektorler` eşleşen MAKİNE sektör kodları (`matchedSecs`); boş dizi
+ * gelebilir — risk/ton hizasıyla eşleşmiş ama sektör örtüşmesi olmayan
+ * bağ demek, "veri yok" DEĞİL.
+ */
+export type NedenBaglanti = {
+  key: string;
+  skor: number;
+  sektorler: string[];
+};
+
+/**
+ * Bir endeks hareketi ve ona en iyi hizalanan konseptler.
+ * `links` en çok 2 öğe taşır (motor `slice(0, 2)` — api/_motor.js:1761)
+ * ve ASLA boş gelmez (boş olanlar ucta düşüyor — :1763).
+ *
+ * `kind` tipi `NedenKind | string`: uç izinli kümeyi motordan okuyor,
+ * motor bir gün tabloyu büyütürse ekran kodu olduğu gibi basar, çökmez.
+ */
+export type NedenBag = {
+  kind: NedenKind | string;
+  pct: number;
+  links: NedenBaglanti[];
+};
+
+export type CausalResponse = {
+  /** BOŞ OLABİLİR — arıza değil, dürüst sessizlik. */
+  baglar: NedenBag[];
+  /** Kaç hareket değerlendirildi (gönderilen hareket sayısı). */
+  degerlendirilen: number;
+  /** Kaçı bir konseptle eşleşti (`baglar.length`). İstemci yeniden saymaz. */
+  eslesen: number;
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};
+
+/**
+ * Uç noktanın makine hata kodları (api/causal.js). Çoğu 400 ÜRETİR;
+ * istisnalar: `govde_buyuk` 413 (:231), `method_not_allowed` 405 (:214),
+ * `motor_kurulamadi` 503 (:221), `neden_hesaplanamadi` 502 (:278).
+ */
+export type CausalErrorCode =
+  | 'govde_yok'
+  | 'bozuk_json'
+  | 'govde_buyuk'
+  | 'hareketler_yok'
+  | 'gundem_yok'
+  | 'cok_hareket'
+  | 'cok_konsept'
+  | 'bad_hareket'
+  | 'bad_kind'
+  | 'bad_pct'
+  | 'bad_notable'
+  | 'bad_konsept'
+  | 'konsept_key_yok'
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'neden_hesaplanamadi';
+
+// =====================================================================
+//  /api/watchlist SÖZLEŞME TİPLERİ — cihaz senkronu (ŞERİT 4 / native)
+// ---------------------------------------------------------------------
+//  NE: `api/watchlist.js` ucunun (Vercel KV) cevap tipleri. Paylaşılan
+//  bir `code` anahtarı altında izleme listesi + portföy saklıyor.
+//
+//  ⚠️ GÜVENLİK — KİMLİK DOĞRULAMASI YOK (api/watchlist.js:30-59):
+//  tek kapı `code` ve doğrulaması yalnız BİÇİM (`/^[a-z0-9_-]{4,40}$/i`).
+//  Kodu bilen ya da tahmin eden herkes hem OKUR hem YAZAR (POST aynı
+//  kapıdan geçiyor), CORS `*` (:24). Yani bu uç bir kimlik değil, bir SIR
+//  paylaşımıdır ve zayıf bir kod herkese açıktır. Bu kusur gizlilik
+//  politikasında duyuruldu. `code` ASLA kaynağa gömülmez — her çağrıda
+//  çağırandan gelir (bkz. `fetchWatchlist` / `pushWatchlist`).
+//
+//  ── ÖLÇÜLDÜ (2026-10-26, KAYNAK OKUMA — canlı istek ATILMADI) ──────
+//  · GET  /api/watchlist?code=… → 200 { list, portfolio, ui, updatedAt }
+//    (:62-73). `list`/`portfolio` HER ZAMAN dizi (`data?.list || []`);
+//    `ui` ve `updatedAt` KV'de kayıt yoksa `null` — bu yüzden ikisi
+//    `| null`, ilk ikisi DEĞİL.
+//  · POST /api/watchlist?code=… → 200 { ok, count, portfolioCount,
+//    updatedAt } (:100). Dört alanın hiçbiri `null` dönmüyor.
+//  · Kayıt şeması `cleanList` (:35-48): `{ symbol, market, query }`.
+//    - `symbol` büyük harfe çevrilip 8 karaktere KIRPILIYOR, sonra
+//      `/^[A-Z][A-Z0-9.\-]{0,7}$/` süzgecinden geçiyor.
+//    - `market` YALNIZ 'BIST' | 'US'; başkası SESSİZCE DÜŞÜYOR.
+//    - `query` yoksa `symbol`a eşitlenir, 64 karaktere kırpılır.
+//    Yani gönderilen bir kayıt sessizce ELENEBİLİR; yazma cevabının
+//    `count`/`portfolioCount` alanı bu yüzden okunmalı (gönderilen
+//    sayıyla karşılaştırmak elenmeyi ortaya çıkarır).
+//  · Boyut tavanı `MAX_LIST_BYTES = 256 * 1024` (:21) — temizlenmiş
+//    YÜKÜN boyutu, isteğin değil (:94).
+//  · HATA GÖVDELERİ MAKİNE KODU DEĞİL, İNGİLİZCE CÜMLE: 400 (:56) ·
+//    400 (:83) · 413 (:96) · 405 (:104) · 500 `e.message` (:106).
+//    Bu yüzden `client.ts` `kodMetni` eşlemesi BU UÇTA ÇALIŞMAZ ve
+//    sunucunun cümlesi KULLANILMAZ (hem İngilizce, hem de 500 dalında
+//    iç hata metni sızdırabilir). `ApiError.code`da teşhis için kalır.
+//
+//  `ui` ALANI BİLEREK TİPLENMEDİ: içeriğini uç TANIMLAMIYOR — düz nesne
+//  olup olmadığına bakıp olduğu gibi saklıyor (:91-93). Bugünkü şekli WEB
+//  istemcisinin kendi durumu (`app.js buildUiState` → `{v, lists,
+//  compare}`, app.js:2111) ve web'in localStorage anahtarlarına bağlı.
+//  Native için ÖLÇÜLMÜŞ bir karşılığı YOK; o şekli tiplemek web'in iç
+//  durumunu sözleşme sanmak olurdu. Bu yüzden `unknown`: okuyan kod kendi
+//  daraltmasını yazmak ZORUNDA kalır.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/** `code` biçim kuralı — UCUN KENDİ regex'i (api/watchlist.js:31). */
+export const WATCHLIST_CODE_BICIM = /^[a-z0-9_-]{4,40}$/i;
+
+/** Temizlenmiş yük tavanı, bayt (api/watchlist.js:21). */
+export const WATCHLIST_AZAMI_BAYT = 256 * 1024;
+
+/**
+ * Tek kayıt — izleme listesi ve portföy AYNI şemayı kullanıyor
+ * (api/watchlist.js:34). `market` yalnız iki değer alır; başka değer
+ * yazmaya çalışırsan kayıt SESSİZCE düşer.
+ */
+export type WatchlistKayit = {
+  symbol: string;
+  market: 'BIST' | 'US';
+  query: string;
+};
+
+/** GET cevabı. `list`/`portfolio` her zaman dizi; öteki ikisi `null` olabilir. */
+export type WatchlistResponse = {
+  list: WatchlistKayit[];
+  portfolio: WatchlistKayit[];
+  /** Web istemcisinin kendi arayüz durumu — şekli SÖZLEŞME DEĞİL. */
+  ui: unknown | null;
+  /** Son yazma anı — UNIX **MİLİSANİYE** (`Date.now()`, :88). Kayıt yoksa `null`. */
+  updatedAt: number | null;
+};
+
+/** POST gövdesi. İkisinden EN AZ BİRİ dizi olmalı (yoksa 400). */
+export type WatchlistYazGovde = {
+  list?: WatchlistKayit[];
+  portfolio?: WatchlistKayit[];
+};
+
+/**
+ * POST cevabı. `count`/`portfolioCount` SUNUCUNUN TEMİZLİKTEN SONRA
+ * saydığı kayıt sayısı — gönderdiğinden küçük olabilir (bkz. `cleanList`).
+ */
+export type WatchlistYazResponse = {
+  ok: true;
+  count: number;
+  portfolioCount: number;
+  /** UNIX **MİLİSANİYE**. */
+  updatedAt: number;
+};

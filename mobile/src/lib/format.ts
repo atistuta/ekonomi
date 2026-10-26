@@ -179,6 +179,38 @@ export function formatGunAyYil(saniye: number | null | undefined): string {
 }
 
 /**
+ * UNIX **SANİYE** damgası → gün/ay + saat ("24 Eki 09:41").
+ *
+ * NEDEN AYRI İŞLEV, `formatGunAy`A SEÇENEK EKLENMEDİ: gün içi aralıklarda
+ * (5m · 15m · 60m) iki ardışık mumun TARİHİ AYNI; artı imleci yalnız
+ * "24 Eki" yazınca kullanıcı hangi mumun üzerinde olduğunu göremiyordu
+ * (ÖLÇÜLDÜ: mum grafiği imleç künyesi). Günlük aralıklarda ise saat
+ * 00:00 sabit ve gürültü — bu yüzden çağıran aralığa göre seçiyor,
+ * işlev kendi başına karar vermiyor.
+ *
+ * NEDEN `toLocaleTimeString` DEĞİL: Hermes'te `Intl` sınırlı ve o yol
+ * cihaza göre değişen çıktı veriyor; bu dosyanın kuralı tek kaynak.
+ * `Intl.DateTimeFormat` patlarsa tarih bile basılmıyor — uydurma saat
+ * yazmak ölçülmemiş bir sayı basmak olurdu.
+ */
+export function formatGunAySaat(saniye: number | null | undefined): string {
+  if (!isNum(saniye)) return EMPTY;
+  const d = new Date(saniye * 1000);
+  if (Number.isNaN(d.getTime())) return EMPTY;
+  try {
+    return new Intl.DateTimeFormat(LOCALE, {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(d);
+  } catch {
+    return EMPTY;
+  }
+}
+
+/**
  * Haber maddesinin HAM `pubDate` dizgesi → "24 Eki 2026 09:41".
  *
  * NEDEN BURADA: uç nokta tarihi ÜST KAYNAĞIN VERDİĞİ GİBİ (RFC-822)

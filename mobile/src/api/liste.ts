@@ -39,6 +39,18 @@ import { useSyncExternalStore } from 'react';
 
 import { listeOku, listeYaz } from '@/lib/kalici';
 
+import {
+  listelerDepo,
+  listelerTazele,
+  listeEvreneAl as depoListeEvreneAl,
+  listedenCikar as depoListedenCikar,
+  listeleriAl as depoListeleriAl,
+  listeOlustur as depoListeOlustur,
+  listeSil as depoListeSil,
+  listeyeEkle as depoListeyeEkle,
+  listeYenidenAdlandir as depoListeYenidenAdlandir,
+  VARSAYILAN_LISTE_ID,
+} from './depo';
 import { AZAMI_SEMBOL } from './types';
 
 /**
@@ -75,7 +87,12 @@ function yayinla() {
 
 /** Depoya yazma: ateşle-ve-unut, ama SESSİZ DEĞİL — kalici.ts yutuyor. */
 function kaydet() {
-  void listeYaz(liste);
+  // Yazma bitince adlandırılmış liste belleği TAZELENİR: `kalici.ts` ve
+  // `api/depo.ts` AYNI `sb:lists` anahtarını okuyor; tazeleme olmasaydı
+  // düz görünümden yapılan ekleme adlandırılmış görünümde eski kalırdı.
+  void listeYaz(liste)
+    .then(() => listelerTazele())
+    .catch(() => {});
 }
 
 /**
@@ -173,4 +190,80 @@ export function doluMu(): boolean {
 /** Ekranların okuma yolu. Liste değişince abone ekranlar yeniden çizilir. */
 export function useListe(): string[] {
   return useSyncExternalStore(abone, anlik, anlik);
+}
+
+// ---------------------------------------------------------------------
+//  ADLANDIRILMIŞ LİSTELER — düz görünümün ÜSTÜNE eklendi    (ŞERİT 1)
+// ---------------------------------------------------------------------
+//  NE: web'in `sb:lists` kaydındaki çok-listeli şema (app.js:1923) native
+//  tarafta da açıldı: liste aç/sil/yeniden adlandır + "evrene dahil et".
+//
+//  NEDEN YUKARIDAKİ DÜZ API AYNEN KALDI: ekranlar (`listeAl`, `ekle`,
+//  `cikar`, `doluMu`, `useListe`, `useHazir`, `kayitBudandiMi`) bu
+//  işlevleri çağırıyor. Davranışları DEĞİŞMEDİ; düz görünüm hâlâ
+//  `lib/kalici.ts`in yazdığı "mobil" listesine (kalici.ts:50) bakıyor.
+//
+//  NEDEN TEK DOĞRULUK KAYNAĞI SORUNU VAR VE NASIL ÇÖZÜLDÜ: iki yazar
+//  (`kalici.ts` düz görünüm için, `api/depo.ts` adlandırılmış görünüm
+//  için) AYNI anahtarı yazıyor. `kaydet()` yazmadan sonra `depo`nun
+//  belleğini tazeliyor; aşağıdaki sarmalayıcılar da adlandırılmış
+//  değişiklikten sonra DÜZ görünümü tazeliyor. Böylece iki görünüm
+//  aynı kaydı gösteriyor, ikinci bir kayıt açılmıyor.
+//
+//  SINIR: liste başına 8 (`AZAMI_SEMBOL`) — bir liste = bir uç turu.
+//  Birden çok liste olabilir, ama tek çağrıya 8'den fazla sembol gitmez.
+//  Gerekçe ve reddin sebebi `api/depo.ts:listeyeEkle` içinde.
+// ---------------------------------------------------------------------
+
+export type { ListeKaydi, ListeOge, YazSonuc } from './depo';
+export { evrenSemboller, useListeler } from './depo';
+
+/** Adlandırılmış kayıttan düz görünümü tazeler (yalnız "mobil" listesi). */
+function duzTazele(): void {
+  const mobil = listelerDepo.al().find((l) => l.id === VARSAYILAN_LISTE_ID);
+  if (!mobil) return;
+  const yeni = mobil.items.map((i) => i.symbol);
+  const ayni = yeni.length === liste.length && yeni.every((s, i) => s === liste[i]);
+  if (ayni) return;
+  liste = yeni;
+  yayinla();
+}
+
+export function listeleriAl() {
+  return depoListeleriAl();
+}
+
+export async function listeOlustur(ad: string) {
+  return depoListeOlustur(ad);
+}
+
+export async function listeSil(id: string) {
+  const sonuc = await depoListeSil(id);
+  duzTazele();
+  return sonuc;
+}
+
+export async function listeYenidenAdlandir(id: string, ad: string) {
+  return depoListeYenidenAdlandir(id, ad);
+}
+
+export async function listeEvreneAl(id: string, dahil: boolean) {
+  return depoListeEvreneAl(id, dahil);
+}
+
+export async function listeyeEkle(id: string, sembol: string) {
+  const sonuc = await depoListeyeEkle(id, sembol);
+  duzTazele();
+  return sonuc;
+}
+
+export async function listedenCikar(id: string, sembol: string) {
+  const sonuc = await depoListedenCikar(id, sembol);
+  duzTazele();
+  return sonuc;
+}
+
+/** Adlandırılmış liste belleğini diskten tazeler (başka yazar olduysa). */
+export function listeleriTazele(): Promise<void> {
+  return listelerTazele().then(duzTazele);
 }

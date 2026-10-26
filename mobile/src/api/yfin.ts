@@ -45,7 +45,13 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { apiGet, ENDPOINTS, type ApiResult, type RequestOptions } from './client';
+import {
+  apiGet,
+  DEFAULT_TIMEOUT_MS,
+  ENDPOINTS,
+  type ApiResult,
+  type RequestOptions,
+} from './client';
 
 /**
  * Uç noktanın sembol sınırı. ÖLÇÜLDÜ — `api/_yfin.js`:
@@ -243,4 +249,141 @@ export function yfinSozluk(veri: YfinResponse | null | undefined): Map<string, Y
     if (k && typeof k.symbol === 'string') m.set(k.symbol.toUpperCase(), k);
   }
   return m;
+}
+
+// =====================================================================
+//  ARAMA KİPİ — /api/yfin?search=<yazı>
+// ---------------------------------------------------------------------
+//  NE: aynı uç noktanın İKİNCİ kipi. Bir yazıyı (şirket adı ya da
+//  sembol parçası) Yahoo autocomplete ile çözüp sembol + borsa
+//  döndürüyor; evrensel arama kutusunun "bu yazı hangi hisse" sorusunu
+//  bu kip yanıtlıyor.
+//
+//  NEDEN AYRI İŞLEV (`fetchYfin`e KİP EKLENMEDİ) — ÖLÇÜLDÜ:
+//    1. Uç, arama dalını `symbols` dalından ÖNCE ve ondan tamamen
+//       ayrı çalıştırıp `return` ediyor (api/_yfin.js:123-143 vs
+//       :145-171). İki kip aynı istekte BİRLEŞMİYOR.
+//    2. Gövdeler apayrı: arama `{ query, quotes }` (api/_yfin.js:137),
+//       künye `{ results }` (:167). Tek işleve katlamak dönüş tipini
+//       birleşime (union) çevirir ve BUGÜN `YfinResponse` okuyan her
+//       çağıran daraltma yazmak zorunda kalırdı — geriye dönük
+//       uyumluluk kırılırdı.
+//    3. `fetchYfin` sorguya `search` anahtarını HİÇ basmıyor
+//       (yalnız `symbols` + `deep`), yani mevcut sözleşme bu eklemeden
+//       etkilenmiyor. `YfinOptions`/`YfinResponse`/`yfinSozluk`
+//       DEĞİŞTİRİLMEDİ.
+//
+//  ── ÖLÇÜLDÜ (2026-10-26, KAYNAK OKUMA — canlı istek ATILMADI) ──────
+//  · Parametre adı `search` (api/_yfin.js:122):
+//    `(req.query?.search || '').toString().trim()`.
+//  · BOŞ/eksik `search` arama SAYILMIYOR: dal atlanır ve istek
+//    `symbols` dalına düşer → 400 `{ error: 'Missing ?symbols=' }`
+//    (:146). Yani `search=''` göndermek "sonuç yok" değil, HATA verir.
+//    Bu yüzden boş yazı AĞA ÇIKMADAN aşağıda kesiliyor.
+//  · Sonuç sayısı SUNUCUDA SABİT: `quotesCount=10` (:125). İstemci
+//    bunu değiştiremez; `AZAMI_ARAMA_SONUC` yalnız BELGEDİR, sorguya
+//    basılmaz.
+//  · YAZI UZUNLUĞU SINIRI ÖLÇÜLEMEDİ — ne uçta ne Yahoo tarafında bir
+//    denetim var (kaynakta yok). Bu yüzden istemciye uydurma bir
+//    uzunluk kapısı YAZILMADI; tek kapı "boş mu".
+//  · `newsCount=0` → haber GELMİYOR; `enableFuzzyQuery=false` → yakın
+//    yazım DÜZELTİLMİYOR (yanlış yazılan ad boş liste döndürür ve bu
+//    bir VERİ CEVABIDIR, ölçüm eksikliği değil).
+//  · Dönen alanlar TAM OLARAK (:129-135): symbol · name · exch ·
+//    exchDisp · type. Hepsi `|| null`; `symbol` null olanlar sunucuda
+//    SÜZÜLÜYOR (:135) — bu yüzden `symbol` burada `string`.
+//  · Hata: 502 `{ error: <metin>, quotes: [] }` (:140). Gövde
+//    `apiGet` tarafından `ApiError`a çevrilir, buraya gelmez.
+//  · Fiyat/çarpan/sektör BU KİPTE GELMEZ — künye için `fetchYfin`
+//    çağrılmalı. Arama sonucundan finansal alan türetmek uydurma
+//    olurdu.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/**
+ * Uç noktanın döndürdüğü azami sonuç sayısı — ÖLÇÜLDÜ:
+ * `quotesCount=10` (api/_yfin.js:125). SUNUCUDA SABİT: istemci
+ * artıramaz/azaltamaz. 10 sonuç gelmesi "daha fazlası yok" demek
+ * DEĞİL, "uç 10'da kesti" demek.
+ */
+export const YFIN_AZAMI_ARAMA_SONUC = 10;
+
+/**
+ * Tek arama satırı. `symbol` DIŞINDAKİ her alan `null` olabilir
+ * (Yahoo o alanı vermemiş olabilir); `symbol` sunucuda süzüldüğü için
+ * her zaman dolu.
+ */
+export type YfinAramaSonuc = {
+  /** Yahoo sembolü — BIST'te `.IS` ekli gelir (örn. THYAO.IS). */
+  symbol: string;
+  /** Kısa ad; yoksa uzun ad; ikisi de yoksa `null`. */
+  name: string | null;
+  /** Borsa kodu (ham, örn. `IST`, `NMS`). */
+  exch: string | null;
+  /** Borsanın gösterilecek adı (örn. `Istanbul`, `NasdaqGS`). */
+  exchDisp: string | null;
+  /**
+   * Yahoo kayıt türü (ham, örn. `EQUITY`, `ETF`, `INDEX`, `CRYPTOCURRENCY`).
+   * SÜZÜLMEDİ: hisse dışı satırları ayıklamak ekranın kararı; burada
+   * süzmek, kullanıcının yazdığı şeyi sessizce yok saymak olurdu.
+   */
+  type: string | null;
+};
+
+/**
+ * `/api/yfin?search=` cevabı. ÖLÇÜLDÜ (api/_yfin.js:137): üst düzeyde
+ * `query` ve `quotes` DIŞINDA alan yok.
+ *
+ * `quotes` BOŞ DİZİ olabilir ve bu "bu yazıya karşılık bulunamadı"
+ * demek — ölçüm eksikliği DEĞİL.
+ */
+export type YfinArama = {
+  /** Sunucunun kırptığı (`trim`) hâliyle sorgu — gönderdiğimizin yankısı. */
+  query: string;
+  quotes: YfinAramaSonuc[];
+};
+
+/**
+ * Arama çağrısı: GET /api/yfin?search=<yazı>
+ *
+ * NEDEN `YFIN_TIMEOUT_MS` DEĞİL, `DEFAULT_TIMEOUT_MS` (12 sn): künye
+ * kipi sembol başına SIRAYLA Yahoo turu atıyor (12 tura kadar), arama
+ * kipi ise TEK tur (api/_yfin.js:126) ve crumb el sıkışması bile
+ * gerekmiyor (:121). 28 sn'yi buraya kopyalamak, arama kutusunu
+ * düşmüş bir ağda yarım dakika kilitli tutardı.
+ *
+ * BURADA SIRALAMA/PUANLAMA YOK: gelen sıra Yahoo'nun ilgi sırası.
+ * İstemcide yeniden sıralamak ikinci bir alaka kuralı doğururdu.
+ */
+export async function fetchYfinArama(
+  yazi: string,
+  options: Omit<RequestOptions, 'query'> = {},
+): Promise<ApiResult<YfinArama>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.yfin;
+
+  // Uç noktanın kendi temizliğiyle AYNI: `toString().trim()`
+  // (api/_yfin.js:122). BÜYÜK HARFE ÇEVİRİLMİYOR — künye kipinin
+  // aksine buraya şirket ADI da yazılıyor ve Yahoo aramasında harf
+  // büyüklüğü sonucu değiştirmiyor; çevirmek kullanıcının yazdığını
+  // boşuna bozmak olurdu.
+  const q = String(yazi ?? '').trim();
+
+  if (!q) {
+    // Boş yazı gönderilirse uç arama dalını ATLAR ve 400
+    // `Missing ?symbols=` döner (ölçüldü) — yani boş arama "sonuç yok"
+    // değil, yanıltıcı bir HATA olurdu. Ağa çıkmadan kesiliyor.
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Aranacak yazı verilmedi.',
+        endpoint: path,
+        code: 'search_yok',
+      },
+    };
+  }
+
+  return apiGet<YfinArama>(path, { query: { search: q }, timeoutMs, signal });
 }

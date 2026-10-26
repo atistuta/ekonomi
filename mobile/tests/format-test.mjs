@@ -37,6 +37,9 @@ import {
   EMPTY,
   formatBandUzakligi,
   formatCompact,
+  formatGunAy,
+  formatGunAySaat,
+  formatGunAyYil,
   formatOran,
   formatPercent,
   formatPrice,
@@ -210,4 +213,53 @@ atar('N9 · işlev yokken içe aktarma sessizce geçmiyor', () => {
   return formatBandUzakligiOlmayan(1);
 });
 
-bitir('formatBandUzakligi ölçülmemiş uzaklığa ASLA sayı basmıyor; ondalık kararı tek yerden.');
+// ---------------------------------------------------------------------
+bolum('TARİH BİÇİMLERİ — formatGunAy / formatGunAyYil / formatGunAySaat');
+// ---------------------------------------------------------------------
+// NEDEN BU BÖLÜM: üçü de UNIX **SANİYE** bekliyor; milisaniye geçirmek
+// sessizce 1970'e ya da 58000'e düşürür ve ekranda uydurma bir tarih
+// basar. Ayrıca gün-içi imleç künyesinin SAAT basması bir sözleşme:
+// kırmızıysa kullanıcı hangi mumun üzerinde olduğunu göremiyor demektir.
+
+// ÖLÇÜLDÜ: /api/chart mum damgası 10 hane. 1790256600 = 24 Eki 2026.
+const DAMGA = 1790256600;
+
+for (const [ad, girdi] of [
+  ['null', null],
+  ['undefined', undefined],
+  ['NaN', NaN],
+  ['Infinity', Infinity],
+  ['metin', 'bugün'],
+]) {
+  esit(`formatGunAy(${ad}) → —`, formatGunAy(girdi), '—');
+  esit(`formatGunAyYil(${ad}) → —`, formatGunAyYil(girdi), '—');
+  esit(`formatGunAySaat(${ad}) → —`, formatGunAySaat(girdi), '—');
+}
+
+// Üçü de AYNI damgadan türüyor: aynı günü söylemek zorundalar. Gün
+// numarasını üçünde de arıyoruz — ay adı yerele bağlı, gün değil.
+const gun = String(new Date(DAMGA * 1000).getDate());
+ok('formatGunAy günü basıyor', formatGunAy(DAMGA).includes(gun));
+ok('formatGunAyYil günü basıyor', formatGunAyYil(DAMGA).includes(gun));
+ok('formatGunAySaat günü basıyor', formatGunAySaat(DAMGA).includes(gun));
+
+// Ayırt edici alanlar: yıl yalnız formatGunAyYil'da, saat yalnız
+// formatGunAySaat'te. Karışırsa etiketler gürültülenir.
+const yil = String(new Date(DAMGA * 1000).getFullYear());
+ok('formatGunAyYil yılı basıyor', formatGunAyYil(DAMGA).includes(yil));
+ok('formatGunAy yılı BASMIYOR', !formatGunAy(DAMGA).includes(yil));
+ok('formatGunAySaat saat:dakika basıyor', /\d{1,2}[:.]\d{2}/.test(formatGunAySaat(DAMGA)));
+ok('formatGunAy saat BASMIYOR', !/\d{1,2}[:.]\d{2}/.test(formatGunAy(DAMGA)));
+ok('formatGunAySaat yılı BASMIYOR (gün-içinde gürültü)', !formatGunAySaat(DAMGA).includes(yil));
+
+// SANİYE ↔ MİLİSANİYE karışması: milisaniye geçirilirse çıktı AYNI
+// günü söylememeli. Bu denetim yeşilse birim karışması yakalanır.
+ok(
+  'milisaniye geçirmek sessizce aynı tarihi vermiyor',
+  formatGunAySaat(DAMGA * 1000) !== formatGunAySaat(DAMGA),
+);
+
+// 12 saat kipi KAPALI olmalı: "09:41" bekleniyor, "9:41 ÖÖ" değil.
+ok('formatGunAySaat 12 saat kipi kullanmıyor', !/(ÖÖ|ÖS|AM|PM)/i.test(formatGunAySaat(DAMGA)));
+
+bitir('formatBandUzakligi ölçülmemiş uzaklığa ASLA sayı basmıyor; tarih biçimleri saniye bekliyor ve gün-içi künye saat basıyor.');

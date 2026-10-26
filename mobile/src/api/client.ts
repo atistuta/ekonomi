@@ -40,15 +40,21 @@ import {
   ADIMLAR,
   ARALIKLAR,
   AZAMI_HABER_SORGU,
+  AZAMI_HAREKET,
+  AZAMI_KONSEPT,
   AZAMI_MADDE,
   AZAMI_SEMBOL,
   HABER_PAZARLAR,
+  NEDEN_KINDLER,
+  WATCHLIST_CODE_BICIM,
   VARSAYILAN_ADIM,
   VARSAYILAN_ARALIK,
   VARSAYILAN_HABER_PAZAR,
   type Adim,
   type AnalyzeResponse,
   type Aralik,
+  type CausalRequest,
+  type CausalResponse,
   type ChartResponse,
   type CompareResponse,
   type HaberPazar,
@@ -60,6 +66,9 @@ import {
   type ScoreResponse,
   type ThemeResponse,
   type Vade,
+  type WatchlistResponse,
+  type WatchlistYazGovde,
+  type WatchlistYazResponse,
 } from './types';
 
 export * from './types';
@@ -248,6 +257,30 @@ function kodMetni(code: string | undefined, azami?: number, istenen?: number): s
       return 'Konjonktür girdisi geçersiz.';
     case 'nabiz_hesaplanamadi':
       return 'Nabız hesaplanamadı — ölçüm alınamadı.';
+    // --- /api/causal kodları (api/causal.js:144-201). `govde_yok`,
+    // `bozuk_json`, `govde_buyuk`, `method_not_allowed` ve
+    // `motor_kurulamadi` YUKARIDA zaten tanımlı ve BU UÇTA DA AYNI
+    // anlamı taşıyor (gövde okunamadı / çok büyük / yöntem / motor) —
+    // ikinci kez yazmak aynı koda iki cümle vermek olurdu.
+    case 'hareketler_yok':
+      return 'Endeks hareketi verilmedi.';
+    case 'gundem_yok':
+      return 'Gündem verilmedi.';
+    case 'cok_hareket':
+      return 'En çok ' + (azami ?? AZAMI_HAREKET) + ' endeks hareketi gönderilebilir (' + (istenen ?? 0) + ' gönderildi).';
+    case 'cok_konsept':
+      return 'En çok ' + (azami ?? AZAMI_KONSEPT) + ' gündem konsepti gönderilebilir (' + (istenen ?? 0) + ' gönderildi).';
+    case 'bad_hareket':
+    case 'bad_pct':
+    case 'bad_notable':
+      return 'Endeks hareketi biçimi geçersiz.';
+    case 'bad_kind':
+      return 'Endeks türü geçersiz.';
+    case 'bad_konsept':
+    case 'konsept_key_yok':
+      return 'Gündem konsepti biçimi geçersiz.';
+    case 'neden_hesaplanamadi':
+      return 'Nedensellik okuması yapılamadı — ölçüm alınamadı.';
     case 'motor_kurulamadi':
     case 'skor_hesaplanamadi':
       return 'Motor çalıştırılamadı — ölçüm alınamadı.';
@@ -977,4 +1010,248 @@ export async function fetchPulse(
   }
 
   return apiPost<PulseResponse>(path, { q, haberPazari }, { timeoutMs, signal });
+}
+
+/**
+ * `/api/causal` — 📉 Günün Nedeni. `fetchPulse` deseninin BİREBİR
+ * aynısı: kesin 400 üretecek istekler AĞA ÇIKMADAN burada kesilir,
+ * kalanı `apiPost`a devredilir (tek hata eşlemesi orada).
+ *
+ * NEDEN `apiGet` DEĞİL: uç yalnız POST kabul ediyor (api/causal.js:211
+ * → 405 `method_not_allowed`). Gerekçesi uç başlığında ölçülmüş: girdi
+ * iki büyük dizi ve `AZAMI_SORGU = 128` sınırını ilk konseptte aşıyor.
+ *
+ * ⚠️ GÜNDEMİ BU İŞLEV ÜRETMEZ — ÇAĞIRAN VERİR. Uç ağa HİÇ çıkmıyor
+ * (api/causal.js:38-40): gündem taramasını istemciden bekliyor ve web
+ * tarafında bunu `app.js computeAgenda()` yapıyor. Native istemcide o
+ * tarayıcı YOK; bu yüzden `gundem` bu işlevin PARAMETRESİ. Gündem
+ * ÜRETİMİ (RSS taraması + konsept çıkarımı) SUNUCU İŞİ ve AYRI BİR
+ * ŞERİDE devredilecek — burada uydurma bir gündem kurmak, ucu
+ * ölçülmemiş girdiyle besleyip ekrana "ölçülmüş" görünen bir bağ
+ * bastırmak olurdu.
+ *
+ * NEDEN BU KATMANDA EŞİK/SIRALAMA YOK: gürültü eşiği (1,6), en iyi 2
+ * bağ seçimi ve "belirgin hareket" kararı MOTORDA
+ * (api/_motor.js:1752-1763). Buraya bir sayı yazmak ekranla sunucuyu
+ * sessizce ayrıştırırdı.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS` (12 sn): uç `maxDuration: 10` ile çalışıyor
+ * ve AĞA ÇIKMIYOR (api/causal.js:92-96) — saf hesap. /api/pulse ve
+ * /api/news ile aynı kademe; skorun 58 sn'si buraya kopyalanmaz.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır, yeni kod uydurulmadı):
+ *   · `hareketler` dizi değil   → `hareketler_yok`
+ *   · `gundem` dizi değil       → `gundem_yok`
+ *   · hareket sayısı > 12       → `cok_hareket`
+ *   · konsept sayısı > 60       → `cok_konsept`
+ *   · küme dışı `kind`          → `bad_kind`
+ *   · sonlu olmayan `pct`       → `bad_pct`
+ *   · sonlu/≥0 olmayan `notable`→ `bad_notable`
+ *   · boş konsept `key`         → `konsept_key_yok`
+ *
+ * ÖLÇÜLDÜ — YEREL BAYT KAPISI YOK: ucun 65536 baytlık denetimi YALNIZ
+ * gövde DİZGE geldiğinde çalışıyor (api/causal.js:228-233); Vercel Node
+ * runtime `application/json`ı kendi ayrıştırdığı için bizim isteğimizde
+ * o dal hiç yürümez. Sayı kapıları (12 × 60) yükü zaten sınırlıyor;
+ * ölçmediğim bir bayt eşiğini istemciye yazmadım.
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchCausal(
+  govde: CausalRequest,
+  options: Omit<RequestOptions, 'query'> = {},
+): Promise<ApiResult<CausalResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.causal;
+
+  const kapi = (code: string, message?: string): ApiResult<CausalResponse> => ({
+    ok: false,
+    error: {
+      kind: 'bad-request',
+      message: message ?? kodMetni(code) ?? 'İstek karşılanamadı.',
+      endpoint: path,
+      code,
+    },
+  });
+
+  const hareketler = govde?.hareketler;
+  const gundem = govde?.gundem;
+
+  if (!Array.isArray(hareketler)) return kapi('hareketler_yok');
+  if (!Array.isArray(gundem)) return kapi('gundem_yok');
+  if (hareketler.length > AZAMI_HAREKET) {
+    return kapi(
+      'cok_hareket',
+      kodMetni('cok_hareket', AZAMI_HAREKET, hareketler.length) ?? undefined,
+    );
+  }
+  if (gundem.length > AZAMI_KONSEPT) {
+    return kapi('cok_konsept', kodMetni('cok_konsept', AZAMI_KONSEPT, gundem.length) ?? undefined);
+  }
+
+  for (const h of hareketler) {
+    if (!h || typeof h !== 'object') return kapi('bad_hareket');
+    if (!(NEDEN_KINDLER as readonly string[]).includes(h.kind)) return kapi('bad_kind');
+    // HAM SAYI: yuvarlama/ölçekleme YOK — yalnız "sonlu mu" sorusu.
+    if (!Number.isFinite(h.pct)) return kapi('bad_pct');
+    if (!Number.isFinite(h.notable) || h.notable < 0) return kapi('bad_notable');
+  }
+  for (const c of gundem) {
+    if (!c || typeof c !== 'object') return kapi('bad_konsept');
+    if (!String(c.key ?? '').trim()) return kapi('konsept_key_yok');
+  }
+
+  // Gövde OLDUĞU GİBİ gidiyor: alan budama/normalleştirme YAPILMIYOR.
+  // Ucun `ayristirGovde`si motorun okuduğu alanları kendi süzüyor
+  // (api/causal.js:179-198) ve ikinci bir süzgeç, bir gün motor yeni bir
+  // alan okumaya başladığında onu istemcide sessizce düşürürdü.
+  return apiPost<CausalResponse>(path, govde, { timeoutMs, signal });
+}
+
+// ---------------------------------------------------------------------
+//  İZLEME LİSTESİ SENKRONU — /api/watchlist
+// ---------------------------------------------------------------------
+//  ⚠️⚠️ GÜVENLİK UYARISI — BU UCUN KİMLİK DOĞRULAMASI YOK ⚠️⚠️
+//
+//  ÖLÇÜLDÜ (api/watchlist.js:30-59, kaynak okuma): tek erişim kapısı
+//  `?code=` parametresi ve doğrulaması YALNIZCA BİÇİM —
+//  `/^[a-z0-9_-]{4,40}$/i`. Sunucu kodun KİME ait olduğunu bilmiyor,
+//  oturum/token/imza YOK, CORS `*` (api/watchlist.js:24) ve POST aynı
+//  kapıdan geçiyor. SONUÇ:
+//    · Kodu bilen ya da TAHMİN EDEN herkes o kodun listesini OKUR.
+//    · Aynı kişi o listeyi SİLEBİLİR / DEĞİŞTİREBİLİR (POST son-yazan-
+//      kazanır, api/watchlist.js:99).
+//    · "atahan-7a2b" gibi insan-okur bir kod, 4 karakterlik kodlar ve
+//      sözlükten türeyen kodlar pratikte HERKESE AÇIKTIR.
+//  Bu kusur gizlilik politikasında açıkça duyuruldu. Bu yüzden:
+//
+//  1) HİÇBİR `code` DEĞERİ BU KAYNAKTA YOK — ne gerçek, ne örnek, ne
+//     varsayılan. `code` DAİMA çağrıdan parametre gelir; varsayılan
+//     üretmek, tüm kurulumların aynı tahmin edilebilir kutuyu
+//     paylaşması demekti.
+//  2) Kullanıcı e-postası, gizli anahtar, token BU UCA HİÇ GÖNDERİLMEZ
+//     ve bu dosyada hiçbir yerde SAKLANMAZ. Gönderilen tek şey sembol
+//     listesi (`cleanList` şeması: symbol/market/query).
+//  3) Ekran, kodu kullanıcıya "paylaşılan sır" olarak anlatmak
+//     zorundadır; "hesap" ya da "giriş" demek yanlış olurdu.
+//
+//  ÖLÇÜLDÜ — HATA GÖVDESİ MAKİNE KODU DEĞİL: bu uç İngilizce cümle
+//  döndürüyor (api/watchlist.js:56, :83, :96, :104, :106), öteki uçların
+//  `{error:'<kod>'}` deseninde DEĞİL. `kodMetni` bu yüzden eşleşmez ve
+//  `ApiError.message` genel cümleye düşer — bu KASITLI: sunucunun
+//  cümlesi hem İngilizce, hem de 500 dalında iç hata metni (`e.message`)
+//  taşıyabiliyor; ekrana basmak bilgi sızdırmak olurdu. Ham metin yalnız
+//  teşhis için `ApiError.code`da kalır, ekranda gösterilmez.
+//
+//  NEDEN `DEFAULT_TIMEOUT_MS`: uç `maxDuration: 10` (api/watchlist.js:18)
+//  ve tek KV turu atıyor. /api/chart · /api/news ile aynı kademe.
+// ---------------------------------------------------------------------
+
+/** Yerel `code` kapısı — ucun KENDİ biçim kuralı (api/watchlist.js:31). */
+function watchlistKodKapisi(code: string): { kod: string } | { hata: ApiError } {
+  const kod = String(code ?? '').trim();
+  if (!WATCHLIST_CODE_BICIM.test(kod)) {
+    return {
+      hata: {
+        kind: 'bad-request',
+        // Kullanıcıya KODUN KENDİSİ tekrar edilmiyor (ekran kaydına /
+        // hata günlüğüne sır düşmesin); yalnız kural anlatılıyor.
+        message: 'Senkron kodu geçersiz: 4-40 karakter, harf/rakam/alt çizgi/kısa çizgi.',
+        endpoint: ENDPOINTS.watchlist,
+        // Ucun makine kodu YOK (İngilizce cümle dönüyor); yerel kapı
+        // kendi adını taşıyor ki iki yerde iki ad olmasın.
+        code: 'bad_code',
+      },
+    };
+  }
+  return { kod };
+}
+
+/**
+ * İzleme listesi/portföy OKUMA: GET /api/watchlist?code=<paylaşılan kod>
+ *
+ * ⚠️ Yukarıdaki GÜVENLİK bloğunu okumadan çağırma: bu uçta kimlik
+ * doğrulaması YOK, `code` paylaşılan bir sırdır.
+ *
+ * ÖLÇÜLDÜ (api/watchlist.js:62-73): 200 + `{ list, portfolio, ui,
+ * updatedAt }`. `list`/`portfolio` kayıt yoksa BOŞ DİZİ — bu "bu kodda
+ * liste yok" demek, "ölçemedim" DEĞİL; `no-data`ya çevirmiyoruz.
+ * `updatedAt` ise `null` gelebilir ve o "hiç yazılmamış" demek.
+ *
+ * `ui` alanı TİPLENMEDİ (`unknown`): şekli ucun sözleşmesi değil, web
+ * istemcisinin iç durumu (bkz. `types.ts` başlığı). Native onu
+ * benimsemez; okuyan kod kendi daraltmasını yazmak zorundadır.
+ */
+export async function fetchWatchlist(
+  code: string,
+  options: Omit<RequestOptions, 'query'> = {},
+): Promise<ApiResult<WatchlistResponse>> {
+  const kapi = watchlistKodKapisi(code);
+  if ('hata' in kapi) return { ok: false, error: kapi.hata };
+
+  return apiGet<WatchlistResponse>(ENDPOINTS.watchlist, {
+    query: { code: kapi.kod },
+    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    signal: options.signal,
+  });
+}
+
+/**
+ * İzleme listesi/portföy YAZMA: POST /api/watchlist?code=<paylaşılan kod>
+ *
+ * ⚠️ Yukarıdaki GÜVENLİK bloğu BU İŞLEV İÇİN DAHA AĞIR: yazma da aynı
+ * doğrulanmamış `code` ile açık. Aynı kodu kullanan başka bir cihaz
+ * (ya da kodu tahmin eden biri) bu yazmayı EZEBİLİR — uç son-yazan-
+ * kazanır (api/watchlist.js:99). Ekran bunu bir yedek garantisi gibi
+ * anlatmamalı.
+ *
+ * ÖLÇÜLDÜ (api/watchlist.js:76-101):
+ *   · `list` VE `portfolio` ikisi de dizi değilse → 400 (İngilizce cümle).
+ *     Yerel kapı aynı durumu ağa çıkmadan kesiyor.
+ *   · Kayıtlar `cleanList`ten geçiyor: `market` 'BIST'/'US' dışındaysa ya
+ *     da `symbol` biçimi tutmazsa kayıt SESSİZCE DÜŞÜYOR. Bu yüzden
+ *     cevabın `count`/`portfolioCount` alanı okunmalı — gönderilenden
+ *     küçükse bir şey elenmiş demektir. İstemci burada kayıt SÜZMÜYOR:
+ *     sunucunun süzgecini kopyalamak, bir gün biri yalnız birini
+ *     güncellediğinde iki ayrı şema demekti.
+ *   · Temizlenmiş yük > 256 KB → 413.
+ *
+ * `ui` ALANI GÖNDERİLMİYOR: uç onu kabul ediyor (api/watchlist.js:91)
+ * ama şekli web istemcisinin iç durumu ve native'de ÖLÇÜLMÜŞ bir
+ * karşılığı yok. Uydurma bir `ui` yazmak, web'in o kodu bir sonraki
+ * açılışında kendi listelerini BİZİM uydurmamızla kurmasına yol
+ * açabilirdi (app.js:2131 `adoptRemoteState`). Bu yüzden gövde yalnız
+ * `list`/`portfolio` taşır.
+ */
+export async function pushWatchlist(
+  code: string,
+  govde: WatchlistYazGovde,
+  options: Omit<RequestOptions, 'query'> = {},
+): Promise<ApiResult<WatchlistYazResponse>> {
+  const kapi = watchlistKodKapisi(code);
+  if ('hata' in kapi) return { ok: false, error: kapi.hata };
+
+  const list = govde?.list;
+  const portfolio = govde?.portfolio;
+  if (!Array.isArray(list) && !Array.isArray(portfolio)) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Yazılacak liste verilmedi.',
+        endpoint: ENDPOINTS.watchlist,
+        code: 'liste_yok',
+      },
+    };
+  }
+
+  const govdeDizisi: WatchlistYazGovde = {};
+  if (Array.isArray(list)) govdeDizisi.list = list;
+  if (Array.isArray(portfolio)) govdeDizisi.portfolio = portfolio;
+
+  return apiPost<WatchlistYazResponse>(ENDPOINTS.watchlist, govdeDizisi, {
+    query: { code: kapi.kod },
+    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    signal: options.signal,
+  });
 }

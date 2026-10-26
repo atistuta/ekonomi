@@ -29,9 +29,19 @@
 //      değiştirmek motorun işi (`lib/format.ts` başlığı). Bu yüzden
 //      `formatOran`, `formatPercent` DEĞİL — `formatPercent` yüzde
 //      PUANI beklediği için 0,0229'u "%0,02" diye YANLIŞ basardı.
-//    · Sıralama YOK: gelen dizi isteğin sırası (`api/_yfin.js`
-//      sembolleri sırayla geziyor). "En yüksek verim" diye yeniden
-//      sıralamak istemcide ikinci bir sıralama kuralı doğurur.
+//    · SIRALAMA (eklendi 2026-10-26): verim AZALAN. Bu bir EŞİK ya da
+//      skor değil — aynı alanın yeniden DİZİLİŞİ; hiçbir sayı türetmiyor.
+//      Sıranın NE OLDUĞU kartta yazılı, böylece ikinci bir gizli kural
+//      doğmuyor. `null` (ölçülemedi) EN SONA, `0` (ödemiyor) nullardan
+//      ÖNCE: `0` ölçülmüş bir bilgi, boşluk değil.
+//    · PAZAR SÜZGECİ (eklendi 2026-10-26): Tümü/BIST/ABD. Pazar ayrımı
+//      SEMBOLÜN EKİNDEN okunuyor (`.IS` → BIST), uçtan gelen bir skordan
+//      değil — `api/_girdi.js` PAZARLAR aynı ayrımı kuruyor.
+//
+//  ── EKSİK ALANLAR ARTIK TEK TEK EKRANDA ────────────────────────────
+//  Aşağıdaki başlık yorumundaki eksik listesi `EKSIK_ALANLAR` dizisine
+//  taşındı ve kartın içinde MADDE MADDE basılıyor. Eksiği yalnız kaynak
+//  yorumunda saklamak, kullanıcıya "temettü = verim" demek olurdu.
 //
 //  `0` GERÇEK BİR ÖLÇÜM: "temettü ödemiyor" demek, "veri yok" DEĞİL.
 //  İkisi ayrı cümle — `null` ile `0`ı aynı kutuya koymak ölçülmüş bir
@@ -44,12 +54,43 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ApiError, IstekDurum, YfinKunye, YfinResponse } from '@/api';
+import { YFIN_AZAMI_SEMBOL } from '@/api';
 import { Card, Durum, Pill, VeriYok } from '@/components';
 import { formatOran, formatPrice } from '@/lib/format';
-import { numeric, space, type, useTheme } from '@/theme';
+import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
+
+type PazarSuzgec = null | 'BIST' | 'US';
+
+const SUZGECLER: readonly { id: PazarSuzgec; etiket: string }[] = [
+  { id: null, etiket: 'Tümü' },
+  { id: 'BIST', etiket: 'BIST' },
+  { id: 'US', etiket: 'ABD' },
+];
+
+/** `.IS` eki BIST demek (`api/_motor.js` `yahooSymbol` aynı eki ekliyor). */
+function pazarOf(sembol: string): 'BIST' | 'US' {
+  return sembol.toUpperCase().endsWith('.IS') ? 'BIST' : 'US';
+}
+
+/**
+ * Künye ucunun TEMETTÜ TARAFINDA DÖNDÜRMEDİĞİ alanlar — tek tek.
+ * ÖLÇÜLDÜ (`api/_yfin.js` → `fetchOne`): `summaryDetail`ten yalnız
+ * `dividendYield` okunuyor; `deep=1` yolunda `calendarEvents`ten yalnız
+ * `earnings` ayrıştırılıyor. Liste kartta madde madde basılır; tahmin
+ * değil, ölçülmüş bir eksiklik raporudur.
+ */
+const EKSIK_ALANLAR: readonly string[] = [
+  'Temettü kesinti tarihi (ex-date)',
+  'Ödeme tarihi',
+  'Beyan (ilan) tarihi',
+  'Hisse başı temettü tutarı',
+  'Dağıtım oranı (payout)',
+  'Geçmiş temettü ödemeleri',
+];
 
 export type TemettuKartProps = {
   /** `fetchYfin(semboller)` gövdesi. */
@@ -63,12 +104,37 @@ export type TemettuKartProps = {
 
 export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: TemettuKartProps) {
   const { colors } = useTheme();
+  const [suzgec, setSuzgec] = useState<PazarSuzgec>(null);
 
   const kunyeler = veri?.results ?? [];
   const olculemeyen = kunyeler.filter((k) => !k.ok).map((k) => k.symbol);
   // `ok:true` olan her sembol gösterilir — verim `null` ise de, `0` ise
   // de. Üçü AYRI cümle: ölçülemedi · ödemiyor · şu oranda ödüyor.
   const olculen = kunyeler.filter((k) => k.ok);
+
+  // VERİM AZALAN. `slice()` ile kopya: gelen diziyi yerinde sıralamak
+  // props'u mutasyona uğratırdı. `null` en sonda — ölçülemeyeni sıfır
+  // sananın yanına koymak iki ayrı hâli birleştirmek olurdu.
+  const sirali = useMemo(
+    () =>
+      olculen.slice().sort((a, b) => {
+        const va = typeof a.dividendYield === 'number' ? a.dividendYield : null;
+        const vb = typeof b.dividendYield === 'number' ? b.dividendYield : null;
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        return vb - va;
+      }),
+    // `olculen` her renderda yeniden türüyor; kimliği `kunyeler`e bağlı.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kunyeler],
+  );
+
+  const gorunen = suzgec ? sirali.filter((k) => pazarOf(k.symbol) === suzgec) : sirali;
+  // SÜZGEÇ SESSİZ KIRPMAZ: kaçının görünmediği yazılır.
+  const suzulen = sirali.length - gorunen.length;
+  // Uç 12'den fazlasını sessizce kırpıyor (`api/yfin.ts` gerekçesi).
+  const asim = Math.max(0, semboller.length - YFIN_AZAMI_SEMBOL);
 
   return (
     <Card
@@ -92,12 +158,80 @@ export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: Temet
       {durum === 'veri' ? (
         kunyeler.length ? (
           <>
-            {olculen.map((k) => (
+            {/* PAZAR ÇİPLERİ — seçim RENKLE DEĞİL: başta "•" ve ton. */}
+            <View style={styles.cipler}>
+              {SUZGECLER.map((s) => {
+                const aktif = suzgec === s.id;
+                const adet = s.id
+                  ? sirali.filter((k) => pazarOf(k.symbol) === s.id).length
+                  : sirali.length;
+                return (
+                  <Pressable
+                    key={s.etiket}
+                    onPress={() => setSuzgec(s.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: aktif }}
+                    accessibilityLabel={
+                      'Pazar: ' +
+                      s.etiket +
+                      ', ' +
+                      String(adet) +
+                      ' sembol' +
+                      (aktif ? ' — seçili' : '')
+                    }
+                    hitSlop={space.sm}
+                    style={({ pressed }) => [
+                      styles.cipKabi,
+                      pressed ? { backgroundColor: colors.bgPressed } : null,
+                    ]}>
+                    <Pill
+                      label={(aktif ? '• ' : '') + s.etiket + ' (' + String(adet) + ')'}
+                      tone={aktif ? 'gold' : 'neutral'}
+                      variant={aktif ? 'soft' : 'outline'}
+                      glyph={null}
+                      size="sm"
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Sıranın NE OLDUĞU yazılı — gizli kural bırakmıyoruz. */}
+            <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
+              {gorunen.length
+                ? 'Verime göre azalan sıralı; ölçülemeyenler en sonda.' +
+                  (suzulen > 0 ? ' Süzgeç ' + String(suzulen) + ' satırı gizliyor.' : '')
+                : 'Bu süzgeçte gösterilecek sembol yok.'}
+            </Text>
+
+            {asim > 0 ? (
+              <View style={styles.dipnot}>
+                <Pill label="sorulmadı" tone="gold" glyph={null} size="sm" />
+                <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
+                  {'Künye ucu en çok ' +
+                    String(YFIN_AZAMI_SEMBOL) +
+                    ' sembol alıyor; ' +
+                    String(asim) +
+                    ' sembol hiç sorulmadı — eksikliği "temettü yok" diye okumayın.'}
+                </Text>
+              </View>
+            ) : null}
+
+            {gorunen.map((k) => (
               <VerimSatiri key={k.symbol} kunye={k} />
             ))}
 
             {!olculen.length ? (
               <VeriYok kartsiz metin="Sorulan sembollerin hiçbirinin künyesi ölçülemedi." />
+            ) : !gorunen.length ? (
+              <VeriYok
+                kartsiz
+                metin={
+                  'Künye ölçüldü ama ' +
+                  (suzgec === 'BIST' ? 'BIST' : 'ABD') +
+                  ' tarafında sorulan sembol yok.'
+                }
+              />
             ) : null}
 
             {/* TAKVİMİN NEDEN OLMADIĞI KARTIN İÇİNDE YAZAR: kullanıcı
@@ -105,12 +239,29 @@ export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: Temet
                 Eksiği gizleyip yalnız verimi göstermek, kartın adının
                 verdiği sözü sessizce yemek olurdu. */}
             <View style={[styles.uyari, { borderColor: colors.border }]}>
-              <Pill label="uçtan gelmiyor" tone="neutral" glyph={null} size="sm" />
-              <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
-                Temettü kesinti (ex-date) ve ödeme tarihleri, hisse başı tutar ve dağıtım oranı
-                künye ucunda ÖLÇÜLMEDİ — bu alanlar cevapta hiç yok. Takvim satırı, uç o alanları
-                döndürdüğü gün eklenecek; uydurma tarih basılmıyor.
-              </Text>
+              <View style={styles.uyariIc}>
+                <View style={styles.uyariBas}>
+                  <Pill label="uçtan gelmiyor" tone="neutral" glyph={null} size="sm" />
+                  <Text style={[type.smallBold, { color: colors.text, flex: 1 }]}>
+                    Bu kartta ölçülemeyen alanlar
+                  </Text>
+                </View>
+                {/* MADDE MADDE: tek bir cümleye sıkıştırmak eksiğin
+                    boyutunu küçük gösterirdi. Her satır, uç o alanı
+                    döndürmediği için BOŞ — tarih uydurulmuyor. */}
+                {EKSIK_ALANLAR.map((alan) => (
+                  <View key={alan} style={styles.eksikSatir}>
+                    <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>{alan}</Text>
+                    <Text style={[type.micro, numeric, { color: colors.textFaint }]}>
+                      ölçülmedi
+                    </Text>
+                  </View>
+                ))}
+                <Text style={[type.micro, { color: colors.textFaint }]}>
+                  Bu alanlar künye cevabında HİÇ YOK (eksik ölçüm değil, alan yok). Takvim satırı,
+                  uç o alanları döndürdüğü gün eklenecek; uydurma tarih basılmıyor.
+                </Text>
+              </View>
             </View>
 
             {olculemeyen.length ? (
@@ -215,6 +366,26 @@ const styles = StyleSheet.create({
     paddingTop: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  uyariIc: { flex: 1, gap: space.xs },
+  uyariBas: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  eksikSatir: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: space.sm,
+  },
+  cipler: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    paddingBottom: space.xs,
+  },
+  cipKabi: {
+    minHeight: hitSlopMin,
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+  },
+  num: { ...numeric, paddingBottom: space.xs },
   dipnot: {
     flexDirection: 'row',
     alignItems: 'center',

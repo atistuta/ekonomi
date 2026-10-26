@@ -32,15 +32,65 @@
 //  `api/yfin.ts` → `fetchYfin()` ile ekranda çekilir, buraya props
 //  olarak gelir.
 //
+//  ── EKLENDİ (2026-10-26): PAZAR SÜZGECİ + TARİH SIRALI LİSTE ────────
+//  NE: web'in `earnMktChips` çipleri (index.html:146) ve tarihe göre
+//  sıralı liste görünümü. Web kartında bu iki şey vardı, yerli kartta
+//  YOKTU.
+//
+//  YENİ ALAN GEREKMEDİ — ÖLÇÜLDÜ: sıralama anahtarı `earnings.ts`
+//  (api/_yfin.js:52-77 `parseEarnings`, `mobile/src/api/yfin.ts:79-97`
+//  `YfinEarnings`), pazar ise sembolün KENDİSİNDEN okunuyor. Uca tek
+//  alan eklenmedi, tek yeni çağrı yazılmadı.
+//
+//  PAZAR BİR HESAP DEĞİL, BİÇİM EŞLEMESİ: '.IS' ile biten sembol BIST,
+//  ötekiler ABD (aynı eşleme `lib/kalici.ts:69` `pazarOf`'ta var ama o
+//  fonksiyon dışa açık DEĞİL; `kesfet/` ve `detay/` kartları da aynı
+//  eşlemeyi yerinde yapıyor — ör. `kesfet/TaramaKart.tsx:130`). Burada
+//  da yerinde yapılıyor; `lib/` DEĞİŞTİRİLMEDİ.
+//
+//  SIRALAMA EŞİK DEĞİL: `ts` ARTAN sıraya diziliyor, yani "en yakın
+//  tarih üstte". Hiçbir tarih atlanmıyor, hiçbir pencere uydurulmuyor
+//  ("önümüzdeki 30 gün" gibi bir eşik YOK — o eşik motorun işi olurdu).
+//  `ts == null` olan künye (tarih yok ama beklenti var — `parseEarnings`
+//  bu hâlde de nesne döndürüyor) EN SONA konuyor ve ayrıca "tarih
+//  ölçülmedi" yazıyor; onu tarihli kayıtların arasına sokmak sıranın
+//  anlamını bozardı.
+//
+//  SÜZGEÇ GİZLEMEZ, SAYAR: bir pazar çipi seçiliyken kaç satırın
+//  görünmediği YAZIYOR. Sessizce kırpılan liste, kullanıcının
+//  sorduğu ama görmediği sembol demektir.
+//
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ApiError, IstekDurum, YfinKunye, YfinResponse } from '@/api';
+import { YFIN_AZAMI_SEMBOL } from '@/api';
 import { Card, Durum, Pill, VeriYok } from '@/components';
 import { formatCompact, formatGunAyYil, formatOran, formatPrice } from '@/lib/format';
-import { numeric, space, type, useTheme } from '@/theme';
+import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
+
+/**
+ * Pazar süzgeci çipleri — web'in `earnMktChips` kümesiyle aynı üç
+ * seçenek. `null` = süzgeç kapalı ("Tümü").
+ */
+type PazarSuzgec = null | 'BIST' | 'US';
+
+const SUZGECLER: readonly { id: PazarSuzgec; etiket: string }[] = [
+  { id: null, etiket: 'Tümü' },
+  { id: 'BIST', etiket: 'BIST' },
+  { id: 'US', etiket: 'ABD' },
+];
+
+/**
+ * Sembolden pazar. HESAP DEĞİL, biçim eşlemesi: '.IS' eki BIST demek
+ * (api/_girdi.js:139 `temizleSembol` aynı eki aynı anlamda okuyor).
+ */
+function pazarOf(sembol: string): 'BIST' | 'US' {
+  return sembol.toUpperCase().endsWith('.IS') ? 'BIST' : 'US';
+}
 
 export type BilancoKartProps = {
   /** `fetchYfin(semboller, { deep: true })` gövdesi. */
@@ -54,6 +104,7 @@ export type BilancoKartProps = {
 
 export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: BilancoKartProps) {
   const { colors } = useTheme();
+  const [suzgec, setSuzgec] = useState<PazarSuzgec>(null);
 
   const kunyeler = veri?.results ?? [];
   // `ok:false` = Yahoo turu bu sembolde düştü → ÖLÇEMEDİM.
@@ -63,6 +114,33 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
   const olculemeyen = kunyeler.filter((k) => !k.ok).map((k) => k.symbol);
   const takvimli = kunyeler.filter((k) => k.ok && k.earnings);
   const takvimsiz = kunyeler.filter((k) => k.ok && !k.earnings).map((k) => k.symbol);
+
+  // TARİH SIRALI: `ts` ARTAN (en yakın üstte). `ts == null` olanlar EN
+  // SONA — tarihsiz bir kaydı tarihlilerin arasına sokmak sıranın
+  // anlamını bozardı. `slice()` ile kopya: gelen diziyi yerinde
+  // sıralamak props'u mutasyona uğratırdı.
+  const sirali = useMemo(
+    () =>
+      takvimli.slice().sort((a, b) => {
+        const ta = a.earnings?.ts ?? null;
+        const tb = b.earnings?.ts ?? null;
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return ta - tb;
+      }),
+    // `takvimli` her renderda yeniden türüyor; `kunyeler` kimliği
+    // değişmediği sürece sıralama da değişmez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kunyeler],
+  );
+
+  const gorunen = suzgec ? sirali.filter((k) => pazarOf(k.symbol) === suzgec) : sirali;
+  // SÜZGEÇ SESSİZ KIRPMAZ: kaçının görünmediği yazılır.
+  const suzulen = sirali.length - gorunen.length;
+  // Uç 12'den fazlasını SESSİZCE kırpıyor (`api/yfin.ts` YFIN_AZAMI_SEMBOL
+  // gerekçesi) — aşım varsa kullanıcıya söylenir, uydurulmaz.
+  const asim = Math.max(0, semboller.length - YFIN_AZAMI_SEMBOL);
 
   return (
     <Card
@@ -86,7 +164,69 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
       {durum === 'veri' ? (
         kunyeler.length ? (
           <>
-            {takvimli.map((k) => (
+            {/* PAZAR ÇİPLERİ — web'deki `earnMktChips` karşılığı.
+                Seçim RENKLE DEĞİL: başta "•" ve ton değişiyor
+                (kesfet/TaramaKart.tsx:202 ile aynı kalıp). */}
+            <View style={styles.cipler}>
+              {SUZGECLER.map((s) => {
+                const aktif = suzgec === s.id;
+                const adet = s.id
+                  ? sirali.filter((k) => pazarOf(k.symbol) === s.id).length
+                  : sirali.length;
+                return (
+                  <Pressable
+                    key={s.etiket}
+                    onPress={() => setSuzgec(s.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: aktif }}
+                    accessibilityLabel={
+                      'Pazar: ' +
+                      s.etiket +
+                      ', ' +
+                      String(adet) +
+                      ' takvim' +
+                      (aktif ? ' — seçili' : '')
+                    }
+                    hitSlop={space.sm}
+                    style={({ pressed }) => [
+                      styles.cipKabi,
+                      pressed ? { backgroundColor: colors.bgPressed } : null,
+                    ]}>
+                    <Pill
+                      label={(aktif ? '• ' : '') + s.etiket + ' (' + String(adet) + ')'}
+                      tone={aktif ? 'gold' : 'neutral'}
+                      variant={aktif ? 'soft' : 'outline'}
+                      glyph={null}
+                      size="sm"
+                    />
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Sıranın NE OLDUĞU yazılı: kullanıcı listedeki düzenin
+                nereden geldiğini bilmeden okumasın. */}
+            <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
+              {gorunen.length
+                ? 'Yaklaşan bilanço tarihine göre sıralı (en yakın üstte).' +
+                  (suzulen > 0 ? ' Süzgeç ' + String(suzulen) + ' satırı gizliyor.' : '')
+                : 'Bu süzgeçte gösterilecek takvim yok.'}
+            </Text>
+
+            {asim > 0 ? (
+              <View style={styles.dipnot}>
+                <Pill label="sorulmadı" tone="gold" glyph={null} size="sm" />
+                <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
+                  {'Künye ucu en çok ' +
+                    String(YFIN_AZAMI_SEMBOL) +
+                    ' sembol alıyor; ' +
+                    String(asim) +
+                    ' sembol hiç sorulmadı — eksikliği "takvim yok" diye okumayın.'}
+                </Text>
+              </View>
+            ) : null}
+
+            {gorunen.map((k) => (
               <TakvimSatiri key={k.symbol} kunye={k} />
             ))}
 
@@ -94,6 +234,16 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
               <VeriYok
                 kartsiz
                 metin="Sorulan sembollerin hiçbirinde yaklaşan bilanço tarihi yok."
+              />
+            ) : !gorunen.length ? (
+              // Takvim VAR ama bu pazarda yok. İki ayrı cümle.
+              <VeriYok
+                kartsiz
+                metin={
+                  'Takvim ölçüldü ama ' +
+                  (suzgec === 'BIST' ? 'BIST' : 'ABD') +
+                  ' tarafında yaklaşan bilanço tarihi yok.'
+                }
               />
             ) : null}
 
@@ -146,7 +296,10 @@ function TakvimSatiri({ kunye }: { kunye: YfinKunye }) {
   if (!e) return null;
 
   const kur = kunye.finCurrency ?? null;
-  const tarih = formatGunAyYil(e.ts);
+  // TARİH ÖLÇÜLMEDİ ≠ TARİH YOK: `ts` boşsa çıplak tire basmak, beklenti
+  // bandı ölçülmüş olduğu hâlde satırı "bozuk" gösterirdi. Cümle yazılır.
+  const tarihVar = typeof e.ts === 'number' && Number.isFinite(e.ts);
+  const tarih = tarihVar ? formatGunAyYil(e.ts) : 'tarih ölçülmedi';
 
   // Beklenti BANDI tek satırda: düşük – ortalama – yüksek. Tek sayı
   // basmak, bandın genişliğini (yani belirsizliği) gizlerdi.
@@ -161,9 +314,8 @@ function TakvimSatiri({ kunye }: { kunye: YfinKunye }) {
       accessible
       accessibilityLabel={
         (kunye.name ?? kunye.symbol) +
-        ' bilanço tarihi ' +
-        tarih +
-        (e.estimate ? ', tarih kesinleşmedi' : '') +
+        (tarihVar ? ' bilanço tarihi ' + tarih : ' bilanço tarihi ölçülmedi') +
+        (tarihVar && e.estimate ? ', tarih kesinleşmedi' : '') +
         (e.epsAvg != null ? ', beklenen hisse başı kâr ' + formatPrice(e.epsAvg, kur) : '')
       }>
       <View style={styles.basliksatir}>
@@ -178,11 +330,20 @@ function TakvimSatiri({ kunye }: { kunye: YfinKunye }) {
           ) : null}
         </View>
         <View style={styles.basliksag}>
-          <Text style={[type.bodyBold, numeric, { color: colors.gold }]}>{tarih}</Text>
+          <Text
+            style={[
+              tarihVar ? type.bodyBold : type.micro,
+              tarihVar ? numeric : null,
+              { color: tarihVar ? colors.gold : colors.textDim },
+            ]}>
+            {tarih}
+          </Text>
           {/* NEDEN AYRI ROZET: `estimate:true` tarihin ŞİRKETTEN
               GELMEDİĞİNİ, Yahoo'nun tahmini olduğunu söylüyor. Bunu
               yazmamak, tahmini kesin tarih gibi sunmak olurdu. */}
-          {e.estimate ? (
+          {!tarihVar ? (
+            <Pill label="tarih yok" tone="neutral" glyph={null} size="sm" />
+          ) : e.estimate ? (
             <Pill label="tarih tahmini" tone="gold" glyph={null} size="sm" />
           ) : (
             <Pill label="tarih kesin" tone="neutral" glyph={null} size="sm" />
@@ -271,6 +432,20 @@ const styles = StyleSheet.create({
   },
   olcumSol: { flex: 1 },
   olcumSag: { textAlign: 'right' },
+  // Çip şeridi — kesfet/TaramaKart.tsx `cipler`/`cipKabi` ile aynı.
+  // `minHeight: hitSlopMin` dokunma hedefini 44pt'nin altına düşürmez.
+  cipler: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    paddingBottom: space.xs,
+  },
+  cipKabi: {
+    minHeight: hitSlopMin,
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+  },
+  num: { ...numeric, paddingBottom: space.xs },
   dipnot: {
     flexDirection: 'row',
     alignItems: 'center',
