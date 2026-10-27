@@ -2139,6 +2139,14 @@ main {
 }
 .cmp-tolist:hover { border-color: var(--accent); background: var(--accent-soft); }
 .compare-head .cmp-sym { font-size: 15px; font-weight: 800; }
+/* Sembol artik bir <button>: hisse sayfasini acar. Gorunum DEGISMEDI,
+   yalniz tarayici dugme varsayilanlari sifirlandi + tiklanabilir isareti. */
+.compare-head button.cmp-sym { background: none; border: 0; padding: 0; margin: 0;
+  color: inherit; font-family: inherit; line-height: inherit; cursor: pointer;
+  text-decoration: underline; text-decoration-color: rgba(127,127,127,.45);
+  text-underline-offset: 2px; }
+.compare-head button.cmp-sym:hover { text-decoration-color: currentColor; }
+.compare-head button.cmp-sym:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; border-radius: 3px; }
 .compare-head .cmp-mkt, .cmp-pick-chip .cmp-mkt {
   font-size: 10px; font-weight: 700; color: var(--accent);
   background: var(--accent-soft); padding: 1px 6px; border-radius: 6px; margin-left: 6px;

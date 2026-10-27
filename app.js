@@ -5101,13 +5101,13 @@
     // "VERİ YOK" ASLA 0 DEĞİL: eski kod `Number(dAtr) || 0` yazıyordu, yani
     // ölçülemeyen uzaklık ekranda "~0,0 günlük" = "sıfır uzaklık" görünüyordu.
     if (yz == null && kat == null) return 'banda uzaklığı ölçülemedi';
-    if (kat == null) return kisa ? `Bandın ${yz} üstünde` : `bandın ${yz} üstünde`;
+    if (kat == null) return kisa ? `Alım bölgesinden ${yz} yüksek` : `uygun alım bölgesinden ${yz} yüksek`;
     if (yz == null) {
-      return kisa ? `Bandın üstünde · günlük salınımın ${kat}`
-                  : `bandın üstünde, tipik bir günlük salınımın ${kat} kadar uzakta`;
+      return kisa ? `Alım bölgesinin üstünde · günlük salınımın ${kat}`
+                  : `uygun alım bölgesinin üstünde, tipik bir günlük salınımın ${kat} kadar uzakta`;
     }
-    return kisa ? `Bandın ${yz} üstünde · günlük salınımın ${kat}`
-                : `bandın ${yz} üstünde — tipik bir günlük salınımın ${kat} kadar uzakta`;
+    return kisa ? `Alım bölgesinden ${yz} yüksek · günlük salınımın ${kat}`
+                : `uygun alım bölgesinden ${yz} yüksek — tipik bir günlük salınımın ${kat} kadar uzakta`;
   }
 
   function buyZoneProximityHtml(prox) {
@@ -8476,6 +8476,28 @@
     }
   }
 
+  // NE: Google News RSS, "yükseliş teması" gibi GENEL bir ifadeye de 200 ile
+  //     yanıt verir ve sorgu sözcüklerinin HİÇBİRİ geçmeyen başlıklar döndürür
+  //     (ÖLÇÜLDÜ 2026-10-27). Bu başlıklar hem tema ısısını şişiriyor hem de
+  //     ekranda "alakasız haber" olarak görünüyordu.
+  // KURAL: bir başlık, sorgunun en az BİR anlamlı sözcüğünü (≥4 harf; "tema",
+  //     "hisse" gibi TAŞIYICI sözcükler sayılmaz) içermelidir.
+  // BİLMİYORUM DURUMU: sorguda ölçülebilir sözcük yoksa SÜZME YAPILMAZ —
+  //     başlık atılmaz, çünkü ilgisizliği kanıtlayamayız.
+  // Bu katman yalnız KEŞİF/gösterimdir; TA/FA skoruna dokunmaz.
+  const TEMA_TASIYICI = ['tema', 'teması', 'temasi', 'temalı', 'temali', 'hisse',
+    'hisseler', 'hisseleri', 'borsa', 'piyasa', 'sektör', 'sektor'];
+  function temaSorguSozcukleri(q) {
+    return String(q || '').toLowerCase().split(' ')
+      .map((w) => w.trim())
+      .filter((w) => w.length >= 4 && !TEMA_TASIYICI.includes(w));
+  }
+  function temaBaslikIlgili(title, words) {
+    if (!words.length) return true; // ölçemiyoruz → atmıyoruz
+    const t = String(title || '').toLowerCase();
+    return words.some((w) => t.includes(w));
+  }
+
   // Google News (US+TR) → birleşik başlık listesi (ısı + kanıt)
   async function themeFetchNews(query) {
     const urls = [googleNewsUrl(query, 'US'), googleNewsUrl(query, 'TR')];
@@ -8486,7 +8508,9 @@
       if (!key || seen.has(key)) return; seen.add(key); out.push(it);
     });
     out.sort((a, b) => (Date.parse(b.pubDate) || 0) - (Date.parse(a.pubDate) || 0));
-    return out;
+    // İLGİ SÜZGECİ — sorgu sözcüğü geçmeyen başlık listeye GİRMEZ.
+    const sozcukler = temaSorguSozcukleri(query);
+    return out.filter((it) => temaBaslikIlgili(it.title, sozcukler));
   }
 
   // Bir adayın haberde geçip geçmediğini sapta → kanıt başlığı iliştir
@@ -8678,8 +8702,8 @@
           </div>
           <ul class="ts-news">${g.items.map((n) => `<li><a href="${n.link}" target="_blank" rel="noopener">${escapeHtml(n.title || '')}</a><span class="ts-news-m">${n.author ? escapeHtml(n.author) + ' · ' : ''}${fmtTime(n.pubDate)}</span></li>`).join('')}</ul>
         </div>`).join('')
-        : `<div class="empty" style="padding:10px">Listelenen hisselerin hiçbiri güncel başlıklarda geçmiyor — bu temanın haberleri aşağıda.</div>`}
-      ${otherNews.length ? `
+        : `<div class="empty" style="padding:10px">Listelenen hisselerin hiçbiri güncel başlıklarda geçmiyor — bu temada hisse–haber bağı kurulamadı. Alakasız başlık göstermemek için liste boş bırakıldı.</div>`}
+      ${(groups.length && otherNews.length) ? `
         <div class="ts-nblock">
           <div class="ts-nblock-h"><span class="ts-nblock-n">Temayla ilgili diğer başlıklar (hisse eşleşmesi yok)</span><span class="ts-nblock-c">${Math.min(otherNews.length, 8)} başlık</span></div>
           <ul class="ts-news">${otherNews.slice(0, 8).map((n) => `<li><a href="${n.link}" target="_blank" rel="noopener">${escapeHtml(n.title || '')}</a><span class="ts-news-m">${n.author ? escapeHtml(n.author) + ' · ' : ''}${fmtTime(n.pubDate)}</span></li>`).join('')}</ul>
@@ -12703,7 +12727,11 @@
         if (mom.active) {
           honest = `⚡ <b>Trend güçlü</b>${pricey ? ' — F/K yüksek (pahalı) olsa da ' : ' — '}derin geri çekilme beklemeden <b>kademeli momentum girişi öngörülür</b> (fiyata yakın: ${momZone}). ${compTxt}`;
         } else if (pricey && faScore != null) {
-          honest = `Değerleme pahalı (F/K ${pe.toFixed(1)}) ve güçlü bir momentum rejimi yok — bu vadede fiyata yakın agresif alım yerine uygun alım bandı beklenir. ${compTxt}`;
+          // SIRA DEGISTI (2026-10-27): once BILESKE HUKUM, sonra cekince.
+          // Oncesinde cumle cekinceyle basliyordu; etiket "Güçlü uyum" iken
+          // okuyucu once "pahalı" goruyor ve etiketle celisik hissediyordu.
+          // Metinlerin KENDISI degismedi, yalnız dizilim ve baglac eklendi.
+          honest = `${compTxt} <b>Ancak</b> değerleme pahalı (F/K ${pe.toFixed(1)}) ve güçlü bir momentum rejimi yok — bu vadede fiyata yakın agresif alım yerine uygun alım bandı beklenir.`;
         } else if (faScore != null) {
           honest = compTxt;
         } else {
@@ -12891,7 +12919,7 @@
         const descTip = bizTip || name;
         g += `<div class="compare-cell compare-head">`
           + `<button class="cmp-remove" data-sym="${it.symbol}" data-mkt="${it.market}" title="Kaldır">×</button>`
-          + `<div class="cmp-head-top"><span class="cmp-sym">${it.symbol}</span><span class="cmp-mkt">${it.market === 'BIST' ? 'BIST' : 'ABD'}</span></div>`
+          + `<div class="cmp-head-top"><button type="button" class="cmp-sym cmp-open" data-sym="${it.symbol}" data-mkt="${it.market}" data-q="${esc(it.query || it.symbol)}" title="Hisse sayfasını aç">${it.symbol}</button><span class="cmp-mkt">${it.market === 'BIST' ? 'BIST' : 'ABD'}</span></div>`
           + (desc && desc !== '—' ? `<div class="cmp-head-desc"${descTip ? ` title="${descTip}"` : ''}>${desc}</div>` : (hm ? '' : `<div class="cmp-head-desc cmp-head-desc-dim">…</div>`))
           + `<button class="cmp-tolist" data-sym="${it.symbol}" data-mkt="${it.market}" data-q="${esc(it.query || it.symbol)}" title="Listeye ekle">☆ Listeye ekle</button>`
           + `</div>`;
@@ -13186,6 +13214,11 @@
     wrap.querySelectorAll('.cmp-tolist').forEach((b) => b.addEventListener('click', (e) => {
       e.stopPropagation();
       openListMenu(b, b.dataset.sym, b.dataset.mkt, b.dataset.q);
+    }));
+    // Sutun basligindaki sembole tiklayinca o hissenin sayfasi acilir.
+    wrap.querySelectorAll('.cmp-open').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openStockPage(b.dataset.sym, b.dataset.mkt, b.dataset.q || b.dataset.sym);
     }));
     wrap.querySelectorAll('.cmp-rel-btn').forEach((b) => b.addEventListener('click', () => runCompareReliability(b)));
     // İçsel Değer (DCF) satırını aç/kapa — tam yeniden çizim yapmadan (durum korunur).
