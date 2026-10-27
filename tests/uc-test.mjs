@@ -1306,11 +1306,31 @@ bolum('⑧ /api/theme — LLM keşif ucu, AYNI kabuk');
       ok('⑧d · yerel `AZAMI_SORGU = ` sabiti DİRİLMEMİŞ',
         !/^\s*(const|let|export const)\s+AZAMI_SORGU\s*=/m.test(kod));
 
-      // ŞERİT AYRIMI: theme SKOR şeridine dokunmaz. Motor/akış/ağ taşıyıcısı
-      // içe alınmaz — alınsaydı LLM ucu skorun bağımlılık ağacına girerdi.
-      for (const m of ['./_motor.js', './_akis.js', './_ag.js', './_ayar.js']) {
-        ok(`⑧d · \`${m}\` içe ALINMIYOR (skor şeridi bulaşmıyor)`, !src.includes(`from '${m}'`));
+      // SERIT AYRIMI — KILIT DEGISTI ve NIYE:
+      // Onceki hali `./_motor.js`i de yasakliyordu. `candidates[].sector` alani
+      // icin motorun DONMUS `SYMBOL_SECTORS` sozlugu gerekti; tek secenek LLMden
+      // sektor istemekti ve bu ucun kendi sozlesmesi halusinasyonu eliyor diyor —
+      // dogrulanamaz bir metin alani eklemek o kuralin tam tersi olurdu.
+      // Yasak KALDIRILMADI, DARALTILDI: ag tasiyicilari hala yasak, motor ithali
+      // ise YALNIZ sozluk okumasi olarak ve ATIL konakla serbest.
+      for (const m of ['./_akis.js', './_ag.js', './_ayar.js']) {
+        ok('⑧d · ' + m + ' içe ALINMIYOR (ağ/skor şeridi bulaşmıyor)',
+          !src.includes("from '" + m + "'"));
       }
+      const motorIthali = src.includes("from './_motor.js'");
+      ok('⑧d · motordan YALNIZ `buildMotor` içe alınıyor (skor simgesi yok)',
+        !motorIthali
+        || src.includes("import { buildMotor } from './_motor.js';"));
+      ok('⑧d · motor ATIL konakla kuruluyor (fetch/fetchVia PATLIYOR)',
+        !motorIthali
+        || (kod.includes("fetch: async () => { throw")
+            && kod.includes("fetchVia: async () => { throw")));
+      ok('⑧d · TA_WEIGHTS/TA_BENCHMARK BOŞ geçiyor (eşik/ağırlık okunmuyor)',
+        !motorIthali || kod.includes('TA_WEIGHTS: {}, TA_BENCHMARK: {}'));
+      ok('⑧d · bu dosyada skor HESABI yok',
+        ['scoreSymbol(', 'scoreSymbolList(', 'computeTA(',
+          'computeFA(', 'taScore(', 'faScore(']
+          .every((n) => !kod.includes(n)));
       ok('⑧d · app.js / config.js import edilmiyor',
         !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src));
 
@@ -3127,8 +3147,14 @@ ok('⑭a · zaman aşımı sayı ve maxDuration tavanının ALTINDA',
   && HABER_ISTEK_MS < haberConfig.maxDuration * 1000, `${HABER_ISTEK_MS} ms`);
 ok('⑭a · izin listesi TEK konak (yalnız news.google.com)',
   IZINLI_KONAK.length === 1 && IZINLI_KONAK[0] === 'news.google.com', IZINLI_KONAK.join(','));
-ok('⑭a · madde alan kümesi beyaz liste (title/link/pubDate/source)',
-  MADDE_ALANLARI.join(',') === 'title,link,pubDate,source', MADDE_ALANLARI.join(','));
+// KILIT DEGISTI ve NIYE: kume 4 alandan 6ya KASITLI buyudu. Webin haber akisi
+// maddeyi `{ symbol, type, item }` olarak tasiyor ve ekranin iki suzgeci bu iki
+// alani okuyor; sunucu onlari tasimadigi icin native istemci ayni suzgeci
+// kuramiyordu. Beyaz liste KALDIRILMADI — alan alan yazili kaldi, 7. alan
+// gelirse bu kapi gene kirmiziya doner.
+ok('⑭a · madde alan kümesi beyaz liste (title/link/pubDate/source/type/symbol)',
+  MADDE_ALANLARI.join(',') === 'title,link,pubDate,source,type,symbol',
+  MADDE_ALANLARI.join(','));
 ok('⑭a · kısa gövde eşiği sayı ve pozitif',
   Number.isInteger(ASGARI_GOVDE_BAYT) && ASGARI_GOVDE_BAYT > 0, String(ASGARI_GOVDE_BAYT));
 

@@ -116,7 +116,36 @@ export const ENDPOINTS = {
   // manşet LİSTESİ taşıyabildiği için sorgu dizgisine sığmıyor
   // (api/pulse.js başlığı). Yol adı İngilizce, öteki uçlarla aynı dilde.
   pulse: '/api/pulse',
+  // ----- Keşif beşlisi (api/_kesif.js) -----
+  // BEŞİ DE `api/proxy.js` yeniden-yazımıyla taşınıyor (vercel.json 25-29):
+  // Vercel Hobby'nin 12 fonksiyon tavanı yüzünden ayrı dosya AÇILMADI. Yol
+  // adları istemci açısından gerçek uç gibi davranıyor — yeniden-yazım
+  // sunucuda, istemci bilmiyor.
+  tarama: '/api/tarama',
+  sektor: '/api/sektor',
+  radar: '/api/radar',
+  backtest: '/api/backtest',
+  deger: '/api/deger',
 } as const;
+
+/**
+ * Grafik/backtest uçlarının KAPALI KÜMESİ olarak kabul ettiği endeks
+ * sembolleri. ÖLÇÜLDÜ (2026-10-27, `api/_girdi.js` `ENDEKS_SOZLUGU` +
+ * `cozEndeks()`, `api/chart.js:245`, `api/_kesif.js:586`): bu dört sembol
+ * `SEMBOL_BICIM` düzenli ifadesine UYMADIĞI hâlde sözlükten çözülüyor, yani
+ * sunucu artık kabul ediyor. Küme SUNUCUDA kapalı olduğu için burada da
+ * kapalı: listede olmayan `^`/`=` taşıyan sembol hâlâ kesin 400 demek.
+ *
+ * Bu bir EŞİK/FORMÜL DEĞİL, sunucunun beyaz listesinin kopyası.
+ */
+export const ENDEKS_SEMBOLLER = ['^GSPC', '^IXIC', 'GC=F', 'XU100'] as const;
+export type EndeksSembol = (typeof ENDEKS_SEMBOLLER)[number];
+
+/** Sembol sunucunun endeks sözlüğünde mi? (büyük harfe çevirerek bakar) */
+export function endeksMi(symbol: string | null | undefined): boolean {
+  const s = String(symbol ?? '').trim().toUpperCase();
+  return (ENDEKS_SEMBOLLER as readonly string[]).includes(s);
+}
 
 export type EndpointName = keyof typeof ENDPOINTS;
 
@@ -758,13 +787,17 @@ export async function fetchChart(
       },
     };
   }
-  if (sym.startsWith('^')) {
-    // ENDEKS. Sunucu kesinlikle 400 `bad_symbol` döner — ağa çıkmıyoruz.
+  if ((sym.startsWith('^') || sym.includes('=')) && !endeksMi(sym)) {
+    // SÖZLÜK DIŞI özel sembol. ÖLÇÜLDÜ (2026-10-27): `api/chart.js:245`
+    // `cozEndeks(ham) || temizleSembol(...)` — sözlükte olmayan `^`/`=`
+    // sembolü `SEMBOL_BICIM`e de uymadığı için kesin 400 `bad_symbol`.
+    // Sözlükteki dördü (ENDEKS_SEMBOLLER) artık GEÇİYOR, kapı onları
+    // durdurmuyor.
     return {
       ok: false,
       error: {
         kind: 'bad-request',
-        message: 'Endeks sembolleri bu uçtan grafiklenemiyor.',
+        message: 'Bu sembol grafik ucunun tanıdığı kümede değil.',
         endpoint: path,
         code: 'bad_symbol',
       },

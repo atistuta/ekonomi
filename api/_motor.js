@@ -21,7 +21,7 @@
 //    fa-bist       154 satır
 //    fa-us         292 satır
 //    causal         68 satır
-//    makro-faz      97 satır
+//    makro-faz     117 satır
 //    nabiz-yon      88 satır
 //    backtest       99 satır
 //    fmt-kisa       11 satır
@@ -31,14 +31,14 @@
 //    firsat         40 satır
 //    scan           92 satır
 //    sektor        216 satır
-//    radar          98 satır
-//    TOPLAM       2682 satır
-//  Dışa verilen sembol: 74
+//    radar         109 satır
+//    TOPLAM       2713 satır
+//  Dışa verilen sembol: 77
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:a68c4529b1909cab';
+export const IMZA = 'sha256:e9e8ecf78db80c02';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
@@ -52,7 +52,7 @@ export const DILIMLER = [
   { name: 'fa-bist', lines: 154 },
   { name: 'fa-us', lines: 292 },
   { name: 'causal', lines: 68 },
-  { name: 'makro-faz', lines: 97 },
+  { name: 'makro-faz', lines: 117 },
   { name: 'nabiz-yon', lines: 88 },
   { name: 'backtest', lines: 99 },
   { name: 'fmt-kisa', lines: 11 },
@@ -62,7 +62,7 @@ export const DILIMLER = [
   { name: 'firsat', lines: 40 },
   { name: 'scan', lines: 92 },
   { name: 'sektor', lines: 216 },
-  { name: 'radar', lines: 98 },
+  { name: 'radar', lines: 109 },
 ];
 
 /**
@@ -1879,6 +1879,26 @@ const navigator = H.dead("navigator");
     return 'mid';
   }
 
+  // Enflasyon / emtia baskısı: petrol + altın gündem sayısı → 0..1.
+  // `td` = fetchThemesData çıktısı (tema anahtarı → {heat:{n}, toneScore}).
+  // Petrol tonu belirgin pozitifse (> 0.15) baskıya sabit 0.15 eklenir;
+  // eşik ve katsayı computeMacro içindeki haliyle AYNIDIR.
+  function macroInflPressure(td) {
+    const d = td || {};
+    const nOf = (k) => (d[k] ? d[k].heat.n : 0);
+    const inflN = nOf('oil') + nOf('gold');
+    let infl = Math.min(1, inflN / 10);
+    if (d.oil && d.oil.toneScore > 0.15) infl = Math.min(1, infl + 0.15);
+    return infl;
+  }
+
+  // Jeopolitik risk: savaş + Hürmüz gündem sayısı → 0..1 (aynı bölen).
+  function macroRiskPressure(td) {
+    const d = td || {};
+    const nOf = (k) => (d[k] ? d[k].heat.n : 0);
+    return Math.min(1, (nOf('war') + nOf('hormuz')) / 10);
+  }
+
 
 // ===== dilim: nabiz-yon =====
   const RATE_SENSITIVE = ['tech', 'semis', 'reit', 'auto', 'clean', 'biotech', 'space', 'software', 'crypto'];
@@ -2791,6 +2811,17 @@ const navigator = H.dead("navigator");
       impacts: [['energy', 'up'], ['utilities', 'up'], ['auto', 'down']] },
   ];
 
+  // Tema ısısı: son ~3 günün başlık sayısı
+  function themeHeat(items) {
+    const now = Date.now(), win = 3 * 24 * 3600 * 1000;
+    let recent = 0;
+    items.forEach((it) => { const t = Date.parse(it.pubDate); if (!isNaN(t) && now - t < win) recent++; });
+    if (!items.length) return { lvl: 'na', txt: '⚪ Veri yok', n: 0 };
+    if (recent >= 5) return { lvl: 'hot', txt: '🔴 Sıcak', n: recent };
+    if (recent >= 2) return { lvl: 'warm', txt: '🟠 Orta', n: recent };
+    return { lvl: 'cool', txt: '⚪ Sakin', n: recent };
+  }
 
-return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, CYCLE_PHASES, macroGrowth, macroPhase, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance, TA_HORIZON, BT_CFG, spearmanIC, computeBacktest, shortNum, scoreBand, cryptoCategory, computeCryptoValue, METAL_MACRO_W, computeMetalMacro, SENTI_POS, SENTI_NEG, scoreHeadline, sentiLabel, oppTag, priceOppAdj, SCAN_PRESETS, scanBlend, scanScore, scanTag, SEK_META, sekMedian, sekClassify, sekSortGroups, SECTORS, SYMBOL_SECTORS, RADAR_THEMES };
+
+return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, CYCLE_PHASES, macroGrowth, macroPhase, macroInflPressure, macroRiskPressure, themeHeat, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance, TA_HORIZON, BT_CFG, spearmanIC, computeBacktest, shortNum, scoreBand, cryptoCategory, computeCryptoValue, METAL_MACRO_W, computeMetalMacro, SENTI_POS, SENTI_NEG, scoreHeadline, sentiLabel, oppTag, priceOppAdj, SCAN_PRESETS, scanBlend, scanScore, scanTag, SEK_META, sekMedian, sekClassify, sekSortGroups, SECTORS, SYMBOL_SECTORS, RADAR_THEMES };
 }

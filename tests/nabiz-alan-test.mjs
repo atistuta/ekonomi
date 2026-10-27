@@ -103,28 +103,62 @@ ok('PENCERE_GUN 14', PENCERE_GUN === 14);
 ok('TAZE_GUN 2', TAZE_GUN === 2);
 
 // =========================================================================
-bolum('② ÖLÇÜM — üç büyüklük app.js içinde VAR, motorda YOK (yol (b))');
-//  Bu bölüm bir BULGU KİLİDİ: üç hesap motora taşınırsa denetim kırmızı
-//  yanar ve o gün ucun bu alanları HESAPLAYABİLECEĞİ anlaşılır.
-const sAppInfl = satir(APP, 'let infl = Math.min(1, inflN / 10);');
-const sAppRisk = satir(APP, "const risk = Math.min(1, (nOf('war') + nOf('hormuz')) / 10);");
+bolum('② ÖLÇÜM — iki baskı hesabı ve tema ısısı MOTORA TAŞINDI (B5)');
+//  KILIT DEGISTI ve NIYE: bu bolum 2026-10-19'da bir BOSLUK kilidiydi —
+//  "uc buyukluk app.js icinde VAR, motorda YOK" diyordu ve tasinma gunu
+//  KIRMIZI yanmasi ISTENIYORDU. O gun geldi: enflasyon baskisi, jeopolitik
+//  risk ve tema isisi artik motorun dilimlerinde ve disa veriliyor. Kilit
+//  GEVSETILMEDI, TERS CEVRILDI: artik yoklugu degil VARLIGINI ve app.js ile
+//  AYNI SAYIYI urettigini dogruluyor. Esik (0.15), bolen (10) ve ton artisi
+//  (0.15) degismedi — asagidaki sayi denetimleri tam bunu olcer.
 const sAppGen = satir(APP, 'const breadth = taVals.length ? taVals.reduce(');
-const sAppHeat = satir(APP, 'function themeHeat(items) {');
-const sDilimBas = satir(APP, '  const CYCLE_PHASES = {');
 const sDilimBit = satir(APP, '  // Makro nabzını hesapla');
-ok('app.js: enflasyon baskısı formülü bulundu', sAppInfl > 0, 'satır ' + sAppInfl);
-ok('app.js: jeopolitik risk formülü bulundu', sAppRisk > 0, 'satır ' + sAppRisk);
-ok('app.js: piyasa genişliği (breadth) formülü bulundu', sAppGen > 0, 'satır ' + sAppGen);
-ok('app.js: themeHeat yardımcısı bulundu', sAppHeat > 0, 'satır ' + sAppHeat);
+const sDilimBas = satir(APP, '  const CYCLE_PHASES = {');
 ok('makro-faz dilimi sınırları bulundu', sDilimBas > 0 && sDilimBit > sDilimBas, `${sDilimBas}..${sDilimBit}`);
-ok('enflasyon baskısı dilimin DIŞINDA (sonrasında)', sAppInfl > sDilimBit);
-ok('jeopolitik risk dilimin DIŞINDA (sonrasında)', sAppRisk > sDilimBit);
+
+ok('motorda macroInflPressure VAR', typeof ENG.macroInflPressure === 'function');
+ok('motorda macroRiskPressure VAR', typeof ENG.macroRiskPressure === 'function');
+ok('motorda themeHeat VAR', typeof ENG.themeHeat === 'function');
+
+// SAYI DENETIMI — formulun bire bir karsiligi, app.js'teki haliyle ayni.
+const tdOlcu = { oil: { heat: { n: 4 }, toneScore: 0.4 }, gold: { heat: { n: 2 } },
+  war: { heat: { n: 3 } }, hormuz: { heat: { n: 1 } } };
+const tdSogukTon = { oil: { heat: { n: 4 }, toneScore: 0.1 }, gold: { heat: { n: 2 } } };
+ok('infl = min(1,(4+2)/10) + 0.15 = 0.75', ENG.macroInflPressure(tdOlcu) === 0.75,
+  String(ENG.macroInflPressure(tdOlcu)));
+ok('ton 0.15 ESIGININ ALTINDA artış YOK → 0.6',
+  ENG.macroInflPressure(tdSogukTon) === 0.6, String(ENG.macroInflPressure(tdSogukTon)));
+ok('risk = min(1,(3+1)/10) = 0.4', ENG.macroRiskPressure(tdOlcu) === 0.4,
+  String(ENG.macroRiskPressure(tdOlcu)));
+ok('ikisi de 1 ile TAVANLI',
+  ENG.macroInflPressure({ oil: { heat: { n: 99 } } }) === 1
+  && ENG.macroRiskPressure({ war: { heat: { n: 99 } } }) === 1);
+// VERI YOK → 0, UYDURMA YOK.
+ok('td yoksa infl 0', ENG.macroInflPressure(null) === 0, String(ENG.macroInflPressure(null)));
+ok('td yoksa risk 0', ENG.macroRiskPressure(null) === 0, String(ENG.macroRiskPressure(null)));
+ok('başlık yoksa themeHeat lvl "na" ve n 0',
+  ENG.themeHeat([]).lvl === 'na' && ENG.themeHeat([]).n === 0,
+  JSON.stringify(ENG.themeHeat([])));
+
+// CAGRI NOKTASI: app.js artik kendi kopyasini degil cikarilan fonksiyonu okur.
+ok('app.js: computeMacro infl = macroInflPressure(td)',
+  APP.includes('const infl = macroInflPressure(td);'));
+ok('app.js: computeMacro risk = macroRiskPressure(td)',
+  APP.includes('const risk = macroRiskPressure(td);'));
+ok('app.js: infl formülü TEK yerde (kopya dirilmemiş)',
+  APP.split('let infl = Math.min(1, inflN / 10);').length === 2,
+  String(APP.split('let infl = Math.min(1, inflN / 10);').length - 1) + ' kez');
+ok('app.js: risk formülü TEK yerde (kopya dirilmemiş)',
+  APP.split("(nOf('war') + nOf('hormuz')) / 10").length === 2,
+  String(APP.split("(nOf('war') + nOf('hormuz')) / 10").length - 1) + ' kez');
+
+// GENISLIK hala DISARIDA ve bu YAPISAL: evren taAllSymbols() -> loadLists()
+// -> localStorage, yani kullaniciya ozel; ustune sembol basina bir TA cagrisi
+// maxDuration 10'u asar. Bu UC denetim BOSLUK kilidi olarak KALIYOR — tasindigi
+// gun kirmizi yanar ve o gun ucun genisligi hesaplayabilecegi anlasilir.
+ok('app.js: piyasa genişliği (breadth) formülü bulundu', sAppGen > 0, 'satır ' + sAppGen);
 ok('genişlik dilimin DIŞINDA (sonrasında)', sAppGen > sDilimBit);
-ok('themeHeat dilimin DIŞINDA (öncesinde)', sAppHeat > 0 && sAppHeat < sDilimBas);
-ok('motorda inflN YOK', !MOTOR.includes('inflN'));
-ok('motorda war/hormuz risk formülü YOK', !MOTOR.includes("nOf('war')"));
 ok('motorda taVals YOK', !MOTOR.includes('taVals'));
-ok('motorda themeHeat YOK', !MOTOR.includes('themeHeat'));
 // KARŞIT KANIT: dilim İÇİNDEKİLER motorda GERÇEKTEN var — yani yokluk
 // denetimleri "her şey yok" diyen boş bir testten gelmiyor.
 ok('motorda macroGrowth VAR (karşıt kanıt)', typeof ENG.macroGrowth === 'function');

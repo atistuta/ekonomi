@@ -10306,6 +10306,17 @@
       impacts: [['energy', 'up'], ['utilities', 'up'], ['auto', 'down']] },
   ];
 
+  // Tema ısısı: son ~3 günün başlık sayısı
+  function themeHeat(items) {
+    const now = Date.now(), win = 3 * 24 * 3600 * 1000;
+    let recent = 0;
+    items.forEach((it) => { const t = Date.parse(it.pubDate); if (!isNaN(t) && now - t < win) recent++; });
+    if (!items.length) return { lvl: 'na', txt: '⚪ Veri yok', n: 0 };
+    if (recent >= 5) return { lvl: 'hot', txt: '🔴 Sıcak', n: recent };
+    if (recent >= 2) return { lvl: 'warm', txt: '🟠 Orta', n: recent };
+    return { lvl: 'cool', txt: '⚪ Sakin', n: recent };
+  }
+
   function radarUniverse() {
     return taAllSymbols()
       .map((s) => ({ ...s, sectors: SYMBOL_SECTORS[s.symbol] || [] }))
@@ -10326,17 +10337,6 @@
     return theme.lang === 'en'
       ? `https://news.google.com/rss/search?q=${enc}&hl=en-US&gl=US&ceid=US:en`
       : `https://news.google.com/rss/search?q=${enc}&hl=tr&gl=TR&ceid=TR:tr`;
-  }
-
-  // Tema ısısı: son ~3 günün başlık sayısı
-  function themeHeat(items) {
-    const now = Date.now(), win = 3 * 24 * 3600 * 1000;
-    let recent = 0;
-    items.forEach((it) => { const t = Date.parse(it.pubDate); if (!isNaN(t) && now - t < win) recent++; });
-    if (!items.length) return { lvl: 'na', txt: '⚪ Veri yok', n: 0 };
-    if (recent >= 5) return { lvl: 'hot', txt: '🔴 Sıcak', n: recent };
-    if (recent >= 2) return { lvl: 'warm', txt: '🟠 Orta', n: recent };
-    return { lvl: 'cool', txt: '⚪ Sakin', n: recent };
   }
 
   const dirArrow = (d) => (d === 'up' ? '▲' : '▼');
@@ -10634,6 +10634,26 @@
     return 'mid';
   }
 
+  // Enflasyon / emtia baskısı: petrol + altın gündem sayısı → 0..1.
+  // `td` = fetchThemesData çıktısı (tema anahtarı → {heat:{n}, toneScore}).
+  // Petrol tonu belirgin pozitifse (> 0.15) baskıya sabit 0.15 eklenir;
+  // eşik ve katsayı computeMacro içindeki haliyle AYNIDIR.
+  function macroInflPressure(td) {
+    const d = td || {};
+    const nOf = (k) => (d[k] ? d[k].heat.n : 0);
+    const inflN = nOf('oil') + nOf('gold');
+    let infl = Math.min(1, inflN / 10);
+    if (d.oil && d.oil.toneScore > 0.15) infl = Math.min(1, infl + 0.15);
+    return infl;
+  }
+
+  // Jeopolitik risk: savaş + Hürmüz gündem sayısı → 0..1 (aynı bölen).
+  function macroRiskPressure(td) {
+    const d = td || {};
+    const nOf = (k) => (d[k] ? d[k].heat.n : 0);
+    return Math.min(1, (nOf('war') + nOf('hormuz')) / 10);
+  }
+
   // Makro nabzını hesapla → {phase, dims, breadth, hotThemes}
   async function computeMacro(force) {
     const keys = ['fed', 'oil', 'gold', 'war', 'hormuz'];
@@ -10643,12 +10663,11 @@
 
     // 1) Faiz yönü (Fed haberleri)
     const rate = td.fed ? rateDirection(td.fed.items) : 0;
-    // 2) Enflasyon/Emtia baskısı (petrol + altın gündemi + tonu)
-    const inflN = nOf('oil') + nOf('gold');
-    let infl = Math.min(1, inflN / 10);
-    if (td.oil && td.oil.toneScore > 0.15) infl = Math.min(1, infl + 0.15);
-    // 3) Jeopolitik risk (savaş + Hürmüz)
-    const risk = Math.min(1, (nOf('war') + nOf('hormuz')) / 10);
+    // 2) Enflasyon/Emtia baskısı · 3) Jeopolitik risk — formüller
+    //    macroInflPressure/macroRiskPressure'a çıkarıldı (motora dilimlenebilsin
+    //    diye). Eşikler, bölenler ve ton artışı AYNI.
+    const infl = macroInflPressure(td);
+    const risk = macroRiskPressure(td);
     // 4) Büyüme / piyasa genişliği (evrenin ortalama teknik skoru)
     const uni = taAllSymbols();
     const taMap = await scoreSymbolList(uni, force, { taOnly: true });
@@ -11023,21 +11042,22 @@
     return (t || '').replace(/\s+-\s+[^-]{2,40}$/, '').trim();
   }
 
-  async function computeAgenda(force) {
-    const CK = 'agenda:pool';
-    const cached = force ? null : cacheGet(CK);
-    let feeds;
-    if (cached && cached.data && (Date.now() - cached.t) < 20 * 60 * 1000) {
-      feeds = cached.data;
-    } else {
-      const results = await Promise.all(AGENDA_FEEDS.map((f) =>
-        fetchRSS(f.url, 24).then((items) => ({ f, items })).catch(() => ({ f, items: [] }))));
-      feeds = results.filter((r) => r.items.length);
-      if (feeds.length) cacheSet(CK, feeds);
-      else if (cached && cached.data) feeds = cached.data; // ağ koptuysa bayat da olsa
-    }
+  // ⚖️ SAF ÇIKARMA (2026-10-27) — /api/gundem için.
+  // ÖLÇÜLEN DURUM: puanlama `computeAgenda`nın İÇİNDEydi; o fonksiyon AĞA
+  // ÇIKIYOR (fetchRSS + cacheGet/cacheSet), yani motora dilimlenemez.
+  // Çözüm: ÇEKME ile PUANLAMA ayrıldı. agendaScore saf: beslemeleri girdi
+  // olarak alır, çekme işi çağırana kalır. FORMÜLLER DEĞİŞMEDİ — tazelik
+  // katsayıları, ısı eşikleri, keşif eşikleri ve risk-on/off eşiği aynıdır.
+  // (Bilgi amaçlı sunum katmanı; TA/FA/bileşke SKORUNA DAHİL DEĞİL.)
 
-    const now = Date.now();
+  // Rotasyon bannerının "değer/savunma" sektör listesi. İki yerden okunur:
+  // agendaScore (rotasyonu kurar) ve çağırıcı (hisseleri eşleştirir).
+  const AGENDA_VALUE_SECTORS = [['banks', 'up'], ['staples', 'up'], ['energy', 'up'], ['industrials', 'up'], ['utilities', 'up'], ['gold', 'up']];
+
+  // SAF puanlayıcı: feeds = [{f:{w,lang}, items:[{title,link,pubDate}]}].
+  // nowMs verilmezse Date.now(). summary.rotation.stocks BOŞ döner.
+  function agendaScore(feeds, nowMs) {
+    const now = Number.isFinite(nowMs) ? nowMs : Date.now();
     // Manşet havuzu: dedup + zaman ağırlığı
     const seen = new Set();
     const pool = [];
@@ -11130,10 +11150,12 @@
     const rot = top.find((it) => it.key === 'rotation');
     let rotation = null;
     if (rot) {
-      const valueSecs = [['banks', 'up'], ['staples', 'up'], ['energy', 'up'], ['industrials', 'up'], ['utilities', 'up'], ['gold', 'up']];
+      // Değer/savunma sektörleri AGENDA_VALUE_SECTORS'ta — hisse eşleştirmesi
+      // KULLANICI EVRENİNE bakar (radarUniverse → taAllSymbols → localStorage),
+      // yani SAF DEĞİL. Burada boş bırakılır, çağırıcı doldurur.
       rotation = {
         heat: rot.heat,
-        stocks: agendaMatchedStocks(valueSecs),
+        stocks: [],
         n: rot.n || rot.heads.length,
       };
     }
@@ -11141,8 +11163,28 @@
     return {
       items: top, empty: !top.length,
       summary: { mood, moodCls, upSectors, downSectors, riskOn, riskOff, poolN: pool.length, rotation },
-      ts: Date.now(),
+      ts: now,
     };
+  }
+
+  async function computeAgenda(force) {
+    const CK = 'agenda:pool';
+    const cached = force ? null : cacheGet(CK);
+    let feeds;
+    if (cached && cached.data && (Date.now() - cached.t) < 20 * 60 * 1000) {
+      feeds = cached.data;
+    } else {
+      const results = await Promise.all(AGENDA_FEEDS.map((f) =>
+        fetchRSS(f.url, 24).then((items) => ({ f, items })).catch(() => ({ f, items: [] }))));
+      feeds = results.filter((r) => r.items.length);
+      if (feeds.length) cacheSet(CK, feeds);
+      else if (cached && cached.data) feeds = cached.data; // ağ koptuysa bayat da olsa
+    }
+    const res = agendaScore(feeds, Date.now());
+    // Kullanıcı evrenine bakan tek parça: rotasyon hisseleri (saf değil).
+    const rot = res.summary.rotation;
+    if (rot) rot.stocks = agendaMatchedStocks(AGENDA_VALUE_SECTORS);
+    return res;
   }
 
   // Bir gündem başlığına eşleşen izleme-evreni hisseleri (bilgi amaçlı ilişki).

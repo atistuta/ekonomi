@@ -82,7 +82,8 @@ async function fetchOne(sym, ck, deep) {
   const R = j?.quoteSummary?.result?.[0];
   if (!R) return { symbol: sym, ok: false };
   const sd = R.summaryDetail || {}, ks = R.defaultKeyStatistics || {},
-        pr = R.summaryProfile || {}, fd = R.financialData || {}, p = R.price || {};
+        pr = R.summaryProfile || {}, fd = R.financialData || {}, p = R.price || {},
+        ce = R.calendarEvents || {}; // yalnız deep=1'de dolu (MODULES_DEEP)
   return {
     symbol: sym, ok: true,
     ...(deep ? { earnings: parseEarnings(R) } : {}),
@@ -107,6 +108,27 @@ async function fetchOne(sym, ck, deep) {
     earningsGrowth: num(fd.earningsGrowth),
     debtToEquity: num(fd.debtToEquity),
     dividendYield: num(sd.dividendYield),
+    // --- TEMETTÜ ALANLARI ---
+    // Moduller (summaryDetail / defaultKeyStatistics / calendarEvents) zaten ISTENIYORDU
+    // ama okunmuyordu. Esleme Yahoo v10 quoteSummary govdesinden OLCULDU.
+    // num() kurali: olculemeyen alan null doner, ASLA 0. Cunku Number(null)===0 ve
+    // 0 basmak "temettu dagitmiyor" ile "veri yok"u ayni gosterir (olculmus hata).
+    // BIRIM TUZAGI: oran mi puan mi karisik — her alanin yanina yazildi. Istemci
+    // bicimlendirir; burada yuzdeye cevirme/yuvarlama YAPILMAZ (ham sayi kurali).
+    dividendRate: num(sd.dividendRate),                               // hisse basina yillik temettu (currency birimi)
+    payoutRatio: num(sd.payoutRatio),                                 // 0–1 ORAN
+    dividendYield5y: num(sd.fiveYearAvgDividendYield),                // DIKKAT: YUZDE PUANI (2.41 = %2,41), oran DEGIL
+    trailingAnnualDividendRate: num(sd.trailingAnnualDividendRate),   // son 12 ayda fiilen odenen, hisse basina
+    trailingAnnualDividendYield: num(sd.trailingAnnualDividendYield), // 0–1 ORAN
+    lastDividendValue: num(ks.lastDividendValue),                     // son tek temettu tutari, hisse basina
+    lastDividendTs: num(ks.lastDividendDate),                         // SANIYE (unix)
+    // Temettu kesilme (ex-date): summaryDetail birincil, calendarEvents yedek (yedek yalniz deep=1'de dolu).
+    exDividendTs: num(sd.exDividendDate) ?? num(ce.exDividendDate),   // SANIYE (unix)
+    // Odeme tarihi YALNIZ calendarEvents'ta var → deep=1 olmadan olculemez, o yuzden null.
+    dividendTs: deep ? num(ce.dividendDate) : null,                   // SANIYE (unix)
+    // ILAN TARIHI (declaration date) Yahoo quoteSummary'de YOK — uydurulmadi, alan da acilmadi.
+    // TEMETTU GECMISI de burada YOK: ayri cagri gerekiyor
+    // (v8/finance/chart?events=div → events.dividends). Bu serit disi, tasinmadi.
     price: num(p.regularMarketPrice) ?? num(sd.previousClose),
   };
 }

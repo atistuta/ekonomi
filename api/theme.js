@@ -121,6 +121,79 @@ export { AZAMI_SORGU };
 // tek PARA ÖDENEN istek: önbellek burada ağ değil MALİYET kazancı.
 import { anahtar, oku, yaz, TTL_TEMA } from './_onbellek.js';
 
+// ---------------------------------------------------------------------
+//  SEKTÖR SÖZLÜĞÜ — MOTORDAN OKUNUYOR, LLM'E SORULMUYOR
+//
+//  Başlıktaki "ne `_motor.js` ne `_akis.js` buraya girer" cümlesi
+//  DEĞİŞTİ ve NİYE: `candidates[].sector` alanı gerekiyordu (web bu
+//  etiketi gösteriyor, native istemci alanı hiç görmüyordu). İki yol
+//  vardı ve biri ÖLÇÜLDÜ:
+//    ① LLM'den sektör istemek → UYDURMA RİSKİ. Bu ucun kendi başlığı
+//       "istemci her sembolü /api/yfin ile doğrular, halüsinasyonları
+//       eler" diyor; doğrulanamayan bir metin alanı eklemek o kuralın
+//       tam tersi olurdu.
+//    ② Motorun DONMUŞ sözlüğü: `SYMBOL_SECTORS` — 127 sembol → sektör
+//       KODU dizisi (ölçüm: TUPRS=['energy'], NVDA=['semis','tech'],
+//       ASELS=['defense','tech']). Sözlükte OLMAYAN sembol (ölçüm:
+//       MSFT, AAPL) `null` döner; TAHMİN EDİLMEZ.
+//  ② seçildi.
+//
+//  SKOR ŞERİDİ YİNE BULAŞMIYOR — ÖLÇÜLDÜ:
+//    · `_akis.js` ve `_ag.js` İÇE ALINMADI. Motor ATIL bir konakla
+//      kuruluyor: `fetch`/`fetchVia` PATLAR, yani bu dosyadan motor
+//      üzerinden ağa çıkmak MÜMKÜN DEĞİL.
+//    · TA_WEIGHTS/TA_BENCHMARK BOŞ geçiyor: tek bir eşik, ağırlık ya da
+//      formül okunmuyor — okunan şey sabit bir SÖZLÜK.
+//    · Hiçbir skor hesaplanmıyor, gövdeye tek bir skor alanı girmiyor;
+//      `tests/parity.mjs`in koruduğu yüzey bu dosyada hâlâ YOK.
+//    · MALİYET ÖLÇÜLDÜ: `import` 5 ms, `buildMotor` 1 ms (maxDuration
+//      30 sn ve 20 sn'lik LLM çağrısının yanında ölçülemez).
+//  MOTORA YAZILMADI, yalnız OKUNDU.
+// ---------------------------------------------------------------------
+import { buildMotor } from './_motor.js';
+
+// Atıl konak: motorun beklediği en küçük yüzey, ağ kapıları KAPALI.
+const ATIL_KONAK = {
+  window: { TA_WEIGHTS: {}, TA_BENCHMARK: {}, MY_PROXY: 'https://atil.invalid/' },
+  localStorage: { getItem: () => null, setItem: () => {} },
+  fetch: async () => { throw new Error('bu uc motor uzerinden aga cikmaz'); },
+  fetchVia: async () => { throw new Error('bu uc motor uzerinden aga cikmaz'); },
+};
+
+// Sözlük kurulamazsa (motor yeniden üretilirken alan adı değişirse)
+// uç ÇÖKMEZ, sektör alanı null kalır: "ölçemedim" sessiz 0 değil null.
+const SEKTOR_SOZLUGU = (() => {
+  try {
+    const d = buildMotor(ATIL_KONAK).SYMBOL_SECTORS;
+    return (d && typeof d === 'object') ? d : {};
+  } catch (e) {
+    console.error('api/theme sektor sozlugu kurulamadi:', (e && e.message) || e);
+    return {};
+  }
+})();
+
+/**
+ * Sembolün sektör KODLARI (makine kodu dizisi) ya da `null`.
+ * SAF: ağa çıkmaz, motora yazmaz. Dışa aktarılıyor ki tests/uc-test.mjs
+ * ağsız ölçebilsin.
+ *
+ * ÇOĞUL: sözlükte bir sembol birden çok kod taşıyabilir
+ * (ASELS = ['defense','tech']) — tek koda indirmek bilgi kaybı olurdu.
+ * Türkçe etiket (motorun `SECTORS` tablosu) GÖNDERİLMİYOR: ham metin
+ * kuralı gereği gövdede yalnız kapalı kümeden makine kodu durur,
+ * etiketleme istemcinin işi.
+ */
+export function sektorKodlari(symbol) {
+  // Sözlüğün anahtarları ÇIPLAK kod; aday sembolü BIST'te '.IS' taşıyor.
+  const ham = String(symbol || '').trim().toUpperCase();
+  const cip = ham.endsWith('.IS') ? ham.slice(0, -3) : ham;
+  if (!cip) return null;
+  const v = Object.prototype.hasOwnProperty.call(SEKTOR_SOZLUGU, cip)
+    ? SEKTOR_SOZLUGU[cip] : null;
+  if (!Array.isArray(v) || !v.length) return null; // boş dizi = bilgi yok → null
+  return v.map((s) => String(s)).filter(Boolean);
+}
+
 // maxDuration 30 KALDI — değiştirilmedi, çünkü ölçülmüş bir sebep yok ve
 // bu görev davranışı değiştirmiyor. İş yükü tek bir LLM çağrısı; skor
 // uçlarının 60'ına (8 sembol × 7,2 sn) ihtiyaç duymuyor.

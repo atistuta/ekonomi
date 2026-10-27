@@ -175,6 +175,13 @@ export const EXPORTS = [
   // SKORA DOKUNMAZ. Turkce cumleler (CYCLE_PHASES.label, PMAC_STANCE_TR)
   // BILEREK dısarı verilmiyor — HAM SAYI kurali: uc yalniz kod dondurur.
   'CYCLE_PHASES', 'macroGrowth', 'macroPhase',
+  // B5 (2026-10-27): computeMacro'nun ICINDEN cikarilan iki SAF baski
+  // hesabi. Esik (0.15), bolen (10) ve ton artisi (0.15) DEGISMEDI —
+  // yalniz artik dilimlenebilir bir fonksiyon govdesinde. Ucun kendi
+  // enflasyon/risk sayisini uretebilmesi icin disa verilmeleri gerekti.
+  'macroInflPressure', 'macroRiskPressure',
+  // Tema isisi: /api/theme + /api/radar ayni isi iki yerde yapmasin diye.
+  'themeHeat',
   'FADE_WIN', 'fadedAround', 'rateDirection', 'inflDirection',
   'RATE_SENSITIVE', 'pulseRecentCount',
   'PULSE_FRESH_H', 'PULSE_FRESH_W', 'pulseFreshWithin', 'pulseFreshWeight', 'pulseStance',

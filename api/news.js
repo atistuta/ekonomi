@@ -35,6 +35,36 @@
 //  sorgusunu reddetmek olurdu. Uzunluk tavanı da bu yüzden ayrı
 //  (`AZAMI_HABER_SORGU`, ölçümü _haber.js'te).
 //
+//  …AMA `symbols=` KİPİ ORTAK KAPIDAN GEÇER — ÜSTTEKİNİN TERSİ DEĞİL,
+//  AYNI FİKRİN ÖTEKİ YÜZÜ: `symbols` SERBEST METİN DEĞİL, SEMBOL. O
+//  yüzden `_girdi.js`in `ayristir()`ından geçiyor ve onun ÖLÇÜLMÜŞ
+//  tavanları aynen geçerli: `AZAMI_SEMBOL` = 8, `AZAMI_SORGU` = 128,
+//  `SEMBOL_BICIM`, yineleyi atma, `cok_sembol` reddi. Bu uçta ELLE
+//  YAZILMIŞ TEK BİR SEMBOL EŞİĞİ YOK — hata gövdeleri de o kapının
+//  kendi kodları (`symbols_yok|too_long|bad_vade|bad_market|
+//  symbols_bos|cok_sembol|bad_symbol`), burada yeniden yazılmadı.
+//
+//  `symbols=` NİYE GEREKTİ (ÖLÇÜLEN EKSİK): webin haber akışı portföyün
+//  TÜM sembollerini TEK ekranda, her maddenin hangi hisseye ait
+//  olduğunu bilerek gösteriyor (app.js:3308 `{ symbol, type, item }`,
+//  app.js:3330 `Promise.allSettled(portfolio.map(...))`). Tek sorgulu
+//  uç ile native istemci bunu ancak sembol başına bir HTTP isteğiyle
+//  yapabilirdi (8 istek, 8 soğuk lambda). HİSSE↔HABER EŞLEMESİ de bu
+//  kipin çıktısında duruyor: her maddenin `symbol` alanı.
+//
+//  ARİTMETİK (maxDuration 10 ile):
+//    · Beslemeler PARALEL (pulse.js:530'un ölçülmüş kalıbı). En kötü hâl
+//      8 × 6 sn değil, ~6 sn + ayrıştırma; diziliyse 48 sn olurdu.
+//    · Madde tavanı: sembol başına `limit` (1..`AZAMI_MADDE`=25), yani
+//      gövde en çok 8 × 25 = 200 madde. İKİSİ DE ÖLÇÜLMÜŞ SABİT; bu uç
+//      üçüncü bir sayı UYDURMUYOR.
+//
+//  TEK SAYAÇ DEĞİL, SEMBOL BAŞINA SAYAÇ + TOPLAM: `haberCek` kendi
+//  `tam`ını verilen sayaçtan hesaplıyor; sekiz besleme AYNI sayacı
+//  paylaşsa bir sembolün zaman aşımı ÖTEKİ YEDİ sembolü de "ölçemedim"
+//  gösterirdi. Her satır KENDİ sayacıyla ölçülüyor, sonra sayaçlar
+//  toplanıyor: `semboller[i].tam` o satırın, gövdedeki `tam` hepsinin.
+//
 //  KV ÖNBELLEĞİ YOK — BİLEREK, SESSİZ EKSİKLİK DEĞİL: `api/_onbellek.js`
 //  TTL'leri skor ve tema için ÖLÇÜLDÜ (TTL_FIYAT 300 · TTL_TEMA). Haber
 //  için ölçülmüş bir TTL yok ve uydurmak, bayat manşeti "taze" diye
@@ -43,13 +73,33 @@
 //  (öteki uçların `kisaOnbellek` kalıbı). Ölçülmüş bir TTL çıktığında KV
 //  eklenir.
 //
-//  SÖZLEŞME
+//  SÖZLEŞME — İKİ KİP, BİRİ ZORUNLU, İKİSİ BİRDEN OLMAZ
+//
+//  ① TEK SORGU (eski kip, GÖVDESİ DEĞİŞMEDİ)
 //    GET /api/news?q=ASELSAN[&market=TR][&limit=10]
-//      q      ZORUNLU · serbest metin ya da sembol (en çok 256 karakter)
+//      q      serbest metin ya da sembol (en çok 256 karakter)
 //      market TR | US   (varsayılan TR — ölçüm: _haber.js PAZAR_YERELI)
 //      limit  1..25     (varsayılan 10)
 //    Cevap 200: { q, market, limit, maddeler[], adet, sayac, tam, ms, uyari }
-//      maddeler[i] = { title, link, pubDate, source } — HAM metin.
+//
+//  ② ÇOKLU SEMBOL (yeni)
+//    GET /api/news?symbols=THYAO,NVDA[&market=BIST][&limit=10]
+//      symbols en çok 8 sembol (ortak kapı: _girdi.js `ayristir`)
+//      market  US | BIST — SEMBOL pazarı (kipin kapısı _girdi.js, o
+//              yüzden TR/US DEĞİL; satır başına haber yereline
+//              `PAZAR_ESLEME` ile çevriliyor)
+//      limit   1..25 · SEMBOL BAŞINA
+//    Cevap 200: { q: null, symbols[], market, limit, maddeler[], adet,
+//                 semboller[], sayac, tam, ms, uyari }
+//      semboller[i] = { symbol, market, adet, tam } — satır başına ölçüm
+//      maddeler      = BÜTÜN satırların maddeleri TEK düz dizide; hangi
+//                      satırdan geldiği maddenin `symbol` alanında.
+//
+//    İKİ KİPTE DE maddeler[i] =
+//      { title, link, pubDate, source, type, symbol } — HAM metin.
+//      type   = 'NEWS' (bu uç KAP duyurusu üretmez; küme _haber.js'te)
+//      symbol = çoklu kipte satırın sembolü · tek sorgu kipinde null
+//               (serbest metin bir hisseye ait değildir — uydurulmaz)
 //      adet        = maddeler.length — istemci boş listeyi alan okumadan
 //                    görsün.
 //      tam         = sayaçta hata/zaman aşımı/kısa gövde YOK mu.
@@ -74,10 +124,17 @@
 import {
   haberCek, bosHaberSayac, haberTam,
   AZAMI_MADDE, VARSAYILAN_MADDE, AZAMI_HABER_SORGU, HABER_PAZARLAR,
+  MADDE_ALANLARI, HABER_TURLERI,
 } from './_haber.js';
+
+// Sembol kapısı ORTAK: skor şeridinin kullandığı AYNI fonksiyon nesnesi
+// (gerekçe _girdi.js:155 — kopya yok, ayrışma yok). Bu uç motor kurmuyor,
+// yalnız GİRDİ DOĞRULAMASINI ödünç alıyor.
+import { ayristir, AZAMI_SEMBOL } from './_girdi.js';
 
 export {
   AZAMI_MADDE, VARSAYILAN_MADDE, AZAMI_HABER_SORGU, HABER_PAZARLAR,
+  MADDE_ALANLARI, HABER_TURLERI, AZAMI_SEMBOL, ayristir,
 };
 
 // maxDuration 10 · ÖLÇÜLEN gerekçe: bu uç TEK bir dış istek yapıyor
@@ -92,6 +149,26 @@ const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 // `hl=en-US` çağrılarından fazla). Sessiz varsayılan DEĞİL: cevapta
 // `market` alanı hangi pazarın kullanıldığını BİLDİRİYOR.
 export const VARSAYILAN_PAZAR = 'TR';
+
+// SEMBOL PAZARI → HABER YERELİ. KAPALI SÖZLÜK, tahmin yok: solu
+// `_girdi.js` PAZARLAR (['US','BIST']), sağı `_haber.js` HABER_PAZARLAR
+// (['TR','US']). İki ölçülmüş küme arasında İKİ giriş var ve ikisi de
+// yazılı; üçüncü bir pazar eklenirse bu sözlük DERLEME ANINDA değil,
+// aşağıdaki `eslemeTam` ölçümünde patlar (sessizce 'TR'ye düşmez).
+export const PAZAR_ESLEME = { BIST: 'TR', US: 'US' };
+
+// Sözlüğün iki kümeyi de kapattığını ÖLÇ: eksik giriş sessiz varsayılan
+// üretirdi. `false` çıkarsa çoklu kip o sembolü REDDEDER (aşağıda).
+export const eslemeTam = (pazar) =>
+  Object.prototype.hasOwnProperty.call(PAZAR_ESLEME, pazar)
+  && HABER_PAZARLAR.includes(PAZAR_ESLEME[pazar]);
+
+// Sayaçları topla. Anahtar kümesi `bosHaberSayac()`ten OKUNUYOR, elle
+// yazılmıyor — taşıyıcı yarın bir sayaç eklerse buraya da gelir.
+function sayacTopla(hedef, kaynak) {
+  for (const k of Object.keys(hedef)) hedef[k] += Number(kaynak?.[k] || 0);
+  return hedef;
+}
 
 // Hata ve eksik cevaplar KISA önbelleklenir (gerekçe: api/analyze.js:225).
 function kisaOnbellek(res) {
@@ -115,22 +192,41 @@ export default async function handler(req, res) {
   const sorgu = req.query || {};
 
   const q = String(sorgu.q ?? '').trim();
-  if (!q) {
+  const hamSembol = String(sorgu.symbols ?? '').trim();
+
+  // İKİ KİP BİRDEN OLMAZ: hangisinin kazandığını SESSİZCE seçmek,
+  // istemcinin istemediği gövdeyi dönmek olurdu.
+  if (q && hamSembol) {
+    kisaOnbellek(res);
+    res.status(400).json({ error: 'q_ve_symbols', uyari: UYARI });
+    return;
+  }
+  // Hiçbiri yoksa ESKİ kod ne diyorduysa o: `missing_q` (yeni kod
+  // uydurulmadı, bugünün istemcisinin gördüğü hata değişmiyor).
+  if (!q && !hamSembol) {
     kisaOnbellek(res);
     res.status(400).json({ error: 'missing_q', uyari: UYARI });
     return;
   }
-  if (q.length > AZAMI_HABER_SORGU) {
+  // Uzunluk tavanı YALNIZ serbest metne: `symbols`in tavanı (128)
+  // `_girdi.js` kapısında ve kendi `too_long`unu kendisi döner.
+  if (q && q.length > AZAMI_HABER_SORGU) {
     kisaOnbellek(res);
     res.status(400).json({ error: 'too_long', azami: AZAMI_HABER_SORGU, uyari: UYARI });
     return;
   }
 
-  const market = String(sorgu.market ?? VARSAYILAN_PAZAR).trim().toUpperCase();
-  if (!HABER_PAZARLAR.includes(market)) {
-    kisaOnbellek(res);
-    res.status(400).json({ error: 'bad_market', izinli: HABER_PAZARLAR, uyari: UYARI });
-    return;
+  // Pazar doğrulaması KİPE GÖRE: tek sorgu kipinde haber yereli
+  // (TR|US), çoklu kipte SEMBOL pazarı (US|BIST) ve onu `ayristir`
+  // doğruluyor — iki ayrı küme, iki ayrı kapı, karıştırılmıyor.
+  let market = VARSAYILAN_PAZAR;
+  if (q) {
+    market = String(sorgu.market ?? VARSAYILAN_PAZAR).trim().toUpperCase();
+    if (!HABER_PAZARLAR.includes(market)) {
+      kisaOnbellek(res);
+      res.status(400).json({ error: 'bad_market', izinli: HABER_PAZARLAR, uyari: UYARI });
+      return;
+    }
   }
 
   // Limit SESSİZCE KIRPILMAZ: tavanı aşan istek açıkça reddediliyor
@@ -155,6 +251,85 @@ export default async function handler(req, res) {
   const t0 = Date.now();
 
   try {
+    // ------------------------------------------------------------------
+    //  ② ÇOKLU SEMBOL KİPİ
+    // ------------------------------------------------------------------
+    if (hamSembol) {
+      // Doğrulama ORTAK kapıda; hata gövdesi OLDUĞU GİBİ geçiyor
+      // (`cok_sembol`/`bad_symbol`/`too_long` burada yeniden yazılmadı).
+      const ay = ayristir({ symbols: hamSembol, market: sorgu.market });
+      if (ay.hata) {
+        kisaOnbellek(res);
+        res.status(ay.hata.http).json({ ...ay.hata.govde, uyari: UYARI });
+        return;
+      }
+
+      // Sözlükte karşılığı olmayan pazar SESSİZ VARSAYILANA DÜŞMEZ,
+      // reddedilir: 'TR'ye düşürmek ABD hissesine Türkçe besleme
+      // vermek (ya da tersi) olurdu ve istemci bunu farketmezdi.
+      const kapanmayan = ay.rows.filter((r) => !eslemeTam(r.market)).map((r) => r.market);
+      if (kapanmayan.length) {
+        kisaOnbellek(res);
+        res.status(400).json({
+          error: 'bad_market', izinli: Object.keys(PAZAR_ESLEME),
+          gecersiz: kapanmayan, uyari: UYARI,
+        });
+        return;
+      }
+
+      // PARALEL (pulse.js:530 kalıbı) + SATIR BAŞINA SAYAÇ: bir
+      // sembolün zaman aşımı ötekileri "ölçemedim" göstermesin.
+      const satirlar = await Promise.all(ay.rows.map(async (r) => {
+        const satirSayac = bosHaberSayac();
+        const s = await haberCek(r.sym, {
+          market: PAZAR_ESLEME[r.market], limit, sayac: satirSayac, symbol: r.sym,
+        });
+        return { row: r, maddeler: s.maddeler || [], satirSayac };
+      }));
+
+      const sayac = bosHaberSayac();
+      const maddeler = [];
+      const semboller = [];
+      for (const it of satirlar) {
+        for (const m of it.maddeler) maddeler.push(m);
+        sayacTopla(sayac, it.satirSayac);
+        semboller.push({
+          symbol: it.row.sym,
+          market: it.row.market,
+          adet: it.maddeler.length,
+          // Satırın KENDİ ölçümü: 0 madde + tam:true = "bu hissede haber
+          // yok", tam:false = "ölçemedim". İkisi karıştırılmıyor.
+          tam: haberTam(it.satirSayac),
+        });
+      }
+      const tamCoklu = haberTam(sayac);
+
+      if (tamCoklu && maddeler.length) {
+        res.setHeader('Cache-Control', 'public, max-age=120, s-maxage=120, stale-while-revalidate=240');
+      } else {
+        kisaOnbellek(res);
+      }
+
+      res.status(200).json({
+        // `q: null` — bu kipte serbest metin YOK. Alanı düşürmek yerine
+        // null bırakıyoruz: istemci tek bir gövde şeması okuyor ve
+        // "hangi kip" sorusunu `symbols`in varlığından değil
+        // `q === null`dan da okuyabiliyor.
+        q: null,
+        symbols: ay.rows.map((r) => r.sym),
+        market: ay.market,
+        limit,
+        maddeler,
+        adet: maddeler.length,
+        semboller,
+        sayac,
+        tam: tamCoklu,
+        ms: Date.now() - t0,
+        uyari: UYARI,
+      });
+      return;
+    }
+
     const sayac = bosHaberSayac();
     const sonuc = await haberCek(q, { market, limit, sayac });
     const maddeler = sonuc.maddeler || [];

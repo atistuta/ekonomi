@@ -78,7 +78,25 @@ export const AZAMI_HABER_SORGU = 256;
 
 // Dönen maddenin alan kümesi BURADA yazılı — besleme yarın yeni bir
 // etiket eklediğinde sözleşmemiz sessizce büyümesin.
-export const MADDE_ALANLARI = ['title', 'link', 'pubDate', 'source'];
+export const MADDE_ALANLARI = ['title', 'link', 'pubDate', 'source', 'type', 'symbol'];
+
+// `type` ve `symbol` NEDEN EKLENDİ (native sözleşme eksiği, ÖLÇÜLDÜ):
+// webin haber akışı maddeyi `{ symbol, type:'NEWS'|'KAP', item }` olarak
+// taşıyor (app.js:3308) ve ekranın iki süzgeci (`newsFilterSymbol`,
+// `newsFilterType`, app.js:3309-3310) BU İKİ ALANI okuyor. Sunucu onları
+// taşımadığı için native istemci aynı süzgeçleri kuramıyordu.
+//
+// DEĞER KÜMESİ ÖLÇÜLDÜ, GENİŞLETİLMEDİ: 'NEWS' | 'KAP'. Bu taşıyıcı
+// YALNIZ 'NEWS' üretir — tek kaynağı Google News RSS (IZINLI_KONAK) ve
+// KAP duyurusu oradan GELMEZ (webde ayrı bir `fetchKAP()` çağrısı,
+// app.js:3312). 'KAP' kümede yazılı ki istemci tarafı aynı sözlüğü
+// kullanabilsin; bu taşıyıcıdan asla o değer çıkmaz.
+//
+// `symbol` ÖLÇÜLEMEYEN HÂLDE null, BOŞ DİZGE DEĞİL: serbest metin
+// sorgusunda (`?q=Fed faiz kararı`) maddenin bir hissesi YOKTUR ve
+// sorgu metnini sembol gibi yazmak uydurma olurdu.
+export const HABER_TURLERI = ['NEWS', 'KAP'];
+export const HABER_TURU = 'NEWS'; // bu taşıyıcının üretebildiği TEK tür
 
 // ---------------------------------------------------------------------
 //  PAZAR → YEREL AYAR. İki değer, ikisi de ÖLÇÜLDÜ (app.js:8695-8696).
@@ -172,13 +190,25 @@ function etiket(blok, ad) {
  *
  * @param {string} xml
  * @param {number} azami  en çok kaç madde
- * @returns {{title:string, link:string, pubDate:string, source:string}[]}
+ * @param {{symbol?:string}} [isaret]  maddeye yazılacak hisse kodu;
+ *        verilmezse `symbol: null` (serbest metin sorgusunda madde bir
+ *        hisseye AİT DEĞİLDİR — sorgu metni sembol yerine konmaz).
+ * @returns {{title:string, link:string, pubDate:string, source:string,
+ *            type:string, symbol:(string|null)}[]}
  */
-export function ayristirRSS(xml, azami = VARSAYILAN_MADDE) {
+export function ayristirRSS(xml, azami = VARSAYILAN_MADDE, isaret = {}) {
   const metin = String(xml ?? '');
   if (!metin) return [];
   const sinir = Math.max(0, Math.min(AZAMI_MADDE, Number(azami) || 0));
   if (!sinir) return [];
+
+  // Parametre adi `isaret`, `etiket` DEGIL: modul duzeyinde ayni adli bir
+  // yardimci var (etiket(blok, ad), satir 171) ve `etiket` adli bir parametre
+  // onu GOLGELER — govdedeki her etiket(...) cagrisi TypeError atardi.
+  // Etiket: boş dizge / boşluk SEMBOL DEĞİLDİR → null. Uydurma yok.
+  const sembol = (isaret && isaret.symbol != null && String(isaret.symbol).trim())
+    ? String(isaret.symbol).trim().toUpperCase()
+    : null;
 
   // RSS <item> ve Atom <entry> — app.js de ikisini birlikte topluyor.
   const bloklar = metin.match(/<(item|entry)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi) || [];
@@ -207,7 +237,9 @@ export function ayristirRSS(xml, azami = VARSAYILAN_MADDE) {
     // ADI; yoksa boş kalır (uydurulmaz).
     const source = etiket(blok, 'source');
 
-    out.push({ title, link, pubDate, source });
+    // type SABİT 'NEWS': bu taşıyıcının tek kaynağı Google News RSS.
+    // 'KAP' buradan ÇIKMAZ (gerekçe: MADDE_ALANLARI yorumu).
+    out.push({ title, link, pubDate, source, type: HABER_TURU, symbol: sembol });
   }
   return out;
 }
@@ -219,7 +251,9 @@ export function ayristirRSS(xml, azami = VARSAYILAN_MADDE) {
  * olmadığında istek Vercel'in süre tavanına kadar asılı kalırdı.
  *
  * @param {string} q
- * @param {{market?:string, limit?:number, sayac?:object}} [sec]
+ * @param {{market?:string, limit?:number, sayac?:object, symbol?:string}} [sec]
+ *        `symbol` verilirse dönen her maddeye yazılır (çoklu sembol
+ *        kipinde hisse↔haber eşlemesi BU alandır); verilmezse null.
  * @returns {Promise<{maddeler:object[], sayac:object, tam:boolean, adres:(string|null)}>}
  */
 export async function haberCek(q, sec = {}) {
@@ -261,7 +295,7 @@ export async function haberCek(q, sec = {}) {
       return { maddeler: [], sayac, tam: false, adres };
     }
 
-    const maddeler = ayristirRSS(govde, limit);
+    const maddeler = ayristirRSS(govde, limit, { symbol: sec.symbol });
     sayac.basari++;
     // Sıfır madde ARIZA DEĞİL: geçerli bir besleme, o sorguda haber yok.
     return { maddeler, sayac, tam: haberTam(sayac), adres };
