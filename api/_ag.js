@@ -119,6 +119,52 @@ export const SEC_ARALIK_MS = 125;
 export const TUR_BUTCE_MS = 45000;
 export const TUR_TAVAN_MS = 50000;
 
+// ---------------------------------------------------------------------------
+//  İŞ YATIRIM (BIST temel bacağı) — İKİ sayı, biri tek istek biri tüm bacak.
+//
+//  NİYE VAR: eski tek sayı `isMs = 7000` BIST temel bacağını TAMAMEN
+//  öldürüyordu. ÖLÇÜLDÜ 2026-10-27, MaliTablo ucu, companyCode=ASELS, üç yıl
+//  ayrı ayrı (curl -w, üretim başlıklarıyla):
+//      y1=2025 → HTTP 200 · TTFB 22,780 sn · 27919 bayt
+//      y1=2024 → HTTP 200 · TTFB 12,797 sn · 27812 bayt
+//      y1=2026 → HTTP 200 · TTFB 12,586 sn · 27142 bayt
+//  Önceki teşhis koşusunun aynı ölçümü: 22,86 / 12,79 / 17,45 sn.
+//  ALTI ölçümün EN YAVAŞI 22,86 sn. Yani 7 sn'de ÜÇ yıl da kesiliyor →
+//  fetchIsYatirimMali null → /api/analyze?symbols=ASELS.IS `fa=null`.
+//  Uç 200 dönüyor, bu yüzden arıza sessiz. (Karşı ölçüm: isMs 25000 ile
+//  rows=147 · score=79,598507 · present=16/16.)
+//
+//  IS_ISTEK_MS 25000 — NİYE 25 ve niye daha fazlası DEĞİL:
+//    en yavaş ölçüm 22,86 sn → 25 000 − 22 860 = 2 140 ms marj (~%9).
+//    30 000 marjı büyütürdü ama aşağıdaki bacak bütçesini de büyütmek
+//    gerekirdi; 25 000 ölçülmüş en yavaş cevabı geçen EN KÜÇÜK yuvarlak sayı.
+//
+//  IS_BACAK_MS 30000 — NİYE AYRI BİR SAYI GEREKİYOR: üç-yıl döngüsü
+//  `api/_motor.js:1269`'da ve ÜRETİLMİŞ dosyada, elle düzenlenemez. Döngü üç
+//  yılı SIRAYLA deniyor, ilk BAŞARIDA duruyor. Tek sayıyı 25 000 yapıp
+//  bırakmak YETMEZ, çünkü ulaşılamayan ağda (score.js:80'de ölçülen
+//  UND_ERR_CONNECT_TIMEOUT hâli) niyet 3 × 25 = 75 sn olur; `pencere()` bunu
+//  TAVAN'da (50 sn) kesse de BIST bacağı TURUN TAMAMINI yer, Yahoo/SEC
+//  bacakları ve diğer semboller açlıktan `kesinti` olur.
+//  30 000'in aritmetiği (tur başında bacak hakkı = 30 000 ms):
+//    1. yıl: min(25 000, 30 000)        = 25 000 ms → ölçülen 22,86 sn SIĞAR
+//    2. yıl: kalan 30 000 − 25 000      =  5 000 ms
+//    3. yıl: kalan 0 (< ASGARI_ISTEK_MS) =     0 ms → ağa HİÇ çıkmaz, anında kesinti
+//    bacak toplamı ≤ 30 000 ms.
+//  TAVAN ile uyum: 50 000 − 30 000 = 20 000 ms, Yahoo (yahooMs 10 000) + SEC
+//  + bütüncül katman için kalıyor. Tavandan sonraki saf hesap payı ÖLÇÜLDÜ
+//  (yukarıda, duman.mjs): ~3,3 sn. 50,0 + 3,3 ≈ 53,3 sn < maxDuration 60 →
+//  ~6,7 sn marj. BUTCE (45 000) ile uyum: 30 000 < 45 000, yani BIST bacağı
+//  tek başına ikinci sembolün BAŞLAMASINI engellemiyor.
+//  BACAK HAKKI TUR BAŞINA, SEMBOL BAŞINA DEĞİL: sembol başına olsaydı 8 sembol
+//  için niyet 8 × 30 = 240 sn olurdu; `pencere()` yine 50'de keserdi ama
+//  muhasebe yalan söylerdi. Tur başına olması şu demek: bir turda ÖLÇÜLEBİLEN
+//  BIST temeli sayısı sınırlı. Bu bir TAVİZ, ama eski davranış HİÇBİRİNİ
+//  ölçemiyordu (hepsi `fa=null`).
+// ---------------------------------------------------------------------------
+export const IS_ISTEK_MS = 25000;
+export const IS_BACAK_MS = 30000;
+
 // Tavana bu kadar az kalmışsa ağa HİÇ çıkılmaz. Niye bir taban var: 20 ms
 // kalmışken istek açmak neredeyse kesin bir zaman aşımı demek — uzak tarafı
 // boşuna yorar, soket açar, sonra iptal eder. 250 ms ölçülmüş bir RTT değil,
@@ -198,7 +244,7 @@ export function sayacTam(s) {
   return s.yahoo.kesinti === 0 && s.sec.kesinti === 0 && s.bist.kesinti === 0;
 }
 
-function yeniTurDurumu(butceMs, tavanMs) {
+function yeniTurDurumu(butceMs, tavanMs, bistButceMs) {
   const genel = bosSayac();
   const t0 = Date.now();
   return {
@@ -209,6 +255,7 @@ function yeniTurDurumu(butceMs, tavanMs) {
     t0,                          // turun başlangıç anı
     butce: t0 + butceMs,         // semboller arası fren
     sonTarih: t0 + tavanMs,      // mutlak son tarih (sembol içinde de durur)
+    bistKalan: bistButceMs,      // BIST bacağının TUR BOYUNCA harcayabileceği ms
   };
 }
 
@@ -258,22 +305,24 @@ async function cek(url, { headers, ms, signal }) {
  * @param {object} opt.taBenchmark config.js TA_BENCHMARK
  * @param {number} [opt.yahooMs=10000] Yahoo isteği zaman aşımı
  * @param {number} [opt.secMs=10000]   SEC isteği üst sınırı (motorun sinyali daha kısa olabilir)
- * @param {number} [opt.isMs=7000]     İş Yatırım ÜST SINIRI. Motor 15000 istiyor
- *   ama fetchIsYatirimMali 3 yılı SIRAYLA deniyor → 3 × 15 sn = 45 sn, bütçeyi
- *   aşar. Motor üretilmiş ve elle düzenlenemez; kısıntı bu yüzden konakta,
- *   çünkü `fetchVia` konağın kendi işlevi.
+ * @param {number} [opt.isMs=25000]    İş Yatırım TEK İSTEK üst sınırı. Aşağıda
+ *   `IS_ISTEK_MS` ile birlikte okunur.
+ * @param {number} [opt.bistButceMs=30000] BIST bacağının TUR BOYUNCA toplam ms
+ *   hakkı. Üç-yıl döngüsünün tavanı yemesini engelleyen fren; aritmetiği
+ *   `IS_ISTEK_MS` yorumunda.
  */
 export function canliAg(opt = {}) {
   const yahooMs = opt.yahooMs ?? 10000;
   const secMs = opt.secMs ?? 10000;
-  const isMs = opt.isMs ?? 7000;
+  const isMs = opt.isMs ?? IS_ISTEK_MS;
+  const bistButceMs = opt.bistButceMs ?? IS_BACAK_MS;
   // Varsayılanlar YUKARIDAKİ TEK sayı yerinden. Opsiyon yalnız ÖLÇÜM için
   // var: tests/uc-test.mjs ⑦ bölümü tavanı milisaniyelere küçültüp freni
   // saniyenin altında sınıyor (üretim sabitleriyle o test 50 sn sürerdi ve
   // kapı dörtlüsüne girmezdi). Üretimde hiçbir uç bu iki opsiyonu GEÇMİYOR.
   const butceMs = opt.butceMs ?? TUR_BUTCE_MS;
   const tavanMs = opt.tavanMs ?? TUR_TAVAN_MS;
-  let tur = yeniTurDurumu(butceMs, tavanMs);
+  let tur = yeniTurDurumu(butceMs, tavanMs, bistButceMs);
 
   const say = (yol, alan) => {
     tur.genel[yol][alan]++;
@@ -384,16 +433,25 @@ export function canliAg(opt = {}) {
     const istenen = Math.min(o.timeout ?? isMs, isMs);
     return birKez('IS ' + s, async () => {
       say('bist', 'istek');
-      // fetchIsYatirimMali üç yılı SIRAYLA deniyor (3 × 7 sn = 21 sn). Tavan
-      // dolduysa kalan yıllar anında düşer — sembol içi fren burada görünür.
-      const ms = pencere(istenen);
+      // fetchIsYatirimMali üç yılı SIRAYLA deniyor, ilk BAŞARIDA duruyor.
+      // ÜÇ kapı birden: ① tek istek üst sınırı (istenen ≤ IS_ISTEK_MS),
+      // ② BIST bacağının tur boyu kalan hakkı (tur.bistKalan), ③ turun mutlak
+      // son tarihi (`pencere`). En küçüğü kazanır. Hakkı burada DÜŞÜYORUZ, yani
+      // ilk yıl 25 sn'yi yerse ikinci yıla 5 sn, üçüncüye 0 kalır — aritmetik
+      // IS_BACAK_MS yorumunda ÖLÇÜLDÜ (2026-10-27).
+      const hak = Math.min(istenen, Math.max(0, tur.bistKalan));
+      const ms = hak < ASGARI_ISTEK_MS ? 0 : pencere(hak);
       if (!ms) { say('bist', 'kesinti'); throw new Error('sure tavani'); }
+      const basla = Date.now();
       let r;
       try {
         r = await cek(s, { headers: isYatirimBaslik(s), ms });
       } catch (e) {
         say('bist', 'kesinti');
         throw e; // fetchIsYatirimMali yakalar → sıradaki yılı dener
+      } finally {
+        // Harcanan GERÇEK süre düşülür (zaman aşımı dahil): niyet değil ölçüm.
+        tur.bistKalan -= Date.now() - basla;
       }
       if (!r.ok) { say('bist', 'kesinti'); throw new Error('HTTP ' + r.status); }
       if (!r.txt || r.txt.length <= 50) { say('bist', 'kesinti'); throw new Error('bos yanit'); }
@@ -434,7 +492,7 @@ export function canliAg(opt = {}) {
      * onun bir parçası. Uç noktanın ayrı bir `t0` tutup sayı taşıması
      * gerekmiyor — `butceDoldu()` soruyor, cevabı taşıyıcı veriyor.
      */
-    yeniTur() { tur = yeniTurDurumu(butceMs, tavanMs); return tur.genel; },
+    yeniTur() { tur = yeniTurDurumu(butceMs, tavanMs, bistButceMs); return tur.genel; },
     /** Sembol başına sayaç odağı; null ile genele dön. */
     odakla(s) { tur.aktif = s || tur.genel; },
     get genel() { return tur.genel; },

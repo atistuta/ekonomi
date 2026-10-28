@@ -82,7 +82,12 @@ import {
   ScreenShell,
   VeriYok,
 } from '@/components';
-import { ENDEKS_NABIZ, EndeksNabziKarti, type EndeksOlcum } from '@/components/bugun';
+import {
+  ENDEKS_NABIZ,
+  EndeksNabziKarti,
+  PiyasaGundemiKarti,
+  type EndeksOlcum,
+} from '@/components/bugun';
 import { HaberSatiri } from '@/components/kesfet';
 import { formatOran, formatScore } from '@/lib/format';
 import { radius, space, type, useTheme } from '@/theme';
@@ -227,6 +232,11 @@ export default function BugunScreen() {
       <MakroNabizKarti />
 
       <TematikHaberKarti />
+
+      {/* 📰 Gündem manşetleri: sembole bağlı DEĞİL — Keşfet'teki gündem
+          kartı sembol başına çalışıyor, bu uç (`gundem=1`) sembolsüz.
+          Kaynak başına ölçümü kendi içinde yazıyor. */}
+      <PiyasaGundemiKarti />
 
       <Card title="Henüz ölçülmeyen kartlar" subtitle="Dürüst eksik listesi">
         <Text style={[type.small, { color: colors.textDim }]}>

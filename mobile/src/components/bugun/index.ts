@@ -2,7 +2,7 @@
 //  BUGÜN KARTLARI — tek içe aktarma noktası           (FAZ 3 / native)
 // ---------------------------------------------------------------------
 //  NE: "Bugün" sekmesine takılacak yüzeyleri tek yerden dışa açar.
-//  Şimdilik bir kalem: 📊 Endeks Nabzı.
+//  İki kalem: 📊 Endeks Nabzı · 📰 Piyasa gündemi.
 //
 //  NEDEN AYRI KLASÖR, NEDEN `components/index.ts`E EKLENMEDİ: gerekçe
 //  `analiz/index.ts` başlığıyla BİREBİR aynı — `components/` kökü
@@ -16,6 +16,11 @@
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
+
+export {
+  PiyasaGundemiKarti,
+  type PiyasaGundemiKartiProps,
+} from './PiyasaGundemiKarti';
 
 export {
   ENDEKS_NABIZ,

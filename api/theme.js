@@ -100,6 +100,9 @@
 //      `candidates` HER ZAMAN dizi — boş olsa bile alan var.
 //    Cevap 4xx: { error: <makine kodu>, candidates: [], uyari }
 //    Cevap 405: { error: 'method_not_allowed', uyari }
+//    Cevap 429: { error: 'rate_limit', candidates: [], ms, uyari }
+//      İstemci başına PARA ÖDENEN çağrı kotası aşıldı (aşağıda HIZ_TAVAN).
+//      İstemci bu kodu `llm_error` gibi ele alabilir: `candidates` yine dizi.
 //
 //  Gerekli ortam değişkeni: ANTHROPIC_API_KEY
 //  İsteğe bağlı: THEME_MODEL (varsayılan aşağıdaki MODEL)
@@ -158,6 +161,18 @@ const ATIL_KONAK = {
   localStorage: { getItem: () => null, setItem: () => {} },
   fetch: async () => { throw new Error('bu uc motor uzerinden aga cikmaz'); },
   fetchVia: async () => { throw new Error('bu uc motor uzerinden aga cikmaz'); },
+  // `dead` ZORUNLU, EKSİKTİ: motorun kurulum kabuğu `H.dead("document")` /
+  // `H.dead("navigator")` çağırıyor (api/_motor.js:90-91). Yoksa `buildMotor`
+  // `TypeError: H.dead is not a function` atıyor, aşağıdaki `catch` yutuyor ve
+  // SEKTOR_SOZLUGU SESSİZCE `{}` kalıyordu.
+  // ÖLÇÜLDÜ (2026-10-27): düzeltmeden önce `sektorKodlari('NVDA')` → null,
+  // sonra → ['tech']; yani `candidates[].sector` üretimde HER sembolde null'dı.
+  // Yüzey api/_ag.js:408 `olenVekil` ile BİREBİR aynı: erişilirse adıyla patlar,
+  // böylece bir motor dilimi ekrana dokunursa sessiz geçmez.
+  dead: (ad) => new Proxy({}, {
+    get(_t, k) { throw new Error('motor dilimi ekrana dokundu: ' + ad + '.' + String(k)); },
+    set(_t, k) { throw new Error('motor dilimi ekrana yazdi: ' + ad + '.' + String(k)); },
+  }),
 };
 
 // Sözlük kurulamazsa (motor yeniden üretilirken alan adı değişirse)
@@ -212,6 +227,90 @@ export const AZAMI_ADAY = 14;
 // ÖNCE biz kesip temiz bir `llm_error` dönelim, yoksa istemci hiç cevap
 // almaz. Fark (10 sn) serileştirme + soğuk başlangıç payı.
 export const LLM_ISTEK_MS = 20000;
+
+// ---------------------------------------------------------------------
+//  İSTEMCİ BAŞINA HIZ SINIRI — PARA FRENİ (DEVAM.md §4 "bilinen onarılmamış
+//  arıza: /api/theme yolunda istemci başına hız sınırı yok")
+//
+//  NE: aynı istemci (IP) bir pencere içinde en çok `HIZ_TAVAN` kez
+//  PARA ÖDENEN yola (askClaude) girebilir. Aşarsa 429 + makine kodu.
+//
+//  NEDEN: bu uç ölçümde (_onbellek.js başlığı) 1 dış istek yapıyor ama o
+//  istek `api.anthropic.com`a gidiyor ve FATURALANIYOR. Önbellek yalnız
+//  AYNI sorguyu koruyor; her turda `q`yu değiştiren bir döngü önbelleği
+//  ıskalatır ve sınırsız harcar. Sınır bu yüzden ÖNBELLEK ISKASINDAN
+//  SONRA, anahtar varken, fetch'ten HEMEN ÖNCE basıyor: hiçbir ücretsiz
+//  yol (OPTIONS · 405 · missing_q · too_long · no_key · önbellek isabeti)
+//  sayaca girmiyor, çünkü onlar para harcamıyor.
+//
+//  BU SAYI BİR ÜRÜN AYARI, SKOR EŞİĞİ DEĞİL. HAM SAYI KURALI
+//  (BAGIMLILIK_GRAFIGI.md §5.1) sunucunun eşik/ağırlık/formül taşımasını
+//  yasaklıyor — o kural SKOR matematiği içindir. Buradaki sayı skora
+//  girmiyor, gövdeye girmiyor, hiçbir hesabı etkilemiyor: yalnız "kaç
+//  istek para harcayabilir" kotası. Gerekçesi: tek kullanıcılı bir keşif
+//  ekranı bir dakikada eliyle 12 tema aramaz; tavan insan kullanımının
+//  ÜSTÜNDE, otomatik döngünün ALTINDA tutuldu.
+//
+//  DÜRÜSTLÜK — BU SINIR MUTLAK DEĞİL (ÖLÇÜLMEDİ, mimariden biliniyor):
+//  sayaç BELLEK İÇİ ve Vercel'de her örnek (lambda) kendi belleğini
+//  taşıyor, süreç ömrü kısa. Yani en kötü durumda sınır ÖRNEK BAŞINA
+//  geçerlidir: N eşzamanlı örnek → en çok N × HIZ_TAVAN çağrı; soğuk
+//  başlangıç sayacı sıfırlar. Gerçek bir küresel kota paylaşılan bir
+//  durum deposu ister (KV sayacı) — o FAZ işi ve BU GÖREVDE YAPILMADI.
+//  Buna rağmen değerli: bir istemciden gelen TEKRAR FIRTINASININ önünü
+//  kesiyor, ki ölçülmemiş faturanın tek bilinen kaynağı o.
+//
+//  `api/_onbellek.js` BU İŞ İÇİN KULLANILAMADI: o taşıyıcı KV tabanlı
+//  (`kv.get`/`kv.set`), bellek içi sayaç yüzeyi YOK ve o dosya bu şeridin
+//  sahipliğinde değil. Bu yüzden sayaç iki uçta AYRI AYRI ve KISA tutuldu;
+//  paylaşılan bir yardımcı gerekiyorsa taşıyıcı sahibine bildirilecek.
+//  (Vercel Hobby 12 fonksiyon tavanı: yeni `api/` dosyası AÇILMADI.)
+// ---------------------------------------------------------------------
+
+/** Pencere uzunluğu (ms). */
+export const HIZ_PENCERE_MS = 60000;
+/** Pencere başına PARA ÖDENEN çağrı tavanı (istemci başına). */
+export const HIZ_TAVAN = 12;
+
+// Harita örnek ömrü kadar yaşar. Sınırsız büyümesin: temizlik yalnız
+// harita şiştiğinde (tur başına değil) — süpürme maliyeti amortize olsun.
+const HIZ_AZAMI_GIRDI = 500;
+const _hizSayac = new Map();
+
+/**
+ * İstemci kimliği — IP + sabit rota etiketi. SAF, ağa çıkmaz.
+ * `x-forwarded-for` Vercel'in kenarının koyduğu başlık; ilk parça
+ * istemciye en yakın adres. Başlık YOKSA (test çağrısı, native fetch)
+ * 'bilinmeyen' döner ve o kova paylaşılır — bilerek: kimliği
+ * ölçemediğimizde SINIRSIZ bırakmak frenin kendisini iptal ederdi.
+ * IP ASLA loglanmıyor ve gövdeye girmiyor (gizlilik).
+ */
+export function istemciKimligi(req, rota) {
+  const h = (req && req.headers) || {};
+  const xff = String(h['x-forwarded-for'] || '').split(',')[0].trim();
+  const ip = xff
+    || String(h['x-real-ip'] || '').trim()
+    || String((req && req.socket && req.socket.remoteAddress) || '').trim()
+    || 'bilinmeyen';
+  return rota + '|' + ip;
+}
+
+/**
+ * Sayacı ARTIRIR ve tavanın AŞILDIĞINI döner (true = reddet). SAF hesap.
+ * Dışa aktarılıyor ki ağsız sınanabilsin (`_girdi.js` kalıbı).
+ */
+export function hizAsildi(kimlik, simdi = Date.now()) {
+  if (_hizSayac.size > HIZ_AZAMI_GIRDI) {
+    for (const [k, v] of _hizSayac) if (v.bitis <= simdi) _hizSayac.delete(k);
+  }
+  const kayit = _hizSayac.get(kimlik);
+  if (!kayit || kayit.bitis <= simdi) {
+    _hizSayac.set(kimlik, { sayi: 1, bitis: simdi + HIZ_PENCERE_MS });
+    return false;
+  }
+  kayit.sayi += 1;
+  return kayit.sayi > HIZ_TAVAN;
+}
 
 const SYSTEM = [
   'You are a financial RESEARCH DISCOVERY assistant for a Turkish investing-INFORMATION app.',
@@ -360,6 +459,19 @@ export default async function handler(req, res) {
     // tanımlandığı an eski cevabı servis etmeyelim.
     kisaOnbellek(res);
     res.status(200).json({ query, candidates: [], error: 'no_key', ms: Date.now() - t0, uyari: UYARI });
+    return;
+  }
+
+  // --- HIZ SINIRI — yalnız PARA ÖDENEN yolun önünde ------------------
+  //  Buraya gelen istek: GET · q geçerli · önbellek ıskası · anahtar VAR.
+  //  Yani bir sonraki satır fatura yazıyor. Sayaç tam burada basıyor;
+  //  ücretsiz yollar (405/400/no_key/önbellek isabeti) hiç saymıyor.
+  //  429 `no-store`: kota İSTEMCİYE ÖZEL, CDN'de paylaşılmamalı.
+  //  Gövde yalnız makine kodu + uyarı — IP, sayaç, tavan ve anahtar
+  //  hakkında HİÇBİR ŞEY sızdırılmıyor.
+  if (hizAsildi(istemciKimligi(req, 'theme'))) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(429).json({ error: 'rate_limit', candidates: [], ms: Date.now() - t0, uyari: UYARI });
     return;
   }
 

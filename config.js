@@ -59,7 +59,12 @@ window.GENERAL_FEEDS = [
   { name: 'Bloomberg HT',     url: 'https://www.bloomberght.com/rss',                   region: 'TR' },
   { name: 'Dünya Gazetesi',   url: 'https://www.dunya.com/rss?dunya',                   region: 'TR' },
   { name: 'T24 Ekonomi',      url: 'https://t24.com.tr/rss/category/ekonomi',           region: 'TR' },
-  { name: 'Cumhuriyet Ekonomi', url: 'https://www.cumhuriyet.com.tr/rss/4.xml',         region: 'TR' },
+  // NIYE BU ADRES / OLCULDU 2026-10-28:
+  //   /rss/4.xml  -> HTTP 301, yonlendirme hedefi /rss/dunya (DUNYA haberleri),
+  //                  govde 0 bayt. Arayuz "Ekonomi" diyordu, icerik dunyaydi.
+  //   /rss/ekonomi -> HTTP 200, 115291 bayt, kanal basligi
+  //                  "Cumhuriyet Gazetesi - Ekonomi". Dogru olan bu.
+  { name: 'Cumhuriyet Ekonomi', url: 'https://www.cumhuriyet.com.tr/rss/ekonomi',       region: 'TR' },
   { name: 'Sözcü Ekonomi',    url: 'https://www.sozcu.com.tr/rss/ekonomi.xml',          region: 'TR' },
   { name: 'DW Türkçe Ekonomi', url: 'https://rss.dw.com/rdf/rss-tur-eco',               region: 'TR' },
 

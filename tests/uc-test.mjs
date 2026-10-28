@@ -109,7 +109,7 @@ import {
 // ÇIKMIYOR (yalnız sabit + saf fonksiyon), bu yüzden içe almak bedava.
 import temaHandler, {
   config as temaConfig, extractArray, cleanCandidates,
-  AZAMI_SORGU as temaAzamiSorgu, AZAMI_ADAY, LLM_ISTEK_MS,
+  AZAMI_SORGU as temaAzamiSorgu, AZAMI_ADAY, LLM_ISTEK_MS, sektorKodlari,
 } from '../api/theme.js';
 import {
   AZAMI_SORGU, PAZARLAR as girdiPazarlar, temizleSembol as girdiTemizle,
@@ -137,6 +137,8 @@ import haberHandler, {
   config as haberConfig, VARSAYILAN_PAZAR,
   AZAMI_MADDE as haberAzamiMadde, VARSAYILAN_MADDE as haberVarsayilanMadde,
   AZAMI_HABER_SORGU as haberAzamiSorgu, HABER_PAZARLAR as haberPazarlar,
+  GUNDEM_YERELLER as ucGundemYereller, GUNDEM_BESLEMELER as ucGundemBeslemeler,
+  GUNDEM_BESLEME_MADDE as ucGundemBeslemeMadde, IZINLI_GUNDEM_KONAK as ucIzinliGundemKonak,
 } from '../api/news.js';
 // ⑭ haberin KENDİ ağ taşıyıcısı — `_ag.js` DEĞİL. `ayristirRSS` /
 // `haberAdresi` / `izinliAdres` SAF: ağa çıkmadan ölçülebiliyorlar.
@@ -144,6 +146,8 @@ import {
   ayristirRSS, haberAdresi, izinliAdres, bosHaberSayac, haberTam,
   IZINLI_KONAK, HABER_ISTEK_MS, ASGARI_GOVDE_BAYT, MADDE_ALANLARI,
   PAZAR_YERELI, AZAMI_MADDE as agAzamiMadde,
+  beslemeCek, IZINLI_GUNDEM_KONAK, GUNDEM_BESLEMELER, GUNDEM_YERELLER,
+  GUNDEM_BESLEME_MADDE, izinliGundemAdresi, gundemSirala, gundemTekille, gundemCek,
 } from '../api/_haber.js';
 // ⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger —
 // BEŞ ROTA, SIFIR yeni fonksiyon dosyası: hepsi `api/proxy.js`in `__rota=`
@@ -191,7 +195,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news + /api/tarama + /api/sektor + /api/radar + /api/backtest + /api/deger kapıları ve doğrulamaları yerinde.`);
+  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news + /api/tarama + /api/sektor + /api/radar + /api/backtest + /api/deger + /api/arama kapıları ve doğrulamaları yerinde.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -1264,6 +1268,25 @@ bolum('⑧ /api/theme — LLM keşif ucu, AYNI kabuk');
       const kod = src.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
 
       ok('⑧d · dosya uyarı metnini taşıyor', src.includes(UYARI));
+
+      // --- ⑧e SEKTÖR SÖZLÜĞÜ — SESSİZ KIRILMA KAPISI -------------------------
+      //  NİYE VAR: `api/theme.js` modül yüklenirken `buildMotor(ATIL_KONAK)` ile
+      //  motorun `SYMBOL_SECTORS` sözlüğünü okuyor ve hata halİnde SESSİZCE `{}`
+      //  dönüyor (gerekçe: uç çökmesin). ÖLÇÜLDÜ (2026-10-27): atıl kabukta
+      //  `dead` eksik olduğu için `TypeError: H.dead is not a function` atıyordu,
+      //  `catch` yutuyordu ve `candidates[].sector` ÜRETİMDE HER sembolde `null`du.
+      //  1088 denetim yine yeşildi — çünkü bunu ölçen denetim YOKTU. Bu üç satır
+      //  o boşluğu kapatıyor: sözlük BOŞ kalırsa kapı kırmızı yanar.
+      //  EŞİK/FORMÜL DEĞİL: sözlük okumasının ÇALIŞTIĞINI ölçüyor.
+      ok('⑧e · sektör sözlüğü KURULDU (atıl kabuk `dead` taşıyor)',
+        Array.isArray(sektorKodlari('NVDA')) && sektorKodlari('NVDA').length > 0,
+        JSON.stringify(sektorKodlari('NVDA')));
+      ok('⑧e · çoğul kod dönüyor (tek koda indirilmiyor)',
+        (sektorKodlari('ASELS') || []).length >= 2, JSON.stringify(sektorKodlari('ASELS')));
+      ok('⑧e · sözlükte olmayan sembol `null` (0 ya da [] DEĞİL)',
+        sektorKodlari('XYZQ') === null, String(sektorKodlari('XYZQ')));
+      ok('⑧e · atıl kabuk `dead` işlevini taşıyor (metin denetimi)',
+        kod.includes('dead:'), 'ATIL_KONAK.dead');
       ok('N8 · yorum ayıklama çalışıyor (başlık düştü)',
         /\bIntl\b/.test(src) && !/\bIntl\b/.test(kod), 'başlıkta var, kodda yok');
 
@@ -3422,8 +3445,346 @@ ok('⑭a · kısa gövde eşiği sayı ve pozitif',
     !/^\s*import\s/m.test(habKod), 'import yok');
 }
 
+// --- ⑭g GÜNDEM KİPİ — sabitler, KONAK BİREBİRLİĞİ ve saf yardımcılar ---
+// NİYE AYRI ALT BÖLÜM: gündem kipi (`api/_haber.js` ikinci yarısı) ÜÇ yeni
+// sabit ve DÖRT saf fonksiyon getirdi ve hiçbirini ölçen bir kapı YOKTU —
+// `node --check`ten geçmek "sözleşme yerinde" demek değil. Bu alt bölüm
+// AĞA HİÇ çıkmıyor: ölçülen her şey sabit ya da saf fonksiyon.
+{
+  // ---------------------------------------------------------------------
+  //  BİREBİRLİK — BU BÖLÜMÜN ASIL KAPISI.
+  //
+  //  NİYE VAR: aynı konak kümesi İKİ dosyada ELLE yazılı — `api/proxy.js`
+  //  `IZINLI_KONAKLAR` (webin tarayıcı vekilinin güven alanı) ve
+  //  `api/_haber.js` `IZINLI_GUNDEM_KONAK` (sunucu gündem taşıyıcısının
+  //  güven alanı). `_haber.js` gündem başlığı "Yeni bir güven alanı
+  //  AÇILMADI, var olan küme bu taşıyıcıya da yazıldı" diyor ve o cümlenin
+  //  TEK bekçisi bu denetim. Biri SESSİZCE büyürse — yeni bir RSS kaynağı
+  //  yalnız vekile eklenir ya da yalnız taşıyıcıya — kapı kırmızı yanar.
+  //
+  //  ÖLÇÜM YOLU: `api/proxy.js` METİN olarak okunuyor, import EDİLMİYOR —
+  //  `IZINLI_KONAKLAR` o dosyada dışa AKTARILMIŞ DEĞİL (modül içi `const`)
+  //  ve proxy'yi içe almak `_kesif.js` üstünden motor kurulumunu bu teste
+  //  ÖDETİRDİ. Dilim sınırı `// haber / RSS` ile `// piyasa verisi`
+  //  yorumları; o iki işaret kaybolursa aşağıdaki "dilim okunabildi"
+  //  denetimi kırmızı yanar, küme sessizce BOŞ sayılmaz.
+  //
+  //  İKİ KALEM BİLEREK DIŞARIDA — ikisinin de gerekçesi ÖLÇÜLDÜ:
+  //    · `news.google.com` → arama kipinin (`?q=`) konağı, `IZINLI_KONAK`ta
+  //      duruyor; gündem listesi SABİT yayıncı beslemelerinden geliyor.
+  //    · `t24.com.tr`      → aşağıdaki ⑭g T24 denetiminin gerekçesi.
+  // ---------------------------------------------------------------------
+  const proxySrc = readFileSync(PROXY_PATH, 'utf8');
+  const kumeBas = proxySrc.indexOf('const IZINLI_KONAKLAR = new Set([');
+  const kumeSon = proxySrc.indexOf(']);', kumeBas);
+  const kume = (kumeBas >= 0 && kumeSon > kumeBas) ? proxySrc.slice(kumeBas, kumeSon) : '';
+  const haberBas = kume.indexOf('// haber / RSS');
+  const haberSon = kume.indexOf('// piyasa verisi');
+  const haberDilim = (haberBas >= 0 && haberSon > haberBas) ? kume.slice(haberBas, haberSon) : '';
+  const proxyHaber = (haberDilim.match(/'[^']+'/g) || []).map((s) => s.slice(1, -1));
+  // DIŞARIDA BIRAKILANLAR burada TEK yerde yazılı: üçüncü bir istisna
+  // eklemek bu satırı değiştirmeyi gerektirir, yani gözden kaçmaz.
+  const GUNDEM_DISI = ['news.google.com', 't24.com.tr'];
+
+  ok('⑭g · proxy izin listesinin HABER dilimi OKUNABİLDİ (metin kapısı çalışıyor)',
+    proxyHaber.length >= 7, `${proxyHaber.length} konak`);
+  ok('⑭g · arama kipinin konağı proxy HABER diliminde (dilim doğru yerden kesildi)',
+    proxyHaber.includes('news.google.com'));
+
+  const beklenen = proxyHaber.filter((h) => !GUNDEM_DISI.includes(h)).slice().sort();
+  ok('⑭g · BİREBİRLİK · gündem konakları proxy HABER dilimiyle AYNI küme',
+    IZINLI_GUNDEM_KONAK.slice().sort().join(',') === beklenen.join(','),
+    `taşıyıcı [${IZINLI_GUNDEM_KONAK.slice().sort().join(',')}] / proxy [${beklenen.join(',')}]`);
+  ok('⑭g · arama konağı gündem listesine SIZMADI (iki kip iki küme)',
+    !IZINLI_GUNDEM_KONAK.includes('news.google.com'));
+  ok('⑭g · gündem konak sayısı ÖLÇÜLMÜŞ sabit (7 — curl, 2026-10-27)',
+    IZINLI_GUNDEM_KONAK.length === 7, String(IZINLI_GUNDEM_KONAK.length));
+
+  // T24 YOKLUĞU KALICI — ÖLÇÜLDÜ 2026-10-27: Cloudflare managed challenge,
+  // vekil üstünden 3/3 HTTP 403 (DEVAM.md §4'te de "T24 RSS 403" kayıtlı).
+  // Listeye geri dönerse her gündem isteği bir zaman aşımı ÖDER ve gövde
+  // kalıcı `tam:false` döner — yani ekran "eksik ölçüm" demeye başlar.
+  // Düzeldiği ÖLÇÜLÜRSE bu denetim ve GUNDEM_DISI birlikte güncellenir.
+  ok('⑭g · T24 gündem konak listesinde YOK (ölçüldü: 403, zaman aşımı bedeli)',
+    !IZINLI_GUNDEM_KONAK.some((h) => h.includes('t24.com.tr')),
+    IZINLI_GUNDEM_KONAK.join(','));
+  ok('⑭g · T24 gündem BESLEMELERİNDE de YOK (adres olarak da dönmedi)',
+    !GUNDEM_YERELLER.some((y) => GUNDEM_BESLEMELER[y].some((b) => b.adres.includes('t24.com.tr'))));
+
+  // ---------------------------------------------------------------------
+  //  BESLEME LİSTESİ — ölçülmüş sabitler yerinde mi.
+  //  NİYE: `GUNDEM_BESLEME_MADDE` × besleme sayısı havuz tavanını veriyor;
+  //  ikisi de dosyada ÖLÇÜLDÜ diye yazılı, kapı onları kilitliyor.
+  // ---------------------------------------------------------------------
+  ok('⑭g · gündem yerelleri TR + US (üçüncüsü ÖLÇÜLMEDİ, uydurulmadı)',
+    GUNDEM_YERELLER.join(',') === 'TR,US', GUNDEM_YERELLER.join(','));
+  ok('⑭g · TR 5 besleme, US 2 besleme (ölçülmüş küme, curl 2026-10-27)',
+    GUNDEM_BESLEMELER.TR.length === 5 && GUNDEM_BESLEMELER.US.length === 2,
+    `${GUNDEM_BESLEMELER.TR.length} / ${GUNDEM_BESLEMELER.US.length}`);
+  ok('⑭g · besleme başına madde tavanı 8 (adlandırılmış sabit, gömülü sayı değil)',
+    GUNDEM_BESLEME_MADDE === 8, String(GUNDEM_BESLEME_MADDE));
+  ok('⑭g · havuz tavanı madde tavanının ALTINA düşmüyor (limit anlamlı kalıyor)',
+    GUNDEM_BESLEMELER.TR.length * GUNDEM_BESLEME_MADDE >= agAzamiMadde,
+    `${GUNDEM_BESLEMELER.TR.length * GUNDEM_BESLEME_MADDE} ≥ ${agAzamiMadde}`);
+  // Her beslemenin `ad`ı var: maddenin `source` alanı boşsa oraya yazılıyor
+  // (yayıncı beslemeleri kaynağı madde içinde VERMİYOR). Boş `ad` "kaynağı
+  // ölçemedim" demek olurdu.
+  ok('⑭g · her beslemede dolu `ad` ve `adres` var (alan kümesi sabit)',
+    GUNDEM_YERELLER.every((y) => GUNDEM_BESLEMELER[y].every((b) =>
+      anahtarlar(b) === 'ad,adres' && typeof b.ad === 'string' && b.ad.trim()
+      && typeof b.adres === 'string' && b.adres.trim())));
+  // AYNI besleme iki yerelde SAYILMASIN: tekilleştirme sonradan düzeltir
+  // ama sayaç iki istek öder ve `besleme[]` listesi yalan söyler.
+  ok('⑭g · besleme adresleri YİNELEMESİZ (aynı kaynak iki kez okunmuyor)', (() => {
+    const hepsi = GUNDEM_YERELLER.flatMap((y) => GUNDEM_BESLEMELER[y].map((b) => b.adres));
+    return new Set(hepsi).size === hepsi.length;
+  })());
+  // ASIL KAPI: listedeki her adres KENDİ izin kapısından GEÇMELİ. Geçmeyen
+  // bir adres `gundemCek` içinde sessizce `hata++` olup düşerdi — besleme
+  // listede DURUR ama hiç okunmaz, `tam` kalıcı false olur.
+  ok('⑭g · HER gündem adresi `izinliGundemAdresi`den GEÇİYOR', (() => {
+    const hepsi = GUNDEM_YERELLER.flatMap((y) => GUNDEM_BESLEMELER[y].map((b) => b.adres));
+    return hepsi.length > 0 && hepsi.every(izinliGundemAdresi);
+  })());
+
+  // ---------------------------------------------------------------------
+  //  `izinliGundemAdresi` — NE REDDETTİĞİ de sözleşme.
+  //  NİYE: bu fonksiyon gündem kipinin TEK güven kapısı; `beslemeCek`
+  //  adresi KENDİSİ doğrulamıyor (çağıran doğrular, JSDoc'ta yazılı).
+  // ---------------------------------------------------------------------
+  ok('⑭g · http REDDEDİLİYOR (yalnız https — izinli konakta bile)',
+    izinliGundemAdresi('http://www.cnbc.com/id/100003114/device/rss/rss.html') === false);
+  ok('⑭g · izin listesi DIŞI konak reddediliyor (son-ek hilesi dâhil)',
+    izinliGundemAdresi('https://evil.example/rss') === false
+    && izinliGundemAdresi('https://www.cnbc.com.evil.example/rss') === false);
+  ok('⑭g · boş dizge reddediliyor (sessiz varsayılan besleme YOK)',
+    izinliGundemAdresi('') === false);
+  ok('⑭g · bozuk/dizge olmayan adres reddediliyor (çökmüyor)',
+    izinliGundemAdresi('xxx') === false && izinliGundemAdresi(null) === false
+    && izinliGundemAdresi(undefined) === false && izinliGundemAdresi(42) === false);
+  // İKİ KİP İKİ KAPI: arama konağı gündem kapısından, gündem konağı arama
+  // kapısından GEÇMEMELİ. Geçerse iki güven alanı birleşmiş olur.
+  ok('⑭g · iki kapı birbirine AÇILMIYOR (kümeler ayrı)',
+    izinliGundemAdresi('https://news.google.com/rss/search?q=x') === false
+    && izinliAdres('https://www.cnbc.com/id/100003114/device/rss/rss.html') === false);
+
+  // ---------------------------------------------------------------------
+  //  `gundemTekille` — DÜŞEN MADDE SAYILIR, sessizce yok olmaz.
+  //  NİYE: iki besleme aynı haberi verebiliyor (Reuters servisi). Düşeni
+  //  saymazsak istemciye "10 madde istedin, 7 geldi"nin sebebini
+  //  söyleyemeyiz — kaynak mı düştü, kopya mı düşürüldü ayırt edilemez.
+  // ---------------------------------------------------------------------
+  {
+    const t = gundemTekille([
+      { title: 'A', link: 'https://www.dunya.com/1' },
+      { title: 'B', link: 'https://www.dunya.com/2' },
+      { title: 'A kopya', link: 'https://www.dunya.com/1' },
+    ]);
+    ok('⑭g · aynı `link`ten gelen kopya DÜŞÜYOR', t.maddeler.length === 2, `${t.maddeler.length} madde`);
+    ok('⑭g · düşen sayısı DOĞRU bildiriliyor (`dusen` = 1)', t.dusen === 1, String(t.dusen));
+    ok('⑭g · İLK görülen madde kalıyor (kopya sonrakini düşürüyor)',
+      t.maddeler[0].title === 'A' && t.maddeler[1].title === 'B');
+    // Büyük/küçük harf ve kenar boşluğu farkı AYNI bağlantıdır: anahtar
+    // normalleştiriliyor, yoksa kopya iki kez basılırdı.
+    const t2 = gundemTekille([
+      { title: 'A', link: 'https://www.dunya.com/1' },
+      { title: 'A', link: ' HTTPS://WWW.DUNYA.COM/1 ' },
+    ]);
+    ok('⑭g · anahtar normalleştiriliyor (harf/boşluk farkı kopyayı kaçırmıyor)',
+      t2.maddeler.length === 1 && t2.dusen === 1, `${t2.maddeler.length} / ${t2.dusen}`);
+    // ANAHTARSIZ MADDE DÜŞMEZ: `link` ve `title` boşsa o madde hakkında
+    // "kopya" diyemeyiz. Düşürmek ÖLÇÜLMEMİŞ bir karar olurdu; iki
+    // anahtarsız madde de kalıyor ve `dusen` onları SAYMIYOR.
+    const t3 = gundemTekille([
+      { title: '', link: '' }, { title: '   ', link: null }, { title: 'A', link: 'https://www.dunya.com/1' },
+    ]);
+    ok('⑭g · anahtarsız madde DÜŞÜRÜLMÜYOR (uydurma kopya kararı yok)',
+      t3.maddeler.length === 3 && t3.dusen === 0, `${t3.maddeler.length} / ${t3.dusen}`);
+    // `link` yoksa `title` anahtar: aynı manşet iki beslemeden farklı
+    // bağlantıyla gelebiliyor.
+    const t4 = gundemTekille([{ title: 'Aynı manşet' }, { title: 'Aynı manşet' }]);
+    ok('⑭g · `link` yokken `title` anahtar oluyor', t4.maddeler.length === 1 && t4.dusen === 1);
+    ok('⑭g · SAF: girdi dizisi DEĞİŞMİYOR (kopya üstünde çalışıyor)', (() => {
+      const girdi = [{ title: 'A', link: 'x' }, { title: 'A', link: 'x' }];
+      gundemTekille(girdi);
+      return girdi.length === 2;
+    })());
+  }
+
+  // ---------------------------------------------------------------------
+  //  `gundemSirala` — TARİHİ ÖLÇÜLEMEYEN MADDE ATILMAZ, SONA KONUR.
+  //  NİYE: "tarihini ölçemedim" ile "haber yok" ayrı şeyler (bu dosyanın
+  //  her yerindeki sayaç ayrımının aynı fikri). Atmak, istemciye var olan
+  //  bir manşeti hiç göstermemek olurdu.
+  // ---------------------------------------------------------------------
+  {
+    const g = gundemSirala([
+      { title: 'eski', pubDate: 'Mon, 19 Oct 2026 08:00:00 GMT' },
+      { title: 'tarihsiz', pubDate: 'çözülemez' },
+      { title: 'yeni', pubDate: 'Mon, 19 Oct 2026 10:00:00 GMT' },
+      { title: 'alansız' },
+    ]);
+    ok('⑭g · hiçbir madde ATILMADI (4 girdi → 4 çıktı)', g.length === 4, `${g.length} madde`);
+    ok('⑭g · tarihe göre YENİDEN ESKİYE diziliyor',
+      g[0].title === 'yeni' && g[1].title === 'eski', g.map((m) => m.title).join('>'));
+    ok('⑭g · tarihi ÇÖZÜLEMEYEN madde SONA konuyor (atılmıyor)',
+      ['tarihsiz', 'alansız'].includes(g[2].title) && ['tarihsiz', 'alansız'].includes(g[3].title),
+      g.map((m) => m.title).join('>'));
+    ok('⑭g · boş dizi/çöp madde çökertmiyor',
+      gundemSirala([]).length === 0 && gundemSirala([{}, {}]).length === 2);
+    ok('⑭g · SAF: girdi dizisi yerinde SIRALANMIYOR (kopya dönüyor)', (() => {
+      const girdi = [
+        { title: 'eski', pubDate: 'Mon, 19 Oct 2026 08:00:00 GMT' },
+        { title: 'yeni', pubDate: 'Mon, 19 Oct 2026 10:00:00 GMT' },
+      ];
+      const cikti = gundemSirala(girdi);
+      return girdi[0].title === 'eski' && cikti[0].title === 'yeni';
+    })());
+  }
+
+  // ---------------------------------------------------------------------
+  //  UÇ İLE TAŞIYICI AYNI NESNEYİ PAYLAŞIYOR MU (kopya sabit yok).
+  //  NİYE: ⑭a'nın `AZAMI_MADDE` için kurduğu kapının aynısı. `news.js`
+  //  gündem sabitlerini yeniden dışa aktarıyor; bir gün oraya YEREL bir
+  //  kopya yazılırsa iki liste ayrışır ve kimse farketmez.
+  // ---------------------------------------------------------------------
+  ok('⑭g · uçtaki gündem konak listesi taşıyıcının TA KENDİSİ',
+    ucIzinliGundemKonak === IZINLI_GUNDEM_KONAK);
+  ok('⑭g · uçtaki besleme tablosu/yerel/madde tavanı taşıyıcının TA KENDİSİ',
+    ucGundemBeslemeler === GUNDEM_BESLEMELER && ucGundemYereller === GUNDEM_YERELLER
+    && ucGundemBeslemeMadde === GUNDEM_BESLEME_MADDE);
+  // `beslemeCek` ikinci ağ gövdesi DEĞİL, ORTAK gövde: `haberCek` de onu
+  // çağırıyor (zaman aşımı, kimlik dizgesi, kısa gövde kuralı tek yerde).
+  ok('⑭g · `beslemeCek` dışa aktarılmış bir fonksiyon (ortak ağ gövdesi)',
+    typeof beslemeCek === 'function', typeof beslemeCek);
+  {
+    const habKod2 = readFileSync(HABER_PATH, 'utf8');
+    ok('⑭g · `haberCek` ortak gövdeyi ÇAĞIRIYOR (ikinci fetch gövdesi yazılmadı)',
+      /return beslemeCek\(adres/.test(habKod2));
+    ok('⑭g · taşıyıcıda `fetch(` YALNIZ BİR yerde (ağa çıkan tek gövde)',
+      (habKod2.match(/await fetch\(/g) || []).length === 1,
+      `${(habKod2.match(/await fetch\(/g) || []).length} yer`);
+    ok('⑭g · gündem fan-out`u `izinliGundemAdresi` kapısından geçiyor (çağrı öncesi)',
+      /if \(!izinliGundemAdresi\(b\.adres\)\)/.test(habKod2));
+  }
+}
+
+// --- ⑭h GÜNDEM KİPİ — uç sözleşmesi (hepsi ağdan ÖNCE dönüyor) ---------
+// NİYE: ③ gündem kipi `api/news.js`e ÜÇ yeni kapı getirdi (`bad_gundem`,
+// `gundem_ve_sorgu`, kipe göre `bad_market`) ve hiçbirini ölçen denetim
+// YOKTU. Üçü de ağa çıkmadan dönüyor, bu yüzden burada `fetch` YASAK:
+// kapılardan biri sızarsa ölçüm "AĞ YASAĞI" ile patlar, sessiz geçmez.
+{
+  const gercekFetch = globalThis.fetch;
+  let agDenemesi = 0;
+  globalThis.fetch = (...a) => { agDenemesi++; throw new Error('⑭h AĞ YASAĞI: ' + String(a[0])); };
+  try {
+    const e = async (query) => (await cagirUc(haberHandler, 'GET', query)).govde.error;
+
+    // `gundem` KAPALI KÜME: '1'/'true' açar, '0'/'false'/boş kapatır,
+    // BAŞKA HİÇBİR ŞEY sessizce yorumlanmaz. "evet"/"yes" yazan bir
+    // istemciye sessizce kip ① dönmek, istemediği gövdeyi vermek olurdu.
+    ok('⑭h · gundem=evet → bad_gundem (sessiz yorum YOK)',
+      (await e({ gundem: 'evet' })) === 'bad_gundem');
+    ok('⑭h · gundem=2 → bad_gundem', (await e({ gundem: '2' })) === 'bad_gundem');
+    ok('⑭h · gundem=yes → bad_gundem', (await e({ gundem: 'yes' })) === 'bad_gundem');
+    // KAPATAN değerler kipi açmıyor ve hata da ÜRETMİYOR: `q`/`symbols`
+    // yoksa eski kodun dediği `missing_q` dönüyor (bugünün istemcisinin
+    // gördüğü hata DEĞİŞMEDİ).
+    ok('⑭h · gundem=0 kipi KAPATIYOR (→ missing_q, bad_gundem değil)',
+      (await e({ gundem: '0' })) === 'missing_q');
+    ok('⑭h · gundem=false kipi KAPATIYOR (→ missing_q)',
+      (await e({ gundem: 'false' })) === 'missing_q');
+    ok('⑭h · gundem boş dizge kipi KAPATIYOR (→ missing_q)',
+      (await e({ gundem: '' })) === 'missing_q');
+    // Kapatan değer kip ①'i BOZMUYOR: q ile birlikte `gundem_ve_sorgu`
+    // çıkmamalı (yoksa istemci q sorgusunu hiç yapamazdı).
+    ok('⑭h · gundem=0 + q çakışma SAYILMIYOR (kip ① çalışmaya devam eder)',
+      (await e({ gundem: '0', q: 'x'.repeat(haberAzamiSorgu + 1) })) === 'too_long');
+
+    const bg = await cagirUc(haberHandler, 'GET', { gundem: 'evet' });
+    ok('⑭h · bad_gundem izinli DEĞERLERİ bildiriyor (istemci tahmin etmiyor)',
+      Array.isArray(bg.govde.izinli) && bg.govde.izinli.join(',') === '1,true',
+      JSON.stringify(bg.govde.izinli));
+    ok('⑭h · bad_gundem gövdesinde uyarı metni', bg.govde.uyari === UYARI);
+    ok('⑭h · bad_gundem kısa önbellekli', bg.basliklar['cache-control'] === 'public, max-age=30');
+
+    // ÜÇ KİP BİRBİRİNİ DIŞLIYOR: hangisinin kazandığını SESSİZCE seçmek,
+    // istemcinin istemediği gövdeyi dönmek olurdu. Eski `q_ve_symbols`
+    // kodu KORUNDU; gündem çakışması KENDİ kodunu alıyor.
+    ok('⑭h · gundem + q → gundem_ve_sorgu',
+      (await e({ gundem: '1', q: 'ASELSAN' })) === 'gundem_ve_sorgu');
+    ok('⑭h · gundem + symbols → gundem_ve_sorgu',
+      (await e({ gundem: 'true', symbols: 'THYAO' })) === 'gundem_ve_sorgu');
+    ok('⑭h · q + symbols → ESKİ kod `q_ve_symbols` (değişmedi)',
+      (await e({ q: 'ASELSAN', symbols: 'THYAO' })) === 'q_ve_symbols');
+    const ck = await cagirUc(haberHandler, 'GET', { gundem: '1', q: 'ASELSAN' });
+    ok('⑭h · çakışma gövdesinde uyarı metni + kısa önbellek',
+      ck.govde.uyari === UYARI && ck.basliklar['cache-control'] === 'public, max-age=30');
+
+    // PAZAR DOĞRULAMASI KİPE GÖRE: gündem kipi KENDİ ölçülmüş kümesine
+    // (`GUNDEM_YERELLER`, besleme listesinden) bakıyor, `HABER_PAZARLAR`a
+    // (Google News yerellerinden) DEĞİL. Bugün ikisi de ['TR','US'] — ama
+    // aynı diziyi iki ölçüm için kullanmak, yarın biri büyüdüğünde
+    // ötekini SESSİZCE büyütmek olurdu.
+    ok('⑭h · gündem kipinde bilinmeyen yerel → bad_market',
+      (await e({ gundem: '1', market: 'TOKYO' })) === 'bad_market');
+    const gm = await cagirUc(haberHandler, 'GET', { gundem: '1', market: 'TOKYO' });
+    ok('⑭h · bad_market gövdesi GUNDEM_YERELLER kümesini bildiriyor (HABER_PAZARLAR değil)',
+      Array.isArray(gm.govde.izinli)
+      && gm.govde.izinli.join(',') === GUNDEM_YERELLER.join(','),
+      JSON.stringify(gm.govde.izinli));
+    ok('⑭h · gündem kipinde limit tavanı da geçerli → limit_buyuk',
+      (await e({ gundem: '1', limit: String(haberAzamiMadde + 1) })) === 'limit_buyuk');
+    ok('⑭h · gündem kipinde limit 0 → bad_limit',
+      (await e({ gundem: '1', limit: '0' })) === 'bad_limit');
+
+    // BİLİNMEYEN YEREL TAŞIYICIDA DA AĞA ÇIKMIYOR: uç kapısı atlansa
+    // (başka bir çağıran) `gundemCek` KENDİSİ düşüyor ve `hata` SAYIYOR —
+    // sessiz boş dizi DÖNMÜYOR.
+    const bos = await gundemCek('XX');
+    ok('⑭h · gundemCek(bilinmeyen) → boş besleme listesi',
+      Array.isArray(bos.besleme) && bos.besleme.length === 0, JSON.stringify(bos.besleme));
+    ok('⑭h · gundemCek(bilinmeyen) → maddeler boş, `tam` FALSE (ölçemedim)',
+      bos.maddeler.length === 0 && bos.tam === false, `${bos.maddeler.length} / ${bos.tam}`);
+    ok('⑭h · gundemCek(bilinmeyen) → sayac.hata = 1 (sessiz boş dizi DEĞİL)',
+      bos.sayac.hata === 1, JSON.stringify(bos.sayac));
+    ok('⑭h · gundemCek(bilinmeyen) → tekrar 0 (uydurma sayı yok)', bos.tekrar === 0);
+    const bos2 = await gundemCek('');
+    const bos3 = await gundemCek(null);
+    ok('⑭h · gundemCek boş/çöp yerelde de çökmüyor (aynı dürüst cevap)',
+      bos2.tam === false && bos2.sayac.hata === 1
+      && bos3.tam === false && bos3.sayac.hata === 1);
+
+    ok('⑭h · ÖLÇÜM · gündem kapılarının hiçbiri ağa ÇIKMADI', agDenemesi === 0, `${agDenemesi} deneme`);
+  } finally {
+    globalThis.fetch = gercekFetch;
+  }
+}
+
+// --- ⑭i GÜNDEM KİPİ — statik denetimler (metin) ------------------------
+{
+  const src2 = readFileSync(NEWS_PATH, 'utf8');
+  // Gündem kipi SÖZLEŞMESİ başlıkta yazılı mı: üç kipin de gövdesi
+  // dosyanın başındaki sözleşme bloğunda duruyor, istemci oradan okuyor.
+  ok('⑭i · ③ gündem kipi uç sözleşmesinde YAZILI (gövde alanları dâhil)',
+    src2.includes('③ GÜNDEM') && src2.includes('besleme[i]') && src2.includes('tekrar'));
+  // T24'ün DIŞARIDA olma gerekçesi taşıyıcıda YAZILI: kapı kırmızı
+  // yandığında "niye yok" sorusunun cevabı koddan okunabilsin.
+  const habSrc2 = readFileSync(HABER_PATH, 'utf8');
+  ok('⑭i · T24 yokluğunun GEREKÇESİ taşıyıcıda yazılı (ölçüm, tahmin değil)',
+    habSrc2.includes('T24') && habSrc2.includes('zaman aşımı'));
+  // BİREBİRLİK iddiası taşıyıcıda da yazılı — yukarıdaki ⑭g kapısı o
+  // cümlenin bekçisi, cümle kaybolursa niyet de kaybolur.
+  ok('⑭i · proxy BİREBİRLİĞİ iddiası taşıyıcıda yazılı',
+    habSrc2.includes('BİREBİR') && habSrc2.includes('proxy.js'));
+  // Gündem kipi de HAM METİN kuralına tabi: `durum` MAKİNE KODU
+  // ('ok'/'bos'), Türkçe etiket İSTEMCİDE.
+  ok('⑭i · besleme `durum` alanı MAKİNE KODU (Türkçe etiket uçta değil)',
+    habSrc2.includes("durum: n > 0 ? 'ok' : 'bos'"));
+}
 // =========================================================================
-bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger — keşif rotaları (api/_kesif.js)');
+bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger · /api/arama — keşif rotaları (api/_kesif.js)');
 // =========================================================================
 // 13. FONKSİYON TUZAĞI: bu beş uç YENİ dosya DEĞİL. `api/proxy.js`in
 // `__rota=` çoklayıcısına takılı (api/yfin kalıbı). Aşağıdaki ⑮b bölümü
@@ -3469,11 +3830,11 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
   ];
 
   // --- ⑮a yüzey --------------------------------------------------------
-  ok('⑮a · beş handler da fonksiyon',
-    ['taramaHandler', 'sektorHandler', 'radarHandler', 'backtestHandler', 'degerHandler']
+  ok('⑮a · altı handler da fonksiyon',
+    ['taramaHandler', 'sektorHandler', 'radarHandler', 'backtestHandler', 'degerHandler', 'aramaHandler']
       .every((a) => typeof KESIF[a] === 'function'));
-  ok('⑮a · ROTALAR beş rota ilan ediyor',
-    KESIF.ROTALAR.join(',') === 'tarama,sektor,radar,backtest,deger', KESIF.ROTALAR.join(','));
+  ok('⑮a · ROTALAR altı rota ilan ediyor',
+    KESIF.ROTALAR.join(',') === 'tarama,sektor,radar,backtest,deger,arama', KESIF.ROTALAR.join(','));
   ok('⑮a · HANDLERLAR tablosu ROTALAR ile BİREBİR',
     anahtarlar(KESIF.HANDLERLAR) === [...KESIF.ROTALAR].sort().join(','), anahtarlar(KESIF.HANDLERLAR));
   ok('⑮a · HANDLERLAR dondurulmuş (rota tablosu çalışma anında değişmez)',
@@ -3487,6 +3848,21 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
     KESIF.AZAMI_OLCUM === 120, String(KESIF.AZAMI_OLCUM));
   ok('⑮a · sayısal ölçüm listesi `ok`/`symbol` TAŞIMIYOR (çakışma yok)',
     !KESIF.OLCUM_SAYISAL.includes('ok') && !KESIF.OLCUM_SAYISAL.includes('symbol'));
+  // arama ucu: tavan ve ÖLÇÜLMÜŞ borsa kodu kümeleri.
+  ok('⑮a · arama aday tavanı Yahoo `quotesCount` ile birebir taşınan sayı',
+    KESIF.ARAMA_AZAMI === 25, String(KESIF.ARAMA_AZAMI));
+  ok('⑮a · arama varsayılanı tavanın İÇİNDE (sessiz kırpma yok)',
+    KESIF.ARAMA_VARSAYILAN >= 1 && KESIF.ARAMA_VARSAYILAN <= KESIF.ARAMA_AZAMI,
+    String(KESIF.ARAMA_VARSAYILAN));
+  ok('⑮a · BIST ve US borsa kodu kümeleri AYRIK (IST US listesinde YOK)',
+    !KESIF.BORSA_US.some((k) => KESIF.BORSA_BIST.includes(k)), KESIF.BORSA_US.join(','));
+  ok('⑮a · kripto HAM `quoteType` koduyla tanınıyor (borsa koduyla değil)',
+    KESIF.TUR_KRIPTO === 'CRYPTOCURRENCY', KESIF.TUR_KRIPTO);
+  ok('⑮a · borsa kodları HAM (ekran metni değil)',
+    [...KESIF.BORSA_BIST, ...KESIF.BORSA_US].every((k) => /^[A-Z]{2,4}$/.test(k)),
+    KESIF.BORSA_BIST.concat(KESIF.BORSA_US).join(','));
+  ok('⑮a · arama adresi Yahoo arama ucu (konak `_ag.js` IZINLI listesinde)',
+    KESIF.ARAMA_URL === 'https://query1.finance.yahoo.com/v1/finance/search', KESIF.ARAMA_URL);
   ok('⑮a · metinsel ve sayısal ölçüm kümeleri AYRIK',
     !KESIF.OLCUM_SAYISAL.some((k) => KESIF.OLCUM_METINSEL.includes(k)));
 
@@ -3497,7 +3873,7 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
     ok('⑮b · KİLİT · `api/*.js` uç dosyası sayısı 12 (Hobby tavanı aşılmadı)',
       dosyalar.length === 12, `${dosyalar.length}: ${dosyalar.join(',')}`);
     ok('⑮b · yeni uç dosyası YOK — keşif `_` önekli MODÜL',
-      !dosyalar.some((f) => /tarama|sektor|radar|backtest|deger|kesif/.test(f)), dosyalar.join(','));
+      !dosyalar.some((f) => /tarama|sektor|radar|backtest|deger|arama|kesif/.test(f)), dosyalar.join(','));
     ok('⑮b · `api/_kesif.js` gerçekten `_` önekli (fonksiyon sayılmaz)',
       existsSync(KESIF_PATH) && path.basename(KESIF_PATH).startsWith('_'));
 
@@ -3509,10 +3885,25 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
       ok(`⑮b · \`/api/${r}\` proxy'ye \`__rota=${r}\` ile gidiyor`,
         !!k && k.destination === `/api/proxy?__rota=${r}`, k && k.destination);
     }
+    // TERS YÖN: vercel.json'da ROTALAR ∪ {yfin} D I Ş I N D A rewrite OLMAMALI.
+    // İleri yön (her rotanın rewrite'ı var mı) yukarıda; bu kapı ters tarafı
+    // tutuyor: rota adı bir yerde sessizce değişirse (örn. `/api/aramaa`)
+    // eşleşme kopar ve BURADA kırmızı yanar — canlıda 404 beklemeden.
+    {
+      const izinliRota = new Set(['yfin', ...KESIF.ROTALAR]);
+      const kacak = rew.filter((x) => {
+        const m = /^\/api\/([a-z]+)$/.exec(String(x.source));
+        return !m || !izinliRota.has(m[1]) || x.destination !== `/api/proxy?__rota=${m[1]}`;
+      });
+      ok('⑮b · KİLİT · ROTALAR ∪ {yfin} D I Ş I N D A rewrite YOK (ters yön)',
+        kacak.length === 0, kacak.map((x) => `${x.source}→${x.destination}`).join(' | ') || 'temiz');
+      ok('⑮b · KİLİT · rewrite sayısı = ROTALAR + yfin (fazla/eksik yol yok)',
+        rew.length === KESIF.ROTALAR.length + 1, `${rew.length} rewrite`);
+    }
     ok('⑮b · yfin rewrite\'ı BOZULMADI (taklit edilen kalıp yerinde)',
       rew.some((x) => x.source === '/api/yfin' && x.destination === '/api/proxy?__rota=yfin'));
     ok('⑮b · `functions` bloğuna YENİ kalem girmedi (beşi proxy bütçesini paylaşıyor)',
-      !Object.keys(vercel.functions || {}).some((k) => /tarama|sektor|radar|backtest|deger|kesif/.test(k)),
+      !Object.keys(vercel.functions || {}).some((k) => /tarama|sektor|radar|backtest|deger|arama|kesif/.test(k)),
       Object.keys(vercel.functions || {}).join(','));
     ok('⑮b · beş rota `api/proxy.js`in maxDuration bütçesinde',
       (vercel.functions || {})['api/proxy.js'] && typeof vercel.functions['api/proxy.js'].maxDuration === 'number',
@@ -3561,6 +3952,8 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
         (await cagirKesif(KESIF.radarHandler, 'POST', {}, {})).kod === 405);
       ok('⑮c · backtest POST kabul ETMİYOR',
         (await cagirKesif(KESIF.backtestHandler, 'POST', {}, {})).kod === 405);
+      ok('⑮c · arama POST kabul ETMİYOR',
+        (await cagirKesif(KESIF.aramaHandler, 'POST', {}, {})).kod === 405);
       ok('⑮c · deger GET ve POST\'u da kabul ediyor (metal/kripto)',
         (await cagirKesif(KESIF.degerHandler, 'GET', { tur: 'gumus' })).kod === 200
         && (await cagirKesif(KESIF.degerHandler, 'POST', {}, { tur: 'kripto', belge: {} })).kod !== 405);
@@ -4072,6 +4465,178 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
     }
   }
 
+  // --- ⑮i arama — ÇOK PAZARLI aday listesi (VARSAYIM YERİNE SEÇİM) ----
+  // NİYE VAR: `api/_girdi.js:161` çıplak terimde pazarı SESSİZCE 'US'
+  // varsayıyor (ÖLÇÜLDÜ: `ASELS` → market 'US' → skor null). O sözleşme
+  // analyze/score/recommend tarafından paylaşıldığı için DEĞİŞTİRİLMEDİ;
+  // bu uç varsayımın yerine ETiKETLİ ADAY LİSTESİ veriyor.
+  // ⑮g'DEN ÖNCE duruyor: topladığı gövdeler HAM SAYI / tavsiye dili
+  // süzgecinden de geçsin.
+  {
+    const gercekFetch = globalThis.fetch;
+    let agDenemesi = 0;
+    let cagrilanUrl = null;
+    // ÖLÇÜLMÜŞ Yahoo /v1/finance/search kaydı (2026-10-28, on üç sorgu):
+    // symbol / shortname / longname / exchange / quoteType / sector var;
+    // ENDEKS ÜYELİĞİ ALANI YOK — bu yüzden uç 'S&P 500' İDDİA EDEMİYOR.
+    const aramaTxt = JSON.stringify({ count: 5, quotes: [
+      { symbol: 'ASELS.IS', shortname: 'ASELSAN', longname: 'Aselsan Elektronik', exchange: 'IST', quoteType: 'EQUITY', sector: 'Industrials' },
+      { symbol: 'AAPL', shortname: 'Apple Inc.', exchange: 'NMS', quoteType: 'EQUITY', sector: 'Technology' },
+      { symbol: 'BTC-USD', shortname: 'Bitcoin USD', exchange: 'CCC', quoteType: 'CRYPTOCURRENCY' },
+      { symbol: 'APC.DE', shortname: 'APPLE INC', exchange: 'GER', quoteType: 'EQUITY' },
+      { symbol: 'SPY', shortname: 'SPDR TRUST', exchange: 'PCX', quoteType: 'ETF' },
+    ] });
+    const aramaYanit = (txt = aramaTxt, ok2 = true, status = 200) => ({
+      ok: ok2, status, text: async () => txt, json: async () => JSON.parse(txt),
+    });
+    const aday = (g, sembol) => (g.adaylar || []).find((a) => a.sembol === sembol) || {};
+
+    try {
+      globalThis.fetch = async (u) => { agDenemesi++; cagrilanUrl = String(u); return aramaYanit(); };
+
+      const a = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', { q: 'apple' }));
+      ok('⑮i · geçerli GET → 200', a.kod === 200, `kod ${a.kod} ${a.govde.error || ''}`);
+      ok('⑮i · gövde alanları SABİT',
+        anahtarlar(a.govde) === 'adaylar,adet,limit,ms,q,sayac,surum,tam,uyari'
+          .split(',').sort().join(','), anahtarlar(a.govde));
+      ok('⑮i · ÖLÇÜM · TEK dış istek', agDenemesi === 1, `${agDenemesi} istek`);
+      ok('⑮i · ÖLÇÜM · Yahoo ARAMA ucuna gidildi (chart ucuna değil)',
+        String(cagrilanUrl).startsWith(KESIF.ARAMA_URL), cagrilanUrl);
+      ok('⑮i · ÖLÇÜM · terim kaçışlı (encodeURIComponent) ve limit adrese GEÇTİ',
+        /[?&]q=apple\b/.test(cagrilanUrl)
+        && new RegExp('[?&]quotesCount=' + KESIF.ARAMA_VARSAYILAN + '\\b').test(cagrilanUrl), cagrilanUrl);
+      ok('⑮i · limit verilmezse ARAMA_VARSAYILAN (uydurma sayı yok)',
+        a.govde.limit === KESIF.ARAMA_VARSAYILAN, String(a.govde.limit));
+      ok('⑮i · sorulan terim GERİ BİLDİRİLİYOR', a.govde.q === 'apple', a.govde.q);
+      ok('⑮i · aday alanları SABİT',
+        (a.govde.adaylar || []).every((x) => anahtarlar(x)
+          === 'ad,borsa,motorPazar,motorSembol,motorUc,pazar,sektor,sembol,tur'),
+        anahtarlar(a.govde.adaylar[0]));
+      ok('⑮i · adet GERÇEK aday sayısını bildiriyor',
+        a.govde.adet === a.govde.adaylar.length, `${a.govde.adet}/${a.govde.adaylar.length}`);
+
+      // ÜÇ PAZAR BİR ARADA — kullanıcının istediği seçim listesi.
+      ok('⑮i · ÖLÇÜM · TEK sorguda BIST + US + KRİPTO yan yana geldi',
+        ['BIST', 'US', 'KRIPTO'].every((p) => a.govde.adaylar.some((x) => x.pazar === p)),
+        a.govde.adaylar.map((x) => x.pazar).join(','));
+      ok('⑮i · BIST adayı HAM borsa kodunu taşıyor (IST)',
+        aday(a.govde, 'ASELS.IS').pazar === 'BIST' && aday(a.govde, 'ASELS.IS').borsa === 'IST',
+        `${aday(a.govde, 'ASELS.IS').pazar}/${aday(a.govde, 'ASELS.IS').borsa}`);
+      ok('⑮i · BIST `motorSembol`ü motorun KABUL ETTİĞİ biçim (`_girdi.js` ile ölçüldü)',
+        aday(a.govde, 'ASELS.IS').motorSembol === 'ASELS.IS'
+        && girdiTemizle(aday(a.govde, 'ASELS.IS').motorSembol, 'US').market === 'BIST',
+        aday(a.govde, 'ASELS.IS').motorSembol);
+      ok('⑮i · BIST adayı `motorPazar: BIST` — VARSAYILAN US DEĞİL (asıl onarım)',
+        aday(a.govde, 'ASELS.IS').motorPazar === 'BIST', aday(a.govde, 'ASELS.IS').motorPazar);
+      ok('⑮i · US adayı çıplak sembolle gidiyor (`_girdi.js` biçimine uyuyor)',
+        aday(a.govde, 'AAPL').pazar === 'US' && aday(a.govde, 'AAPL').motorSembol === 'AAPL'
+        && girdiTemizle(aday(a.govde, 'AAPL').motorSembol, 'US').market === 'US',
+        aday(a.govde, 'AAPL').motorSembol);
+      ok('⑮i · her iki motor adayı da `motorUc: analyze` bildiriyor',
+        aday(a.govde, 'AAPL').motorUc === 'analyze' && aday(a.govde, 'ASELS.IS').motorUc === 'analyze',
+        aday(a.govde, 'AAPL').motorUc);
+
+      // DÜRÜSTLÜK: motorda KRİPTO PAZARI YOK → motorSembol null.
+      ok('⑮i · kripto adayı pazar koduyla GÖRÜNÜYOR (kullanıcı seçebilir)',
+        aday(a.govde, 'BTC-USD').pazar === 'KRIPTO' && aday(a.govde, 'BTC-USD').tur === 'CRYPTOCURRENCY',
+        `${aday(a.govde, 'BTC-USD').pazar}/${aday(a.govde, 'BTC-USD').tur}`);
+      ok('⑮i · ÖLÇÜM · motorun PAZARLARında kripto YOK (uydurulmadı)',
+        !girdiPazarlar.includes('KRIPTO'), girdiPazarlar.join(','));
+      ok('⑮i · kripto `motorSembol` null — motorla ölçülemez, UYDURULMUYOR',
+        aday(a.govde, 'BTC-USD').motorSembol === null
+        && aday(a.govde, 'BTC-USD').motorPazar === null
+        && aday(a.govde, 'BTC-USD').motorUc === null,
+        String(aday(a.govde, 'BTC-USD').motorSembol));
+      ok('⑮i · ÖLÇÜLMEYEN borsa kodu (GER) `pazar: null` — TAHMİN YOK',
+        aday(a.govde, 'APC.DE').pazar === null && aday(a.govde, 'APC.DE').borsa === 'GER'
+        && aday(a.govde, 'APC.DE').motorSembol === null,
+        String(aday(a.govde, 'APC.DE').pazar));
+      ok('⑮i · ölçülmeyen alan null — 0 ya da boş dize DEĞİL',
+        aday(a.govde, 'BTC-USD').sektor === null, String(aday(a.govde, 'BTC-USD').sektor));
+
+      // HAM KOD KURALI + ENDEKS ÜYELİĞİ İDDİASI YOK.
+      ok('⑮i · `pazar` KAPALI makine kodu kümesi (ekran metni yok)',
+        a.govde.adaylar.every((x) => x.pazar === null || ['BIST', 'US', 'KRIPTO'].includes(x.pazar)),
+        a.govde.adaylar.map((x) => String(x.pazar)).join(','));
+      ok('⑮i · `borsa`/`tur` Yahoo\'nun HAM kodu (büyük harf, çeviri yok)',
+        a.govde.adaylar.every((x) => x.borsa === null || /^[A-Z]{2,4}$/.test(x.borsa))
+        && a.govde.adaylar.every((x) => x.tur === null || /^[A-Z]+$/.test(x.tur)),
+        a.govde.adaylar.map((x) => `${x.borsa}:${x.tur}`).join(','));
+      ok('⑮i · ENDEKS ÜYELİĞİ İDDİA EDİLMİYOR (PCX bir BORSA kodu, endeks değil)',
+        aday(a.govde, 'SPY').pazar === 'US' && aday(a.govde, 'SPY').borsa === 'PCX'
+        && !Object.prototype.hasOwnProperty.call(aday(a.govde, 'SPY'), 'endeks'),
+        `${aday(a.govde, 'SPY').pazar}/${aday(a.govde, 'SPY').borsa}`);
+      // BÜYÜK/küçük HARF DUYARLI bakılıyor: 'KRIPTO' MAKİNE KODU (geçerli),
+      // 'Kripto' EKRAN METNİ (yasak). `i` bayrağı ikisini ayırt edemiyordu.
+      ok('⑮i · uç TÜRKÇE ETiKET METNİ ÜRETMİYOR (etiketi istemci yazıyor)',
+        !/Kripto|Borsa İstanbul|Nasdaq|S&P 500 üye/.test(JSON.stringify(a.govde.adaylar.map(
+          (x) => ({ pazar: x.pazar, borsa: x.borsa, tur: x.tur, motorPazar: x.motorPazar }),
+        ))), 'temiz');
+      ok('⑮i · TAM cevap 300 sn penceresiyle dönüyor',
+        a.govde.tam === true
+        && a.basliklar['cache-control'] === 'public, max-age=300, s-maxage=300, stale-while-revalidate=600',
+        a.basliklar['cache-control']);
+      ok('⑮i · KV yokken `X-Onbellek: iska`', a.basliklar['x-onbellek'] === 'iska');
+
+      // LIMIT KAPISI — kapalı küme, sessiz kırpma yok.
+      const l3 = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', { q: 'apple', limit: '3' }));
+      ok('⑮i · limit adrese ve gövdeye GEÇİYOR',
+        l3.kod === 200 && l3.govde.limit === 3 && /[?&]quotesCount=3\b/.test(cagrilanUrl),
+        `${l3.govde.limit} / ${cagrilanUrl}`);
+      ok('⑮i · aday sayısı limiti AŞMIYOR', l3.govde.adaylar.length <= 3, String(l3.govde.adaylar.length));
+
+      // BOŞ SONUÇ HATA DEĞİL: ölçtüm, yok → tam: true.
+      globalThis.fetch = async (u) => { agDenemesi++; cagrilanUrl = String(u); return aramaYanit(JSON.stringify({ count: 0, quotes: [] })); };
+      const bos = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', { q: 'zzzzqqqq' }));
+      ok('⑮i · ÖLÇÜM · aday yok → 200 + `adaylar: []` + `tam: true` (ÖLÇTÜM, YOK)',
+        bos.kod === 200 && Array.isArray(bos.govde.adaylar) && bos.govde.adaylar.length === 0
+        && bos.govde.adet === 0 && bos.govde.tam === true,
+        `kod ${bos.kod} adet ${bos.govde.adet} tam ${bos.govde.tam}`);
+      ok('⑮i · boş sonuçta sayac KESİNTİSİZ', bos.govde.sayac.yahoo.kesinti === 0,
+        JSON.stringify(bos.govde.sayac.yahoo));
+
+      // TAŞIMA KESİNTİSİ: ölçemedim → tam: false (boş sonuçla AYNI DEĞİL).
+      globalThis.fetch = async () => { agDenemesi++; return aramaYanit('', false, 500); };
+      const kes = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', { q: 'apple' }));
+      ok('⑮i · ÖLÇÜM · taşıma kesintisi → `tam: false` (ÖLÇEMEDİM)',
+        kes.kod === 200 && kes.govde.tam === false && kes.govde.adaylar.length === 0
+        && kes.govde.sayac.yahoo.kesinti > 0,
+        `tam ${kes.govde.tam} kesinti ${kes.govde.sayac.yahoo.kesinti}`);
+      ok('⑮i · ölçülemeyen cevap KISA pencereyle dönüyor (kesinti 5 dk donmuyor)',
+        kes.basliklar['cache-control'] === 'public, max-age=30', kes.basliklar['cache-control']);
+      ok('⑮i · KİLİT · “boş sonuç” ile “ölçemedim” AYIRT EDİLEBİLİYOR',
+        bos.govde.tam === true && kes.govde.tam === false
+        && bos.govde.adaylar.length === kes.govde.adaylar.length,
+        `${bos.govde.tam} / ${kes.govde.tam}`);
+
+      globalThis.fetch = async () => { agDenemesi++; throw new Error('taşıma çöktü'); };
+      const cok = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', { q: 'apple' }));
+      ok('⑮i · taşıyıcı atışı → 502 `arama_yapilamadi` (aday UYDURULMUYOR)',
+        cok.kod === 502 && cok.govde.error === 'arama_yapilamadi', `${cok.kod} ${cok.govde.error}`);
+
+      // 400 KAPALI KÜMESİ — ağa ÇIKMADAN reddediyor.
+      const once400 = agDenemesi;
+      const q0 = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', {}));
+      ok('⑮i · q yok → 400 q_yok', q0.kod === 400 && q0.govde.error === 'q_yok', `${q0.kod} ${q0.govde.error}`);
+      const qb = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', { q: '   ' }));
+      ok('⑮i · boşluk q → 400 q_yok (sessiz kabul yok)', qb.kod === 400 && qb.govde.error === 'q_yok');
+      const qu = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', { q: 'a'.repeat(AZAMI_SORGU + 1) }));
+      ok('⑮i · q çok uzun → 400 too_long + azami (kırpma YOK)',
+        qu.kod === 400 && qu.govde.error === 'too_long' && qu.govde.azami === AZAMI_SORGU,
+        `${qu.kod} ${qu.govde.azami}`);
+      for (const kotu of ['abc', '0', '-1', String(KESIF.ARAMA_AZAMI + 1), '2.5']) {
+        const bl = yakala(await cagirKesif(KESIF.aramaHandler, 'GET', { q: 'apple', limit: kotu }));
+        ok(`⑮i · limit=${kotu} → 400 bad_limit + asgari/azami`,
+          bl.kod === 400 && bl.govde.error === 'bad_limit'
+          && bl.govde.asgari === 1 && bl.govde.azami === KESIF.ARAMA_AZAMI,
+          `${bl.kod} ${bl.govde.error}`);
+      }
+      ok('⑮i · ÖLÇÜM · 400 yolu SIFIR dış istek attı', agDenemesi === once400, `${agDenemesi - once400} istek`);
+    } finally {
+      globalThis.fetch = gercekFetch;
+    }
+  }
+
   // --- ⑮g HAM SAYI + tavsiye dili — TOPLANAN TÜM gövdeler --------------
   {
     ok('⑮g · denetlenen gövde sayısı anlamlı (süzgeç boşa çalışmıyor)',
@@ -4096,8 +4661,20 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
     ok('⑮h · uçta `Intl` YOK (HAM SAYI kuralı)', !/\bIntl\b/.test(kesifKod));
     ok('⑮h · uçta `toFixed(` / `toLocaleString(` YOK',
       !kesifKod.includes('toFixed(') && !kesifKod.includes('toLocaleString('));
+    // ÖLÇÜLMÜŞ GENİŞLETME (2026-10-28): motorun ARAMA DİLİMİ YOK (api/_motor.js
+    // içinde 'finance/search' geçmiyor), bu yüzden `arama` ucu adresi kendisi
+    // kurup TAŞIYICIYA (`AG.H.fetch` = _ag.js agFetch: izin listesi + tekilleştirme
+    // + süre tavanı + sayac) veriyor. Kapının NİYETİ GLOBAL `fetch`i yasaklamak;
+    // taşıyıcı çağrısı ayıklandıktan sonra çıplak `fetch(` HÂLÂ YASAK.
+    const kesifAgsiz = kesifKod.split('AG.H.fetch(').join('AG.H[TASIYICI](');
     ok('⑮h · uçta çıplak `fetch(` YOK — ağ MOTORUN taşıyıcısında',
-      !/\bfetch\(/.test(kesifKod));
+      !/\bfetch\(/.test(kesifAgsiz));
+    ok('⑮h · ağ YALNIZ taşıyıcı üzerinden (`AG.H.fetch`) çağrılıyor',
+      kesifKod.includes('AG.H.fetch('), 'AG.H.fetch');
+    ok('⑮h · arama adresi `_ag.js` IZINLI önekiyle başlıyor (izin listesine dokunulmadı)',
+      KESIF.ARAMA_URL.startsWith('https://query1.finance.yahoo.com/'), KESIF.ARAMA_URL);
+    ok('⑮h · uçta ENDEKS ETİKETİ ya da TÜRKÇE PAZAR METNİ yazılmamış',
+      !/'S&P[^']*'|'Kripto'|'Nasdaq'|'Borsa İstanbul'/.test(kesifKod), 'temiz');
     ok('⑮h · gövdeye `detail:`/yığın izi sızdıran alan yok', !/detail:/.test(kesifKod));
     ok('⑮h · kaynakta e-posta/anahtar YOK', !/@gmail|ANTHROPIC|apiKey/.test(kesifSrc), 'temiz');
     ok('⑮h · arıza `console.error` ile KENDİ adıyla raporlanıyor',

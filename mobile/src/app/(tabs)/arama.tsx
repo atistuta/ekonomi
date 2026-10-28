@@ -4,6 +4,13 @@
 //  NE: iki iş, tek alan: (1) sembol ölç → /api/recommend, sonucu
 //  takip listesine ekle; (2) tema ara → /api/theme (🔭 tematik keşif).
 //
+//  (3) ÇOK PAZARLI ADAY LİSTESİ → /api/arama (🔎 Adaylar kartı):
+//  yazılan terim için kripto + ABD + BIST adayları, her biri NE OLDUĞU
+//  yazılı; seçimi KULLANICI yapıyor. NEDEN: çıplak bir terimin pazarı
+//  ÖLÇÜLMEDEN BİLİNEMEZ — eskiden sunucu tahmin ediyordu ve çıplak
+//  `ASELS` sessizce `US` sayılıp skor `null` dönüyordu. Kart kendi
+//  ucuna gidiyor, kendi gecikmesini/iptalini taşıyor.
+//
 //  NEDEN TEK ALAN İKİ DÜĞME: web'de de "🔎 Arama" sekmesi hem sembol
 //  hem tema girişi; 5 menü düzeni korunuyor, yeni sekme açılmıyor.
 //  Hangi işin istendiğini TAHMİN ETMİYORUZ (metinde nokta var mı diye
@@ -68,6 +75,7 @@ import {
   TickerRow,
   VeriYok,
 } from '@/components';
+import { AdayKarti } from '@/components/arama';
 import { HaberSatiri } from '@/components/kesfet';
 import { formatPrice, formatScore } from '@/lib/format';
 import { radius, space, type, useTheme } from '@/theme';
@@ -164,7 +172,19 @@ export default function AramaScreen() {
         {bildirim ? (
           <Text style={[type.micro, { color: colors.textDim }]}>{bildirim}</Text>
         ) : null}
+        {/* ÇIPLAK SEMBOLÜN PAZARI ÖLÇÜLMEDEN BİLİNEMEZ: 'Sembol ölç'
+            düğmesi metni TEK sembol olarak motora yolluyor ve pazarı
+            sunucu seçiyor (ÖLÇÜLDÜ: çıplak `ASELS` → `US` → skor
+            `null`). Doğru yol aşağıdaki aday listesi. */}
+        <Text style={[type.micro, { color: colors.textFaint }]}>
+          {'Pazarı bilmiyorsan aşağıdaki 🔎 Adaylar listesinden seç — kripto, ABD ve BIST ' +
+            'birlikte aranır, pazar TAHMİN EDİLMEZ.'}
+        </Text>
       </Card>
+
+      {/* Gecikme, iptal ve tüm dallar (pazar ölçülemedi · motor yok ·
+          ölçüm tamamlanmadı · eşleşme yok) kartın İÇİNDE. */}
+      <AdayKarti terim={metin} />
 
       <Card
         title="Sembol sonucu"

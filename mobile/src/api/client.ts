@@ -39,31 +39,53 @@
 import {
   ADIMLAR,
   ARALIKLAR,
+  ARAMA_AZAMI,
   AZAMI_HABER_SORGU,
   AZAMI_HAREKET,
   AZAMI_KONSEPT,
   AZAMI_MADDE,
+  AZAMI_OLCUM,
   AZAMI_SEMBOL,
+  GUNDEM_YERELLER,
   HABER_PAZARLAR,
+  METAL_OLCUM_ALANLAR,
+  METAL_TURLER,
   NEDEN_KINDLER,
+  SIRA_KIPLERI,
+  TARAMA_PRESETLER,
   WATCHLIST_CODE_BICIM,
   VARSAYILAN_ADIM,
   VARSAYILAN_ARALIK,
+  VARSAYILAN_GUNDEM_YEREL,
   VARSAYILAN_HABER_PAZAR,
+  VARSAYILAN_SIRA,
   type Adim,
   type AnalyzeResponse,
   type Aralik,
+  type AramaResponse,
+  type BacktestResponse,
   type CausalRequest,
   type CausalResponse,
   type ChartResponse,
   type CompareResponse,
+  type DegerResponse,
+  type GundemResponse,
+  type GundemYerel,
   type HaberPazar,
   type Market,
+  type MetalOlcumler,
+  type MetalTur,
   type NewsResponse,
+  type OlcumKayit,
   type PulseResponse,
+  type RadarResponse,
   type RecommendResponse,
   type ScoreErrorBody,
   type ScoreResponse,
+  type SektorResponse,
+  type SiraKip,
+  type TaramaPreset,
+  type TaramaResponse,
   type ThemeResponse,
   type Vade,
   type WatchlistResponse,
@@ -126,6 +148,10 @@ export const ENDPOINTS = {
   radar: '/api/radar',
   backtest: '/api/backtest',
   deger: '/api/deger',
+  // ÇOK PAZARLI ADAY ARAMASI (api/_kesif.js `aramaHandler`). Altıncı keşif
+  // rotası, o beşle AYNI yeniden-yazımdan geçiyor (vercel.json:30 →
+  // `/api/proxy?__rota=arama`) — yeni Vercel fonksiyonu AÇILMADI.
+  arama: '/api/arama',
 } as const;
 
 /**
@@ -1286,5 +1312,753 @@ export async function pushWatchlist(
     query: { code: kapi.kod },
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     signal: options.signal,
+  });
+}
+
+// =====================================================================
+//  KEŞİF BEŞLİSİ — tarama · sektör · radar · backtest · değer
+// ---------------------------------------------------------------------
+//  NE: `ENDPOINTS` içinde adresleri duran beş ucun istemci işlevleri.
+//  NEDEN ŞİMDİ: adresler listede duruyordu ama ÇAĞIRAN YOKTU (DEVAM.md
+//  §4) — yani beş uç ekranlardan erişilemez durumdaydı.
+//
+//  NEDEN BEŞİ BİR BLOK: beşi de `api/_kesif.js` içinde yaşıyor, aynı
+//  `kapi()` kapısını, aynı 405/503 davranışını ve aynı makine kodu
+//  kümesini paylaşıyor. Ortak kod→cümle eşlemesi (`kesifKodMetni`) tek
+//  yerde olmazsa iki ekran aynı duruma iki ayrı cümle der.
+//
+//  ⚠️ BU BLOKTA EŞİK / AĞIRLIK / FORMÜL / SKOR MATEMATİĞİ YOK.
+//  Yapılan tek iş: TAŞIMA + TİP + Türkçe hata cümlesi + kesin 400
+//  üretecek isteği ağa çıkmadan kesmek. Beyaz listeler motorun
+//  sözlüklerinin KOPYASI, karar değil.
+//
+//  ÖLÇÜLDÜ (2026-10-27, kaynak okuma — CANLI ÇAĞRI YAPILMADI):
+//  alan adları, makine kodları ve beyaz listeler `api/_kesif.js` ile
+//  birebir; küme değerleri `api/_motor.js`ten.
+//  ⚠️ ÖLÇÜLMEDİ: beş ucun canlı cevabı (ağ erişimi bu şeritte yoktu) —
+//  tipler kaynaktan türetildi, üretimden doğrulanmadı.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/**
+ * Backtest zaman aşımı.
+ *
+ * NEDEN AYRI: keşif beşlisinin DÖRDÜ ağa HİÇ ÇIKMIYOR (api/_kesif.js:
+ * tarama/sektör/değer girdisini istemciden alıyor, radar saf sözlük
+ * okuması) — onlar için `DEFAULT_TIMEOUT_MS` (12 sn) fazlasıyla yeter.
+ * BACKTEST TEK AĞA ÇIKAN UÇ: mum serisini Yahoo'dan çekiyor, hem de
+ * `5y/1d` gibi uzun seriyi. Beşi de `api/proxy.js` üstünden taşındığı
+ * için sunucu tavanı o dosyanın `maxDuration: 30`u (api/proxy.js:8).
+ * 28 sn: tavanın hemen altı — önce biz değil SUNUCU konuşur, yani
+ * "ölçemedim" yerine sunucunun kendi makine kodunu görürüz.
+ * Skorun 58 sn'si buraya kopyalanmaz: o uç 8 sembol × iki kaynak
+ * koşturuyor, bu uç tek sembol tek seri.
+ */
+export const BACKTEST_TIMEOUT_MS = 28_000;
+
+/**
+ * Pazar beyaz listesi — `api/_girdi.js:73` `PAZARLAR` kopyası.
+ * NEDEN KOPYA: uç küme dışı pazarı KIRPMIYOR, 400 `bad_market` ile
+ * reddediyor. Aynı kodu yerelde üretmek kullanıcıya aynı cümleyi
+ * anında gösterir. Karar değil, beyaz liste.
+ */
+const KESIF_PAZARLAR: readonly Market[] = ['US', 'BIST'];
+
+/**
+ * Vade beyaz listesi — motorun `TA_HORIZON` anahtarları
+ * (api/_motor.js:1996). `Vade` türü derleme zamanında zorluyor; bu dizi
+ * ÇALIŞMA ZAMANI kapısı (JS tarafından, tipsiz çağrıyla gelen değer).
+ */
+const KESIF_VADELER: readonly Vade[] = ['gunici', 'kisa', 'orta', 'uzun'];
+
+/**
+ * Keşif uçlarının makine kodu → Türkçe cümle.
+ *
+ * NEDEN `kodMetni` YETMİYOR: o eşleme SKOR/GRAFİK kodları için yazıldı
+ * ve bazı kodların ANLAMI BU UÇLARDA FARKLI. En net örnek `too_long`:
+ * skor tarafında "sembol listesi çok uzun", radar tarafında "tema/sektör
+ * metni çok uzun". Aynı koda iki anlam yüklemek yerine ayrı küme.
+ *
+ * Cümlelerde TAVSİYE DİLİ YOK: ne "fırsat", ne "kazanç", ne "al/sat".
+ * Bilinmeyen kod → `null`; kodu yutmuyoruz, `error.code`'da kalır.
+ */
+export function kesifKodMetni(
+  code: string | null | undefined,
+  azami?: number,
+  istenen?: number,
+): string | null {
+  switch (code) {
+    // ----- ortak kapı (api/_kesif.js kapi/govdeAl) -----
+    case 'method_not_allowed':
+      return 'Bu uç bu yöntemi kabul etmiyor.';
+    case 'motor_kurulamadi':
+      return 'Hesap motoru yüklenemedi — ölçüm yapılamadı.';
+    case 'govde_yok':
+      return 'İstek gövdesi boş.';
+    case 'bozuk_json':
+      return 'İstek gövdesi okunamadı.';
+    case 'govde_buyuk':
+      return 'İstek gövdesi çok büyük.';
+
+    // ----- ölçüm listesi (tarama + sektör) -----
+    case 'olcumler_yok':
+      return 'Ölçüm listesi verilmedi.';
+    case 'olcumler_bos':
+      return 'Ölçüm listesi boş.';
+    case 'cok_olcum':
+      return (
+        'En çok ' +
+        (azami ?? AZAMI_OLCUM) +
+        ' ölçüm kaydı gönderilebilir (' +
+        (istenen ?? 0) +
+        ' gönderildi).'
+      );
+    case 'bad_olcum':
+      return 'Ölçüm kaydı okunamadı.';
+    case 'symbols_bos':
+      return 'Ölçüm kaydında sembol yok.';
+    case 'bad_market':
+      return 'Geçersiz pazar.';
+    case 'bad_symbol':
+      return 'Sembol biçimi tanınmadı.';
+    case 'too_long':
+      return 'Girdi çok uzun.';
+
+    // ----- tarama -----
+    case 'bad_preset':
+      return 'Tanınmayan tarama önayarı.';
+    case 'tarama_hesaplanamadi':
+      return 'Tarama hesaplanamadı — ölçüm yapılamadı.';
+
+    // ----- sektör -----
+    case 'bad_sira':
+      return 'Tanınmayan sıralama kipi.';
+    case 'sektor_hesaplanamadi':
+      return 'Sektör dağılımı hesaplanamadı — ölçüm yapılamadı.';
+
+    // ----- radar -----
+    case 'bad_tema':
+      return 'Tanınmayan tema.';
+    case 'bad_sektor':
+      return 'Tanınmayan sektör.';
+    case 'radar_alinamadi':
+      return 'Radar sözlüğü okunamadı — ölçüm yapılamadı.';
+
+    // ----- backtest -----
+    case 'symbol_yok':
+      return 'Sembol verilmedi.';
+    case 'cok_sembol':
+      return 'Bu uç tek sembol alır; birden çok sembol verildi.';
+    case 'bad_vade':
+      return 'Tanınmayan vade.';
+    case 'bad_range':
+      return 'Tanınmayan aralık.';
+    case 'bad_interval':
+      return 'Tanınmayan adım.';
+    case 'backtest_hesaplanamadi':
+      return 'Geçmiş ölçümü hesaplanamadı — ölçüm yapılamadı.';
+
+    // ----- değer -----
+    case 'bad_tur':
+      return 'Tanınmayan tür.';
+    case 'belge_yok':
+      return 'Değerleme belgesi verilmedi.';
+    case 'deger_hesaplanamadi':
+      return 'Değer ölçümü hesaplanamadı — ölçüm yapılamadı.';
+
+    // ----- arama (api/_kesif.js aramaHandler) -----
+    case 'q_yok':
+      return 'Arama terimi verilmedi.';
+    case 'bad_limit':
+      return 'Geçersiz aday sayısı (en az ' + 1 + ', en çok ' + ARAMA_AZAMI + ').';
+    case 'arama_yapilamadi':
+      return 'Arama yapılamadı — ölçüm yapılamadı.';
+
+    default:
+      return null;
+  }
+}
+
+/** Keşif uçlarının yerel kapısı — `fetchCausal` desenin birebir aynısı. */
+function kesifKapi<T>(
+  path: string,
+  code: string,
+  message?: string,
+): ApiResult<T> {
+  return {
+    ok: false,
+    error: {
+      kind: 'bad-request',
+      message: message ?? kesifKodMetni(code) ?? 'İstek karşılanamadı.',
+      endpoint: path,
+      code,
+    },
+  };
+}
+
+/**
+ * Ölçüm listesi kapısı — tarama ve sektör ucunun PAYLAŞTIĞI kapı.
+ *
+ * NEDEN TEK KAPI: sunucuda da tek fonksiyon (`api/_kesif.js`
+ * `ayristirOlcumler`). İki kopya yazmak, biri sınırı değiştirince bir
+ * ucun sessizce sunucudan ayrışması demek olurdu.
+ *
+ * Kodlar SUNUCUNUN KENDİ kodları, sırası da sunucudaki sıra — yeni kod
+ * uydurulmadı. `null` → kapı açık.
+ */
+function olcumKapisi<T>(path: string, olcumler: unknown): ApiResult<T> | null {
+  if (!Array.isArray(olcumler)) return kesifKapi<T>(path, 'olcumler_yok');
+  if (!olcumler.length) return kesifKapi<T>(path, 'olcumler_bos');
+  if (olcumler.length > AZAMI_OLCUM) {
+    return kesifKapi<T>(
+      path,
+      'cok_olcum',
+      kesifKodMetni('cok_olcum', AZAMI_OLCUM, olcumler.length) ?? undefined,
+    );
+  }
+  for (const o of olcumler) {
+    if (!o || typeof o !== 'object') return kesifKapi<T>(path, 'bad_olcum');
+    const kayit = o as OlcumKayit;
+    const ham = String(kayit.symbol ?? '').trim();
+    if (!ham) return kesifKapi<T>(path, 'symbols_bos');
+    if (ham.length > AZAMI_SORGU) return kesifKapi<T>(path, 'too_long');
+    if (kayit.market != null && !KESIF_PAZARLAR.includes(kayit.market)) {
+      return kesifKapi<T>(path, 'bad_market');
+    }
+  }
+  return null;
+}
+
+export type TaramaOptions = Omit<RequestOptions, 'query'>;
+
+/**
+ * Tarama çağrısı: POST /api/tarama
+ *
+ * NE: bir önayar (`value` · `growth` · `quality`) ve ÖLÇÜM KAYITLARI
+ * gönderilir; uç her kayda motorun tarama skorunu verip skora göre
+ * AZALAN sırada döner.
+ *
+ * NEDEN POST: girdi temel kayıt LİSTESİ (en çok 120 kayıt × 18 alan) —
+ * sorgu dizgisine sığmaz. Uç da yalnız POST kabul ediyor
+ * (api/_kesif.js: `kapi(req, res, 'POST, OPTIONS')` → 405
+ * `method_not_allowed`).
+ *
+ * ⚠️ ÖLÇÜMLERİ BU İŞLEV ÜRETMEZ — ÇAĞIRAN VERİR. Uç AĞA ÇIKMIYOR:
+ * temel kayıtları istemciden bekliyor (web tarafında bunu `/api/yfin`
+ * taraması yapıyor). Burada uydurma bir ölçüm kurmak, ucu
+ * ölçülmemiş girdiyle besleyip ekrana "ölçülmüş" görünen bir skor
+ * bastırmak olurdu. Eksik alan `null` geçer — 0 GEÇMEZ (0 bir F/K'sı
+ * olmayan şirketi "en ucuz" gösterir).
+ *
+ * ⚠️ `atlanan[]` BOŞ DEĞİLSE EKRAN SUSMAZ: `ok: true` "her şey ölçüldü"
+ * demek değil. Skorlanamayan kayıtlar oraya `neden` ile yazılıyor
+ * ("veri yok" ≠ "düşük skor").
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS`: uç AĞA ÇIKMIYOR, saf hesap — gelen
+ * kayıtları motordan geçirip sıralıyor.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır):
+ *   · küme dışı önayar            → `bad_preset`
+ *   · `olcumler` dizi değil       → `olcumler_yok`
+ *   · boş liste                   → `olcumler_bos`
+ *   · kayıt sayısı > 120          → `cok_olcum`
+ *   · kayıt nesne değil           → `bad_olcum`
+ *   · boş sembol                  → `symbols_bos`
+ *   · sembol > 128 karakter       → `too_long`
+ *   · küme dışı pazar             → `bad_market`
+ *
+ * ÖLÇÜLDÜ — YEREL BAYT KAPISI YOK: ucun 65536 baytlık denetimi YALNIZ
+ * gövde DİZGE geldiğinde çalışıyor; Vercel Node runtime JSON'u kendi
+ * ayrıştırdığı için o dal bizim isteğimizde hiç yürümez. 120 kayıt
+ * kapısı yükü zaten sınırlıyor; ölçmediğim bir bayt eşiği yazmadım.
+ *
+ * ⚠️ `bad_symbol` YEREL OLARAK DENETLENMEDİ: sunucu sembol biçimini
+ * `api/_girdi.js` düzenli ifadesi + endeks sözlüğüyle çözüyor; o
+ * ifadeyi buraya kopyalamak, sunucu onu genişlettiğinde istemcinin
+ * geçerli sembolü sessizce reddetmesine yol açardı.
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchTarama(
+  preset: TaramaPreset,
+  olcumler: OlcumKayit[],
+  options: TaramaOptions = {},
+): Promise<ApiResult<TaramaResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.tarama;
+
+  if (!(TARAMA_PRESETLER as readonly string[]).includes(String(preset))) {
+    return kesifKapi<TaramaResponse>(path, 'bad_preset');
+  }
+
+  const kapali = olcumKapisi<TaramaResponse>(path, olcumler);
+  if (kapali) return kapali;
+
+  return apiPost<TaramaResponse>(path, { preset, olcumler }, { timeoutMs, signal });
+}
+
+export type SektorOptions = Omit<RequestOptions, 'query'> & {
+  /** Varsayılan 'cheap' — ucun `VARSAYILAN_SIRA`sı ile aynı. */
+  sira?: SiraKip;
+};
+
+/**
+ * Sektör dağılımı: POST /api/sektor
+ *
+ * NE: aynı ölçüm kayıtları sektör gruplarına bölünür; her grup için
+ * medyan F/K · ileri F/K · büyüme · marj · PEG döner.
+ *
+ * NEDEN POST + NEDEN AYNI KAPI: girdi tarama ucuyla BİREBİR aynı ölçüm
+ * listesi (sunucuda da aynı `ayristirOlcumler`), bu yüzden yerel kapı
+ * da paylaşılıyor.
+ *
+ * ⚠️ MEDYANLAR HAM KESİR — YÜZDE DEĞİL (bkz. `SektorGrup`). Ekran
+ * yüzdeye çevirmek isterse ×100'ü BİR KEZ yapar; burada çevirmiyoruz,
+ * çünkü ham sayıyı biçimlemek `lib/format.ts`in işi ve iki yerde
+ * ölçekleme iki kat yanlış basar.
+ *
+ * ⚠️ SIRALAMA MOTORDA: `sira` yalnız KİBİN ADI; grupları sunucu
+ * `sekSortGroups` ile diziyor. İstemci yeniden sıralamaz — sıralama
+ * ölçütü bir karardır ve iki yerde yaşarsa ayrışır.
+ *
+ * ⚠️ `siniflanan < degerlendirilen` olabilir: `ok: false` kayıtlar
+ * gruba HİÇ girmiyor. Ekran bu farkı "eksik ölçüm" olarak söylemek
+ * zorunda; 0 ile doldurulmaz.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS`: uç AĞA ÇIKMIYOR, saf hesap.
+ *
+ * YEREL KAPILAR: `bad_sira` + tarama ucunun ölçüm kapısının tamamı.
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchSektor(
+  olcumler: OlcumKayit[],
+  options: SektorOptions = {},
+): Promise<ApiResult<SektorResponse>> {
+  const { sira = VARSAYILAN_SIRA, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.sektor;
+
+  if (!(SIRA_KIPLERI as readonly string[]).includes(String(sira))) {
+    return kesifKapi<SektorResponse>(path, 'bad_sira');
+  }
+
+  const kapali = olcumKapisi<SektorResponse>(path, olcumler);
+  if (kapali) return kapali;
+
+  return apiPost<SektorResponse>(path, { olcumler, sira }, { timeoutMs, signal });
+}
+
+export type RadarOptions = Omit<RequestOptions, 'query'> & {
+  /** Tek temayı süzmek için — verilmezse TÜM temalar döner. */
+  tema?: string;
+  /** Verilirse cevaba o sektörün MOTOR SÖZLÜĞÜNDEKİ sembolleri eklenir. */
+  sektor?: string;
+};
+
+/**
+ * Radar sözlüğü: GET /api/radar?tema=&sektor=
+ *
+ * NE: 🔭 tema listesi (etiket · dil · haber ARAMA METNİ · etkilenen
+ * sektörler) ve sektör anahtar→ad sözlüğü. İki parametre de İSTEĞE
+ * BAĞLI: ikisi de verilmezse tüm sözlük döner.
+ *
+ * NEDEN SKOR YOK: bu uç SAF SÖZLÜK OKUMASI, AĞA ÇIKMIYOR ve hiçbir şey
+ * hesaplamıyor. Haber taraması ÇAĞIRANIN işi: `tema.sorgu` metni
+ * `/api/news` ya da `/api/pulse`a GİRDİ olarak verilir. Bu işlev haber
+ * getirmez; getirdiğini söylemek uydurma olurdu.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS`: sözlük okuması, dış istek yok. (Uç 5
+ * dakikalık CDN önbelleği de veriyor — `Cache-Control: public,
+ * max-age=300`; istemci bir şey önbelleklemiyor, ona dokunmuyoruz.)
+ *
+ * YEREL KAPI — YALNIZ UZUNLUK: `too_long` (her iki parametre için).
+ * ⚠️ `bad_tema` / `bad_sektor` YEREL OLARAK DENETLENMEDİ: her iki beyaz
+ * liste MOTOR SÖZLÜĞÜNDEN okunuyor (`RADAR_THEMES` anahtarları,
+ * `SECTORS` anahtarları) ve bu uç ZATEN o listeleri cevabında veriyor.
+ * 18 sektör + tema anahtarını istemciye kopyalamak, motora tema
+ * eklendiği gün istemcinin geçerli temayı reddetmesi demek olurdu.
+ * Doğru akış: önce parametresiz çağır, dönen `temalar`/`sektorler`den
+ * seç.
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchRadar(
+  options: RadarOptions = {},
+): Promise<ApiResult<RadarResponse>> {
+  const { tema, sektor, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.radar;
+
+  const t = tema == null ? '' : String(tema).trim();
+  const s = sektor == null ? '' : String(sektor).trim();
+
+  if (t.length > AZAMI_SORGU || s.length > AZAMI_SORGU) {
+    return kesifKapi<RadarResponse>(
+      path,
+      'too_long',
+      'Radar parametresi çok uzun (en çok ' + AZAMI_SORGU + ' karakter).',
+    );
+  }
+
+  return apiGet<RadarResponse>(path, {
+    query: { tema: t || undefined, sektor: s || undefined },
+    timeoutMs,
+    signal,
+  });
+}
+
+export type BacktestOptions = Omit<RequestOptions, 'query'> & {
+  /** Varsayılan 'orta' — ucun varsayılanıyla aynı. */
+  vade?: Vade;
+  /** Verilmezse SUNUCU vadeye göre seçer (gün-içi: '1y', değilse '5y'). */
+  range?: Aralik;
+  /** Verilmezse SUNUCU vadeye göre seçer (gün-içi: '60m', değilse '1d'). */
+  interval?: Adim;
+  market?: Market;
+};
+
+/**
+ * Geçmiş ölçümü: GET /api/backtest?symbol=AAPL&vade=orta
+ *
+ * NE: bir sembolün geçmiş serisinde motorun kendi göstergesinin ileri
+ * getiriyle ilişkisini ÖLÇER (isabet oranları, skor kovaları, bilgi
+ * katsayısı, strateji/al-tut getirisi). Bu bir BAŞARI VAADİ DEĞİL,
+ * geçmişe dönük bir ölçüm.
+ *
+ * NEDEN AĞA ÇIKAN TEK UÇ: keşif beşlisinin diğer dördü girdisini
+ * istemciden alıyor; bu uç mum serisini kendisi çekiyor. Zaman aşımı bu
+ * yüzden ayrı (`BACKTEST_TIMEOUT_MS`, gerekçesi orada).
+ *
+ * ⚠️ `range`/`interval` VARSAYILANI BİLEREK GÖNDERİLMİYOR: sunucu
+ * seçimi VADEYE bağlı (api/_kesif.js: `BT_CFG[vade].intraday` ise
+ * `1y/60m`, değilse `5y/1d`). O eşleştirmeyi istemciye kopyalamak,
+ * motorun vade yapılandırması değiştiğinde istemcinin YANLIŞ seriyi
+ * istemesi demek olurdu. Boş bırakılan alan sorguya hiç yazılmaz
+ * (`buildUrl` `undefined`ı atlar) ve kararı sunucu verir; cevabın
+ * `range`/`interval` alanları ne kullanıldığını söylüyor.
+ *
+ * ⚠️ `sonuc === null` HATA DEĞİL — DÜRÜST "ÖLÇEMEDİM". Motor seri
+ * `warmup + H + 40` barın altındaysa ya da örnek sayısı 12'nin
+ * altındaysa `null` döndürüyor (api/_motor.js `computeBacktest`);
+ * 0 yazmak uydurma olurdu. Bu yüzden `ApiResult` tarafında başarı:
+ * `r.ok === true` ve `r.data.sonuc === null` AYNI ANDA gelir. Ekran
+ * bunu "bu sembol/vade için ölçülemedi" diye yazar ve
+ * `ApiError.kind === 'unmeasured'` ile KARIŞTIRMAZ — o, sunucuya
+ * ulaşamadık demek; burada ulaştık, sunucu ölçemediğini söyledi.
+ *
+ * ⚠️ `tam === false` ya da `sayac.*.kesinti > 0` → seri EKSİK çekildi;
+ * ölçüm o eksikle yapıldı. Ekran bunu söylemek zorunda.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır):
+ *   · boş sembol             → `symbol_yok`
+ *   · virgül içeriyor        → `cok_sembol` (azami 1)
+ *   · uzunluk > 128          → `too_long`
+ *   · küme dışı vade         → `bad_vade`
+ *   · küme dışı range        → `bad_range`
+ *   · küme dışı interval     → `bad_interval`
+ *   · küme dışı pazar        → `bad_market`
+ *
+ * ⚠️ `bad_symbol` YEREL DENETİMİ YOK — ve grafik ucundan FARKLI olarak
+ * `^` kapısı da yok: bu uç endeks sembollerini `cozEndeks()` ile
+ * çözüyor (api/_kesif.js:586), yani `^GSPC` burada GEÇERLİ. Grafik
+ * ucunun kapısını kopyalamak geçerli bir isteği reddetmek olurdu.
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchBacktest(
+  symbol: string,
+  options: BacktestOptions = {},
+): Promise<ApiResult<BacktestResponse>> {
+  const {
+    vade = 'orta',
+    range,
+    interval,
+    market,
+    timeoutMs = BACKTEST_TIMEOUT_MS,
+    signal,
+  } = options;
+  const path = ENDPOINTS.backtest;
+
+  const sym = String(symbol ?? '').trim().toUpperCase();
+
+  if (!sym) return kesifKapi<BacktestResponse>(path, 'symbol_yok');
+  if (sym.includes(',')) return kesifKapi<BacktestResponse>(path, 'cok_sembol');
+  if (sym.length > AZAMI_SORGU) {
+    return kesifKapi<BacktestResponse>(path, 'too_long', 'Sembol çok uzun.');
+  }
+  if (!KESIF_VADELER.includes(vade)) return kesifKapi<BacktestResponse>(path, 'bad_vade');
+  if (range != null && !(ARALIKLAR as readonly string[]).includes(range)) {
+    return kesifKapi<BacktestResponse>(path, 'bad_range');
+  }
+  if (interval != null && !(ADIMLAR as readonly string[]).includes(interval)) {
+    return kesifKapi<BacktestResponse>(path, 'bad_interval');
+  }
+  if (market != null && !KESIF_PAZARLAR.includes(market)) {
+    return kesifKapi<BacktestResponse>(path, 'bad_market');
+  }
+
+  return apiGet<BacktestResponse>(path, {
+    query: { symbol: sym, vade, range, interval, market },
+    timeoutMs,
+    signal,
+  });
+}
+
+/**
+ * Değer ucunun isteği — AYRIK BİRLEŞİM, çünkü uç İKİ YÖNTEM kabul
+ * ediyor (api/_kesif.js: `kapi(req, res, 'GET, POST, OPTIONS')`):
+ *   · metal  → GET,  makro ölçümler sorgu parametresi olarak
+ *   · kripto → POST, CoinGecko belgesi gövdede (sorguya sığmaz)
+ * Tür alanı ayırıcı olduğu için yanlış eşleşme (kriptoya ölçüm,
+ * metale belge) derleme zamanında yakalanır.
+ */
+export type DegerIstek =
+  | { tur: MetalTur; olcumler?: MetalOlcumler }
+  | { tur: 'kripto'; belge: Record<string, unknown> };
+
+export type DegerOptions = Omit<RequestOptions, 'query'>;
+
+/**
+ * Değer ölçümü: GET /api/deger?tur=gram-altin&...  ·  POST /api/deger
+ *
+ * NE: metal için makro rejim skoru (DXY · 10Y · VIX · metaller-arası
+ * oran · kendi trendi), kripto için belge tabanlı değer skoru. İkisi de
+ * AYNI cevap şeklini döndürüyor (`skor` · `cls` · `bilesenler`).
+ *
+ * NEDEN TEK İŞLEV, İKİ YÖNTEM: sunucu TEK uç ve tek cevap sözleşmesi;
+ * iki ayrı istemci işlevi yazmak aynı sözleşmeyi iki yerde tutmak
+ * olurdu. Yöntem seçimi TÜRDEN düşüyor — tahminle değil, ucun kendi
+ * dallarından okundu: POST dalı `tur !== 'kripto'` ise 400
+ * `{error:'bad_tur', izinli:['kripto'], not:'metal icin GET'}` diyor;
+ * GET dalı `tur`u `METAL_MACRO_W` anahtarlarında arıyor.
+ *
+ * ⚠️ ÖLÇÜLMEYEN MAKRO ALAN HİÇ GÖNDERİLMEZ (0 GÖNDERİLMEZ):
+ * `METAL_OLCUM_ALANLAR`ın sekizi de isteğe bağlı; verilmeyen alan
+ * motora `null` geçer ve motor onu nötr sayıp çekincesine yazar. 0
+ * göndermek "DXY hiç değişmedi" diye ÖLÇÜLMÜŞ bir iddia kurardı.
+ * Sonlu olmayan sayı yerelde kesiliyor: sunucu onu 400 `bad_olcum` ile
+ * reddediyor, aynı kodu burada üretiyoruz.
+ *
+ * ⚠️ BİLEŞEN AĞIRLIKLARI MOTORDAN GELİR (`bilesenler[].w`); istemci
+ * onlarla skoru YENİDEN HESAPLAMAZ — yalnız gösterir.
+ *
+ * ⚠️ `uyariAdet > 0` → motorun çekincesi var; metinleri uç bilerek
+ * düşürdü. Ekran sayıyı susturamaz: ölçümün ne kadar güvenilir olduğu
+ * bilgisi oradan geliyor.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS`: uç AĞA ÇIKMIYOR — hem metal hem kripto
+ * girdisini çağırandan alıyor, saf hesap.
+ *
+ * ⚠️ GİRDİYİ BU İŞLEV ÜRETMEZ: makro ölçümleri ve CoinGecko belgesini
+ * ÇAĞIRAN verir. Uydurma girdi, ölçülmemiş bir skoru ölçülmüş gibi
+ * bastırmak olurdu.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır):
+ *   · küme dışı tür                  → `bad_tur`
+ *   · kripto: belge nesne değil/dizi → `belge_yok`
+ *   · metal: sonlu olmayan ölçüm     → `bad_olcum`
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchDeger(
+  istek: DegerIstek,
+  options: DegerOptions = {},
+): Promise<ApiResult<DegerResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.deger;
+  const tur = istek?.tur;
+
+  // ----- POST dalı: kripto -----
+  if (tur === 'kripto') {
+    const belge = (istek as { belge?: unknown }).belge;
+    if (!belge || typeof belge !== 'object' || Array.isArray(belge)) {
+      return kesifKapi<DegerResponse>(path, 'belge_yok');
+    }
+    return apiPost<DegerResponse>(path, { tur, belge }, { timeoutMs, signal });
+  }
+
+  // ----- GET dalı: metal -----
+  if (!(METAL_TURLER as readonly string[]).includes(String(tur))) {
+    return kesifKapi<DegerResponse>(path, 'bad_tur');
+  }
+
+  const olcumler = (istek as { olcumler?: MetalOlcumler }).olcumler ?? {};
+  const query: Record<string, string | number | undefined> = { tur: String(tur) };
+
+  for (const alan of METAL_OLCUM_ALANLAR) {
+    const v = olcumler[alan];
+    // ÖLÇÜLMEDİ → alan sorguya HİÇ yazılmaz (`buildUrl` boş/`undefined`
+    // değerleri atlıyor). Sunucu onu `null` sayıp çekincesine yazar.
+    if (v == null) continue;
+    if (!Number.isFinite(v)) {
+      return kesifKapi<DegerResponse>(
+        path,
+        'bad_olcum',
+        'Makro ölçüm sayı değil: ' + alan + '.',
+      );
+    }
+    query[alan] = v;
+  }
+
+  return apiGet<DegerResponse>(path, { query, timeoutMs, signal });
+}
+
+export type GundemOptions = Omit<RequestOptions, 'query'> & {
+  /** Besleme yereli. Verilmezse uç noktanın varsayılanı (TR) gönderilir. */
+  yerel?: GundemYerel;
+  /** 1..AZAMI_MADDE. Verilmezse uç noktanın varsayılanı (10) kullanılır. */
+  limit?: number;
+};
+
+/**
+ * `/api/news?gundem=1` — GÜNDEM KİPİ: sembole bağlı OLMAYAN manşetler,
+ * birden çok yayıncı beslemesinden toplanıp tekilleştirilmiş.
+ *
+ * NEDEN `fetchNews` İLE AYNI İŞLEV DEĞİL: aynı yolu kullanıyorlar ama
+ * uç bunları AYRI KİP sayıyor ve `gundem` ile `q`/`symbols` BİRLİKTE
+ * gönderilince 400 `gundem_ve_sorgu` dönüyor (api/news.js:251). Tek
+ * işlevde iki kipi toplamak, çağıran yerin yanlışlıkla ikisini birden
+ * geçmesine izin vermek olurdu; ayrı imza bunu derleme zamanında
+ * imkânsız kılıyor. Dönen gövde de ayrı şekilde (`besleme[]`, `tekrar`,
+ * `q: null`) — bkz. `GundemResponse` başlığı.
+ *
+ * NEDEN `q` PARAMETRESİ YOK: bu kipte serbest metin GÖNDERİLEMEZ.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS` (12 sn): `fetchNews` ile aynı uç, aynı
+ * `maxDuration: 10`. Gündem kipi beş-yedi beslemeyi PARALEL çekiyor
+ * (api/_haber.js `Promise.allSettled`), yani seri toplam değil — yeni
+ * bir kademe uydurulmadı.
+ *
+ * NEDEN BOŞ LİSTE HATA DEĞİL: 200 + `maddeler: []` + `tam: true`
+ * ölçülmüş bir cevap ("gündemde madde yok"). `no-data`ya çevirmek
+ * ekrana "ölçemedim" tonu bastırırdı; gövde `ok: true` geçer, ekran
+ * `adet === 0` dalını `VeriYok` ile anlatır. `tam: false` AYRI dal.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır, yeni kod uydurulmadı):
+ *   · küme dışı yerel          → `bad_market` (api/news.js:281 izinli küme)
+ *   · tamsayı olmayan/<1 limit  → `bad_limit`
+ *   · limit > 25               → `limit_buyuk`
+ * `bad_gundem` ve `gundem_ve_sorgu` BURADA ÜRETİLEMEZ: `gundem` daima
+ * '1' gönderiliyor ve `q`/`symbols` hiç gönderilmiyor.
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchGundem(
+  options: GundemOptions = {},
+): Promise<ApiResult<GundemResponse>> {
+  const {
+    yerel = VARSAYILAN_GUNDEM_YEREL,
+    limit,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+  } = options;
+  const path = ENDPOINTS.news;
+
+  if (!(GUNDEM_YERELLER as readonly string[]).includes(yerel)) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('bad_market') ?? 'Geçersiz pazar.',
+        endpoint: path,
+        code: 'bad_market',
+      },
+    };
+  }
+  if (limit !== undefined) {
+    if (!Number.isInteger(limit) || limit < 1) {
+      return {
+        ok: false,
+        error: {
+          kind: 'bad-request',
+          message: kodMetni('bad_limit') ?? 'Geçersiz madde sayısı.',
+          endpoint: path,
+          code: 'bad_limit',
+        },
+      };
+    }
+    if (limit > AZAMI_MADDE) {
+      return {
+        ok: false,
+        error: {
+          kind: 'bad-request',
+          message: kodMetni('limit_buyuk', AZAMI_MADDE, limit) ?? 'Çok fazla manşet istendi.',
+          endpoint: path,
+          code: 'limit_buyuk',
+        },
+      };
+    }
+  }
+
+  return apiGet<GundemResponse>(path, {
+    // `gundem` KAPALI KÜME: uç yalnız '1'/'true' kabul ediyor
+    // (api/news.js:232-240). '1' gönderiliyor, kullanıcıdan alınmıyor.
+    query: { gundem: '1', market: yerel, limit },
+    timeoutMs,
+    signal,
+  });
+}
+
+export type AramaOptions = Omit<RequestOptions, 'query'> & {
+  /** 1..ARAMA_AZAMI (25). Verilmezse ucun varsayılanı (10) kullanılır. */
+  limit?: number;
+};
+
+/**
+ * `/api/arama` — ÇOK PAZARLI ADAY ARAMASI (api/_kesif.js `aramaHandler`).
+ *
+ * NEDEN VAR: çıplak bir terim (`ASELS`) hangi pazara ait, ÖLÇÜLMEDEN
+ * BİLİNEMEZ. Eski akış sembolü doğrudan skora yolluyordu, sunucu pazarı
+ * TAHMİN ediyordu ve `ASELS` sessizce `US` sayılıp skor `null` dönüyordu.
+ * Bu uç tahmin etmiyor: kripto + US + BIST adaylarını BİRLİKTE listeliyor,
+ * seçimi KULLANICI yapıyor.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS` (12 sn): uç TEK dış istek yapıyor (Yahoo
+ * search) ve diğer beş keşif rotasıyla aynı `api/proxy.js` yeniden
+ * yazımından geçiyor; skorun 58 sn'si buraya kopyalanmaz.
+ *
+ * NEDEN BOŞ LİSTE HATA DEĞİL: 200 + `adaylar: []` + `tam: true`
+ * ÖLÇÜLMÜŞ bir cevaptır ("aradım, eşleşme yok"). `tam: false` AYRI dal:
+ * "ölçüm tamamlanmadı". Gövde `ok: true` geçer, ayrımı ekran yapar.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır, yeni kod uydurulmadı):
+ *   · boş q                      → `q_yok`
+ *   · q uzunluğu > 128           → `too_long`  (api/_girdi.js AZAMI_SORGU)
+ *   · tamsayı olmayan/<1/>25 lim → `bad_limit` (asgari 1, azami 25)
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchArama(
+  query: string,
+  options: AramaOptions = {},
+): Promise<ApiResult<AramaResponse>> {
+  const { limit, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.arama;
+
+  // `q` SERBEST METİN: sembol kapısından (büyük harfe çevirme, biçim
+  // denetimi) GEÇİRİLMİYOR — "aselsan" da, "ASELS" de, "bitcoin" de
+  // geçerli arama terimi (api/_kesif.js `aramaHandler` ham `q` alıyor).
+  const q = String(query ?? '').trim();
+
+  if (!q) {
+    return kesifKapi<AramaResponse>(path, 'q_yok');
+  }
+  if (q.length > AZAMI_SORGU) {
+    return kesifKapi<AramaResponse>(
+      path,
+      'too_long',
+      // `kesifKodMetni('too_long')` TARAMA cümlesini döndürür; arama
+      // terimi için yanlış olur.
+      'Arama terimi çok uzun (en çok ' + AZAMI_SORGU + ' karakter).',
+    );
+  }
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > ARAMA_AZAMI)) {
+    return kesifKapi<AramaResponse>(path, 'bad_limit');
+  }
+
+  return apiGet<AramaResponse>(path, {
+    query: { q, limit },
+    timeoutMs,
+    signal,
   });
 }

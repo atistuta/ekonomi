@@ -73,7 +73,7 @@ const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 //  tests/uc-test.mjs ⑮ bu listeyi okuyor. Bir ad üç yerde elle yazılsaydı
 //  birindeki yazım hatası 404'ü ancak canlıda gösterirdi.
 // ---------------------------------------------------------------------
-export const ROTALAR = Object.freeze(['tarama', 'sektor', 'radar', 'backtest', 'deger']);
+export const ROTALAR = Object.freeze(['tarama', 'sektor', 'radar', 'backtest', 'deger', 'arama']);
 
 // ---------------------------------------------------------------------
 //  SINIRLAR — niye bu sayılar
@@ -796,8 +796,208 @@ export async function degerHandler(req, res) {
   }
 }
 
+// =====================================================================
+//  /api/arama  —  GET
+// =====================================================================
+//  NİYE VAR — ÖLÇÜLDÜ (2026-10-28)
+//    `api/_girdi.js:161` çıplak bir terimde pazarı SESSİZCE 'US' VARSAYIYOR:
+//    `ASELS` → {sym:'ASELS', market:'US'} → scoreFaUS → skor null,
+//    why='secFetchModel null'. BIST bacağına ancak `ASELS.IS` / `ASELS:BIST`
+//    / `&market=BIST` ulaşıyor. O sözleşme analyze.js:302, score.js:257 ve
+//    recommend.js:253 tarafından PAYLAŞILIYOR, bu yüzden DEĞİŞTİRİLMEDİ —
+//    bu uç varsayımın YERİNE geçen dürüst yolu veriyor: pazarı tahmin etmek
+//    yerine ÇOK PAZARLI ADAY LİSTESİ döndürüyor, seçimi istemciye bırakıyor.
+//
+//  SÖZLEŞME
+//    GET /api/arama?q=<terim>[&limit=N]      (N tamsayı, 1..ARAMA_AZAMI)
+//    Cevap 200: { q, limit, adaylar[], adet, sayac, tam, surum, ms, uyari }
+//      adaylar[] = { sembol, ad, borsa, tur, sektor,
+//                    pazar, motorSembol, motorPazar, motorUc }
+//        sembol      · Yahoo'nun HAM sembolü ('ASELS.IS', 'AAPL', 'BTC-USD')
+//        ad          · shortname ?? longname ?? null  (ölçülmezse null)
+//        borsa       · Yahoo'nun HAM borsa kodu ('IST','NMS','NYQ','CCC',…)
+//        tur         · Yahoo'nun HAM quoteType'ı ('EQUITY','ETF','FUTURE',…)
+//        pazar       · 'BIST' | 'US' | 'KRIPTO' | null  — ÖLÇÜLMÜŞ kod
+//                      kümelerinden türetilen MAKİNE KODU, metin DEĞİL.
+//        motorSembol · motorun KABUL ETTİĞİ biçim (null = bu motorla ölçülemez)
+//      HAM KOD KURALI: bu uç 'S&P 500' / 'Kripto' gibi EKRAN METNİ ÜRETMEZ;
+//      etiketi istemci yazar. ÖZELLİKLE ENDEKS ÜYELİĞİ İDDİA EDİLMİYOR:
+//      Yahoo arama kaydında endeks üyeliği alanı YOK (ölçüldü) — 'NYQ' bir
+//      BORSA kodudur, 'S&P 500 üyesi' demek UYDURMA olurdu.
+//    Cevap 4xx: { error: 'q_yok' | 'too_long' | 'bad_limit' | …, uyari }
+//    Cevap 502: { error: 'arama_yapilamadi', uyari }
+//
+//  DÜRÜSTLÜK: aday bulunamaması HATA DEĞİL → { adaylar: [], tam: true }.
+//  Taşıma kesintisinde `tam: false` (sayac.yahoo.kesinti > 0) — "ölçtüm,
+//  yok" ile "ölçemedim" ayrı duruyor. Boş liste 0 ile doldurulmuyor.
+// =====================================================================
+
+// Aday tavanı. UYDURULMADI: Yahoo arama ucunun `quotesCount`u bu sayıyla
+// BİREBİR geçiyor; 25, ölçülen en kalabalık sorguda (apple) dönen kayıt
+// sayısının üstünde kalıyor, yani kullanıcı kırpılmayı görmüyor.
+export const ARAMA_AZAMI = 25;
+export const ARAMA_VARSAYILAN = 10;
+
+// Yahoo arama ucu. Konak `api/_ag.js`in IZINLI listesinde ZATEN VAR
+// (query1.finance.yahoo.com) — izin listesine dokunulmadı.
+export const ARAMA_URL = 'https://query1.finance.yahoo.com/v1/finance/search';
+
+// HAM borsa kodu → pazar kodu. Liste ÖLÇÜLDÜ (2026-10-28, on üç sorgu):
+//   IST → BIST · NYQ NMS NAS NGM PCX BTS OQX PNK → US · CCC → kripto.
+// Ölçülmeyen kod (TOR, MEX, GER, FRA, VIE, LSE, BUE, CME, NEO, VAN, PAR,
+// HAM …) `pazar: null` alıyor: TAHMİN EDİLMİYOR. Kümeye kod eklemek bir
+// ölçüm işidir, kolaylık işi değil.
+export const BORSA_BIST = Object.freeze(['IST']);
+export const BORSA_US = Object.freeze(['NYQ', 'NMS', 'NAS', 'NGM', 'PCX', 'BTS', 'OQX', 'PNK']);
+export const TUR_KRIPTO = 'CRYPTOCURRENCY';
+
+function aramaPazar(borsa, tur) {
+  if (tur === TUR_KRIPTO) return 'KRIPTO';
+  if (BORSA_BIST.includes(borsa)) return 'BIST';
+  if (BORSA_US.includes(borsa)) return 'US';
+  return null;
+}
+
+/**
+ * Tek Yahoo arama kaydı → aday. Motor biçimi TAHMİN EDİLMİYOR, `_girdi.js`in
+ * KENDİ kapısına sorularak bulunuyor: `cozEndeks` (kapalı endeks sözlüğü,
+ * yalnız /api/chart kabul ediyor) ve `temizleSembol`. ÖLÇÜM: PAZARLAR =
+ * ['US','BIST'] — motorda KRİPTO PAZARI YOK, bu yüzden kripto adayının
+ * `motorSembol`ü null. BIST'te motorun kabul ettiği biçim `<SYM>.IS`
+ * (`temizleSembol` '.IS' sonekini BIST'e çeviriyor; `<SYM>:BIST` de geçer).
+ */
+function aramaAday(k) {
+  const kayit = k && typeof k === 'object' ? k : {};
+  const sembol = typeof kayit.symbol === 'string' ? kayit.symbol.trim() : '';
+  if (!sembol) return null;
+  const metin = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  const borsa = metin(kayit.exchange);
+  const tur = metin(kayit.quoteType);
+  const pazar = aramaPazar(borsa, tur);
+
+  let motorSembol = null;
+  let motorPazar = null;
+  let motorUc = null;
+  const endeks = cozEndeks(sembol);
+  if (endeks) {
+    motorSembol = endeks.sym;
+    motorPazar = endeks.market;
+    motorUc = 'chart';          // endeks sözlüğünü YALNIZ /api/chart okuyor
+  } else if (pazar === 'BIST' || pazar === 'US') {
+    const c = temizleSembol(sembol, pazar);
+    if (c && c.market === pazar) {
+      motorSembol = pazar === 'BIST' ? c.sym + '.IS' : c.sym;
+      motorPazar = c.market;
+      motorUc = 'analyze';
+    }
+  }
+
+  return {
+    sembol,
+    ad: metin(kayit.shortname) || metin(kayit.longname),
+    borsa,
+    tur,
+    sektor: metin(kayit.sector),
+    pazar,
+    motorSembol,
+    motorPazar,
+    motorUc,
+  };
+}
+
+export async function aramaHandler(req, res) {
+  if (kapi(req, res, 'GET, OPTIONS')) return;
+  const q = req.query || {};
+
+  const ham = String(q.q ?? '').trim();
+  if (!ham) { kisaOnbellek(res); res.status(400).json({ error: 'q_yok', uyari: UYARI }); return; }
+  if (ham.length > AZAMI_SORGU) {
+    kisaOnbellek(res);
+    res.status(400).json({ error: 'too_long', azami: AZAMI_SORGU, uyari: UYARI });
+    return;
+  }
+  // SESSİZ VARSAYILAN YOK: `limit` verilmemişse ARAMA_VARSAYILAN, verilmiş
+  // ama tamsayı/aralık dışıysa 400. Kırpma da yok.
+  const nLimit = sorguSayi(q.limit);
+  const limitKotu = nLimit === undefined
+    || (nLimit !== null && (!Number.isInteger(nLimit) || nLimit < 1 || nLimit > ARAMA_AZAMI));
+  if (limitKotu) {
+    kisaOnbellek(res);
+    res.status(400).json({ error: 'bad_limit', asgari: 1, azami: ARAMA_AZAMI, uyari: UYARI });
+    return;
+  }
+  const limit = nLimit === null ? ARAMA_VARSAYILAN : nLimit;
+
+  const t0 = Date.now();
+  const obAnahtar = anahtar(
+    'arama',
+    { q: ham.toLowerCase(), limit },
+    { motor: IMZA, ayar: IMZA_AYAR },
+  );
+  const obVurus = await oku(obAnahtar);
+  if (obVurus) {
+    res.setHeader('X-Onbellek', 'isabet');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=600');
+    res.status(200).json({ ...obVurus, ms: Date.now() - t0 });
+    return;
+  }
+  res.setHeader('X-Onbellek', 'iska');
+
+  try {
+    AG.yeniTur();
+    const sayac = bosSayac();
+    AG.odakla(sayac);
+    let kayitlar = null;    // null = OKUNAMADI (tam:false), [] = ÖLÇTÜM, YOK
+    try {
+      const url = ARAMA_URL
+        + '?q=' + encodeURIComponent(ham)
+        + '&quotesCount=' + limit
+        + '&newsCount=0&enableFuzzyQuery=false';
+      // Ağ MOTORUN taşıyıcısında: `AG.H.fetch` = `api/_ag.js`in agFetch'i
+      // (izin listesi + tur başı tekilleştirme + süre tavanı + sayaç).
+      // Motorun bir ARAMA DİLİMİ YOK (ölçüldü: api/_motor.js içinde
+      // 'finance/search' geçmiyor), bu yüzden adres burada kuruluyor.
+      const r = await AG.H.fetch(url);
+      if (r && r.ok) {
+        const belge = await r.json();
+        kayitlar = Array.isArray(belge && belge.quotes) ? belge.quotes : [];
+      }
+    } finally {
+      AG.odakla(null);
+    }
+
+    const tam = sayacTam(sayac) && kayitlar !== null;
+    const adaylar = (kayitlar || []).map(aramaAday).filter(Boolean).slice(0, limit);
+
+    if (tam) {
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=600');
+    } else {
+      kisaOnbellek(res);
+    }
+
+    const govde = {
+      q: ham,
+      limit,
+      adaylar,
+      adet: adaylar.length,
+      sayac,
+      tam,
+      surum: { motor: IMZA, ayar: IMZA_AYAR },
+      ms: Date.now() - t0,
+      uyari: UYARI,
+    };
+    // Yalnız TAM gövde önbellekleniyor; kesintiyi 5 dk dondurmak yok.
+    if (tam) await yaz(obAnahtar, govde, TTL_FIYAT);
+    res.status(200).json(govde);
+  } catch (e) {
+    console.error('api/_kesif arama:', (e && e.stack) || e);
+    kisaOnbellek(res);
+    res.status(502).json({ error: 'arama_yapilamadi', uyari: UYARI });
+  }
+}
+
 // ---------------------------------------------------------------------
-//  ROTA → HANDLER. `api/proxy.js` bu tabloyu okuyor; orada beş `if`
+//  ROTA → HANDLER. `api/proxy.js` bu tabloyu okuyor; orada altı `if`
 //  yazılsaydı rota adı üç yerde değil dört yerde elle yazılmış olurdu.
 // ---------------------------------------------------------------------
 export const HANDLERLAR = Object.freeze({
@@ -806,4 +1006,5 @@ export const HANDLERLAR = Object.freeze({
   radar: radarHandler,
   backtest: backtestHandler,
   deger: degerHandler,
+  arama: aramaHandler,
 });

@@ -45,9 +45,9 @@ Degismez kural: **motor -> API ayristir, native ince istemci**. Motorun urettigi
 |---|---|
 | `node --check app.js` | sessiz |
 | `node tools/motor-uret.mjs` | "degisiklik yok" (iki dosya) |
-| `node tests/parite-test.mjs` | FARK 0 / 29 nokta |
+| `node tests/parity.mjs` | FARK 0 / 29 nokta |
 | `node tests/uretim-test.mjs` | 73 |
-| `node tests/uc-test.mjs` | 1088 (14 uc) |
+| `node tests/uc-test.mjs` | 1217 (15 uc) |
 | `node tests/nabiz-yon-test.mjs 2>&1 \| tail -4` | 40 |
 | `node tests/nabiz-alan-test.mjs 2>&1 \| tail -4` | 128 |
 | mobile typecheck | EXIT 0 |
@@ -59,7 +59,7 @@ Nabiz testlerinde `grep` de yaniltir -> `tail -4` kullan.
 `tests/duman.mjs` tek canli-ag testi, elle, CI'da degil, fikstur yazmaz.
 
 ## 4. Durum — dürüst (2026-10-27 olcumu)
-SAGLAM: 21 saf motor dilimi, parite FARK 0, 14 uc / 1088 denetim, 73 uretim denetimi.
+SAGLAM: 21 saf motor dilimi, parite FARK 0, 15 uc / 1217 denetim, 73 uretim denetimi.
 Skor degeri hic kaymadi.
 
 ASIL BOSLUK native taraf:
@@ -80,10 +80,17 @@ tahmin edilebilir `code`, yazma dahil, CORS `*`) · BIST temel bacagi kirik
 hiz siniri yok.
 
 ## 5. Itilmemis is
-`main`, `origin/main`'in **6 commit** onunde: `475468a 5d7c263 a0fcc50 a358f01 659fa43 9b2dfad`.
-Kullanici push ONAYI VERMEDI -> taze acik "evet" gerekir. **Asla force-push yok.**
-Bot commit'i (`poll-kap.yml`) yalniz `worker/.movers.json` + `worker/.seen.json` dokunur;
-once fetch, dosya cakismasi yok dogrula, sonra rebase.
+OLCULDU 2026-10-28: push onayi VERILDI ve KULLANILDI. 7 yerel commit
+(`475468a 5d7c263 a0fcc50 a358f01 659fa43 9b2dfad dc92f64` — kayitta 6 yaziyordu,
+gercekte 7 taneydi) ile uzaktaki 3 bot commit
+(`d3379dd 4b12a2b 5443d9f`, yalnizca `worker/*.json`) birlestirildi: `2facb78`.
+`git push origin main` -> `d3379dd..2facb78`. `main` ile `origin/main` ESIT.
+
+ONAY KAPSAMI: o onay YALNIZ o 7 commit icindi. **Bu oturumda yapilan yeni
+degisiklikler icin AYRI, taze, acik "evet" gerekir.** **Asla force-push yok.**
+Bot commit'i (`poll-kap.yml`) yalniz `worker/.movers.json` + `worker/.seen.json`
+dokunur; once fetch, dosya cakismasi yok dogrula, sonra birlestir (rebase degil —
+CRLF dosyalar icin `git -c core.safecrlf=false` ile).
 
 ## 6. Siradaki dalga — dosya sahipligine gore seritler
 - **D/E** — tek sahibi `api/_akis.js` + `tests/uc-test.mjs`, YALNIZ tasima.

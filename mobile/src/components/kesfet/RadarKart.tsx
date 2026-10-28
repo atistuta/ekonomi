@@ -1,140 +1,98 @@
 // =====================================================================
-//  🌍 RADAR — takip listesinin tek bakışta hâli       (FAZ 3 / native)
+//  🌍 RADAR — motorun tema → sektör sözlüğü            (FAZ 3 / native)
 // ---------------------------------------------------------------------
-//  NE: takip listesindeki her sembol için üç şey yan yana: motorun
-//  bileşke skoru, `plan.yakinlik.state` kararı ve `tam` bayrağı. Eksik
-//  ölçümü olan satır `OlcumEksikRozet` ile İŞARETLENİR.
+//  NE: `/api/radar`ın döndürdüğü tema listesi. Her tema için etiket,
+//  haber dili, haber taramasının ARAMA METNİ (`sorgu`) ve temanın
+//  dokunduğu sektörler + yön etiketi (`etkiler`). Bir sektör seçilirse
+//  uç o etikete sahip MOTOR SÖZLÜĞÜNDEKİ sembolleri de döndürüyor.
 //
-//  NEDEN "RADAR" BİR LİSTE DEĞİL DE DURUM TABLOSU: Fırsatlar sıralıyor,
-//  Tarama süzüyor — ikisi de evreni DARALTIYOR. Kullanıcının bir de
-//  daraltılmamış hâli görmesi gerekiyor, yoksa "listemdeki şu sembol
-//  nerede?" sorusunun cevabı yok. Burada hiçbir satır düşmüyor.
+//  ── NEDEN BU KART YENİDEN YAZILDI (ÖLÇÜLDÜ 2026-10-27) ─────────────
+//  Önceki hâli `/api/recommend` satırlarını prop olarak alıp takip
+//  listesinin durum tablosunu çiziyordu. ÖLÇÜLDÜ (`(tabs)/kesfet.tsx`
+//  eski :74): ekranda TEK bir `fetchRecommend(liste, {vade:'orta'})`
+//  turu vardı ve aynı cevap üç karta (Radar · Fırsatlar · Tarama)
+//  dağıtılıyordu; `/api/radar` HİÇ çağrılmıyordu. Yani üç kart aynı
+//  veriyi üç ad altında gösteriyordu — kullanıcıya üç ayrı ölçüm
+//  yapılmış gibi görünüyordu, oysa bir ölçüm vardı. Bu kart artık KENDİ
+//  ucuna gidiyor ve takip listesinin durum tablosu DEĞİL.
 //
-//  ── `composite.score` DİYE BİR ALAN YOK (ÖLÇÜLDÜ) ──────────────────
-//  Uç sözleşmesinde (api/types.ts `ScoreComposite`) bileşkenin alanları
-//  `band`, `label`, `blended`, `blendedShown`. `score` adı skor
-//  tarafında `ta.score`/`fa.score` için kullanılıyor. Bu yüzden kart
-//  `blendedShown` (motorun GÖSTERDİĞİ yuvarlanmış sayı) okuyor,
-//  yoksa `blended`e düşüyor. Var olmayan bir alanı okumak satırın
-//  sessizce boş kalması demekti; yeni bir sayı türetmek ise istemcide
-//  skor hesaplamak olurdu — ikisi de yapılmadı.
+//  ── BU KART BİR AL/SAT İŞARETİ DEĞİL ───────────────────────────────
+//  `etkiler` kaleminin `up`/`down` değeri motorun SÖZLÜĞÜNDE yazılı bir
+//  YÖN ETİKETİ (api/types.ts `RadarYon`). "Şu sektör yükselir" demiyor,
+//  "bu tema bu sektöre bu yönde dokunur" diyor. Metin uçtan geldiği gibi
+//  basılıyor; burada eşik, ağırlık, skor, sıralama YOK.
 //
-//  NEDEN `tam` AYRI BİR SÜTUN: HTTP 200 + `tam:false` bir başarı DEĞİL.
-//  Satırın skoru gelmiş olabilir ama turun bir ayağı kesilmiştir;
-//  kullanıcı o skoru okurken eksik ölçümü BİLMEK zorunda. Rozet
-//  sayıların önünde duruyor ve veriyi gizlemiyor (ölçülen kalemler
-//  gerçekten ölçüldü).
+//  NEDEN YÖN RENKLE DEĞİL İŞARETLE: yön ▲/▼ karakteriyle taşınıyor ve
+//  tonu nötr. Renk tek taşıyıcı olsaydı renk körü kullanıcı yönü hiç
+//  göremezdi (yol haritası kuralı).
 //
-//  NEDEN MOTORUN DÖNDÜRMEDİĞİ SEMBOLLER DE YAZILI: `liste` verilirse
-//  cevapta karşılığı olmayan semboller "ölçülmedi" diye BASILIYOR.
-//  Sessizce atlamak, kullanıcının listesinde olan bir sembolün ekranda
-//  hiç görünmemesi demekti — "iyi haber yok" sanılırdı.
+//  NEDEN SEKTÖR ADLARI BİR DURUMDA SAKLANIYOR: `sektorler` sözlüğü her
+//  cevapta geliyor ama sektör seçimi `useIstek` anahtarını değiştirdiği
+//  için yeni tur sırasında `veri` bir an `null` oluyor. Çipler o anda
+//  ekrandan kaybolsa kullanıcı seçimini geri alamazdı. Bu bir ÖNBELLEK,
+//  hesap değil — hiçbir sayıya dokunmuyor.
 //
-//  SIRALAMA: `liste` verildiyse KULLANICININ sırası korunuyor; motorun
-//  dönüş sırası değil. Yeni bir sıra kuralı (skora göre dizmek)
-//  üretilmiyor — o Fırsatlar kartının işi.
-//
-//  VERİ BU KARTIN İÇİNDE ÇEKİLMİYOR: `fetch` yok; satırlar prop.
-//
-//  ── `.IS` EŞLEŞTİRMESİ (ÖLÇÜLDÜ 2026-10-25, üretim) ────────────────
-//  Takip listesinde sembol `THYAO.IS` yazıyor; `/api/recommend` AYNI
-//  satırı `sym: "THYAO"` olarak döndürüyor (`market: "BIST"`). Birebir
-//  dizgi eşleştirmesi bu yüzden ekrana YANLIŞ BİR İDDİA bastırdı:
-//  Fırsatlar ve Tarama kartları THYAO'yu ölçülmüş gösterirken Radar
-//  "motor bu sembol için satır döndürmedi" diyordu. Eşleştirme artık
-//  anahtar üzerinden: büyük harf + sondaki `.IS` kırpılmış. Bu bir
-//  EŞLEME, hesap değil — hiçbir sayıya dokunulmuyor ve ekranda yazan
-//  etiket kullanıcının listesindeki hâli kalıyor.
+//  VERİ BU KARTIN İÇİNDE ÇEKİLİYOR (bilinçli): `/api/radar` saf sözlük
+//  okuması, recommend turuyla ilgisi yok; biri düşerken öteki durabilir
+//  ve ekranda ikisi AYRI anlatılmalı.
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import {
-  olcumEksik,
-  type ApiError,
-  type IstekDurum,
-  type RecommendRow,
-  type Sayac,
-} from '@/api';
-import { Card, Durum, OlcumEksikRozet, Pill, VeriYok } from '@/components';
-import { formatScore } from '@/lib/format';
+import { fetchRadar, useIstek, type RadarTema } from '@/api';
+import { Card, Durum, Pill, VeriYok } from '@/components';
 import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
 
 export type RadarKartProps = {
-  /** `/api/recommend` turunun satırları. Kart bunu KENDİ çekmiyor. */
-  satirlar: RecommendRow[];
-  durum: IstekDurum;
-  hata: ApiError | null;
-  yenile: () => void;
-  /** Turun künyesi; verilirse eksik ölçüm rozeti listenin üstünde çizilir. */
-  kaynak?: { tam?: boolean; sayac?: Sayac } | null;
   /**
-   * Kullanıcının takip listesi. Verilirse SIRA bu listeden gelir ve
-   * cevapta karşılığı olmayan semboller "ölçülmedi" diye yazılır.
-   * Verilmezse yalnız gelen satırlar, geldikleri sırada basılır.
+   * Sembol dokunuşunun karşılığı çağıranın kararı; verilmezse
+   * `semboller` listesi basılır ama basılabilir değildir.
    */
-  liste?: readonly string[];
-  /** Zaman bütçesi dolduğu için hiç başlanmayanlar (`cevap.atlanan`). */
-  atlanan?: readonly string[];
-  /** Satır dokunuşunun karşılığı çağıranın kararı; yoksa satır basılmaz. */
   onSembol?: (sym: string) => void;
+  /** Açılışta seçili sektör. `semboller` YALNIZ bir sektör seçiliyken gelir. */
+  baslangicSektor?: string | null;
 };
 
-/** Motorun gösterdiği bileşke. Yedek okuma, hesap değil (bkz. başlık). */
-function bileske(r: RecommendRow): number | null {
-  const v = r.composite?.blendedShown ?? r.composite?.blended ?? null;
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
-}
-
-/**
- * Eşleştirme anahtarı: büyük harf + sondaki `.IS` kırpılmış. Uç, BIST
- * sembolünü soneksiz döndürüyor (bkz. başlık). Yalnız karşılaştırma
- * için; ekrana basılan etiket kullanıcının yazdığı hâl.
- */
-function anahtar(sym: string): string {
-  const s = String(sym).trim().toUpperCase();
-  return s.endsWith('.IS') ? s.slice(0, -3) : s;
-}
-
-/** Ekranda bir satırın taşıyabileceği iki hâl: ölçülmüş ya da hiç yok. */
-type RadarKayit =
-  | { sym: string; satir: RecommendRow }
-  | { sym: string; satir: null; sebep: 'atlandi' | 'donmedi' };
-
-export function RadarKart({
-  satirlar,
-  durum,
-  hata,
-  yenile,
-  kaynak,
-  liste,
-  atlanan,
-  onSembol,
-}: RadarKartProps) {
+export function RadarKart({ onSembol, baslangicSektor }: RadarKartProps) {
   const { colors } = useTheme();
+  const [sektor, setSektor] = useState<string | null>(baslangicSektor ?? null);
 
-  const kayitlar = useMemo<RadarKayit[]>(() => {
-    const harita = new Map(satirlar.map((r) => [anahtar(r.sym), r]));
-    const atlananSet = new Set((atlanan ?? []).map(anahtar));
-    // Sıra kullanıcının listesinden; liste yoksa motorun dönüş sırası.
-    const siralı = liste && liste.length ? liste : satirlar.map((r) => r.sym);
-    return siralı.map((sym) => {
-      const satir = harita.get(anahtar(sym));
-      if (satir) return { sym, satir };
-      return { sym, satir: null, sebep: atlananSet.has(anahtar(sym)) ? 'atlandi' : 'donmedi' };
-    });
-  }, [satirlar, liste, atlanan]);
+  const cagri = useCallback(
+    (signal: AbortSignal) => fetchRadar({ sektor: sektor ?? undefined, signal }),
+    [sektor],
+  );
+  const { durum, veri, hata, yenile } = useIstek(cagri, 'radar:' + (sektor ?? ''));
 
-  const eksikSayisi = kayitlar.filter((k) => k.satir && olcumEksik(k.satir)).length;
-  const olcumsuz = kayitlar.filter((k) => !k.satir).length;
+  // Sektör adları önbelleği (bkz. başlık). Yalnız DOLU sözlük yazılıyor:
+  // boş bir cevap, elde duran adları silmesin.
+  const [sektorAdlari, setSektorAdlari] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const s = veri?.sektorler;
+    if (s && Object.keys(s).length) setSektorAdlari(s);
+  }, [veri]);
+
+  const temalar: RadarTema[] = veri?.temalar ?? [];
+  // `semboller` SADECE `sektor=` verildiğinde geliyor (api/types.ts).
+  // `undefined` ile boş dizi AYRI: biri "sorulmadı", öteki "sorulduk, yok".
+  const semboller = veri?.semboller;
+
+  const sektorCipleri = useMemo(
+    () => Object.keys(sektorAdlari).sort((a, b) => a.localeCompare(b, 'tr')),
+    [sektorAdlari],
+  );
+
+  const sektorAdi = useCallback(
+    (anahtar: string) => sektorAdlari[anahtar] ?? anahtar,
+    [sektorAdlari],
+  );
 
   return (
     <Card
       title="🌍 Radar"
-      subtitle="Takip listesinin tek bakışta hâli — bileşke · yakınlık · ölçüm">
+      subtitle="Motorun tema → sektör sözlüğü — yön etiketi, al/sat işareti değil">
       <Durum
         durum={durum}
         hata={hata}
@@ -142,40 +100,74 @@ export function RadarKart({
         kartsiz
         iskelet={3}
         sekil="sira"
-        bosMetin="Takip listesi boş. Arama sekmesinden sembol ekle."
+        bosMetin="Radar sözlüğü henüz sorulmadı."
       />
 
       {durum === 'veri' ? (
         <>
-          {kaynak ? <OlcumEksikRozet kaynak={kaynak} /> : null}
+          {sektorCipleri.length ? (
+            <View style={styles.cipler}>
+              {/* "Hepsi" çipi: seçim kaldırıldığında uç `semboller`
+                  döndürmüyor, yalnız tema listesi geliyor. */}
+              <SektorCipi
+                etiket="tüm temalar"
+                aktif={sektor == null}
+                onPress={() => setSektor(null)}
+              />
+              {sektorCipleri.map((k) => (
+                <SektorCipi
+                  key={k}
+                  etiket={sektorAdi(k)}
+                  aktif={sektor === k}
+                  onPress={() => setSektor(sektor === k ? null : k)}
+                />
+              ))}
+            </View>
+          ) : null}
 
-          {!kayitlar.length ? (
+          {!temalar.length ? (
             <VeriYok
               kartsiz
-              metin="Radar için satır yok: motor sonuç döndürmedi ve takip listesi de boş."
+              metin={
+                sektor
+                  ? '“' + sektorAdi(sektor) + '” için motor sözlüğünde tema yok.'
+                  : 'Motor sözlüğü tema döndürmedi.'
+              }
             />
           ) : (
-            kayitlar.map((k) =>
-              k.satir ? (
-                <RadarSatiri key={k.sym} satir={k.satir} onSembol={onSembol} />
-              ) : (
-                <OlculmeyenSatir key={k.sym} sym={k.sym} sebep={k.sebep} />
-              ),
-            )
+            temalar.map((t) => (
+              <TemaSatiri key={t.anahtar} tema={t} sektorAdi={sektorAdi} />
+            ))
           )}
 
-          {/* Dipnot SAYIYLA: "bir şeyler eksik" demek yerine kaç satırın
-              eksik olduğu yazılı. */}
-          {eksikSayisi > 0 || olcumsuz > 0 ? (
-            <Text style={[type.micro, styles.num, { color: colors.textFaint }]}>
-              {[
-                eksikSayisi > 0 ? eksikSayisi + ' satırın ölçümü eksik tamamlandı.' : null,
-                olcumsuz > 0 ? olcumsuz + ' sembol için hiç ölçüm dönmedi.' : null,
-              ]
-                .filter(Boolean)
-                .join(' ')}
-            </Text>
+          {/* Sektör sembolleri: motorun SÖZLÜĞÜNDEKİ semboller.
+              Kullanıcının takip listesi DEĞİL — başlıkta yazılı. */}
+          {sektor ? (
+            semboller === undefined ? (
+              <Text style={[type.micro, { color: colors.textFaint }]}>
+                Uç bu sektör için sembol listesi döndürmedi — ÖLÇEMEDİM.
+              </Text>
+            ) : !semboller.length ? (
+              <Text style={[type.micro, { color: colors.textFaint }]}>
+                {'“' + sektorAdi(sektor) + '” etiketini taşıyan sembol motor sözlüğünde yok.'}
+              </Text>
+            ) : (
+              <View style={styles.bolum}>
+                <Text style={[type.microBold, { color: colors.textDim }]}>
+                  {sektorAdi(sektor) + ' — motor sözlüğündeki semboller (takip listesi değil)'}
+                </Text>
+                <View style={styles.cipler}>
+                  {semboller.map((s) => (
+                    <SembolCipi key={s} sym={s} onSembol={onSembol} />
+                  ))}
+                </View>
+              </View>
+            )
           ) : null}
+
+          <Text style={[type.micro, styles.num, { color: colors.textFaint }]}>
+            {temalar.length + ' tema · ' + sektorCipleri.length + ' sektör sözlükten okundu.'}
+          </Text>
         </>
       ) : null}
     </Card>
@@ -183,60 +175,104 @@ export function RadarKart({
 }
 
 /**
- * Ölçülmüş satır. Üç bilgi: bileşke (uçtan), yakınlık durumu (uçtan),
- * ölçüm tamlığı (uçtan). Hiçbiri burada türetilmiyor.
+ * Tek tema. Dört bilgi de UÇTAN: etiket, haber dili, haber sorgusu ve
+ * sektör etkileri. Hiçbiri burada türetilmiyor, çevrilmiyor, kısaltılmıyor.
  */
-function RadarSatiri({
-  satir,
-  onSembol,
+function TemaSatiri({
+  tema,
+  sektorAdi,
 }: {
-  satir: RecommendRow;
-  onSembol?: (sym: string) => void;
+  tema: RadarTema;
+  sektorAdi: (anahtar: string) => string;
 }) {
   const { colors } = useTheme();
-  const bl = bileske(satir);
-  const yk = satir.plan?.yakinlik?.state ?? null;
-  const eksik = olcumEksik(satir);
+  const etkiler = tema.etkiler ?? [];
 
-  const govde = (
-    <>
+  return (
+    <View style={styles.satir}>
       <View style={styles.ust}>
-        <Text style={[type.smallBold, { color: colors.text }]} numberOfLines={1}>
-          {satir.sym}
+        <Text style={[type.smallBold, { color: colors.text }]} numberOfLines={2}>
+          {tema.etiket || tema.anahtar}
         </Text>
-        {/* Yakınlık motorun KARARI; etiket metni olduğu gibi basılıyor. */}
-        <Pill label={yk ?? 'yakınlık ölçülemedi'} tone="info" glyph={null} size="sm" />
         <View style={styles.bosluk} />
-        <Text
-          style={[type.smallBold, styles.num, { color: colors.text }]}
-          accessibilityLabel={'bileşke skoru ' + formatScore(bl)}>
-          {formatScore(bl)}
-        </Text>
+        {/* Haber dili uçtan ('tr' | 'en' ölçüldü, küme kapalı değil). */}
+        <Pill label={tema.dil || 'dil bildirilmedi'} tone="neutral" glyph={null} size="sm" />
       </View>
-      {/* Bant da uçtan: `composite.band` yoksa sebebi (`why`) yazılı. */}
-      <Text style={[type.micro, { color: colors.textDim }]}>
-        {'bant ' + (satir.composite?.band ?? 'ölçülemedi') +
-          (satir.composite?.band ? '' : satir.composite?.why ? ' — ' + satir.composite.why : '')}
-      </Text>
-      {/* Eksik ölçüm rozeti SAYILARIN altında değil satırın içinde:
-          hangi sembolün ölçümü eksik, o sembolün yanında yazıyor. */}
-      {eksik ? <OlcumEksikRozet kaynak={satir} /> : null}
-    </>
-  );
 
-  if (!onSembol) {
-    return <View style={styles.satir}>{govde}</View>;
-  }
+      <Text style={[type.micro, { color: colors.textDim }]}>
+        {'haber sorgusu: ' + (tema.sorgu || 'verilmedi')}
+      </Text>
+
+      {etkiler.length ? (
+        <View style={styles.cipler}>
+          {etkiler.map(([anahtar, yon], i) => (
+            <Pill
+              key={anahtar + ':' + yon + ':' + i}
+              label={sektorAdi(anahtar)}
+              tone="info"
+              // Yön RENKLE DEĞİL işaretle: ▲/▼ karakteri taşıyor.
+              glyph={yon === 'up' ? '▲' : yon === 'down' ? '▼' : null}
+              size="sm"
+            />
+          ))}
+        </View>
+      ) : (
+        <Text style={[type.micro, { color: colors.textFaint }]}>
+          Bu tema için sektör etkisi sözlükte yazılı değil.
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/** Sektör süzgeci çipi. Seçim RENKLE DEĞİL: başta "•", tonu da değişiyor. */
+function SektorCipi({
+  etiket,
+  aktif,
+  onPress,
+}: {
+  etiket: string;
+  aktif: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: aktif }}
+      accessibilityLabel={'Sektör: ' + etiket + (aktif ? ' — seçili' : '')}
+      hitSlop={space.sm}
+      style={({ pressed }) => [
+        styles.cipKabi,
+        pressed ? { backgroundColor: colors.bgPressed } : null,
+      ]}>
+      <Pill
+        label={(aktif ? '• ' : '') + etiket}
+        tone={aktif ? 'gold' : 'neutral'}
+        variant={aktif ? 'soft' : 'outline'}
+        glyph={null}
+        size="sm"
+      />
+    </Pressable>
+  );
+}
+
+/** Sözlükteki sembol. Basılabilir olması çağıranın `onSembol`una bağlı. */
+function SembolCipi({ sym, onSembol }: { sym: string; onSembol?: (sym: string) => void }) {
+  const { colors } = useTheme();
+  const govde = <Pill label={sym} tone="neutral" variant="outline" glyph={null} size="sm" />;
+
+  if (!onSembol) return govde;
 
   return (
     <Pressable
-      onPress={() => onSembol(satir.sym)}
+      onPress={() => onSembol(sym)}
       accessibilityRole="button"
-      accessibilityLabel={satir.sym + ' — analize git'}
+      accessibilityLabel={sym + ' — hisse sayfasına git'}
       hitSlop={space.sm}
       style={({ pressed }) => [
-        styles.satir,
-        styles.basilabilir,
+        styles.cipKabi,
         pressed ? { backgroundColor: colors.bgPressed } : null,
       ]}>
       {govde}
@@ -244,47 +280,18 @@ function RadarSatiri({
   );
 }
 
-/**
- * Listede olup cevapta OLMAYAN sembol. İki ayrı sebep, iki ayrı cümle:
- * `atlandi` turun zaman bütçesi dolduğu için hiç başlanmadı (motor
- * SÖYLÜYOR: `cevap.atlanan`), `donmedi` ise sebebi bilinmiyor. İkincisi
- * için sebep UYDURULMUYOR.
- */
-function OlculmeyenSatir({
-  sym,
-  sebep,
-}: {
-  sym: string;
-  sebep: 'atlandi' | 'donmedi';
-}) {
-  const { colors } = useTheme();
-  return (
-    <View style={styles.satir}>
-      <View style={styles.ust}>
-        <Text style={[type.smallBold, { color: colors.textDim }]} numberOfLines={1}>
-          {sym}
-        </Text>
-        <Pill label="ölçülmedi" tone="gold" glyph={null} size="sm" />
-      </View>
-      <Text style={[type.micro, { color: colors.textFaint }]}>
-        {sebep === 'atlandi'
-          ? 'Tur zaman bütçesi dolduğu için bu sembole hiç başlanmadı.'
-          : 'Motor bu sembol için satır döndürmedi — sebebini ölçemedim.'}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   satir: { gap: space.xxs, paddingVertical: space.sm },
-  basilabilir: {
-    minHeight: hitSlopMin,
-    justifyContent: 'center',
-    borderRadius: radius.md,
-    paddingHorizontal: space.sm,
-  },
+  bolum: { gap: space.xs, paddingTop: space.sm },
   ust: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   bosluk: { flex: 1 },
+  cipler: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  // Çipin kendisi küçük; dokunma hedefi 44'ü kabı tutuyor.
+  cipKabi: {
+    minHeight: hitSlopMin,
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+  },
   num: {
     // Tanım TEK YERDE: theme/typography.ts → `numeric`.
     ...numeric,

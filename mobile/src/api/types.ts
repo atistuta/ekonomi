@@ -1056,3 +1056,703 @@ export type WatchlistYazResponse = {
   /** UNIX **MİLİSANİYE**. */
   updatedAt: number;
 };
+
+// =====================================================================
+//  KEŞİF BEŞLİSİ — /api/tarama · /api/sektor · /api/radar ·
+//                  /api/backtest · /api/deger      (api/_kesif.js)
+// ---------------------------------------------------------------------
+//  NE: beş ucun istek/cevap sözleşmesi, tip olarak.
+//  NEDEN: beşi de `api/proxy.js` yeniden-yazımıyla taşınıyor ve
+//  gövdeleri ÖTEKİ UÇLARA BENZEMİYOR (ikisi POST, biri saf sözlük, biri
+//  ağa çıkan tek uç). Şekli tipte sabitlemek, bir alan sunucuda adını
+//  değiştirdiğinde ekranı derleme zamanında kırar.
+//  ÖLÇÜLDÜ (2026-10-27, kaynak okuma): alan adları ve sınır değerleri
+//  `api/_kesif.js` ile BİREBİR; motorun döndürdüğü küme değerleri
+//  (`cls`, `basis`, `neden`, `kategori`) `api/_motor.js`ten okundu.
+//  EŞİK/AĞIRLIK/FORMÜL BURADA YOK — yalnız şekil.
+// =====================================================================
+
+/**
+ * Ölçüm kaydı — `/api/tarama` ve `/api/sektor`un gövdesindeki
+ * `olcumler[]` kalemi (`api/_kesif.js ayristirOlcumler`).
+ *
+ * ⚠️ ÖLÇÜMLERİ İSTEMCİ VERİR. İki uç da AĞA ÇIKMIYOR: temel kayıtları
+ * istemci `/api/yfin` üzerinden çekip buraya GİRDİ olarak veriyor.
+ *
+ * ⚠️ ÖLÇÜLMEMİŞ SAYI `null` — ASLA 0. Uç `Number(null) === 0` tuzağını
+ * kasıtlı atlatıyor (`api/_kesif.js`: F/K'sı olmayan şirket "F/K = 0"
+ * ile en ucuz görünürdü). Alanı 0 ile doldurmak o kapıyı delmek olur.
+ *
+ * `ok: false` → "bu kayıt için veri gelmedi". Uç onu motora olduğu gibi
+ * taşıyor; motor `atlanan[]`a `'no-data'` gerekçesiyle yazıyor, sektör
+ * ucu ise kaydı gruba HİÇ ALMIYOR.
+ *
+ * Sayılar HAM: oran alanları (profitMargin, returnOnEquity,
+ * revenueGrowth, earningsGrowth, dividendYield) KESİR — yüzdeye
+ * çevrilmemiş hâlleri bekleniyor.
+ */
+export type OlcumKayit = {
+  symbol: string;
+  market?: Market;
+  /** `false` → veri gelmedi. Verilmezse `true` sayılır. */
+  ok?: boolean;
+  trailingPE?: number | null;
+  forwardPE?: number | null;
+  peg?: number | null;
+  priceToBook?: number | null;
+  priceToSales?: number | null;
+  evEbitda?: number | null;
+  marketCap?: number | null;
+  profitMargin?: number | null;
+  returnOnEquity?: number | null;
+  revenueGrowth?: number | null;
+  earningsGrowth?: number | null;
+  debtToEquity?: number | null;
+  dividendYield?: number | null;
+  price?: number | null;
+  sector?: string | null;
+  industry?: string | null;
+  name?: string | null;
+  bizSummary?: string | null;
+};
+
+/** Tek istekte gönderilebilen en çok ölçüm kaydı (`AZAMI_OLCUM`). */
+export const AZAMI_OLCUM = 120;
+
+/**
+ * Tarama önayarları — motorun `SCAN_PRESETS` anahtarları.
+ * ÖLÇÜLDÜ (api/_motor.js:2406): value · growth · quality. Uç beyaz
+ * listeyi motordan okuyor; bu dizi onun KOPYASI (yerel kapı için).
+ * Türkçe ad ve açıklama (`name`/`desc`) TELE KONMADI.
+ */
+export const TARAMA_PRESETLER = ['value', 'growth', 'quality'] as const;
+export type TaramaPreset = (typeof TARAMA_PRESETLER)[number];
+
+/**
+ * Tarama rozet sınıfı — `scanTag`ın makine kodu (api/_motor.js:2409).
+ * Metni uç BİLEREK düşürdü (tavsiye dili taşıyor).
+ */
+export const TARAMA_CLS = ['strong', 'good', 'weak'] as const;
+export type TaramaCls = (typeof TARAMA_CLS)[number];
+
+/**
+ * Ölçüt rozeti sınıfı — `scanCrit` (api/_motor.js:2424).
+ * `na` = o ölçüt ÖLÇÜLEMEDİ. "Nötr" DEĞİL.
+ */
+export const TARAMA_OLCUT_CLS = ['pass', 'mid', 'fail', 'na'] as const;
+export type TaramaOlcutCls = (typeof TARAMA_OLCUT_CLS)[number];
+
+/** Tek ölçüt: `ad` bir ölçüt adı ('F/K'), `cls` motorun sınıfı. */
+export type TaramaOlcut = {
+  ad: string;
+  cls: TaramaOlcutCls | string;
+};
+
+/**
+ * Taranmış tek kayıt. `skor` HAM sayı (yuvarlanmamış — biçimlemek
+ * `lib/format.ts`in işi). `present` kaç alt-skorun ÖLÇÜLDÜĞÜ.
+ */
+export type TaramaSonuc = {
+  sym: string;
+  market: Market;
+  skor: number;
+  cls: TaramaCls | string | null;
+  present: number;
+  olcutler: TaramaOlcut[];
+};
+
+/**
+ * Skorlanamayan kayıt. `neden` motorun `reason`ı: ÖLÇÜLDÜ
+ * (api/_kesif.js:334) `'no-data' | 'neg-earnings'`.
+ * ⚠️ BU LİSTE SIFIR SKOR DEĞİL: "ölçemedim" ayrı duruyor; 0 yazmak
+ * zarar eden şirketi "en ucuz" gösterirdi.
+ */
+export type TaramaAtlanan = {
+  sym: string;
+  market: Market;
+  neden: 'no-data' | 'neg-earnings' | string;
+};
+
+export type TaramaRequest = {
+  preset: TaramaPreset;
+  olcumler: OlcumKayit[];
+};
+
+export type TaramaResponse = {
+  preset: TaramaPreset | string;
+  /** Skoru AZALAN sırada — sıralamayı SUNUCU yaptı, istemci yeniden sıralamaz. */
+  sonuclar: TaramaSonuc[];
+  atlanan: TaramaAtlanan[];
+  /** Kaç kayıt değerlendirildi (yineleme tekilleştirildikten sonra). */
+  degerlendirilen: number;
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};
+
+export type TaramaErrorCode =
+  | 'bad_preset'
+  | 'olcumler_yok'
+  | 'olcumler_bos'
+  | 'cok_olcum'
+  | 'bad_olcum'
+  | 'symbols_bos'
+  | 'too_long'
+  | 'bad_market'
+  | 'bad_symbol'
+  | 'govde_yok'
+  | 'bozuk_json'
+  | 'govde_buyuk'
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'tarama_hesaplanamadi';
+
+/**
+ * Sektör gruplarının sıralama kipi — `SIRA_KIPLERI` (api/_kesif.js:99).
+ * Sıralamayı MOTOR yapıyor (`sekSortGroups`); bu yalnız kipin adı.
+ */
+export const SIRA_KIPLERI = ['cheap', 'growth', 'margin', 'count'] as const;
+export type SiraKip = (typeof SIRA_KIPLERI)[number];
+export const VARSAYILAN_SIRA: SiraKip = 'cheap';
+
+/**
+ * Sınıflandırmanın hangi kademeden geldiği — motorun `sekClassify`ı
+ * (api/_motor.js:2637). `null` → hiçbir kademe tutmadı (`_other`).
+ */
+export const SEKTOR_BASIS = ['sector', 'industry', 'fund', 'tag', 'biz'] as const;
+export type SektorBasis = (typeof SEKTOR_BASIS)[number];
+
+/**
+ * Grup içindeki tek hisse. Beş sayı da HAM: `revenueGrowth` ve
+ * `profitMargin` KESİR (0.18 = %18) — web istemcisi ekranda ×100
+ * yapıyor, o bir EKRAN ölçeklemesi ve uca kopyalanmadı.
+ */
+export type SektorHisse = {
+  sym: string;
+  market: Market;
+  basis: SektorBasis | null;
+  trailingPE: number | null;
+  forwardPE: number | null;
+  revenueGrowth: number | null;
+  profitMargin: number | null;
+  peg: number | null;
+};
+
+/**
+ * Tek sektör grubu.
+ *
+ * ⚠️ MEDYANLAR HAM KESİR — YÜZDE DEĞİL. ÖLÇÜLDÜ (api/_kesif.js:434-444
+ * + uç başlığı): `medGrowth`/`medMargin` motorun `sekMedian`ından
+ * KESİR olarak geliyor (0.18 = %18); `medPe`/`medFpe`/`medPeg` çarpansız
+ * oran. Ekranda yüzde göstermek isteyen ×100'ü BİR KEZ yapar — burada
+ * ya da `lib/format.ts`te ikinci bir ölçekleme iki kat yanlış basar.
+ *
+ * `medPe` ile `medFpe` AYRI: web istemcisi trailingPE yoksa forwardPE'ye
+ * düşüyor, o yedek bir KARAR ve uca kopyalanmadı.
+ * Medyan hiç ölçülemedi ise `null` — 0 DEĞİL.
+ */
+export type SektorGrup = {
+  /** `SEK_META` anahtarı ('Technology' … '_other'). Emoji/Türkçe ad TELE KONMADI. */
+  anahtar: string;
+  n: number;
+  hisseler: SektorHisse[];
+  medPe: number | null;
+  medFpe: number | null;
+  medGrowth: number | null;
+  medMargin: number | null;
+  medPeg: number | null;
+};
+
+export type SektorRequest = {
+  olcumler: OlcumKayit[];
+  sira?: SiraKip;
+};
+
+export type SektorResponse = {
+  sira: SiraKip | string;
+  /** Sıralamayı MOTOR yaptı (`sekSortGroups`) — istemci yeniden sıralamaz. */
+  gruplar: SektorGrup[];
+  degerlendirilen: number;
+  /** Kaç kayıt gruba girdi. `degerlendirilen`den KÜÇÜK olabilir: `ok:false` kayıtlar girmez. */
+  siniflanan: number;
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};
+
+export type SektorErrorCode =
+  | 'bad_sira'
+  | 'olcumler_yok'
+  | 'olcumler_bos'
+  | 'cok_olcum'
+  | 'bad_olcum'
+  | 'symbols_bos'
+  | 'too_long'
+  | 'bad_market'
+  | 'bad_symbol'
+  | 'govde_yok'
+  | 'bozuk_json'
+  | 'govde_buyuk'
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'sektor_hesaplanamadi';
+
+/** Temanın bir sektöre yönü. Bu bir AL/SAT işareti DEĞİL, yön etiketi. */
+export type RadarYon = 'up' | 'down';
+
+/** `[sektör anahtarı, yön]` ikilisi (motorun `impacts` kalemi). */
+export type RadarEtki = [string, RadarYon];
+
+/**
+ * Tek radar teması. `sorgu` haber taramasının ARAMA METNİ — istemci onu
+ * `/api/news`e girdi olarak verir. `emoji` TELE KONMADI.
+ */
+export type RadarTema = {
+  anahtar: string;
+  etiket: string;
+  /** Haber dili ('tr' | 'en' ölçüldü; küme sunucuda kapalı DEĞİL). */
+  dil: string;
+  sorgu: string;
+  etkiler: RadarEtki[];
+};
+
+/**
+ * `/api/radar` cevabı — SAF SÖZLÜK okuması, ağa çıkmıyor.
+ * `semboller` YALNIZ `sektor=` verildiğinde geliyor: o etikete sahip
+ * MOTOR SÖZLÜĞÜNDEKİ semboller. Kullanıcının listesi DEĞİL.
+ */
+export type RadarResponse = {
+  temalar: RadarTema[];
+  /** sektör anahtarı → Türkçe sektör adı (`SECTORS`). */
+  sektorler: Record<string, string>;
+  semboller?: string[];
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};
+
+export type RadarErrorCode =
+  | 'bad_tema'
+  | 'bad_sektor'
+  | 'too_long'
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'radar_alinamadi';
+
+/**
+ * Backtest skor kovası. ⚠️ `label` YOK — uç kova ADINI BİLEREK düşürdü
+ * (tavsiye dili) ve yerine `i` SIRA NUMARASINI koydu. Kova sınırlarını
+ * istemci BİLMİYOR ve uydurmaz.
+ * `avg`/`pos` kovada örnek yoksa `null` — 0 DEĞİL.
+ */
+export type BacktestKova = {
+  i: number;
+  n: number;
+  /** Ortalama ileri getiri — HAM KESİR. */
+  avg: number | null;
+  /** Pozitif biten örneklerin oranı — HAM KESİR. */
+  pos: number | null;
+};
+
+/**
+ * `computeBacktest` çıktısı (api/_motor.js), kovaları adsızlaşmış
+ * hâliyle. Tüm oranlar HAM KESİR; yuvarlama/yüzde YOK.
+ */
+export type BacktestSonuc = {
+  /** İleri getiri ufku (bar) — motorun `TA_HORIZON[vade]`si. */
+  H: number;
+  stride: number;
+  warmup: number;
+  intraday: boolean;
+  nSamples: number;
+  /** Örneklerin ne kadarı pozitif bitti (taban oran) — KESİR. */
+  baseUp: number;
+  alN: number;
+  alHit: number | null;
+  satN: number;
+  satHit: number | null;
+  dirN: number;
+  dirHit: number | null;
+  buckets: BacktestKova[];
+  monotonic: boolean;
+  /** Spearman bilgi katsayısı. */
+  ic: number;
+  stratRet: number;
+  bhRet: number;
+  sharpe: number;
+  mdd: number;
+  switches: number;
+  winRate: number | null;
+  longIv: number;
+};
+
+/**
+ * `/api/backtest` cevabı.
+ *
+ * ⚠️ `sonuc` NULL OLABİLİR VE BU BİR ARIZA DEĞİL. ÖLÇÜLDÜ
+ * (api/_motor.js `computeBacktest`): motor seri `warmup + H + 40` barın
+ * altındaysa ya da örnek sayısı 12'nin altındaysa `null` döndürüyor —
+ * dürüst "ölçemedim". Bu yüzden `ApiResult` tarafında HATA DEĞİL:
+ * `r.ok === true` ve `r.data.sonuc === null` birlikte gelir. Ekran bunu
+ * "ölçülemedi" diye YAZMAK zorunda; `ApiError.kind === 'unmeasured'`
+ * ile KARIŞTIRILMAZ (o, ağ/5xx/zaman aşımı demek — yani sunucuya
+ * ulaşamadık; burada ulaştık, sunucu dürüstçe ölçemediğini söyledi).
+ *
+ * `adet` çekilen mum sayısı: `sonuc === null` iken bile dolu olabilir
+ * (seri geldi, ama motor için kısa).
+ */
+export type BacktestResponse = {
+  sym: string;
+  market: Market;
+  vade: Vade;
+  range: Aralik;
+  interval: Adim;
+  adet: number;
+  sonuc: BacktestSonuc | null;
+  sayac: Sayac;
+  /** Kesinti yok mu? `false` → ölçüm EKSİK. */
+  tam: boolean;
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};
+
+export type BacktestErrorCode =
+  | 'symbol_yok'
+  | 'too_long'
+  | 'cok_sembol'
+  | 'bad_market'
+  | 'bad_symbol'
+  | 'bad_vade'
+  | 'bad_range'
+  | 'bad_interval'
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'backtest_hesaplanamadi';
+
+/**
+ * Metal türleri — motorun `METAL_MACRO_W` anahtarları
+ * (ÖLÇÜLDÜ api/_motor.js:2223). Uç beyaz listeyi motordan okuyor; bu
+ * dizi onun KOPYASI. ⚠️ KAPI ZORUNLU: `computeMetalMacro` bilinmeyen
+ * anahtarda sessizce genel bir ağırlık kümesine düşüyor — kapı olmasa
+ * uç ölçmediği bir sayıyı ölçmüş gibi verirdi.
+ */
+export const METAL_TURLER = ['gram-altin', 'gumus', 'platin'] as const;
+export type MetalTur = (typeof METAL_TURLER)[number];
+
+/** `/api/deger`in tür alanı: metal (GET) ya da kripto (POST). */
+export type DegerTur = MetalTur | 'kripto';
+
+/**
+ * Metal makro ölçüm alanları (api/_kesif.js:778). Hepsi İSTEĞE BAĞLI:
+ * verilmeyen ölçüm `null` geçer, motor onu nötr alıp çekincesine yazar.
+ * ⚠️ UYDURMA SAYI GÖNDERİLMEZ: ölçmediğin alanı HİÇ göndermek, 0
+ * göndermekten dürüsttür — 0 ölçülmüş bir değer gibi davranır.
+ */
+export const METAL_OLCUM_ALANLAR = [
+  'dxyChg',
+  'tnxChg',
+  'vix',
+  'gsr',
+  'pgr',
+  'cuChg',
+  'ownM',
+  'ownH',
+] as const;
+export type MetalOlcumAlan = (typeof METAL_OLCUM_ALANLAR)[number];
+
+/** Ölçüm demeti — verilmeyen/`null` alan "ölçülmedi" demektir. */
+export type MetalOlcumler = Partial<Record<MetalOlcumAlan, number | null>>;
+
+/**
+ * Kripto kategorisi — motorun `cryptoCategory`si (api/_motor.js:2113).
+ * Türkçe etiket (`catLabel`) TELE KONMADI.
+ */
+export const DEGER_KATEGORILER = ['stablecoin', 'meme', 'l1', 'defi', 'other'] as const;
+export type DegerKategori = (typeof DEGER_KATEGORILER)[number];
+
+/**
+ * Bant makine kodu — `scoreBand` (api/_motor.js:2105). Etiket
+ * ('Elverişli rejim' vb.) TELE KONMADI.
+ */
+export const DEGER_BANT_CLS = ['strong', 'good', 'neutral', 'weak', 'bad'] as const;
+export type DegerBantCls = (typeof DEGER_BANT_CLS)[number];
+
+/**
+ * Tek bileşen. `ad` bileşen adı ('Dolar (DXY)'), `w` motorun ağırlığı,
+ * `skor` bileşen skoru. `note` METNİ uçta DÜŞÜRÜLDÜ.
+ * Ağırlıklar MOTORDAN gelir; istemci bunlarla yeniden skor HESAPLAMAZ.
+ */
+export type DegerBilesen = {
+  ad: string;
+  skor: number;
+  w: number;
+};
+
+/**
+ * `/api/deger` cevabı (metal ve kripto AYNI şekil).
+ * `kategori` yalnız kripto yolunda geliyor.
+ * `uyariAdet` motorun çekince SAYISI — metinleri uçta düşürüldü, ama
+ * "kaç çekince var" dürüstlük bilgisi olduğu için sayı geçiyor.
+ */
+export type DegerResponse = {
+  tur: DegerTur | string;
+  skor: number;
+  cls: DegerBantCls | string | null;
+  kategori?: DegerKategori | string;
+  bilesenler: DegerBilesen[];
+  uyariAdet: number;
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};
+
+/** Kripto yolu POST gövdesi. `belge` CoinGecko `/coins/{id}` belgesi. */
+export type DegerKriptoRequest = {
+  tur: 'kripto';
+  belge: Record<string, unknown>;
+};
+
+export type DegerErrorCode =
+  | 'bad_tur'
+  | 'bad_olcum'
+  | 'belge_yok'
+  | 'govde_yok'
+  | 'bozuk_json'
+  | 'govde_buyuk'
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'deger_hesaplanamadi';
+
+// =====================================================================
+//  /api/news GÜNDEM KİPİ SÖZLEŞME TİPLERİ             (FAZ 3 / native)
+// ---------------------------------------------------------------------
+//  NE: `GET /api/news?gundem=1[&market=TR|US][&limit=N]` cevabının
+//  TypeScript karşılığı. Alanlar TAHMİN EDİLMEDİ: uç dosyasının SÖZLEŞME
+//  bloğundan (api/news.js:106-115), 200 cevabını kuran gövdeden
+//  (api/news.js:328-343) ve taşıyıcının `gundemCek` dönüşünden
+//  (api/_haber.js:490-531) okundu.
+//
+//  NEDEN `NewsResponse` YENİDEN KULLANILMIYOR: bu kipte `q` DİZGİ DEĞİL,
+//  `null` (uç `q: null` yazıyor — serbest metin yok) ve gövdede
+//  `NewsResponse`'ta BULUNMAYAN iki alan var: `besleme[]` ve `tekrar`.
+//  Aynı tipi iki şekle zorlamak, ekranda `besleme`yi `undefined`
+//  sanıp kaynak başına ölçümü SESSİZCE düşürmeye davet olurdu — webin
+//  (app.js:6534 `loadGeneral`) düşen beslemeyi hiç yazmama kusuru tam
+//  buradan doğuyor. Ayrı tip, derleme zamanında zorluyor.
+//
+//  NEDEN `market` AYRI KÜME (`HaberPazar` DEĞİL): gündem kipinde izinli
+//  yereller `GUNDEM_YERELLER` (api/news.js:281 — `GUNDEM_BESLEMELER`in
+//  anahtarları). Bugün ikisi de ['TR','US'] ama kümeler AYRI kaynaktan
+//  geliyor: beslemeler eklenirse biri büyür, öteki büyümez. Aynı ada
+//  bağlamak, ileride var olmayan bir yereli uca göndermek olurdu.
+//
+//  ── `durum` MAKİNE KODU ────────────────────────────────────────────
+//  `'ok' | 'bos'` (api/_haber.js:516: `n > 0 ? 'ok' : 'bos'`). Türkçe
+//  etiket UÇTA YOK, İSTEMCİDE üretilir. `'bos'` = "o kaynaktan madde
+//  OKUYAMADIM" — "o kaynakta haber yok" DEĞİL, ikisi ayırt edilemez;
+//  ekran bunu ÖLÇEMEDİM diye yazmak zorunda.
+//
+//  ── `tam: false` ARIZA DEĞİL ───────────────────────────────────────
+//  `tam = okunan === liste.length && haberTam(sayac)` (api/_haber.js:528).
+//  Yani "beslemelerin BİR KISMINI okuyamadım" demek; 200 ve maddeler
+//  gerçek. Ekran onu hata kutusu gibi göstermez, EKSİK ÖLÇÜM diye yazar.
+//
+//  ── BOŞ LİSTE ARIZA DEĞİL ──────────────────────────────────────────
+//  200 + `maddeler: []` + `adet: 0` + `tam: true` geçerli bir VERİ
+//  cevabıdır (uç başlığı, api/news.js:138).
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/**
+ * Gündem kipinin izinli yerelleri — `GUNDEM_YERELLER`
+ * (api/_haber.js:423 = `Object.keys(GUNDEM_BESLEMELER)`).
+ */
+export const GUNDEM_YERELLER = ['TR', 'US'] as const;
+export type GundemYerel = (typeof GUNDEM_YERELLER)[number];
+
+/** Uç noktanın varsayılanı (api/news.js VARSAYILAN_PAZAR ile aynı). */
+export const VARSAYILAN_GUNDEM_YEREL: GundemYerel = 'TR';
+
+/** Kaynak başına ölçüm kodu. Türkçe etiket istemcide. */
+export const GUNDEM_BESLEME_DURUMLAR = ['ok', 'bos'] as const;
+export type GundemBeslemeDurum = (typeof GUNDEM_BESLEME_DURUMLAR)[number];
+
+/**
+ * KAYNAK BAŞINA ölçüm satırı. `ad` beslemenin adı — düşen besleme
+ * GÖVDEDE duruyor ki ekran "5 kaynaktan 4'ü okundu, düşen: X" diyebilsin.
+ */
+export type GundemBesleme = {
+  ad: string;
+  /** `'bos'` → o kaynaktan madde OKUNAMADI (ölçemedim). */
+  durum: GundemBeslemeDurum | string;
+  /** O kaynaktan okunan madde sayısı (tekilleştirme ÖNCESİ). */
+  adet: number;
+};
+
+/**
+ * Gündem maddesi. `HaberMadde`nin dört alanına uç iki alan daha
+ * ekliyor (api/_haber.js:81 `MADDE_ALANLARI`). Gündem kipinde
+ * `symbol` DAİMA `null` (madde bir sembole bağlı değil) ve `source`
+ * BESLEMENİN ADI.
+ */
+export type GundemMadde = HaberMadde & {
+  /** api/_haber.js `HABER_TURU` — bugün 'NEWS'. */
+  type: string;
+  /** Gündem kipinde `null`: madde sembole bağlı değil. */
+  symbol: string | null;
+};
+
+export type GundemResponse = {
+  /** Bu kipte DAİMA `null` — serbest metin yok. */
+  q: null;
+  gundem: true;
+  market: GundemYerel | string;
+  limit: number;
+  maddeler: GundemMadde[];
+  /** Sunucunun saydığı; istemci yeniden saymaz. */
+  adet: number;
+  /** Kaynak başına ölçüm — SESSİZCE DÜŞÜRÜLEMEZ. */
+  besleme: GundemBesleme[];
+  /** İki beslemede birden çıkıp TEKİLLEŞTİRİLEN madde sayısı. */
+  tekrar: number;
+  sayac: HaberSayac;
+  /** `false` → beslemelerin bir kısmı okunamadı (eksik ölçüm). */
+  tam: boolean;
+  ms: number;
+  uyari: string;
+};
+
+/**
+ * Gündem kipine özgü makine hata kodları (api/news.js:237, 253).
+ * Ötekiler (`bad_market`, `bad_limit`, `limit_buyuk`,
+ * `method_not_allowed`, `haber_alinamadi`) `NewsErrorCode` ile aynı.
+ */
+export type GundemErrorCode = NewsErrorCode | 'bad_gundem' | 'gundem_ve_sorgu';
+
+// =====================================================================
+//  /api/arama SÖZLEŞME TİPLERİ — ÇOK PAZARLI ADAY   (FAZ 3 / native)
+// ---------------------------------------------------------------------
+//  NE: `GET /api/arama?q=<terim>[&limit=N]` cevabının TypeScript
+//  karşılığı. Alanlar TAHMİN EDİLMEDİ: `api/_kesif.js`in SÖZLEŞME
+//  bloğundan (:799-833), `aramaAday()` dönüşünden (:869-905) ve 200
+//  gövdesini kuran bloktan (:975-986) okundu.
+//
+//  NİYE VAR: `api/_girdi.js:161` çıplak bir terimde pazarı SESSİZCE 'US'
+//  varsayıyor — `ASELS` → `scoreFaUS` → skor `null`. O sözleşme altı uç
+//  tarafından paylaşıldığı için DEĞİŞTİRİLMEDİ; bu uç varsayımın yerine
+//  geçen dürüst yolu veriyor: pazarı tahmin etmek yerine ÇOK PAZARLI
+//  ADAY LİSTESİ döndürüp seçimi kullanıcıya bırakıyor.
+//
+//  ── `pazar: null` GİZLENEMEZ ───────────────────────────────────────
+//  `AramaPazar` KAPALI MAKİNE KODU kümesi. `null` = "borsa kodunu
+//  tanımadım, TAHMİN ETMİYORUM" (ölçüldü: `CME`, `TOR`, `GER` gibi
+//  kodlar kümede YOK). Ekranda "bilinmeyen" diye yumuşatmak yalan
+//  olurdu — "hangi pazar olduğunu ölçemedim" diye yazılır.
+//
+//  ── TÜRKÇE ETİKET UÇTA YOK ─────────────────────────────────────────
+//  `borsa` HAM borsa kodu ('IST','NMS','PCX','CCC'…), `tur` HAM Yahoo
+//  `quoteType`'ı ('EQUITY','ETF','CRYPTOCURRENCY','FUTURE','INDEX'…).
+//  Etiketi İSTEMCİ yazar. ⚠️ ENDEKS ÜYELİĞİ İDDİA EDİLEMEZ: Yahoo arama
+//  kaydında endeks üyeliği alanı YOK (uç başlığında ölçüldü) — 'NYQ' bir
+//  BORSA kodudur; "S&P 500 hissesi" demek UYDURMA olurdu.
+//
+//  ── `motorUc: null` → MOTORA GÖNDERİLEMEZ ──────────────────────────
+//  Motorda KRİPTO PAZARI YOK (`PAZARLAR = ['US','BIST']`), bu yüzden
+//  kripto adayının `motorSembol`ü `null`. `'analyze'` → `motorSembol`
+//  doğrudan `/api/analyze`e konulabilir (BIST `ASELS.IS`, ABD çıplak
+//  `AAPL`). `'chart'` → kalem motorun KAPALI endeks sözlüğünden geliyor
+//  (`cozEndeks`, api/_girdi.js:119 — yalnız dört kalem) ve YALNIZ
+//  `/api/chart` okuyor.
+//
+//  ── BOŞ LİSTE ≠ ÖLÇEMEDİM ──────────────────────────────────────────
+//  `adaylar: [] + tam: true` = "aradım, eşleşme yok" (ölçülmüş cevap).
+//  `tam: false` = taşıma kesintisi, ölçüm EKSİK. AYRI iki ekran dalı.
+//
+//  ⚠️ `adet` İSTEMCİDE YENİDEN SAYILMAZ ama KIRPMA BİLGİSİ TAŞIMAZ:
+//  ÖLÇÜLDÜ (api/_kesif.js:970+986) → `adet = adaylar.length` ve uç
+//  Yahoo'dan ZATEN `quotesCount=limit` kadar kayıt istiyor. Yani
+//  "kaç aday limit yüzünden dışarıda kaldı" HİÇBİR ALANDA YOK; ekran
+//  bunu 0 diye yazamaz, "ölçülmedi" diye yazar.
+//
+//  ⚠️ ÖLÇÜLMEDİ: ucun CANLI cevabı (bu şeritte ağ erişimi yok) — tipler
+//  kaynaktan türetildi, üretimden doğrulanmadı.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/** Aday tavanı — `api/_kesif.js ARAMA_AZAMI`. */
+export const ARAMA_AZAMI = 25;
+/** Uç noktanın varsayılanı — `api/_kesif.js ARAMA_VARSAYILAN`. */
+export const ARAMA_VARSAYILAN = 10;
+
+/**
+ * Pazar MAKİNE KODU — `api/_kesif.js aramaPazar()` çıktısının kapalı
+ * kümesi. `null` ayrı bir değer: "borsa kodu tanınmadı".
+ */
+export const ARAMA_PAZARLAR = ['BIST', 'US', 'KRIPTO'] as const;
+export type AramaPazar = (typeof ARAMA_PAZARLAR)[number];
+
+/**
+ * Adayın motorla ölçülme yolu. `null` → bu varlık için motor yolu YOK
+ * (ör. kripto: motorda kripto pazarı yok).
+ */
+export const ARAMA_MOTOR_UCLAR = ['analyze', 'chart'] as const;
+export type AramaMotorUc = (typeof ARAMA_MOTOR_UCLAR)[number];
+
+/**
+ * Tek arama adayı. HAM KOD KURALI: `borsa`/`tur` Yahoo'nun kendi
+ * kodları, Türkçe etiket İSTEMCİDE üretilir.
+ *
+ * `ad`/`borsa`/`tur`/`sektor` ölçülmezse `null` — boş dize DEĞİL
+ * (`api/_kesif.js` `metin()` yardımcısı boş dizeyi `null`a çeviriyor).
+ */
+export type AramaAday = {
+  /** Yahoo'nun HAM sembolü: 'ASELS.IS' · 'AAPL' · 'BTC-USD'. */
+  sembol: string;
+  /** `shortname ?? longname`; ölçülmezse `null`. */
+  ad: string | null;
+  /** HAM borsa kodu: 'IST' · 'NMS' · 'PCX' · 'CCC' … */
+  borsa: string | null;
+  /** HAM Yahoo `quoteType`ı: 'EQUITY' · 'ETF' · 'CRYPTOCURRENCY' … */
+  tur: string | null;
+  sektor: string | null;
+  /** `null` → borsa kodu tanınmadı, pazar TAHMİN EDİLMEDİ. */
+  pazar: AramaPazar | null;
+  /** Motorun KABUL ETTİĞİ biçim; `null` → bu motorla ölçülemez. */
+  motorSembol: string | null;
+  motorPazar: Market | null;
+  /** `null` → motora GÖNDERİLEMEZ, yalnız listede gösterilir. */
+  motorUc: AramaMotorUc | null;
+};
+
+export type AramaResponse = {
+  /** Ucun gördüğü terim (kırpılmış ham metin). */
+  q: string;
+  /** Ucun kullandığı aday tavanı. */
+  limit: number;
+  adaylar: AramaAday[];
+  /** Sunucunun saydığı; `adaylar.length` ile AYNI (uç gövdesi). */
+  adet: number;
+  sayac: Sayac;
+  /** `false` → taşıma kesintisi, ölçüm EKSİK (boş liste "yok" demez). */
+  tam: boolean;
+  surum: ScoreSurum;
+  ms: number;
+  uyari: string;
+};
+
+/**
+ * Arama ucunun makine hata kodları — KAPALI küme.
+ * 400: `q_yok` · `too_long` (+`azami`) · `bad_limit` (+`asgari`/`azami`)
+ * 405: `method_not_allowed` · 503: `motor_kurulamadi`
+ * 502: `arama_yapilamadi`
+ */
+export type AramaErrorCode =
+  | 'q_yok'
+  | 'too_long'
+  | 'bad_limit'
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'arama_yapilamadi';

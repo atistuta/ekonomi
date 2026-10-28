@@ -1,323 +1,352 @@
 // =====================================================================
-//  🔎 TARAMA — ölçüt süzgeci, YALNIZ KARŞILAŞTIRMA    (FAZ 3 / native)
+//  🔎 TARAMA — motorun önayar taraması                 (FAZ 3 / native)
 // ---------------------------------------------------------------------
-//  NE: `/api/recommend` satırlarını kullanıcının seçtiği ölçütlere göre
-//  süzer. Ölçütler çipten (basılabilir `Pill`) seçilir, birden çoğu
-//  seçilirse VE ile birleşir ve kaç satırın geçtiği yazılır.
+//  NE: takip listesi, motorun üç önayarından biriyle (`value` ·
+//  `growth` · `quality`) taranır. Skoru ve ölçüt rozetlerini MOTOR
+//  veriyor; bu kart yalnız basıyor.
 //
-//  ── SÜZME NEDEN HESAP DEĞİL ────────────────────────────────────────
-//  Her ölçüt UÇTAN GELEN BİR ALANIN karşılaştırmasıdır:
-//    · `composite.blendedShown` ≥ 70   (motorun gösterdiği bileşke)
-//    · `ta.score` ≥ 70                 (motorun teknik skoru)
-//    · `fa.score` ≥ 70                 (motorun temel skoru)
-//    · `plan.yakinlik.state` ∈ {in, near, below}  (motorun yakınlık kararı)
-//    · `plan.momentum.active === true` (motorun rejim kararı)
-//    · `tam === true`                  (turun kesintisizliği)
-//  Hiçbiri yeni bir gösterge TÜRETMİYOR: toplama, ağırlıklandırma,
-//  normalleştirme, bant eşlemesi YOK. 70 sayısı bir SÜZGEÇ AYARI —
-//  kullanıcının "şu eşiğin üstünü göster" isteği; motorun skoruna
-//  karışmıyor, skoru değiştirmiyor, yeni bir skor üretmiyor. Bir
-//  gösterge eklemek gerekirse yeri MOTOR, burası değil.
+//  ── NEDEN BU KART YENİDEN YAZILDI (ÖLÇÜLDÜ 2026-10-27) ─────────────
+//  Önceki hâli `/api/recommend` satırlarını prop olarak alıp YERELDE
+//  süzüyordu: dosyada `const ESIK = 70` ve "bileşke ≥ 70", "banda
+//  yakın", "momentum" ölçütleri elle yazılıydı. İki ayrı kural ihlali:
+//  (1) `/api/tarama` HİÇ çağrılmıyordu — ÖLÇÜLDÜ, ekranda tek bir
+//  `fetchRecommend(liste,{vade:'orta'})` turu vardı ve aynı cevap üç
+//  karta dağıtılıyordu; (2) eşik native'de yaşıyordu, oysa eşik/ağırlık
+//  motorun tekelinde. Yerel eşik motor eşiğinden saparsa ekran motorun
+//  söylemediği bir şeyi motorun ağzından söylerdi. `ESIK` ve
+//  `TaramaOlcutId` bu yüzden SİLİNDİ, geri gelmemeli.
 //
-//  NEDEN `blendedShown`, `blended` DEĞİL: `blendedShown` motorun
-//  KULLANICIYA GÖSTERDİĞİ yuvarlanmış sayı (api/types.ts). Süzgeç ekranda
-//  yazan sayıyla aynı sayıyı okumalı, yoksa "70" yazan satır 69,6 diye
-//  süzgeçten düşer ve kullanıcı haklı olarak uygulamaya güvenmez.
-//  `blendedShown` yoksa `blended`e düşülüyor — bu bir YEDEK OKUMA,
-//  hesap değil.
+//  ── NEDEN İKİ ÇAĞRI (yfin → tarama) ────────────────────────────────
+//  `/api/tarama` AĞA ÇIKMIYOR: ölçümleri İSTEMCİ veriyor
+//  (api/types.ts `OlcumKayit` başlığı; web tarafında bunu `/api/yfin`
+//  taraması yapıyor). Burada da aynı sıra: önce `fetchYfin` künyeleri
+//  çeker, sonra `fetchTarama` skorlar. YENİ FETCH İŞLEVİ YAZILMADI —
+//  var olan ikisi tek `useIstek` çağrısında BİRLEŞTİRİLDİ.
+//  `deep: false` BİLEREK: `deep`in tek getirisi `earnings` (kazanç
+//  takvimi) ve o `OlcumKayit`in alanı değil; derin tur bedava değil.
 //
-//  NEDEN ÖLÇÜLEMEYEN SATIR ÖLÇÜTÜ GEÇMİYOR: `ta.score === null`
-//  "düşük skor" DEĞİL, "ölçülemedi". İkisini aynı kefeye koyup eşiğin
-//  altına atmak yanlış olurdu; bu yüzden süzgeç dışında kalan satırların
-//  SAYISI ve içlerinden kaçının ölçümü eksik olduğu kartın dibinde
-//  ayrıca yazılı — sessizce kaybolmuyorlar.
+//  ── ÖLÇÜLMEYEN SAYI BASILMAZ ───────────────────────────────────────
+//  Künye alanı yoksa `null` geçiyor, 0 GEÇMİYOR (F/K'sı olmayan şirket
+//  "F/K = 0" ile en ucuz görünürdü). `ok:false` künye motora `ok:false`
+//  olarak gidiyor; motor onu `atlanan[]`a yazıyor.
+//  `atlanan[]` BOŞ DEĞİLSE EKRAN SUSMAZ: her kalem gerekçesiyle basılır.
+//  `/api/yfin` en çok 12 sembol alıyor (`YFIN_AZAMI_SEMBOL`); liste
+//  uzunsa KAÇ SEMBOLÜN TARANMADIĞI ekranda yazılı — sessiz kırpma yok.
 //
-//  NEDEN SEÇİM RENKLE DEĞİL İŞARETLE: seçili çipin başında "•" var ve
-//  tonu değişiyor; `accessibilityState.selected` da veriliyor. Renk tek
-//  taşıyıcı olsaydı renk körü kullanıcı hangi ölçütün açık olduğunu
-//  göremezdi (yol haritası kuralı).
-//
-//  VERİ BU KARTIN İÇİNDE ÇEKİLMİYOR: `fetch` yok; satırlar prop.
+//  SIRALAMA SUNUCUDAN: `sonuclar` skoru azalan sırada geliyor
+//  (api/types.ts), istemci yeniden sıralamıyor.
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
-  olcumEksik,
-  type ApiError,
-  type IstekDurum,
-  type Market,
-  type RecommendRow,
-  type Sayac,
+  fetchTarama,
+  fetchYfin,
+  useIstek,
+  YFIN_AZAMI_SEMBOL,
+  type ApiResult,
+  type OlcumKayit,
+  type TaramaOlcut,
+  type TaramaPreset,
+  type TaramaResponse,
+  type TaramaSonuc,
+  type YfinKunye,
+  TARAMA_PRESETLER,
 } from '@/api';
-import { Card, Durum, OlcumEksikRozet, Pill, VeriYok } from '@/components';
-import { formatPrice, formatScore } from '@/lib/format';
+import { Card, Durum, Pill, VeriYok } from '@/components';
+import { formatScore } from '@/lib/format';
 import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
 
-/** Süzgeç eşiği — SKOR DEĞİL, kullanıcı süzgecinin ayarı (bkz. başlık). */
-const ESIK = 70;
-
-/** Motorun "alım bandına yakın" saydığı durumlar (sabit küme, uçtan). */
-const YAKIN_DURUMLAR = ['in', 'near', 'below'];
-
-/** Ölçüt kimlikleri — çip etiketiyle süzgeç işlevini tek yerde bağlar. */
-export type TaramaOlcutId =
-  | 'bileske70'
-  | 'ta70'
-  | 'fa70'
-  | 'bandaYakin'
-  | 'momentum'
-  | 'olcumTam';
-
-type Olcut = {
-  id: TaramaOlcutId;
-  etiket: string;
-  /** Satırın ölçütü geçip geçmediği. YALNIZ alan karşılaştırması. */
-  gecer: (r: RecommendRow) => boolean;
+export type TaramaKartProps = {
+  /** Taranacak semboller — kullanıcının takip listesi. */
+  liste: readonly string[];
+  onSembol?: (sym: string) => void;
 };
 
-/** Motorun gösterdiği bileşke. Yedek okuma: `blendedShown` → `blended`. */
-function bileske(r: RecommendRow): number | null {
-  const v = r.composite?.blendedShown ?? r.composite?.blended ?? null;
+/**
+ * Önayar adları. Motorun makine kodunun TÜRKÇE KARŞILIĞI — yeni bir
+ * önayar değil. Uç `name`/`desc` alanlarını bilerek düşürdüğü için
+ * (tavsiye dili taşıyorlardı) ad burada duruyor.
+ */
+const PRESET_AD: Record<TaramaPreset, string> = {
+  value: 'ucuzluk ölçütleri',
+  growth: 'büyüme ölçütleri',
+  quality: 'kalite ölçütleri',
+};
+
+/**
+ * `cls` rozetinin metni — motorun `scanTag` makine kodunun karşılığı
+ * (api/types.ts `TARAMA_CLS`). Eşiği motor koydu; burada yalnız çeviri.
+ */
+const CLS_AD: Record<string, string> = {
+  strong: 'ölçütlere güçlü uyum',
+  good: 'ölçütlere kısmi uyum',
+  weak: 'ölçütlere zayıf uyum',
+};
+
+/** Atlanma gerekçesi — motorun `reason`ı (api/_kesif.js:334). */
+const NEDEN_AD: Record<string, string> = {
+  'no-data': 'temel veri gelmedi — ÖLÇEMEDİM',
+  'neg-earnings': 'kâr negatif olduğu için bu önayarla skorlanmadı',
+};
+
+/** Ölçüt rozetinin metni. `na` = ÖLÇÜLEMEDİ, "nötr" DEĞİL. */
+const OLCUT_CLS_AD: Record<string, string> = {
+  pass: 'karşılıyor',
+  mid: 'sınırda',
+  fail: 'karşılamıyor',
+  na: 'ölçülemedi',
+};
+
+/** Ölçülmemiş sayı `null` — 0 DEĞİL. */
+function sayi(v: number | null | undefined): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-function esikGecer(v: number | null | undefined): boolean {
-  // `null` → ölçülemedi. "Eşiğin altında" DEĞİL; ölçüt geçmiyor ama
-  // bunun sebebi kartın dibinde ayrıca sayılıyor.
-  return typeof v === 'number' && Number.isFinite(v) && v >= ESIK;
+function metin(v: string | null | undefined): string | null {
+  return typeof v === 'string' && v ? v : null;
 }
 
-const OLCUTLER: readonly Olcut[] = [
-  {
-    id: 'bileske70',
-    etiket: 'bileşke ≥ ' + ESIK,
-    gecer: (r) => esikGecer(bileske(r)),
-  },
-  { id: 'ta70', etiket: 'teknik ≥ ' + ESIK, gecer: (r) => esikGecer(r.ta?.score) },
-  { id: 'fa70', etiket: 'temel ≥ ' + ESIK, gecer: (r) => esikGecer(r.fa?.score) },
-  {
-    id: 'bandaYakin',
-    etiket: 'alım bandına yakın',
-    gecer: (r) => {
-      const s = r.plan?.yakinlik?.state;
-      return typeof s === 'string' && YAKIN_DURUMLAR.includes(s);
-    },
-  },
-  { id: 'momentum', etiket: 'momentum aktif', gecer: (r) => r.plan?.momentum?.active === true },
-  { id: 'olcumTam', etiket: 'ölçümü tam', gecer: (r) => r.tam === true },
-];
-
-export type TaramaKartProps = {
-  /** `/api/recommend` turunun satırları. Kart bunu KENDİ çekmiyor. */
-  satirlar: RecommendRow[];
-  durum: IstekDurum;
-  hata: ApiError | null;
-  yenile: () => void;
-  /** Turun künyesi; verilirse eksik ölçüm rozeti çizilir. */
-  kaynak?: { tam?: boolean; sayac?: Sayac } | null;
-  /** Satır dokunuşunun karşılığı çağıranın kararı; yoksa satır basılmaz. */
-  onSembol?: (sym: string) => void;
-  /** Açılışta seçili ölçütler. Verilmezse süzgeç KAPALI başlar. */
-  baslangicOlcutler?: readonly TaramaOlcutId[];
-};
-
-/** Pazar → para birimi kodu. Eşleme, hesap değil. */
-function paraBirimi(market: Market): string | null {
-  return market === 'BIST' ? 'TRY' : null;
-}
-
-export function TaramaKart({
-  satirlar,
-  durum,
-  hata,
-  yenile,
-  kaynak,
-  onSembol,
-  baslangicOlcutler,
-}: TaramaKartProps) {
-  const { colors } = useTheme();
-  const [secili, setSecili] = useState<TaramaOlcutId[]>(() => [...(baslangicOlcutler ?? [])]);
-
-  const degistir = (id: TaramaOlcutId) => {
-    setSecili((onceki) =>
-      onceki.includes(id) ? onceki.filter((x) => x !== id) : [...onceki, id],
-    );
+/**
+ * Künye → ölçüm kaydı. `market` BİLEREK VERİLMİYOR: sunucu `.IS`
+ * ekiyle biten sembolü kendisi BIST'e çözüyor (ÖLÇÜLDÜ
+ * `api/_girdi.js:204 temizleSembol`). İstemcinin pazar tahmin etmesi
+ * uydurma bir eşleme olurdu.
+ */
+function olcumYap(k: YfinKunye): OlcumKayit {
+  return {
+    symbol: k.symbol,
+    ok: k.ok,
+    trailingPE: sayi(k.trailingPE),
+    forwardPE: sayi(k.forwardPE),
+    peg: sayi(k.peg),
+    priceToBook: sayi(k.priceToBook),
+    priceToSales: sayi(k.priceToSales),
+    evEbitda: sayi(k.evEbitda),
+    marketCap: sayi(k.marketCap),
+    profitMargin: sayi(k.profitMargin),
+    returnOnEquity: sayi(k.returnOnEquity),
+    revenueGrowth: sayi(k.revenueGrowth),
+    earningsGrowth: sayi(k.earningsGrowth),
+    debtToEquity: sayi(k.debtToEquity),
+    dividendYield: sayi(k.dividendYield),
+    price: sayi(k.price),
+    sector: metin(k.sector),
+    industry: metin(k.industry),
+    name: metin(k.name),
   };
+}
 
-  // Süzme: seçili her ölçüt VE ile birleşiyor. Hiçbiri seçili değilse
-  // liste olduğu gibi geçiyor — "hiç ölçüt yok" demek "hiç satır yok"
-  // demek değil.
-  const gecen = useMemo(() => {
-    if (!secili.length) return satirlar;
-    const aktif = OLCUTLER.filter((o) => secili.includes(o.id));
-    return satirlar.filter((r) => aktif.every((o) => o.gecer(r)));
-  }, [satirlar, secili]);
+export function TaramaKart({ liste, onSembol }: TaramaKartProps) {
+  const { colors } = useTheme();
+  const [preset, setPreset] = useState<TaramaPreset>('value');
 
-  // Süzgeçten düşenlerin kaçı ÖLÇÜLEMEDİ: "eşiğin altında kaldı" ile
-  // "ölçülemedi" aynı cümlede anlatılmasın.
-  const dusenEksik = useMemo(() => {
-    const gecenSet = new Set(gecen.map((r) => r.sym));
-    return satirlar.filter((r) => !gecenSet.has(r.sym) && olcumEksik(r)).length;
-  }, [satirlar, gecen]);
+  // Kırpma AÇIK: `fetchYfin` 12'den fazlasını reddediyor; kaç sembolün
+  // dışarıda kaldığı aşağıda ekrana yazılıyor.
+  const evren = useMemo(() => liste.slice(0, YFIN_AZAMI_SEMBOL), [liste]);
+  const disarida = liste.length - evren.length;
+
+  const cagri = useCallback(
+    async (signal: AbortSignal): Promise<ApiResult<TaramaResponse>> => {
+      const kunye = await fetchYfin([...evren], { deep: false, signal });
+      if (!kunye.ok) return { ok: false, error: kunye.error };
+      const olcumler = kunye.data.results.map(olcumYap);
+      return fetchTarama(preset, olcumler, { signal });
+    },
+    [evren, preset],
+  );
+
+  const { durum, veri, hata, yenile } = useIstek(cagri, preset + '|' + evren.join(','), {
+    etkin: evren.length > 0,
+  });
+
+  const sonuclar: TaramaSonuc[] = veri?.sonuclar ?? [];
+  const atlanan = veri?.atlanan ?? [];
 
   return (
     <Card
       title="🔎 Tarama"
-      subtitle="Ölçüt süzgeci — yalnız motorun döndürdüğü alanların karşılaştırması">
-      <Durum
-        durum={durum}
-        hata={hata}
-        yenile={yenile}
-        kartsiz
-        iskelet={3}
-        sekil="sira"
-        bosMetin="Takip listesi boş. Arama sekmesinden sembol ekle."
-      />
+      subtitle={'Takip listesi · ' + PRESET_AD[preset] + ' — al/sat işareti değil'}>
+      <View style={styles.cipler}>
+        {TARAMA_PRESETLER.map((p) => (
+          <PresetCipi
+            key={p}
+            etiket={PRESET_AD[p]}
+            aktif={p === preset}
+            onPress={() => setPreset(p)}
+          />
+        ))}
+      </View>
 
-      {durum === 'veri' ? (
+      {!liste.length ? (
+        <VeriYok kartsiz metin="Takip listesi boş — taranacak sembol yok." />
+      ) : (
         <>
-          <View style={styles.cipler}>
-            {OLCUTLER.map((o) => {
-              const aktif = secili.includes(o.id);
-              return (
-                <Pressable
-                  key={o.id}
-                  onPress={() => degistir(o.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: aktif }}
-                  accessibilityLabel={
-                    'Ölçüt: ' + o.etiket + (aktif ? ' — açık, kapatmak için dokun' : ' — kapalı')
-                  }
-                  hitSlop={space.sm}
-                  style={({ pressed }) => [
-                    styles.cipKabi,
-                    pressed ? { backgroundColor: colors.bgPressed } : null,
-                  ]}>
-                  {/* Seçim RENKLE DEĞİL: başta "•", tonu da değişiyor. */}
-                  <Pill
-                    label={(aktif ? '• ' : '') + o.etiket}
-                    tone={aktif ? 'gold' : 'neutral'}
-                    variant={aktif ? 'soft' : 'outline'}
-                    glyph={null}
-                    size="sm"
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
+          <Durum
+            durum={durum}
+            hata={hata}
+            yenile={yenile}
+            kartsiz
+            iskelet={3}
+            sekil="sira"
+            bosMetin="Tarama henüz çalıştırılmadı."
+          />
 
-          <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
-            {secili.length
-              ? gecen.length + ' / ' + satirlar.length + ' satır ' + secili.length + ' ölçütü geçti'
-              : satirlar.length + ' satır — süzgeç kapalı, hepsi yazılı'}
-          </Text>
+          {durum === 'veri' ? (
+            <>
+              {!sonuclar.length ? (
+                <VeriYok
+                  kartsiz
+                  metin="Bu önayarla skorlanabilen sembol çıkmadı — aşağıdaki gerekçelere bakın."
+                />
+              ) : (
+                // Sıra SUNUCUDAN; burada yeniden sıralama yok.
+                sonuclar.map((s) => (
+                  <TaramaSatiri key={s.market + ':' + s.sym} sonuc={s} onSembol={onSembol} />
+                ))
+              )}
 
-          {kaynak ? <OlcumEksikRozet kaynak={kaynak} /> : null}
+              {/* `atlanan[]` boş değilse ekran SUSMAZ. */}
+              {atlanan.length ? (
+                <View style={styles.bolum}>
+                  <Text style={[type.microBold, { color: colors.textDim }]}>
+                    {'Skorlanmayan ' + atlanan.length + ' sembol (sıfır skor DEĞİL):'}
+                  </Text>
+                  {atlanan.map((a) => (
+                    <Text
+                      key={a.market + ':' + a.sym}
+                      style={[type.micro, { color: colors.textFaint }]}>
+                      {a.sym + ' — ' + (NEDEN_AD[a.neden] ?? a.neden)}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
 
-          {!satirlar.length ? (
-            <VeriYok
-              kartsiz
-              metin="Motor bu semboller için sonuç döndürmedi; süzülecek satır yok."
-            />
-          ) : !gecen.length ? (
-            // Satır VAR, ölçüt geçen yok. İkisi ayrı cümle: ölçüldü ve
-            // hiçbiri ölçütü geçmedi.
-            <VeriYok
-              kartsiz
-              metin="Satırlar ölçüldü ama seçili ölçütleri geçen sembol yok. Bir ölçüt kapatıp dene."
-            />
-          ) : (
-            gecen.map((r) => <TaramaSatiri key={r.sym} satir={r} onSembol={onSembol} />)
-          )}
+              {disarida > 0 ? (
+                <Text style={[type.micro, { color: colors.textFaint }]}>
+                  {'Listedeki ' +
+                    disarida +
+                    ' sembol bu turda TARANMADI: tek turda en çok ' +
+                    YFIN_AZAMI_SEMBOL +
+                    ' sembolün temel verisi çekilebiliyor.'}
+                </Text>
+              ) : null}
 
-          {dusenEksik > 0 ? (
-            <Text style={[type.micro, { color: colors.textFaint }]}>
-              {'Süzgeç dışında kalan ' +
-                dusenEksik +
-                ' satırın ölçümü eksikti — “eşiğin altında” demiyoruz, ÖLÇEMEDİK.'}
-            </Text>
+              <Text style={[type.micro, styles.num, { color: colors.textFaint }]}>
+                {(veri?.degerlendirilen ?? 0) + ' kayıt değerlendirildi · motor ' + (veri?.surum?.motor ?? '?')}
+              </Text>
+            </>
           ) : null}
         </>
-      ) : null}
+      )}
     </Card>
   );
 }
 
-/**
- * Süzgeci geçen satırın künyesi. Gösterilen her sayı UÇTAN: bileşke,
- * teknik, temel ve fiyat. Süzgeç bu sayıların hiçbirini değiştirmiyor.
- */
+/** Tek taranmış kayıt. Skor ve rozetler MOTORDAN; burada hesap yok. */
 function TaramaSatiri({
-  satir,
+  sonuc,
   onSembol,
 }: {
-  satir: RecommendRow;
+  sonuc: TaramaSonuc;
   onSembol?: (sym: string) => void;
 }) {
   const { colors } = useTheme();
-  const birim = paraBirimi(satir.market);
-  const bl = bileske(satir);
-  const bant = satir.composite?.band ?? null;
+  const clsMetni = sonuc.cls ? (CLS_AD[sonuc.cls] ?? sonuc.cls) : null;
 
   const govde = (
-    <>
+    <View style={styles.satir}>
       <View style={styles.ust}>
         <Text style={[type.smallBold, { color: colors.text }]} numberOfLines={1}>
-          {satir.sym}
+          {sonuc.sym}
         </Text>
-        {bant ? <Pill label={bant} tone="info" glyph={null} size="sm" /> : null}
         <View style={styles.bosluk} />
         <Text style={[type.smallBold, styles.num, { color: colors.text }]}>
-          {'bileşke ' + formatScore(bl)}
+          {formatScore(sonuc.skor)}
         </Text>
       </View>
-      <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
-        {'teknik ' +
-          formatScore(satir.ta?.score) +
-          ' · temel ' +
-          formatScore(satir.fa?.score) +
-          ' · fiyat ' +
-          formatPrice(satir.fa?.price, birim)}
+
+      <Text style={[type.micro, { color: colors.textDim }]}>
+        {(clsMetni ? clsMetni + ' · ' : '') + sonuc.present + ' ölçüt ölçüldü'}
       </Text>
-    </>
+
+      {sonuc.olcutler?.length ? (
+        <View style={styles.cipler}>
+          {sonuc.olcutler.map((o: TaramaOlcut, i) => (
+            <Pill
+              key={o.ad + ':' + i}
+              label={o.ad + ' — ' + (OLCUT_CLS_AD[o.cls] ?? o.cls)}
+              tone="neutral"
+              variant="outline"
+              glyph={null}
+              size="sm"
+            />
+          ))}
+        </View>
+      ) : (
+        <Text style={[type.micro, { color: colors.textFaint }]}>
+          Motor bu kayıt için ölçüt dökümü döndürmedi.
+        </Text>
+      )}
+    </View>
   );
 
-  if (!onSembol) {
-    return <View style={styles.satir}>{govde}</View>;
-  }
+  if (!onSembol) return govde;
 
   return (
     <Pressable
-      onPress={() => onSembol(satir.sym)}
+      onPress={() => onSembol(sonuc.sym)}
       accessibilityRole="button"
-      accessibilityLabel={satir.sym + ' — analize git'}
+      accessibilityLabel={sonuc.sym + ' — hisse sayfasına git'}
+      style={({ pressed }) => (pressed ? { backgroundColor: colors.bgPressed } : null)}>
+      {govde}
+    </Pressable>
+  );
+}
+
+/** Önayar çipi. Seçim RENKLE DEĞİL: başta "•" ve erişilebilirlik durumu. */
+function PresetCipi({
+  etiket,
+  aktif,
+  onPress,
+}: {
+  etiket: string;
+  aktif: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: aktif }}
+      accessibilityLabel={'Önayar: ' + etiket + (aktif ? ' — seçili' : '')}
       hitSlop={space.sm}
       style={({ pressed }) => [
-        styles.satir,
-        styles.basilabilir,
+        styles.cipKabi,
         pressed ? { backgroundColor: colors.bgPressed } : null,
       ]}>
-      {govde}
+      <Pill
+        label={(aktif ? '• ' : '') + etiket}
+        tone={aktif ? 'gold' : 'neutral'}
+        variant={aktif ? 'soft' : 'outline'}
+        glyph={null}
+        size="sm"
+      />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   satir: { gap: space.xxs, paddingVertical: space.sm },
-  basilabilir: {
-    minHeight: hitSlopMin,
-    justifyContent: 'center',
-    borderRadius: radius.md,
-    paddingHorizontal: space.sm,
-  },
+  bolum: { gap: space.xxs, paddingTop: space.sm },
   ust: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   bosluk: { flex: 1 },
   cipler: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  // Çipin kendisi küçük; dokunma hedefi 44'ü kabı tutuyor.
+  // Çip küçük; 44'lük dokunma hedefini kabı tutuyor.
   cipKabi: {
     minHeight: hitSlopMin,
     justifyContent: 'center',

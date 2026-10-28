@@ -6490,6 +6490,11 @@
 
   // ===== Genel sekmesi =====
   let generalCache = [];
+  // Kaynak kaynak OLCUM DURUMU: 'ok' | 'bos' | 'olcemedim'.
+  // NIYE VAR: loadGeneral eskiden Promise.allSettled icindeki REDDEDILEN
+  // beslemeleri SESSIZCE dusuruyordu; kullanici "haber yok" ile "o kaynagi
+  // okuyamadim"i ayirt edemiyordu. Olculmeyen sayi basilmaz: adet null, 0 DEGIL.
+  let generalKaynakDurum = [];
   let activeRegion = 'ALL';
 
   // Ekonomi / siyaset-ekonomi / diplomasi anahtar kelimeleri (TR)
@@ -6540,13 +6545,22 @@
         fetchRSS(f.url, 8).then(items => ({ source: f.name, region: f.region, items }))
       )
     );
-    for (const r of results) {
-      if (r.status === 'fulfilled') {
-        for (const item of r.value.items) {
-          generalCache.push({ source: r.value.source, region: r.value.region, item });
-        }
+    results.forEach((r, i) => {
+      const f = window.GENERAL_FEEDS[i];
+      if (r.status !== 'fulfilled') {
+        // OLCEMEDIM: ag ya da ayristirma basarisiz. adet null — 0 DEGIL.
+        generalKaynakDurum.push({ ad: f.name, region: f.region, durum: 'olcemedim', adet: null });
+        return;
       }
-    }
+      const items = Array.isArray(r.value.items) ? r.value.items : [];
+      generalKaynakDurum.push({
+        ad: f.name, region: f.region,
+        durum: items.length ? 'ok' : 'bos', adet: items.length,
+      });
+      for (const item of items) {
+        generalCache.push({ source: r.value.source, region: r.value.region, item });
+      }
+    });
     generalCache.sort((a, b) =>
       new Date(b.item.pubDate || 0) - new Date(a.item.pubDate || 0)
     );
@@ -6564,11 +6578,29 @@
       const haystack = (x.item.title || '') + ' ' + (x.item.description || '');
       return isTRFinanceOrPolitics(haystack);
     });
+    // Kaynak kaynak durustluk satiri: olcemedigim beslemeler SESSIZCE dusmez.
+    const ilgili = generalKaynakDurum.filter(k => activeRegion === 'ALL' || k.region === activeRegion);
+    const olcemedim = ilgili.filter(k => k.durum === 'olcemedim').map(k => k.ad);
+    const bosKaynak = ilgili.filter(k => k.durum === 'bos').map(k => k.ad);
+    const parcalar = [];
+    if (olcemedim.length) parcalar.push('okuyamadım: ' + olcemedim.join(', '));
+    if (bosKaynak.length) parcalar.push('okudum, haber yoktu: ' + bosKaynak.join(', '));
+    if (filtered.length > 60) {
+      // Sessiz kirpma YOK: kac kalemin gosterilmedigi ekranda yazili.
+      parcalar.push(filtered.length + ' haberin ilk 60ı gösteriliyor, ' + (filtered.length - 60) + ' tanesi gösterilmiyor');
+    }
+    const durumSatiri = parcalar.length
+      ? '<div class="meta" style="margin:6px 0 10px">' + ilgili.length + ' kaynaktan ' + (ilgili.length - olcemedim.length) + ' tanesi ölçüldü · ' + parcalar.join(' · ') + '</div>'
+      : '';
     if (!filtered.length) {
-      feedEl.innerHTML = '<div class="empty">Haber yok.</div>';
+      // "Haber yok" ile "hiçbirini okuyamadım" AYRI iki durum.
+      const bosMetin = ilgili.length && olcemedim.length === ilgili.length
+        ? 'Hiçbir kaynagı okuyamadım — “Haber yok” DEĞİL, ölçemedim.'
+        : 'Haber yok.';
+      feedEl.innerHTML = durumSatiri + '<div class="empty">' + bosMetin + '</div>';
       return;
     }
-    feedEl.innerHTML = filtered.slice(0, 60).map(x => `
+    feedEl.innerHTML = durumSatiri + filtered.slice(0, 60).map(x => `
       <div class="feed-item">
         <a href="${x.item.link}" target="_blank" rel="noopener">${x.item.title}</a>
         <div class="meta">

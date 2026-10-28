@@ -258,7 +258,6 @@ export function ayristirRSS(xml, azami = VARSAYILAN_MADDE, isaret = {}) {
  */
 export async function haberCek(q, sec = {}) {
   const sayac = sec.sayac || bosHaberSayac();
-  const limit = Math.max(1, Math.min(AZAMI_MADDE, Number(sec.limit) || VARSAYILAN_MADDE));
   const adres = haberAdresi(q, sec.market || 'TR');
 
   // Geçersiz sorgu/pazar AĞA ÇIKMADAN düşüyor — ve `hata` sayılıyor,
@@ -267,6 +266,30 @@ export async function haberCek(q, sec = {}) {
     sayac.hata++;
     return { maddeler: [], sayac, tam: false, adres: null };
   }
+  return beslemeCek(adres, { ...sec, sayac });
+}
+
+/**
+ * TEK beslemeyi ADRESİYLE çek ve ayrıştır. AĞA ÇIKAN TEK YER.
+ *
+ * NİYE AYRI: `haberCek` adresi SORGUDAN kuruyordu, yani ağ gövdesi tek
+ * bir adres biçimine kilitliydi. Gündem kipinin (aşağıda) adresleri
+ * sorgudan DEĞİL sabit besleme listesinden geliyor. Gövdeyi ikinci kez
+ * yazmak yerine buraya çıkardım: zaman aşımı, kimlik dizgesi, kısa gövde
+ * kuralı ve sayaçlar İKİ kipte de BİREBİR aynı kaldı.
+ *
+ * Zaman aşımı AbortController ile; `fetch`in kendi varsayılanı yok,
+ * olmadığında istek Vercel'in süre tavanına kadar asılı kalırdı.
+ *
+ * @param {string} adres  İzin listesinden GEÇMİŞ https adresi (çağıran doğrular).
+ * @param {{limit?:number, sayac?:object, symbol?:string, kaynak?:string}} [sec]
+ *        `symbol` verilirse dönen her maddeye yazılır · `kaynak` verilirse
+ *        RSS'in kendi `source` alanı YOKSA yerine o ad yazılır.
+ * @returns {Promise<{maddeler:object[], sayac:object, tam:boolean, adres:(string|null)}>}
+ */
+export async function beslemeCek(adres, sec = {}) {
+  const sayac = sec.sayac || bosHaberSayac();
+  const limit = Math.max(1, Math.min(AZAMI_MADDE, Number(sec.limit) || VARSAYILAN_MADDE));
 
   const kesici = new AbortController();
   const zamanlayici = setTimeout(() => kesici.abort(), HABER_ISTEK_MS);
@@ -296,6 +319,13 @@ export async function haberCek(q, sec = {}) {
     }
 
     const maddeler = ayristirRSS(govde, limit, { symbol: sec.symbol });
+    // `source` BOŞ kalan maddeye besleme adını yaz: Google News araması
+    // kaynağı maddenin içinde veriyor, tek yayıncının beslemesi VERMİYOR.
+    // Boş bırakmak "kaynağı ölçemedim" demek olurdu — oysa ölçtük, besleme
+    // zaten o yayıncının.
+    if (sec.kaynak) {
+      for (const m of maddeler) if (!m.source) m.source = sec.kaynak;
+    }
     sayac.basari++;
     // Sıfır madde ARIZA DEĞİL: geçerli bir besleme, o sorguda haber yok.
     return { maddeler, sayac, tam: haberTam(sayac), adres };
@@ -306,4 +336,197 @@ export async function haberCek(q, sec = {}) {
   } finally {
     clearTimeout(zamanlayici);
   }
+}
+
+// ===========================================================================
+//  GÜNDEM KİPİ — webin `general` sekmesinin SUNUCU KARŞILIĞI
+// ===========================================================================
+//
+//  ÖLÇÜLEN EKSİK (2026-10-27): webin gündem sekmesi `config.js:57`
+//  `window.GENERAL_FEEDS` üstünden 10 beslemeyi TARAYICIDAN `fetchRSS` ile
+//  okuyor. Native'de o sekmenin karşılığı YOK, çünkü:
+//    ① bu dosyanın tek kaynağı Google News ARAMA beslemesiydi — serbest
+//       metin gerektiriyor, "gündem" bir arama sorgusu değil;
+//    ② native'de RSS ayrıştırmak XML'i ince istemciye taşımak olurdu
+//       (kabuk ince kalır kuralı).
+//  Bu yüzden gündem SUNUCUDA toplanıyor, ekrana hazır `maddeler[]` iniyor.
+//
+//  KONAK GENİŞLEMESİ — SESSİZ DEĞİL, ÖLÇÜLDÜ: bu dosyanın başlığı
+//  "Yarın ikinci bir haber konağı gerekirse ÖLÇÜLÜP buraya eklenir;
+//  sessizce genişlemez" diyor. Aşağıdaki yedi konağın HEPSİ `api/proxy.js`
+//  satır 70'teki izin listesinde ZATEN vardı — yani webin bugün okuduğu
+//  küme. Yeni bir güven alanı AÇILMADI, var olan küme bu taşıyıcıya da
+//  yazıldı. `tests/uc-test.mjs` iki listenin BİREBİRLİĞİNİ denetliyor.
+//
+//  ÖLÇÜM (curl, 2026-10-27, bu taşıyıcının kendi kimlik dizgesiyle):
+//    bloomberght.com/rss            301 -> /rss/tum-haberler.xml  50 madde
+//    dunya.com/rss?dunya            200   25 madde
+//    cumhuriyet.com.tr/rss/ekonomi  200  100 madde
+//    sozcu.com.tr/rss/ekonomi.xml   200   50 madde
+//    rss.dw.com/rdf/rss-tur-eco     200   11 madde
+//    feeds.bbci.co.uk/.../rss.xml   200   48 madde
+//    cnbc.com/id/100003114/...      200   30 madde
+//
+//  LİSTEDEN ÇIKARILAN İKİ KALEM — gerekçe ölçüm, tahmin değil:
+//    · T24 (`t24.com.tr/rss/category/ekonomi`): curl `000` döndü, yani
+//      bağlantı HİÇ kurulamadı (DEVAM.md §4'te "403" diye kayıtlı; burada
+//      daha kötüsü ölçüldü). Çalışmayan beslemeyi listeye koymak her
+//      istekte bir zaman aşımı ödemek ve `tam:false` üretmek olurdu.
+//      Teşhis ayrı şeritte sürüyor; düzelirse ÖLÇÜLÜP eklenir.
+//    · Cumhuriyet'in webdeki adresi (`/rss/4.xml`): 301 ile `/rss/dunya`ya
+//      gidiyor — yani web, EKONOMİ sanıp DÜNYA haberi basıyor. Buraya
+//      ölçülmüş doğru adres (`/rss/ekonomi`, başlık "Cumhuriyet Gazetesi -
+//      Ekonomi") yazıldı. Web tarafı AYRI bir düzeltme (G şeridi).
+//
+//  REUTERS/FT SATIRLARI ALINMADI: ikisi de Google News ARAMA adresi, yani
+//  `?q=` kipinin ta kendisi. Gündem listesine koymak aynı kaynağı iki ayrı
+//  kapıdan saymak olurdu.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// ---------------------------------------------------------------------
+
+/**
+ * Gündem kipinin KENDİ konak izin listesi.
+ * `api/proxy.js:70` kümesinin haber bölümüyle BİREBİR aynı olmalı
+ * (`news.google.com` hariç — o `IZINLI_KONAK`ta, arama kipinin konağı).
+ */
+export const IZINLI_GUNDEM_KONAK = [
+  'www.bloomberght.com',
+  'www.dunya.com',
+  'www.cumhuriyet.com.tr',
+  'www.sozcu.com.tr',
+  'rss.dw.com',
+  'feeds.bbci.co.uk',
+  'www.cnbc.com',
+];
+
+/**
+ * Gündem beslemeleri, YEREL'e göre. `ad` EKRAN adı değil KAYNAK adı:
+ * maddenin `source` alanı boşsa oraya yazılıyor (yayıncı beslemeleri
+ * kaynağı madde içinde vermiyor).
+ */
+export const GUNDEM_BESLEMELER = {
+  TR: [
+    { ad: 'Bloomberg HT',        adres: 'https://www.bloomberght.com/rss/tum-haberler.xml' },
+    { ad: 'Dünya Gazetesi',      adres: 'https://www.dunya.com/rss?dunya' },
+    { ad: 'Cumhuriyet Ekonomi',  adres: 'https://www.cumhuriyet.com.tr/rss/ekonomi' },
+    { ad: 'Sözcü Ekonomi',       adres: 'https://www.sozcu.com.tr/rss/ekonomi.xml' },
+    { ad: 'DW Türkçe Ekonomi',   adres: 'https://rss.dw.com/rdf/rss-tur-eco' },
+  ],
+  US: [
+    { ad: 'BBC Business',        adres: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
+    { ad: 'CNBC Top News',       adres: 'https://www.cnbc.com/id/100003114/device/rss/rss.html' },
+  ],
+};
+
+/** Gündem yerelleri — `PAZAR_YERELI`nin anahtarları DEĞİL, kendi kümesi. */
+export const GUNDEM_YERELLER = Object.keys(GUNDEM_BESLEMELER);
+
+/** Besleme başına kaç madde okunur. Fan-out × bu = havuz tavanı. SAF. */
+export const GUNDEM_BESLEME_MADDE = 8;
+
+/** Gündem adresi KENDİ izin listemizde mi (https + izinli konak). SAF. */
+export function izinliGundemAdresi(adres) {
+  if (typeof adres !== 'string' || !adres) return false;
+  let u;
+  try { u = new URL(adres); } catch { return false; }
+  if (u.protocol !== 'https:') return false;
+  return IZINLI_GUNDEM_KONAK.includes(u.hostname);
+}
+
+/**
+ * Maddeleri TARİHE göre yeniden eskiye diz. Tarihi ÇÖZÜLEMEYEN madde
+ * ATILMAZ, sona konur — "tarihini ölçemedim" ile "haber yok" ayrı şeyler.
+ * SAF (girdi dizisini kopyalar).
+ */
+export function gundemSirala(maddeler) {
+  const ts = (m) => {
+    const t = Date.parse(String(m && m.pubDate ? m.pubDate : ''));
+    return Number.isFinite(t) ? t : null;
+  };
+  return maddeler.slice().sort((a, b) => {
+    const ta = ts(a); const tb = ts(b);
+    if (ta === null && tb === null) return 0;
+    if (ta === null) return 1;
+    if (tb === null) return -1;
+    return tb - ta;
+  });
+}
+
+/**
+ * Aynı habere iki beslemeden gelen kopyayı düşür. ANAHTAR `link`, yoksa
+ * `title`. Düşen madde SAYILIR (`dusen`) — sessizce yok olmaz. SAF.
+ */
+export function gundemTekille(maddeler) {
+  const gorulen = new Set();
+  const out = [];
+  let dusen = 0;
+  for (const m of maddeler) {
+    const anahtar = String((m && m.link) || (m && m.title) || '').trim().toLowerCase();
+    if (!anahtar) { out.push(m); continue; }
+    if (gorulen.has(anahtar)) { dusen++; continue; }
+    gorulen.add(anahtar);
+    out.push(m);
+  }
+  return { maddeler: out, dusen };
+}
+
+/**
+ * GÜNDEM: yerelin bütün beslemelerini PARALEL çek, tekille, tarihe göre
+ * diz, `limit` kadar döndür.
+ *
+ * PARALEL ve `allSettled`: beslemelerden biri düşerse öteki dördü
+ * basılmaya devam eder. Hangi beslemenin ne verdiği `besleme[]` dizisinde
+ * AÇIKÇA duruyor — "5 kaynaktan 4'ü okundu" diyebilmek için. Sıralı
+ * çekmek 5 × 6 sn = 30 sn ederdi, ucun 10 sn tavanının üstü.
+ *
+ * `tam` ANLAMI: her besleme okundu mu. Bir besleme düşmüşse `tam:false` —
+ * ekran "eksik ölçüm" diyebilsin.
+ *
+ * @param {string} yerel 'TR' | 'US'
+ * @param {{limit?:number, sayac?:object}} [sec]
+ * @returns {Promise<{maddeler:object[], besleme:object[], sayac:object, tam:boolean, tekrar:number}>}
+ */
+export async function gundemCek(yerel, sec = {}) {
+  const sayac = sec.sayac || bosHaberSayac();
+  const limit = Math.max(1, Math.min(AZAMI_MADDE, Number(sec.limit) || VARSAYILAN_MADDE));
+  const liste = GUNDEM_BESLEMELER[yerel];
+
+  // Bilinmeyen yerel AĞA ÇIKMADAN düşüyor ve `hata` sayılıyor.
+  if (!Array.isArray(liste) || liste.length === 0) {
+    sayac.hata++;
+    return { maddeler: [], besleme: [], sayac, tam: false, tekrar: 0 };
+  }
+
+  const sonuclar = await Promise.allSettled(liste.map((b) => {
+    if (!izinliGundemAdresi(b.adres)) {
+      sayac.hata++;
+      return Promise.resolve({ maddeler: [], sayac, tam: false, adres: null });
+    }
+    return beslemeCek(b.adres, { limit: GUNDEM_BESLEME_MADDE, sayac, kaynak: b.ad });
+  }));
+
+  const besleme = [];
+  let havuz = [];
+  for (let i = 0; i < liste.length; i++) {
+    const s = sonuclar[i];
+    const d = s.status === 'fulfilled' ? s.value : null;
+    const n = d && Array.isArray(d.maddeler) ? d.maddeler.length : 0;
+    // `durum` MAKİNE KODU, Türkçe cümle değil — etiket istemcide.
+    besleme.push({ ad: liste[i].ad, durum: n > 0 ? 'ok' : 'bos', adet: n });
+    if (n > 0) havuz = havuz.concat(d.maddeler);
+  }
+
+  const tekil = gundemTekille(havuz);
+  const sirali = gundemSirala(tekil.maddeler);
+  const okunan = besleme.filter((b) => b.durum === 'ok').length;
+
+  return {
+    maddeler: sirali.slice(0, limit),
+    besleme,
+    sayac,
+    // Her besleme okundu MU: biri düştüyse ölçüm EKSİK.
+    tam: okunan === liste.length && haberTam(sayac),
+    tekrar: tekil.dusen,
+  };
 }

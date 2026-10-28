@@ -26,7 +26,8 @@
     { "source": "/api/sektor",   "destination": "/api/proxy?__rota=sektor" },
     { "source": "/api/radar",    "destination": "/api/proxy?__rota=radar" },
     { "source": "/api/backtest", "destination": "/api/proxy?__rota=backtest" },
-    { "source": "/api/deger",    "destination": "/api/proxy?__rota=deger" }
+    { "source": "/api/deger",    "destination": "/api/proxy?__rota=deger" },
+    { "source": "/api/arama",    "destination": "/api/proxy?__rota=arama" }
   ],
   "regions": ["fra1"],
   "headers": [

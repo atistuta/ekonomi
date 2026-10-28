@@ -8,6 +8,9 @@
   <link rel="preconnect" href="https://day-starter.vercel.app" crossorigin />
   <link rel="preconnect" href="https://finans.truncgil.com" crossorigin />
   <link rel="preconnect" href="https://query1.finance.yahoo.com" crossorigin />
+  <!-- unpkg: grafik kütüphanesi buradan SENKRON yükleniyor (aşağıda), yani ilk
+       boyamayı doğrudan geciktiriyor. ÖLÇÜLDÜ 2026-10-27: TTFB 0,710 sn. -->
+  <link rel="preconnect" href="https://unpkg.com" crossorigin />
   <link rel="dns-prefetch" href="https://news.google.com" />
   <link rel="stylesheet" href="styles.css?v=72" />
   <link rel="manifest" href="manifest.json" />
@@ -628,7 +631,39 @@
     <span>Veri: truncgil, KAP, Google News, Yahoo Finance. Yatırım tavsiyesi değildir.</span>
   </footer>
 
-  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- NİYE VAR: grafik kütüphanesi TEK CDN'e yedeksiz bağlıydı. unpkg bir
+       kez düşünce grafik sekmesi sessizce boş kaldı (app.js:3526'daki
+       `typeof LightweightCharts === 'undefined'` koruması devreye girdi) —
+       koruma doğru çalışıyor, eksik olan YEDEK kaynaktı.
+       ÖLÇÜLDÜ 2026-10-27 (curl -w, iki ayrı istek):
+         unpkg 4.2.0            → HTTP 200 · 163551 bayt · TTFB 0,710 sn
+         cdn.jsdelivr.net 4.2.0 → HTTP 200 · 163551 bayt · TTFB 0,486 sn
+       Yani 4.2.0 ÖLÜ DEĞİL; kök neden yedeksizlik.
+       İKİ KOPYANIN sha384'ü AYNI — ÖLÇÜLDÜ:
+         curl -sS <url> | openssl dgst -sha384 -binary | openssl base64 -A
+         → OK7vELvjHdhUFi31JYioPIcRHTROLdcDa6ZsNWgvgLaKj+9JqhU0Ad8g4wz3CXjA
+       Aynı olduğu için TEK `integrity` değeri her iki CDN'i de doğruluyor.
+       İkisi de `Access-Control-Allow-Origin: *` veriyor (ÖLÇÜLDÜ) → integrity
+       ile birlikte `crossorigin` ŞART, yoksa tarayıcı betiği hiç çalıştırmaz.
+       NİYE defer/async YOK ve niye `document.write`: bu betik `app.js`'ten
+       ÖNCE çalışmak ZORUNDA; defer/async o sırayı bozar, `document.write` ise
+       ayrıştırma sırasında SENKRON araya giriyor.
+       NİYE `onerror` değil de genel değişken denetimi: integrity uyuşmazlığında
+       betik İNDİRİLİR ama ÇALIŞTIRILMAZ — bazı tarayıcılarda onerror ateşlenmez,
+       `LightweightCharts` ise her halükârda undefined kalır. Denetim daha geniş. -->
+  <script
+    src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"
+    integrity="sha384-OK7vELvjHdhUFi31JYioPIcRHTROLdcDa6ZsNWgvgLaKj+9JqhU0Ad8g4wz3CXjA"
+    crossorigin="anonymous"></script>
+  <script>
+    if (typeof LightweightCharts === 'undefined') {
+      document.write(
+        '<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"'
+        + ' integrity="sha384-OK7vELvjHdhUFi31JYioPIcRHTROLdcDa6ZsNWgvgLaKj+9JqhU0Ad8g4wz3CXjA"'
+        + ' crossorigin="anonymous">' + '<' + '/script>'
+      );
+    }
+  </script>
   <script src="config.js?v=71"></script>
   <script src="app.js?v=101"></script>
 </body>

@@ -95,11 +95,38 @@
 //      maddeler      = BÜTÜN satırların maddeleri TEK düz dizide; hangi
 //                      satırdan geldiği maddenin `symbol` alanında.
 //
-//    İKİ KİPTE DE maddeler[i] =
+//  ③ GÜNDEM (yeni — webin `general` sekmesinin karşılığı)
+//    GET /api/news?gundem=1[&market=TR][&limit=10]
+//      gundem  1 | true — kipi AÇAN anahtar. `q`/`symbols` ile BİRLİKTE
+//              verilemez (üç kip birbirini dışlar).
+//      market  TR | US — HABER YERELİ (kip ①'in kümesiyle aynı liste ama
+//              AYRI ölçülmüş küme: `_haber.js GUNDEM_YERELLER`; ikisi
+//              ayrışırsa `tests/uc-test.mjs` söyler, sessizce birleşmez)
+//      limit   1..25 — TEKİLLEŞTİRMEDEN SONRAKİ madde sayısı
+//    Cevap 200: { q: null, gundem: true, market, limit, maddeler[], adet,
+//                 besleme[], tekrar, sayac, tam, ms, uyari }
+//      besleme[i] = { ad, durum: 'ok'|'bos', adet } — KAYNAK BAŞINA ölçüm.
+//                   `durum` MAKİNE KODU; Türkçe etiket İSTEMCİDE. Düşen
+//                   beslemenin adı GÖVDEDE duruyor: "5 kaynaktan 4'ü
+//                   okundu" denebilsin. Webin `loadGeneral`ı (app.js:6534)
+//                   reddedileni SESSİZCE düşürüyor — bu uç DÜŞÜRMÜYOR.
+//      tekrar     = iki beslemede birden çıkıp TEKİLLEŞTİRİLEN madde
+//                   sayısı. Sessizce yok olmuyor, SAYILIYOR.
+//      tam        = HER beslemenin okunması + sayaçta arıza olmaması.
+//                   Biri düştüyse `false` — ekran "eksik ölçüm" der.
+//    NİYE SUNUCUDA: native RSS/XML ayrıştırmıyor (kabuk ince kalır).
+//    Beslemelerin ölçümü, listeye alınma/alınmama gerekçeleri ve
+//    T24'ün neden DIŞARIDA olduğu `api/_haber.js` gündem başlığında.
+//
+//    ÜÇ KİPTE DE maddeler[i] =
 //      { title, link, pubDate, source, type, symbol } — HAM metin.
 //      type   = 'NEWS' (bu uç KAP duyurusu üretmez; küme _haber.js'te)
-//      symbol = çoklu kipte satırın sembolü · tek sorgu kipinde null
-//               (serbest metin bir hisseye ait değildir — uydurulmaz)
+//      symbol = çoklu kipte satırın sembolü · tek sorgu ve gündem
+//               kipinde null (serbest metin ya da genel gündem bir
+//               hisseye ait değildir — uydurulmaz)
+//      source = gündem kipinde beslemenin adı (yayıncı beslemeleri
+//               kaynağı madde içinde VERMİYOR; boş bırakmak "kaynağı
+//               ölçemedim" demek olurdu, oysa ölçüldü)
 //      adet        = maddeler.length — istemci boş listeyi alan okumadan
 //                    görsün.
 //      tam         = sayaçta hata/zaman aşımı/kısa gövde YOK mu.
@@ -125,6 +152,8 @@ import {
   haberCek, bosHaberSayac, haberTam,
   AZAMI_MADDE, VARSAYILAN_MADDE, AZAMI_HABER_SORGU, HABER_PAZARLAR,
   MADDE_ALANLARI, HABER_TURLERI,
+  gundemCek, GUNDEM_YERELLER, GUNDEM_BESLEMELER, GUNDEM_BESLEME_MADDE,
+  IZINLI_GUNDEM_KONAK,
 } from './_haber.js';
 
 // Sembol kapısı ORTAK: skor şeridinin kullandığı AYNI fonksiyon nesnesi
@@ -135,12 +164,15 @@ import { ayristir, AZAMI_SEMBOL } from './_girdi.js';
 export {
   AZAMI_MADDE, VARSAYILAN_MADDE, AZAMI_HABER_SORGU, HABER_PAZARLAR,
   MADDE_ALANLARI, HABER_TURLERI, AZAMI_SEMBOL, ayristir,
+  GUNDEM_YERELLER, GUNDEM_BESLEMELER, GUNDEM_BESLEME_MADDE,
+  IZINLI_GUNDEM_KONAK,
 };
 
-// maxDuration 10 · ÖLÇÜLEN gerekçe: bu uç TEK bir dış istek yapıyor
-// (_haber.js `HABER_ISTEK_MS` = 6000 zaman aşımı altında). /api/chart ile
-// AYNI kademe ve aynı sebep: 33 istek değil 1 istek var. /api/score'un
-// 30-60 sn'si buraya kopyalanmadı.
+// maxDuration 10 · ÖLÇÜLEN gerekçe: kip ① TEK dış istek yapıyor, kip ②
+// en çok 8, kip ③ en çok 5 — AMA HEPSİ PARALEL (`Promise.all` /
+// `allSettled`), yani duvar saati `_haber.js HABER_ISTEK_MS` = 6000
+// zaman aşımının altında kalıyor, 8 × 6 ya da 5 × 6 değil. /api/chart
+// ile AYNI kademe. /api/score'un 30-60 sn'si buraya kopyalanmadı.
 export const config = { runtime: 'nodejs', maxDuration: 10 };
 
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
@@ -194,16 +226,36 @@ export default async function handler(req, res) {
   const q = String(sorgu.q ?? '').trim();
   const hamSembol = String(sorgu.symbols ?? '').trim();
 
-  // İKİ KİP BİRDEN OLMAZ: hangisinin kazandığını SESSİZCE seçmek,
-  // istemcinin istemediği gövdeyi dönmek olurdu.
+  // `gundem` ANAHTARI KAPALI KÜME: '1'/'true' açar, '0'/'false'/boş
+  // kapatır, BAŞKA HİÇBİR ŞEY sessizce yorumlanmaz. "evet" yazan bir
+  // istemciye sessizce kip ① dönmek, istemediği gövdeyi vermek olurdu.
+  const hamGundem = String(sorgu.gundem ?? '').trim().toLowerCase();
+  const GUNDEM_ACIK = ['1', 'true'];
+  const GUNDEM_KAPALI = ['', '0', 'false'];
+  if (!GUNDEM_ACIK.includes(hamGundem) && !GUNDEM_KAPALI.includes(hamGundem)) {
+    kisaOnbellek(res);
+    res.status(400).json({ error: 'bad_gundem', izinli: GUNDEM_ACIK, uyari: UYARI });
+    return;
+  }
+  const gundem = GUNDEM_ACIK.includes(hamGundem);
+
+  // ÜÇ KİP BİRDEN OLMAZ: hangisinin kazandığını SESSİZCE seçmek,
+  // istemcinin istemediği gövdeyi dönmek olurdu. Eski `q_ve_symbols`
+  // kodu KORUNDU (bugünün istemcisinin gördüğü hata değişmiyor); gündem
+  // çakışması kendi kodunu alıyor.
   if (q && hamSembol) {
     kisaOnbellek(res);
     res.status(400).json({ error: 'q_ve_symbols', uyari: UYARI });
     return;
   }
+  if (gundem && (q || hamSembol)) {
+    kisaOnbellek(res);
+    res.status(400).json({ error: 'gundem_ve_sorgu', uyari: UYARI });
+    return;
+  }
   // Hiçbiri yoksa ESKİ kod ne diyorduysa o: `missing_q` (yeni kod
   // uydurulmadı, bugünün istemcisinin gördüğü hata değişmiyor).
-  if (!q && !hamSembol) {
+  if (!q && !hamSembol && !gundem) {
     kisaOnbellek(res);
     res.status(400).json({ error: 'missing_q', uyari: UYARI });
     return;
@@ -220,11 +272,17 @@ export default async function handler(req, res) {
   // (TR|US), çoklu kipte SEMBOL pazarı (US|BIST) ve onu `ayristir`
   // doğruluyor — iki ayrı küme, iki ayrı kapı, karıştırılmıyor.
   let market = VARSAYILAN_PAZAR;
-  if (q) {
+  if (q || gundem) {
+    // Gündem kipi KENDİ ölçülmüş kümesine bakıyor (`GUNDEM_YERELLER`),
+    // `HABER_PAZARLAR`a DEĞİL: bugün ikisi de ['TR','US'] ama biri
+    // besleme listesinden, öteki Google News yerellerinden geliyor.
+    // Aynı diziyi iki ölçüm için kullanmak, yarın biri büyüdüğünde
+    // ötekini SESSİZCE büyütmek olurdu.
+    const izinliYerel = gundem ? GUNDEM_YERELLER : HABER_PAZARLAR;
     market = String(sorgu.market ?? VARSAYILAN_PAZAR).trim().toUpperCase();
-    if (!HABER_PAZARLAR.includes(market)) {
+    if (!izinliYerel.includes(market)) {
       kisaOnbellek(res);
-      res.status(400).json({ error: 'bad_market', izinli: HABER_PAZARLAR, uyari: UYARI });
+      res.status(400).json({ error: 'bad_market', izinli: izinliYerel, uyari: UYARI });
       return;
     }
   }
@@ -251,6 +309,41 @@ export default async function handler(req, res) {
   const t0 = Date.now();
 
   try {
+    // ------------------------------------------------------------------
+    //  ③ GÜNDEM KİPİ
+    // ------------------------------------------------------------------
+    if (gundem) {
+      const sayac = bosHaberSayac();
+      const g = await gundemCek(market, { limit, sayac });
+      const maddeler = g.maddeler || [];
+
+      // Kip ① ve ② ile AYNI pencere kuralı: TAM ve DOLU cevap 120 sn,
+      // eksik ya da boş cevap 30 sn. Yeni sayı uydurulmadı.
+      if (g.tam && maddeler.length) {
+        res.setHeader('Cache-Control', 'public, max-age=120, s-maxage=120, stale-while-revalidate=240');
+      } else {
+        kisaOnbellek(res);
+      }
+
+      res.status(200).json({
+        // `q: null` — bu kipte serbest metin YOK (kip ②'nin aynı kararı).
+        q: null,
+        gundem: true,
+        market,
+        limit,
+        maddeler,
+        adet: maddeler.length,
+        // KAYNAK BAŞINA ölçüm: düşen beslemenin ADI gövdede duruyor.
+        besleme: g.besleme,
+        tekrar: g.tekrar,
+        sayac,
+        tam: g.tam,
+        ms: Date.now() - t0,
+        uyari: UYARI,
+      });
+      return;
+    }
+
     // ------------------------------------------------------------------
     //  ② ÇOKLU SEMBOL KİPİ
     // ------------------------------------------------------------------

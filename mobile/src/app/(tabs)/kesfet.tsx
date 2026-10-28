@@ -1,36 +1,37 @@
 // =====================================================================
 //  KEŞFET — 3. sekme, MOTORA BAĞLI                    (FAZ 2 / native)
 // ---------------------------------------------------------------------
-//  NE: takip listesinin TEK `/api/recommend` turu, üç yüzeye dağıtılıyor:
-//  🌍 Radar (tek bakışta hâl) · 🔥 Fırsatlar (risk/ödül dizilimi) ·
-//  🔎 Tarama (ölçüt süzgeci). Üçü de `@/components/kesfet` altında.
+//  NE: Keşfet sekmesi üç kart basıyor: 🌍 Radar (motorun tema→sektör
+//  sözlüğü) · 🔥 Fırsatlar (risk/ödül dizilimi) · 🔎 Tarama (motorun
+//  önayar taraması) + Gündem manşetleri. Üçü `@/components/kesfet` altında.
 //
-//  NEDEN TEK TUR, ÜÇ KART: üç kartın hiçbiri veri ÇEKMİYOR; satırları
-//  prop olarak alıyor. Aksi hâlde aynı tur için üç istek ödenir ve üç
-//  kart birbirinden farklı üç anlık görüntü gösterebilirdi.
+//  ── HANGİ KART HANGİ UCA GİDİYOR (ÖLÇÜLDÜ 2026-10-27) ──────────────
+//  🔥 Fırsatlar → bu ekranın `/api/recommend` turu (prop olarak alıyor).
+//  🌍 Radar    → KENDİ çekiyor: `/api/radar`.
+//  🔎 Tarama   → KENDİ çekiyor: `/api/yfin` → `/api/tarama`.
 //
-//  NEDEN GRUPLAMA/SÜZME HESAP DEĞİL: kartlar motorun zaten söylediği
-//  alanları (`composite.blendedShown`, `ta.score`, `fa.score`,
-//  `plan.yakinlik.state`, `plan.momentum.active`, `tam`) okuyup
-//  karşılaştırıyor. Tarama'nın ≥70 çipi KULLANICI SÜZGECİNİN ayarı,
-//  skor eşiği değil — tek bir sayı burada türetilmiyor.
+//  ── NEDEN ESKİ "TEK TUR, ÜÇ KART" DÜZENİ BOZULDU ───────────────────
+//  ÖLÇÜLDÜ: bu dosyada tek bir `fetchRecommend(liste,{vade:'orta'})`
+//  turu vardı ve aynı cevap üç karta dağıtılıyordu; `/api/radar` ve
+//  `/api/tarama` HİÇ çağrılmıyordu. Yani üç kart aynı veriyi üç ad
+//  altında gösteriyordu — kullanıcı üç ayrı ölçüm sanıyordu. Eski
+//  başlıktaki "Radar (tarama) için hâlâ uç yok" ölçümü de ESKİDİ: iki uç
+//  da yazılmış ve `api/proxy.js` ile taşınıyor. Tek tur gerekçesi
+//  (istek tasarrufu) geçerliliğini yitirdi, çünkü tasarruf edilen şey
+//  ölçümün kendisiydi.
 //
-//  NEDEN ESKİ İKİ KART GİTTİ: bu ekranda elle yazılmış "Alım bandına
-//  yakın" + "Momentum" kartları vardı; ikisinin içeriği de Tarama'nın
-//  `bandaYakin` / `momentum` ölçütleri ve Radar'ın yakınlık sütunu
-//  tarafından kapsanıyor. Aynı kararı iki ayrı yerde basmak, biri
-//  yarın değişince sessiz bir çelişki bırakırdı.
+//  NEDEN ÜÇ AYRI DURUM: üç ölçüm birbirinden bağımsız; biri düşerken
+//  öteki durabilir. Kendi verisini çeken iki kart kendi `Durum`unu da
+//  çiziyor, ekranın tepesindeki `Durum` yalnız recommend turunu anlatıyor.
 //
-//  ESKİ ÖLÇÜM DÜZELTMESİ: başlık "Radar (tarama) için hâlâ uç yok"
-//  diyordu. O ölçüm ESKİDİ — radar/tarama için AYRI bir uç gerekmiyordu;
-//  ikisi de `/api/recommend` satırlarının okunmasıyla çiziliyor.
+//  NEDEN GRUPLAMA/SÜZME HESAP DEĞİL: Fırsatlar motorun zaten söylediği
+//  alanları okuyup karşılaştırıyor; eşik/ağırlık/formül motorda. Eski
+//  Tarama kartındaki yerel `ESIK = 70` SİLİNDİ (bkz. TaramaKart başlığı).
 //
-//  NEDEN "gündem" ARTIK BURADA: eski başlık "radar/gündem için uç YOK
-//  (api/ altında haber/radar ucu bulunmuyor)" diyordu. O ÖLÇÜM ESKİDİ —
-//  `/api/news` yazıldı. Gündem kartı bu ekrana kondu çünkü eksiği İLAN
-//  EDEN ekran burasıydı; Bugün'ün ilan ettiği eksikler makro (konjonktür,
-//  piyasa nabzı, öne çıkan sektör) ve manşet onların yerine geçmez.
-//  Radar (tarama) için hâlâ uç yok; o madde açık.
+//  NEDEN "gündem" BURADA: eski başlık "radar/gündem için uç YOK" diyordu;
+//  o ölçüm eskidi — `/api/news` yazıldı. Gündem kartı eksiği İLAN EDEN
+//  ekrana kondu; Bugün'ün ilan ettiği eksikler makro ve manşet onların
+//  yerine geçmez.
 //
 //  GÜNDEM KARTI SKOR DEĞİL: `/api/news` metin döndürüyor, skora girdi
 //  vermiyor (api/news.js başlığı). Manşetten yön/duygu çıkarmak ⚡ Nabız'ın
@@ -41,7 +42,7 @@
 
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
   fetchNews,
@@ -62,8 +63,13 @@ import {
   ScreenShell,
   VeriYok,
 } from '@/components';
-import { FirsatlarKart, RadarKart, TaramaKart } from '@/components/kesfet';
-import { formatHaberTarih } from '@/lib/format';
+import {
+  FirsatlarKart,
+  HaberSatiri,
+  RadarKart,
+  SektorKart,
+  TaramaKart,
+} from '@/components/kesfet';
 import { radius, space, type, useTheme } from '@/theme';
 
 export default function KesfetScreen() {
@@ -92,7 +98,7 @@ export default function KesfetScreen() {
     <ScreenShell
       title="Keşfet"
       subtitle="Motorun fırsat ve momentum kararları — eşikler motorda."
-      note="Üç kart TEK recommend turunu okur; tematik keşif Arama sekmesinde.">
+      note="Radar · Tarama · Fırsatlar AYRI ölçümlerdir; tematik keşif Arama sekmesinde.">
       {/* `sekil="sira"`: beklenen içerik sembol + rozet + iki künye
           satırı; fiyat/değişim sütunlu liste satırı değil. */}
       <Durum
@@ -114,40 +120,32 @@ export default function KesfetScreen() {
         <VeriYok metin="Motor bu semboller için sonuç döndürmedi; ayrıştırılacak satır yok." />
       ) : null}
 
-      {/* NEDEN YALNIZ `veri` DALINDA: yükleniyor/hata/boş hâlleri ekran
-          üstündeki TEK `Durum` anlatıyor. Kartlar da durum alıyor (kendi
-          sözleşmeleri bu) ama üçünü birden çizmek aynı yüklenmeyi üç
-          iskeletle, aynı arızayı üç hata kutusuyla tekrar basardı. */}
+      {/* 🌍 Radar KENDİ ucuna gidiyor (`/api/radar`): recommend turundan
+          bağımsız, saf sözlük okuması. Bu yüzden recommend dalının
+          DIŞINDA — liste boşken bile sözlük okunabilir. */}
+      <RadarKart onSembol={sembolAc} />
+
+      {/* NEDEN YALNIZ `veri` DALINDA: Fırsatlar satırları PROP olarak
+          alıyor, yani ekranın turuna bağlı. Yükleniyor/hata/boş hâllerini
+          üstteki TEK `Durum` anlatıyor. */}
       {durum === 'veri' && satirlar.length ? (
-        <>
-          <RadarKart
-            satirlar={satirlar}
-            durum={durum}
-            hata={hata}
-            yenile={yenile}
-            kaynak={veri}
-            liste={liste}
-            atlanan={veri?.atlanan}
-            onSembol={sembolAc}
-          />
-          <FirsatlarKart
-            satirlar={satirlar}
-            durum={durum}
-            hata={hata}
-            yenile={yenile}
-            kaynak={veri}
-            onSembol={sembolAc}
-          />
-          <TaramaKart
-            satirlar={satirlar}
-            durum={durum}
-            hata={hata}
-            yenile={yenile}
-            kaynak={veri}
-            onSembol={sembolAc}
-          />
-        </>
+        <FirsatlarKart
+          satirlar={satirlar}
+          durum={durum}
+          hata={hata}
+          yenile={yenile}
+          kaynak={veri}
+          onSembol={sembolAc}
+        />
       ) : null}
+
+      {/* 🔎 Tarama KENDİ iki turunu atıyor (`/api/yfin` → `/api/tarama`):
+          girdisi takip listesi, recommend cevabı değil. */}
+      <TaramaKart liste={liste} onSembol={sembolAc} />
+
+      {/* Sektor dagilimi -- Tarama ile AYNI hat (yfin kunye -> POST),
+          ayni 12 sembol siniri. Yeni sekme ACILMADI. */}
+      <SektorKart liste={liste} onSembol={sembolAc} />
 
       {/* Gündem kartı KENDİ isteğini yapıyor: recommend turundan bağımsız,
           çünkü manşet ölçümü skor ölçümüne bağlı değil — biri düşerken
@@ -158,7 +156,6 @@ export default function KesfetScreen() {
 }
 
 const styles = StyleSheet.create({
-  satir: { gap: 2, paddingVertical: space.sm },
   cipler: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, paddingBottom: space.sm },
   cip: {
     paddingHorizontal: space.md,
@@ -272,39 +269,5 @@ function GundemKarti() {
         {DISCLAIMER_TEXT}
       </Text>
     </Card>
-  );
-}
-
-/**
- * Tek manşet. Metin UCUN VERDİĞİ GİBİ basılıyor: kısaltma, çeviri, emoji
- * ya da "olumlu/olumsuz" etiketi YOK — o yorum olurdu.
- */
-function HaberSatiri({ madde }: { madde: HaberMadde }) {
-  const { colors } = useTheme();
-  const baslik = (madde.title ?? '').trim();
-  const link = (madde.link ?? '').trim();
-  const kaynak = (madde.source ?? '').trim();
-  const tarih = formatHaberTarih(madde.pubDate);
-
-  return (
-    <View style={styles.satir}>
-      {/* Bağlantı YOKSA basılabilir görünmüyor: tıklanınca hiçbir şey
-          olmayan bir başlık, çalışıyormuş gibi görünen bir yalandır. */}
-      <Text
-        {...(link
-          ? {
-              accessibilityRole: 'link' as const,
-              onPress: () => {
-                void Linking.openURL(link).catch(() => {});
-              },
-            }
-          : null)}
-        style={[type.small, { color: colors.text }]}>
-        {baslik || 'Başlık gelmedi'}
-      </Text>
-      <Text style={[type.micro, { color: colors.textDim }]}>
-        {(kaynak || 'kaynak bildirilmedi') + ' · ' + tarih}
-      </Text>
-    </View>
   );
 }
