@@ -105,10 +105,13 @@ ACIK BOSLUKLAR (hepsi bilerek acik, veri uydurulmadi):
 - **Hicbir React bileseni BENIM tarafimdan render edilmedi.** Expo kosmadi, ekran
   goruntusu alinmadi. Tek render kaniti: kullanicinin uygulamanin iPhone'unda
   acildigini bildirmesi.
-- `/api/takvim` ve `/api/arama` yeniden-yazimlari URETIMDE dogrulanmadi (deploy gerekir).
-  `finans.mynet.com` ve `temettuhisseleri.com` hic cagrilmadi; ayristiricilar yalniz
-  `app.js` regexlerinden turetilmis fikstur ile olculdu. Kaynak sayfa yapisi
-  degistiyse uc bos dizi + `tam:true` doner -> kapanmamis yanlis-guven riski.
+- KAPANDI 2026-10-29 (`d21986c` pushundan sonra, otomatik deploy): `/api/takvim` ve
+  `/api/arama` URETIMDE olculdu. `?kapsam=kap&kapAdet=2` -> HTTP 200, 911 bayt,
+  14.6 sn, Mynet KAP basliklari dolu. `?kapsam=temettu&temettuAdet=3` -> HTTP 200,
+  569 bayt, 0.64 sn, 275794 bayt kaynak, DESA/LIDER/GOKNR tarih+tutar+yieldPct dolu.
+  `/api/arama?q=ASELS` -> HTTP 200, tek aday `ASELS.IS` / `pazar:"BIST"`.
+  Canli KAP cevabi `app.js:255` hatasini da dogruluyor: `***GRFIN ** EMVAR***`
+  blogunda `symbol: null` (bilerek, ikizlik geregi).
 - Telefon yapisi `EXPO_PUBLIC_API_URL=https://day-starter.vercel.app` gomuyor;
   deploy edilmemis her uc cihazda 404 verir.
 - FAZ 4-6 hic baslamadi: Supabase auth, RevenueCat/IAP, LLM katmani, EAS Submit.
@@ -138,10 +141,9 @@ CRLF dosyalar icin `git -c core.safecrlf=false` ile).
 **DEPLOY ONAYI YOK.** Vercel'e deploy kullanici acikca "evet" demeden yapilmaz.
 
 ## 6. Siradaki is — siraya gore
-1. **Deploy onayi sor.** Once `a9068c8` pushu otomatik deploy tetikledi mi olc.
-   `/api/takvim` ve `/api/arama` uretimde yoksa cihazda 404 verir.
-2. Deploy sonrasi **yeni ad-hoc yapi** (`eas build -p ios --profile cihaz`) ki her
-   ekranda veri olsun.
+1. ~~Deploy~~ TAMAM: push otomatik deploy tetikliyor, `/api/takvim` + `/api/arama`
+   uretimde olculdu (§4). Elle `vercel --prod` GEREKMEDI.
+2. **Yeni ad-hoc yapi** (`eas build -p ios --profile cihaz`) ki her ekranda veri olsun.
 3. Kullanicinin cihaz geri bildirimini topla -> cila/optimizasyon listesi.
 4. TestFlight: App Store Connect uygulama kaydi, `submit.production.ios` icin
    `ascAppId` (uygulama var olmadan olculemez), `eas submit`.
@@ -165,7 +167,8 @@ Subagent JSONL ciktisi kabuktan OKUNMAZ. Subagent onay VEREMEZ.
    benim `stop_terminal_tab` cagrilarim reddediliyor (c4 ve c5 kapatildi).
    c2 `eas credentials ios` etkilesimli menude bekliyor, c6 bayat
    `Build in progress...` donuyor (yapinin kendisi `finished` olarak olculdu).
-2. **Vercel deploy'una "evet" ver** (veya reddet) — siradaki tek tikayici karar.
+2. Deploy karari KAPANDI (onay verildi, otomatik deploy ile uretimde dogrulandi).
+   Siradaki tikayici karar: yeni ad-hoc iOS yapisina "evet".
 3. `ANTHROPIC_API_KEY`'i Vercel'e ekle (§10).
 4. `cd mobile && npx expo install --fix` ile SDK 57 yamalarini al
    (expo 57.0.28->31, expo-router 57.0.26->29, @expo/ui 57.0.23->26,
