@@ -72,10 +72,27 @@ mobile tsc EXIT 0, fonksiyon sayisi 12. Skor degeri hic kaymadi.
 PORT DURUMU (web sekmesi -> native):
 - Portlandi: today, general, news, lists, search, technical, fundamental, compare,
   scan, sektor, radar, opps, tez, deger, backtest, tema, nedensellik, kripto, metal,
-  takvim. `momentum` ve `earn` icin yeni uc gerekmedi (`/api/recommend` `plan.momentum`,
-  `/api/yfin?deep=1` `earnings`).
-- `takvim` icin YENI uc: `/api/takvim` (tasiyici `api/_takvim.js` + `vercel.json`
+  calendar. `momentum` ve `earn` icin yeni uc gerekmedi (`/api/recommend`
+  `plan.momentum`, `/api/yfin?deep=1` `earnings`).
+- `calendar` icin YENI uc: `/api/takvim` (tasiyici `api/_takvim.js` + `vercel.json`
   yeniden-yazimi; yeni Vercel fonksiyonu YOK).
+  DUZELTME 2026-10-29: `a9068c8` turunun "takvim portlandi" ifadesi UCUN acildigini
+  dogru, EKRANDA oldugunu YANLIS ima ediyordu. Olcum: o turdan sonra `grep -rn
+  "api/takvim" mobile/` -> 0 eslesme, `client.ts` `ENDPOINTS` haritasinda `takvim`
+  anahtari YOKTU. Yani uc canliydi, onu cizen native kart hic yazilmamisti.
+  Bosluk KAPANDI: `mobile/src/api/takvim.ts` (sarmalayici) + `components/bugun/
+  TakvimKart.tsx` yazildi, `ENDPOINTS.takvim` eklendi, kart Bugun sekmesine
+  `PiyasaGundemiKarti` ardina montelendi. Uc sozlesmesi CANLI olculdu:
+  `kapsam=hepsi` -> HTTP 200, `kap[30]` + `temettu[120]`, `tam:true`;
+  `kapsam=temettu` gorevinde `kap`/`kapAdet` anahtarlari govdede HIC YOK
+  (`undefined` = "sormadim" dali gercek, uydurulmus degil).
+  **`kap` maddelerinin 16/30'unda `symbol: null`** (cok sembollu KAP basliklari,
+  `app.js:255` ikizinin bilinen ariza); kart o satirlarda sembol UYDURMUYOR,
+  basliktan ayristirmaya CALISMIYOR, kac satirin ayristirilamadigini yaziyor.
+  `temettu[].yieldPct` yuzde puani -> x100 YAPILMADI.
+  OLCULMEDI: kart RENDER EDILMEDI (tsc EXIT 0 + eslint EXIT 0 render kaniti degil);
+  ucun 400/502 dallari ve `null`/`[]` dallari canlida HIC gozlenmedi, yalniz
+  `api/_kesif.js takvimHandler` sozlesmesinden turetildi.
 - `makro` PORTLANAMAZ: web'in makro blogu bastan sona istemci esigi/agirligi/karar
   agaci; HAM SAYI KURALI ile uyumsuz. Olculmus yuzey `/api/pulse` Bugun'de zaten cizili.
 
@@ -253,7 +270,8 @@ Vercel CLI 54.9.1 kurulu.
 
 OLCULDU 2026-10-29: `vercel env ls production` -> `ANTHROPIC_API_KEY Encrypted
 Production`. Anahtari KULLANICI kendisi ekledi; ben gormedim, loglamadim.
-Canli kanit: `/api/theme?q=savunma sanayi` -> HTTP 200, 20.9 sn,
+Canli kanit: `/api/theme?q=savunma sanayi` -> HTTP 200, 20.9 sn (bu sure ~13 sn
+YEREL DNS gecikmesi iceriyor, gercek sunucu suresi ~8 sn -> §12),
 `model: claude-haiku-4-5-20251001`, 5 aday (RTX, LMT, BA, GD, NOC) gerekce
 metinleriyle. `no_key` dali KAPANDI.
 Anahtar YALNIZ Production'da; Preview ve Development'ta YOK -> preview deploy'lari
@@ -299,3 +317,29 @@ Yapi sayfasi (olculdu, HTTP 200 / 49769 bayt):
 Sonra `preview` ve `development` icin ayni komut tekrarlanir, ardindan
 `vercel --prod` ile yeniden yayina alinir. Yerel deneme icin `.env.local`
 (git tarafindan yoksayiliyor; `.gitignore:33`).
+
+## 12. "13 saniyelik uc" ARIZA DEGILDI — yerel DNS
+OLCULDU 2026-10-29. `/api/arama?q=ASELS` uc kez ust uste 13.5-14.1 sn surdu, ama
+faz dokumu suclunun uc OLMADIGINI gosterdi:
+
+    dns=12.91s  baglanti=+0.03s  tls=+0.10s  ilkbayt=+0.30s  toplam=13.36s
+
+Kanitlar:
+- SIFIR is yapan cevaplar da ayni sureyi aldi: `/api/score` (400) 13.8 sn,
+  `/api/news` (400) 14.2 sn, `/api/tarama` (405) 14.3 sn, 404 sayfasi 13.1 sn,
+  statik `/` 13.4 sn. Yani sure HANDLER'DAN ONCE harcaniyor.
+- `nslookup day-starter.vercel.app` varsayilan cozucuyle **3 kez zaman asimi**
+  (10.1 sn); `nslookup day-starter.vercel.app 1.1.1.1` 0.138 sn -> `64.29.17.67`,
+  `216.198.79.67`. `example.com` ilk bayt 0.25 sn (ag sağlam).
+- IP sabitleyip DNS atlanınca GERCEK sunucu sureleri:
+  `/api/arama?q=ASELS` **0.46 sn** · `/api/takvim` **0.25 sn** · statik `/` **0.30 sn**.
+
+SONUC: bu gelistirme makinesinin/modeminin DNS cozucusu bu konak icin zaman
+asimina dusuyor. Uçta ya da kodda onarilacak bir sey YOK; kod degisikligi
+YAPILMADI. Cihazda farkli cozucuyle (mobil veri, 1.1.1.1) gorulmesi beklenmiyor
+ama CIHAZDA OLCULMEDI.
+
+**BU BOLUMUN GERIYE DONUK SONUCU:** bu oturumda DNS uzerinden alinan TUM sure
+olcumleri ~13 sn sismis durumda (ornek: §10'daki `/api/theme` 20.9 sn -> gercegi
+~8 sn). Sure olcumu yapacak her gelecek tur `--resolve` ile IP sabitlemeli ya da
+cozucuyu degistirmeli; yoksa olculen sey uc degil, DNS olur.
