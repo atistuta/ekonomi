@@ -13,6 +13,9 @@
       "supportsTablet": false,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "runtimeVersion": {
+        "policy": "fingerprint"
       }
     },
     "android": {
@@ -50,6 +53,9 @@
       "eas": {
         "projectId": "16f82fc4-29d8-4af5-8f27-c626974ec70b"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/16f82fc4-29d8-4af5-8f27-c626974ec70b"
     }
   }
 }

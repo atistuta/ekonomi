@@ -12,15 +12,22 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://day-starter.vercel.app"
       },
-      "ios": { "simulator": true },
-      "android": { "buildType": "apk" }
+      "ios": {
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
+      }
     },
     "cihaz": {
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://day-starter.vercel.app"
       },
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "cihaz"
     },
     "preview": {
       "distribution": "internal",
@@ -28,7 +35,9 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://day-starter.vercel.app"
       },
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      }
     },
     "production": {
       "distribution": "store",
@@ -37,7 +46,9 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://day-starter.vercel.app"
       },
-      "android": { "buildType": "app-bundle" }
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
   "submit": {
