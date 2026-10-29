@@ -82,11 +82,20 @@ PORT DURUMU (web sekmesi -> native):
 ACIK BOSLUKLAR (hepsi bilerek acik, veri uydurulmadi):
 - `/api/causal` girdisini (`hareketler`, `gundem`) ureten uc YOK -> `NedenKart`
   "olcemedim" dalinda.
-- `YfinKunye` tipi ucun donddurdugu 9 temettu alanini bildirmiyor
-  (`dividendRate, payoutRatio, dividendYield5y, trailingAnnualDividendRate,
-  trailingAnnualDividendYield, lastDividendValue, lastDividendTs, exDividendTs,
-  dividendTs`). **`dividendYield5y` yuzde puani, oran degil** -> `formatOran` ile
-  basmak 100 kat yanlis olur.
+- KAPANDI 2026-10-29 (`c4734c9`): `YfinKunye` dokuz temettu alanini bildiriyor,
+  `detay/TemettuKart` cizili. Birimler CANLI olculdu (`/api/yfin?symbols=KO&deep=1`,
+  HTTP 200 / 2345 bayt, dokuzu da dolu): `dividendRate` 2.12 ve
+  `trailingAnnualDividendRate` 2.08 ve `lastDividendValue` 0.53 hisse basi ·
+  `payoutRatio` 0.6195 ve `trailingAnnualDividendYield` 0.02267524 oran 0-1 ·
+  **`dividendYield5y` 2.83 = YUZDE PUANI, oran degil** -> `formatOran` ile x100
+  yapmak 100 kat yanlis olur, yapilmadi · `lastDividendTs` 1789430400,
+  `exDividendTs` 1796083200, `dividendTs` 1797292800 -> ucu de **10 HANE = saniye**
+  (13 haneli milisaniye gelmiyor, `formatGunAyYil` ileri yil basmiyor).
+  Olcum tek sembolle (KO) yapildi; BIST sembolunde ayni alanlarin dolu geldigi
+  SORGULANMADI -> bos gelirse kart "olcemedim" dalina duser.
+  Ayni commit'te `analiz/TemettuKart` dort alan icin YANLIS "olculmedi" basmayi
+  birakti: `EKSIK_ALANLAR` gercekten gelmeyen ikiye indi (beyan tarihi,
+  temettu gecmisi).
 - Liste bazli donem % degisimi icin ham uc YOK (web istemcide hesapliyor:
   `changeFor`, `CHANGE_PERIODS` = gunici/1/7/30/182/365). Listeler sekmesindeki
   en buyuk gorsel bosluk.
@@ -121,16 +130,20 @@ Bilinen onarilmamis arizalar: `/api/watchlist` kimlik dogrulamasi yok (paylasiml
 tahmin edilebilir `code`, yazma dahil, CORS `*`) · BIST temel bacagi kirik
 (ASELS `/api/analyze` -> `fa=null`) · T24 RSS 403, dort vekil de dusuk ·
 `lightweight-charts@4.2.0` unpkg'den yuklenemedi · `/api/theme` yolunda istemci basina
-hiz siniri yok.
+hiz siniri yok — anahtar 2026-10-29'dan beri URETIMDE canli oldugu icin bu artik
+guvenlik degil **faturalandirma** acikligi (§10, §6/7).
 
 ## 5. Itilmemis is
-OLCULDU 2026-10-29: calisma agaci temiz, `main` ile `origin/main` ESIT.
-Push onayi VERILDI ve KULLANILDI: `a9068c8` "web -> native port: 6 serit,
-/api/takvim ucu, 11 yeni native kart", 27 yol acik `git add -- <yol>` ile
-sahnelendi; `git push origin main` -> `34eb385..a9068c8`.
+OLCULDU 2026-10-29: calisma agaci temiz (yalniz izlenmeyen PDF/DOCX ve iki
+referans klasoru kaldi), `main` ile `origin/main` ESIT.
+Bu oturumda push onayi VERILDI ve KULLANILDI, dort commit:
+`a9068c8` web -> native port (27 yol) · `d21986c` DEVAM.md yeniden yazimi ·
+`852b930` uretim olcumu · `c4734c9` temettu 9 alan + yanlis "olculmedi" kalkti
+(5 yol, yalniz `mobile/**`). Hepsi `git add -- <yol>` ile sahnelendi.
 
-ONAY KAPSAMI: o onay YALNIZ `a9068c8` icindi. **Yeni degisiklikler icin AYRI,
-taze, acik "evet" gerekir.** **Asla force-push yok, rebase yok.**
+ONAY KAPSAMI: kullanici "bekleyen tum commit pushlara onay veriyorum" dedi; o onay
+bu dort commit'te KULLANILDI. **Bundan sonraki degisiklikler icin AYRI, taze,
+acik "evet" gerekir.** **Asla force-push yok, rebase yok.**
 `git add -A` / `git add .` ASLA; yalniz `git add -- <yol>`.
 Izlenmeyen ve git'e GIRMEYECEK olanlar: iki PDF, bir DOCX,
 `financial-services-main/`, `total motor fikir/`.
@@ -138,21 +151,36 @@ Bot commit'i (`poll-kap.yml`) yalniz `worker/.movers.json` + `worker/.seen.json`
 dokunur; once fetch, dosya cakismasi yok dogrula, sonra birlestir (rebase degil —
 CRLF dosyalar icin `git -c core.safecrlf=false` ile).
 
-**DEPLOY ONAYI YOK.** Vercel'e deploy kullanici acikca "evet" demeden yapilmaz.
+DEPLOY: ayrı bir adim DEGIL — `main`'e push otomatik Vercel production deploy
+tetikliyor (olculdu). Yani push onayi = deploy onayi; elle `vercel --prod` gereksiz.
+`mobile/**` `.vercelignore` ile haric, web sitesine HIC gitmez (§11).
 
 ## 6. Siradaki is — siraya gore
 1. ~~Deploy~~ TAMAM: push otomatik deploy tetikliyor, `/api/takvim` + `/api/arama`
    uretimde olculdu (§4). Elle `vercel --prod` GEREKMEDI.
-2. **Yeni ad-hoc yapi** (`eas build -p ios --profile cihaz`) ki her ekranda veri olsun.
-3. Kullanicinin cihaz geri bildirimini topla -> cila/optimizasyon listesi.
-4. TestFlight: App Store Connect uygulama kaydi, `submit.production.ios` icin
-   `ascAppId` (uygulama var olmadan olculemez), `eas submit`.
-5. Adli bosluklar: `/api/causal` girdi ucu · `YfinKunye` 9 temettu alani ·
-   liste donem % ham ucu · `depo.ts` `listeBildirimAyarla` yazicisi ·
-   `app.js:255` regex karari · ucuz yalniz-TA momentum ikizi (maliyet olcumu).
-6. Ucretli katman maliyet hesabi (`/api/theme` LLM bacagi) — "ucretsiz kur,
+2. ~~Ad-hoc yapi~~ TAMAM: `db01122d-ba13-4108-bb8c-8348b7a007d3`, `Build finished`,
+   proje 6.8 MB sikistirilip yuklendi, QR + kurulum linki uretildi. Cihaz UDID
+   `00008110-000848A614D1401E` profilde kayitli, dagitim sertifikasi
+   `17C054173FB282BA0DBD0FF514DB3A76` 2027-06-25'e kadar gecerli, ad-hoc profil
+   `S4264TB2H3` etkin, takim `K79M286U78`.
+   **Bu yapida `c4734c9` temettu degisiklikleri YOK** (ZIP zaten yuklenmisti).
+3. **OTA karari bekliyor** (§11). Cihazdaki yapi guncelleme ALAMAZ: `expo-updates`
+   kurulu degil, `app.json`'da `updates`/`runtimeVersion` yok, `cihaz` profilinde
+   `channel` yok -> her arayuz degisikligi yeni yapi + yeniden kurulum demek.
+   Uclar (`api/**`) ise push ile aninda guncelleniyor.
+4. Kullanicinin cihaz geri bildirimini topla -> cila/optimizasyon listesi.
+5. TestFlight: App Store Connect uygulama kaydi (KULLANICININ ISI, kategori
+   **Finance**) -> tek tikayici. Ardindan `submit.production.ios` icin `ascAppId`,
+   App Privacy anketi, Internal Testing grubu, magaza yapisi + `eas submit`.
+6. Adli bosluklar: `/api/causal` girdi ucu · liste donem % ham ucu ·
+   `depo.ts` `listeBildirimAyarla` yazicisi · `app.js:255` regex karari ·
+   ucuz yalniz-TA momentum ikizi (maliyet olcumu).
+   (`YfinKunye` 9 temettu alani KAPANDI -> `c4734c9`.)
+7. `/api/theme` istemci basina hiz siniri: anahtar artik URETIMDE canli, yani bu
+   artik yalniz guvenlik degil **faturalandirma** acikligi. Ucretli katmandan ONCE.
+8. Ucretli katman maliyet hesabi (`/api/theme` LLM bacagi) — "ucretsiz kur,
    parali kisimlari hesapla ve sat" politikasi geregi.
-7. FAZ 4-6: Supabase auth, RevenueCat/IAP, LLM anahtari.
+9. FAZ 4-6: Supabase auth, RevenueCat/IAP.
 
 Serit kurali (dosya sahipligi): **D/E** -> `api/_akis.js` + `tests/uc-test.mjs` ·
 **F** -> yalniz `mobile/**` · **G** (ben) -> `app.js`, `config.js`, uretilen motor,
@@ -167,9 +195,10 @@ Subagent JSONL ciktisi kabuktan OKUNMAZ. Subagent onay VEREMEZ.
    benim `stop_terminal_tab` cagrilarim reddediliyor (c4 ve c5 kapatildi).
    c2 `eas credentials ios` etkilesimli menude bekliyor, c6 bayat
    `Build in progress...` donuyor (yapinin kendisi `finished` olarak olculdu).
-2. Deploy karari KAPANDI (onay verildi, otomatik deploy ile uretimde dogrulandi).
-   Siradaki tikayici karar: yeni ad-hoc iOS yapisina "evet".
-3. `ANTHROPIC_API_KEY`'i Vercel'e ekle (§10).
+2. Deploy ve ad-hoc yapi kararlari KAPANDI. Siradaki tikayici karar: **OTA**
+   (`expo-updates` yeni bagimliligi) ya da her turda yeni yapi (§11).
+3. `ANTHROPIC_API_KEY` KAPANDI: kullanici kendisi ekledi, uretimde canli (§10).
+   Isterse Preview/Development ortamlarina da kendisi ekler; anahtar sohbete YAZILMAZ.
 4. `cd mobile && npx expo install --fix` ile SDK 57 yamalarini al
    (expo 57.0.28->31, expo-router 57.0.26->29, @expo/ui 57.0.23->26,
    expo-constants 57.0.21->22, expo-linking 57.0.12->13).
@@ -222,9 +251,50 @@ Model: `process.env.THEME_MODEL || 'claude-haiku-4-5-20251001'`.
 Vercel projesi baglanmis durumda: `day-starter`, org `team_GlSur06swQU4ceKpaegyyw9c`.
 Vercel CLI 54.9.1 kurulu.
 
-Komut (depo kokunde, anahtar istendiginde yapistirilir — sohbete YAZILMAZ):
+OLCULDU 2026-10-29: `vercel env ls production` -> `ANTHROPIC_API_KEY Encrypted
+Production`. Anahtari KULLANICI kendisi ekledi; ben gormedim, loglamadim.
+Canli kanit: `/api/theme?q=savunma sanayi` -> HTTP 200, 20.9 sn,
+`model: claude-haiku-4-5-20251001`, 5 aday (RTX, LMT, BA, GD, NOC) gerekce
+metinleriyle. `no_key` dali KAPANDI.
+Anahtar YALNIZ Production'da; Preview ve Development'ta YOK -> preview deploy'lari
+ve yerel kosu hala `{candidates:[], error:'no_key'}` doner. Gerekirse kullanici
+kendisi ekler (anahtar sohbete YAZILMAZ):
 
-    vercel env add ANTHROPIC_API_KEY production
+    vercel env add ANTHROPIC_API_KEY preview
+
+**UYARI:** bu uc projenin TEK ucretli yuzeyi ve istemci basina hiz siniri YOK.
+Anahtar canli oldugu icin bu artik gercek bir faturalandirma acikligi (§6, 7. adim).
+
+## 11. Telefona guncelleme — olculmus durum ve uc yol
+OLCULDU 2026-10-29 (`mobile/package.json`, `app.json`, `eas.json`):
+`expo-updates` YOK · `expo-dev-client` YOK · `app.json`'da `updates` /
+`runtimeVersion` anahtari YOK · `cihaz` profilinde `channel` YOK
+(development/preview/production'da var). Sonuc: cihazdaki yapi OTA guncelleme
+ALAMAZ; her `mobile/**` degisikligi yeni yapi + Safari'den yeniden kurulum.
+
+Hangi degisiklik nereye gider (`.vercelignore` olculdu):
+| Degisen | Web sitesi | Telefon |
+|---|---|---|
+| `app.js`, `config.js`, `styles.css`, `index.html` | push -> aninda canli | etkilenmez |
+| `api/**` | push -> aninda canli | **aninda canli** (ayni uclar) |
+| `mobile/**` | HIC gitmez (`.vercelignore`) | yeni yapi gerek |
+
+Uc yol (ucu de ucretsiz):
+- **A — Expo Go**: `npx expo start` + QR, kaydettigim an yenilenir. Yapi yok,
+  yeni bagimlilik yok. Laptop acik ve ayni wifi'de olmali; bagimsiz uygulama degil.
+  `@expo/ui` ve `expo-glass-effect` Expo Go'da yok ama `src/` icinde HIC import
+  edilmemis (olculdu, 0 eslesme) -> engel degil. **Expo Go'da acildigi OLCULMEDI.**
+- **B — EAS Update / OTA**: `expo-updates` kurulur, `cihaz` profiline kanal eklenir,
+  BIR kez yeni yapi; sonra her JS degisikligi `eas update` ile kendi kendine iner.
+  Expo ucretsiz katmaninda var. Sarti: **yeni bagimlilik** -> acik "evet" gerek
+  (`expo-updates` daha once REDDEDILMISTI). Native degisiklik (yeni paket, ikon,
+  izin, bundle adi) ASLA OTA gitmez, hep yeni yapi ister.
+- **C — Simdiki duzen**: her turda yeni ad-hoc yapi + yeniden kurulum.
+
+Kurulum notu: ad-hoc iOS kurulumu `itms-services` protokolu kullanir -> link
+telefonda **Safari'de** acilmali; QR okuyucu/uygulama ici goruntuleyici calismaz.
+Yapi sayfasi (olculdu, HTTP 200 / 49769 bayt):
+`https://expo.dev/accounts/atahanpharma/projects/sabah-bulteni/builds/db01122d-ba13-4108-bb8c-8348b7a007d3`
 
 Sonra `preview` ve `development` icin ayni komut tekrarlanir, ardindan
 `vercel --prod` ile yeniden yayina alinir. Yerel deneme icin `.env.local`
