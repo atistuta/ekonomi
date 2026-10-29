@@ -2,8 +2,10 @@
 //  /hisse/[sembol] — hisse detay ekranı              (FAZ 3 / native)
 // ---------------------------------------------------------------------
 //  NE: tek hissenin tam künyesi: başlık şeridi (sembol · pazar · fiyat ·
-//  bileşke skor), 📈 teknik, 📊 temel, 📓 tez ve ⚖️ risk/ödül kartları.
-//  Hepsi TEK `fetchAnalyze` turundan; başka uç çağrılmıyor.
+//  bileşke skor), 📈 teknik, 📊 temel, 📓 tez ve ⚖️ risk/ödül kartları —
+//  beşi TEK `fetchAnalyze` turundan. Altıncı kart 🕰️ geçmiş ölçümü
+//  (`/api/backtest`) ve metal sembollerinde 🏷️ değer ölçümü
+//  (`/api/deger`) KENDİ uçlarını çağırıyor; gerekçeleri kartlarında.
 //
 //  NEDEN AYRI ROTA, SEKME DEĞİL: webdeki hisse sayfasının karşılığı bu.
 //  Listeler/Arama/Fırsatlar ekranlarının her biri "bir sembole git"
@@ -59,11 +61,14 @@ import { StyleSheet, View } from 'react-native';
 import { fetchAnalyze, useIstek, useListe, type AnalyzeRow } from '@/api';
 import { Card, Durum, Dugme, ScreenShell, VeriYok } from '@/components';
 import {
+  BacktestKart,
+  DegerKart,
   DetayBasligi,
   RiskOdulKart,
   TeknikKart,
   TemelKart,
   TezKart,
+  degerTuruOf,
 } from '@/components/detay';
 import { space } from '@/theme';
 
@@ -152,6 +157,18 @@ export default function HisseDetayScreen() {
               <TemelKart satir={satir} />
               <TezKart satir={satir} />
               <RiskOdulKart satir={satir} />
+              {/* ANALYZE TURUNUN DIŞI: kendi ucu, kendi zaman aşımı,
+                  kendi `Durum` gövdesi (gerekçesi BacktestKart'ta).
+                  Sembol `satir.sym` DEĞİL, ekranın çözdüğü `sembol`:
+                  BIST'te `.IS` soneki ucun doğru pazarı bulması için
+                  gerekiyor (yukarıdaki ".IS GERİ KAZANIMI" notu). */}
+              <BacktestKart sembol={sembol} market={satir.market} vade="orta" />
+              {/* DEĞER UCU HİSSE ÖLÇMÜYOR: yalnız metal/kripto. Kartı
+                  hisse sembolünde HİÇ basmıyoruz — her hissede "bu uç
+                  bunu ölçmüyor" kutusu göstermek ekranı gürültüye
+                  boğardı. Karar DegerKart'ın kendi eşlemesinden
+                  (`degerTuruOf`) geliyor; burada ikinci bir tablo yok. */}
+              {degerTuruOf(sembol) ? <DegerKart sembol={sembol} /> : null}
             </>
           ) : null}
         </>

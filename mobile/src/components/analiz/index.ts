@@ -1,8 +1,14 @@
 // =====================================================================
 //  ANALİZ KARTLARI — tek içe aktarma noktası          (FAZ 3 / native)
 // ---------------------------------------------------------------------
-//  NE: Analiz sekmesine takılacak üç yüzeyi tek yerden dışa açar:
-//  ⚖️ Karşılaştır · 📅 Bilanço · 💰 Temettü.
+//  NE: Analiz sekmesine takılacak beş yüzeyi tek yerden dışa açar:
+//  ⚖️ Karşılaştır · 📅 Bilanço · 💰 Temettü · ₿ Kripto · 🥇 Maden.
+//
+//  SEMBOL EVRENLERİ DE BURADAN ÇIKIYOR (`KRIPTO_SEMBOLLER`,
+//  `METAL_SEMBOLLER`): isteği ekran atıyor (`components/` içinde
+//  `fetch` yok), ama hangi sembollerin sorulacağını kartın SÖZLEŞMESİ
+//  belirliyor. Evreni ekranda ikinci kez yazmak, kart ile istek
+//  arasında sessizce ayrışabilen iki liste demekti.
 //
 //  NEDEN AYRI KLASÖR, NEDEN `components/index.ts`E EKLENMEDİ: bu üç
 //  kart TEK EKRANIN (Analiz) parçası ve `/api/compare` + `/api/yfin`
@@ -21,4 +27,6 @@
 
 export { BilancoKart, type BilancoKartProps } from './BilancoKart';
 export { KarsilastirKart, type KarsilastirKartProps } from './KarsilastirKart';
+export { KRIPTO_SEMBOLLER, KriptoKart, type KriptoKartProps } from './KriptoKart';
+export { METAL_SEMBOLLER, MetalKart, type MetalKartProps } from './MetalKart';
 export { TemettuKart, type TemettuKartProps } from './TemettuKart';

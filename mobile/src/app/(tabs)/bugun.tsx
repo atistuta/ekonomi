@@ -16,10 +16,22 @@
 //  faiz'} → 200, `kaynak:'sunucu'`, `haberler.tam:true`, 960 ms).
 //  Bu yüzden ⚡ Makro Nabız kartı açıldı.
 //
-//  HÂLÂ EKSİK OLAN (yalnız gerçekten eksik olan): ÖNE ÇIKAN SEKTÖR
-//  kartının ucu (ÖLÇÜLDÜ: api/ altında score · recommend · analyze ·
-//  theme · compare · causal · chart · news · pulse var; sektör ucu YOK).
-//  Konjonktür FAZI ise ucu VAR ama GİRDİSİ yok: `/api/pulse`
+//  "SEKTÖR UCU YOK" NOTU DA ESKİDİ (ÖLÇÜLDÜ 2026-10-29, kaynak
+//  okuması): `/api/sektor` VAR — ayrı bir dosya değil, `api/proxy.js`
+//  üzerinden `api/_kesif.js` taşıyıcısında (`ROTALAR`, _kesif.js:85;
+//  `sektorHandler`, :413) ve istemci karşılığı `fetchSektor`
+//  (mobile/src/api/client.ts:1635). AMA O UÇ "öne çıkan sektör"
+//  DEĞİL: POST ile `olcumler` (Yahoo temel verisi, `OlcumKayit`)
+//  İSTİYOR, ağa hiç çıkmıyor ve değerleme GRUPLARI (medPe/medFpe/
+//  medGrowth/medMargin/medPeg — HAM KESİR) döndürüyor. Girdiyi üreten
+//  yüzey ZATEN YAZILDI ve Keşfet sekmesinde duruyor
+//  (components/kesfet/SektorKart.tsx, künyeyi `fetchYfin`den kurup
+//  `olcumler` olarak gönderiyor). Bu ekran onu KOPYALAMIYOR: aynı kart
+//  iki sekmede iki ayrı Yahoo turu demekti.
+//  Konjonktür FAZININ "öne çıkan sektörleri" ise ucu VAR ama GİRDİSİ
+//  yok (aşağıdaki fıkra) — web'in `renderToday` başlığındaki o liste
+//  `CYCLE_PHASES[m.phase].sectors`tan geliyor, yani FAZA bağlı; faz
+//  ölçülmedikçe liste de ölçülmemiş olur. `/api/pulse`
 //  `genislik`/`enflasyonBaskisi`/`risk` sayılarını çağırandan istiyor ve
 //  bu uygulamada onları ölçen kaynak yok — uç `konjonktur: null` + hangi
 //  girdinin eksik olduğunu döndürüyor, kart da bunu AÇIKÇA yazıyor.
@@ -31,15 +43,26 @@
 //  topluyor, çünkü uç TEK sembol alıyor (`cok_sembol`, azami 1); dört
 //  çağrıyı aynı anda atmak istek fırtınası olurdu.
 //
-//  DESTEKLENMEYEN ENDEKSE AĞA GİDİLMİYOR (ÖLÇÜLDÜ 2026-10-26, kaynak
-//  okuması): ortak sembol kapısı `SEMBOL_BICIM = /^[A-Z][A-Z0-9.\-]{0,7}$/`
-//  (api/_girdi.js:79) `^` ve `=` KABUL ETMİYOR, yani `^GSPC` · `^IXIC` ·
-//  `GC=F` kesin 400 `bad_symbol` alır; yalnız `XU100` geçer. Karar TEK
-//  YERDE yazılı: `ENDEKS_NABIZ` kaleminin `destekli` bayrağı
-//  (components/bugun/EndeksNabziKarti.tsx). Bu ekran o bayrağa bakıp
-//  isteği atlıyor ve kalemi "ölçülemedi" ölçümü olarak kartta BASTIRIYOR
-//  — satırı gizlemek "altın hareket etmedi" demek olurdu. Sunucu kapısı
-//  açıldığında bu dosyada DEĞİŞİKLİK GEREKMEZ: bayrak `true` olur.
+//  ENDEKS KAPISI AÇILDI (ÖLÇÜLDÜ 2026-10-29, kaynak okuması): bu başlık
+//  2026-10-26'da "ortak sembol kapısı `^` ve `=` kabul etmiyor, yalnız
+//  `XU100` geçer" diyordu; O NOT ESKİDİ. `api/_girdi.js:119-131` kapalı
+//  bir `ENDEKS_SOZLUGU` kazandı (dördü de içinde) ve `cozEndeks`
+//  (:144-151) AYRI bir çözücü olarak eklendi; `api/chart.js:245` önce
+//  ona bakıyor (`cozEndeks(ham) || temizleSembol(...)`). Skor zinciri
+//  (`ayristir()`, :161) hâlâ yalnız `temizleSembol` kullandığı için
+//  gevşeme SIZMADI. Bu yüzden `ENDEKS_NABIZ`ın dört kaleminin de
+//  `destekli` bayrağı artık `true` ve bu ekran dördünü de gerçekten
+//  `/api/chart`'tan çekiyor. Bayrak mekanizması YERİNDE DURUYOR: karar
+//  TEK YERDE (components/bugun/EndeksNabziKarti.tsx) ve bayrak yarın
+//  `false` olursa bu ekran yine isteği atlar, kart da kalemi gizlemek
+//  yerine "ölçülemedi" diye BASAR.
+//
+//  TAKİP ÖLÇÜMLERİ KARTI NEDEN AÇILDI: kıyas turu (`/api/compare`)
+//  gövdesinde `sira` dizisinin YANINDA sembol başına TAM ölçüm kaydı
+//  (`sonuclar`: ta · fa · composite · plan · analiz) geliyordu ve bu
+//  ekran onu BASMIYORDU — ölçülmüş veri çöpe gidiyordu. Web'in
+//  `renderToday` öneri listesi aynı sayıları gösteriyor. Kart ikinci bir
+//  istek ATMAZ: aynı cevabın okunmayan alanlarını yazar.
 //
 //  BURADA HESAP YOK: sıra, durum, skor10, duruş kodu, yönler, faz —
 //  hepsi uç alanları. Nabız kartında da eşik/ortalama/işaret kararı
@@ -86,6 +109,7 @@ import {
   ENDEKS_NABIZ,
   EndeksNabziKarti,
   PiyasaGundemiKarti,
+  TakipOlcumleriKarti,
   type EndeksOlcum,
 } from '@/components/bugun';
 import { HaberSatiri } from '@/components/kesfet';
@@ -163,7 +187,7 @@ export default function BugunScreen() {
     <ScreenShell
       title="Bugün"
       subtitle="Takip listenin bugünkü sırası — sıralamayı motor yapar."
-      note="Öne çıkan sektör kartı için motor ucu henüz yok; uydurma kart konmadı.">
+      note="Fazın öne çıkan sektörleri için ucun girdisi ölçülemiyor; uydurma kart konmadı.">
       <Card
         title="Fiyata yakınlık sırası"
         subtitle="Anahtar: alım bandına uzaklık — tipik günlük salınımın katı (motor kararı)"
@@ -227,6 +251,19 @@ export default function BugunScreen() {
         ) : null}
       </Card>
 
+      {/* 🧭 Takip ölçümleri: AYNI `veri` gövdesinin okunmayan alanları
+          (`sonuclar`). İkinci bir istek YOK — kart props ile besleniyor.
+          Sıralama yapılmıyor: uç `sonuclar`ı hangi sırada verdiyse o
+          sırada basılıyor, sıralama kararı `sira` dizisinde (üstteki
+          kartta) duruyor. */}
+      <TakipOlcumleriKarti
+        sonuclar={veri?.sonuclar ?? []}
+        durum={durum}
+        hata={hata}
+        yenile={yenile}
+        vade={veri?.vade ?? null}
+      />
+
       <EndeksNabziBolumu />
 
       <MakroNabizKarti />
@@ -240,10 +277,11 @@ export default function BugunScreen() {
 
       <Card title="Henüz ölçülmeyen kartlar" subtitle="Dürüst eksik listesi">
         <Text style={[type.small, { color: colors.textDim }]}>
-          {"Öne çıkan sektör kartı için motor API'de uç yok; kart açılmadan önce ucunun " +
-            'yazılması gerekiyor, o yüzden burada boş bırakıldı — yer tutucu sayı ' +
-            'GÖSTERİLMİYOR. Konjonktür fazının ucu var ama girdisi yok: ⚡ Makro Nabız kartı ' +
-            'ucun hangi girdiyi beklediğini olduğu gibi yazıyor.'}
+          {'Sektör değerleme ucu VAR (`/api/sektor`, proxy üzerinden) ama girdisini kuran ' +
+            'yüzey Keşfet sekmesinde duruyor; aynı kartı burada ikinci kez açmak sembol ' +
+            'başına ikinci bir dış tur demekti, o yüzden kopyalanmadı. Fazın öne çıkan ' +
+            'sektörlerinin ucu da var, girdisi yok: ⚡ Makro Nabız kartı ucun hangi girdiyi ' +
+            'beklediğini olduğu gibi yazıyor. Yer tutucu sayı GÖSTERİLMİYOR.'}
         </Text>
       </Card>
     </ScreenShell>

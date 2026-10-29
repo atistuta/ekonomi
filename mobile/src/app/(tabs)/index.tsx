@@ -56,6 +56,7 @@ import {
   TickerRow,
   VeriYok,
 } from '@/components';
+import { ListelerKart } from '@/components/liste';
 import { formatPrice, formatScore } from '@/lib/format';
 import { depoCalisiyorMu } from '@/lib/kalici';
 import { space, type, useTheme } from '@/theme';
@@ -157,20 +158,35 @@ export default function ListelerScreen() {
           ) : null
         }
         renderItem={({ item }) => <Satir satir={item} />}
-      />
+        // NEDEN ALTLIK (ListFooterComponent) VE KARDEŞ KART DEĞİL:
+        // ScreenShell `scroll={false}` ile geldiği için bu ekranda TEK
+        // kaydırıcı FlatList'in kendisi. Liste yönetimi kartlarını
+        // FlatList'in KARDEŞİ yapmak ya ekranı iki ayrı kaydırma
+        // alanına bölüyor (içe geçmiş kaydırma uyarısı) ya da kartları
+        // sabit yüksekliğe sıkıştırıyordu. Altlık, aynı kaydırıcının
+        // sonuna ekliyor.
+        ListFooterComponent={
+          <View style={styles.altlik}>
+            {/* ŞERİT F7: web'in `renderLists`/`renderListBlock` yüzeyi —
+                adlandırılmış listeler, evren anahtarı, ekle/çıkar/sil.
+                Aynı `sb:lists` kaydını yazıyor, ikinci kayıt açmıyor. */}
+            <ListelerKart />
 
-      <Card title="Liste nerede saklanıyor?">
-        <Text style={[type.small, { color: colors.textDim }]}>
-          {depoOk === null
-            ? 'Yerel kayıt ölçülüyor…'
-            : depoOk
-              ? 'Bu cihazda saklanıyor: uygulamayı kapatıp açsan liste yerinde durur.'
-              : 'Bu cihazda saklanamıyor (depoya yazılamadı): liste yalnız bu oturum boyunca durur.'}
-        </Text>
-        <Text style={[type.small, { color: colors.textDim }]}>
-          {senkron.ok ? 'Bulut senkronu yapılandırıldı.' : senkron.message}
-        </Text>
-      </Card>
+            <Card title="Liste nerede saklanıyor?">
+              <Text style={[type.small, { color: colors.textDim }]}>
+                {depoOk === null
+                  ? 'Yerel kayıt ölçülüyor…'
+                  : depoOk
+                    ? 'Bu cihazda saklanıyor: uygulamayı kapatıp açsan liste yerinde durur.'
+                    : 'Bu cihazda saklanamıyor (depoya yazılamadı): liste yalnız bu oturum boyunca durur.'}
+              </Text>
+              <Text style={[type.small, { color: colors.textDim }]}>
+                {senkron.ok ? 'Bulut senkronu yapılandırıldı.' : senkron.message}
+              </Text>
+            </Card>
+          </View>
+        }
+      />
     </ScreenShell>
   );
 }
@@ -238,6 +254,7 @@ const styles = StyleSheet.create({
   liste: { flex: 1 },
   listeIc: { gap: space.sm, paddingBottom: space.md },
   basliklar: { gap: space.sm },
+  altlik: { gap: space.sm, paddingTop: space.md },
   ozet: { gap: space.xs },
   satirKab: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   satirTicker: { flex: 1 },

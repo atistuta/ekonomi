@@ -148,6 +148,7 @@ import {
   PAZAR_YERELI, AZAMI_MADDE as agAzamiMadde,
   beslemeCek, IZINLI_GUNDEM_KONAK, GUNDEM_BESLEMELER, GUNDEM_YERELLER,
   GUNDEM_BESLEME_MADDE, izinliGundemAdresi, gundemSirala, gundemTekille, gundemCek,
+  HABER_TURLERI,
 } from '../api/_haber.js';
 // ⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger —
 // BEŞ ROTA, SIFIR yeni fonksiyon dosyası: hepsi `api/proxy.js`in `__rota=`
@@ -158,6 +159,11 @@ import {
   ARALIKLAR as KESIF_ARALIKLAR, ADIMLAR as KESIF_ADIMLAR,
   AZAMI_GOVDE_BAYT as KESIF_GOVDE_BAYT,
 } from '../api/_kesif.js';
+// ⑥ /api/takvim — KAP + temettü takvimi. Tarayıcıdan taşınan iki HTML
+// kazıyıcının SUNUCU karşılığı. `_kesif.js` ile aynı rota çoklayıcısında,
+// ama KENDİ ağ taşıyıcısı var (`_haber.js` kalıbı) — ayrıştırıcıların hepsi
+// SAF, yani ağa çıkmadan fikstürle ölçülebiliyorlar.
+import * as TAKVIM from '../api/_takvim.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCORE_PATH = path.join(ROOT, 'api', 'score.js');
@@ -175,6 +181,7 @@ const NEWS_PATH = path.join(ROOT, 'api', 'news.js');
 const HABER_PATH = path.join(ROOT, 'api', '_haber.js');
 const AG_PATH = path.join(ROOT, 'api', '_ag.js');
 const KESIF_PATH = path.join(ROOT, 'api', '_kesif.js');
+const TAKVIM_PATH = path.join(ROOT, 'api', '_takvim.js');
 const PROXY_PATH = path.join(ROOT, 'api', 'proxy.js');
 const VERCEL_PATH = path.join(ROOT, 'vercel.json');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
@@ -195,7 +202,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news + /api/tarama + /api/sektor + /api/radar + /api/backtest + /api/deger + /api/arama kapıları ve doğrulamaları yerinde.`);
+  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news + /api/tarama + /api/sektor + /api/radar + /api/backtest + /api/deger + /api/arama + /api/takvim kapıları ve doğrulamaları yerinde.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -3784,7 +3791,7 @@ ok('⑭a · kısa gövde eşiği sayı ve pozitif',
     habSrc2.includes("durum: n > 0 ? 'ok' : 'bos'"));
 }
 // =========================================================================
-bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger · /api/arama — keşif rotaları (api/_kesif.js)');
+bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger · /api/arama · /api/takvim — keşif rotaları (api/_kesif.js)');
 // =========================================================================
 // 13. FONKSİYON TUZAĞI: bu beş uç YENİ dosya DEĞİL. `api/proxy.js`in
 // `__rota=` çoklayıcısına takılı (api/yfin kalıbı). Aşağıdaki ⑮b bölümü
@@ -3830,11 +3837,12 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
   ];
 
   // --- ⑮a yüzey --------------------------------------------------------
-  ok('⑮a · altı handler da fonksiyon',
-    ['taramaHandler', 'sektorHandler', 'radarHandler', 'backtestHandler', 'degerHandler', 'aramaHandler']
+  ok('⑮a · yedi handler da fonksiyon',
+    ['taramaHandler', 'sektorHandler', 'radarHandler', 'backtestHandler', 'degerHandler', 'aramaHandler',
+      'takvimHandler']
       .every((a) => typeof KESIF[a] === 'function'));
-  ok('⑮a · ROTALAR altı rota ilan ediyor',
-    KESIF.ROTALAR.join(',') === 'tarama,sektor,radar,backtest,deger,arama', KESIF.ROTALAR.join(','));
+  ok('⑮a · ROTALAR yedi rota ilan ediyor',
+    KESIF.ROTALAR.join(',') === 'tarama,sektor,radar,backtest,deger,arama,takvim', KESIF.ROTALAR.join(','));
   ok('⑮a · HANDLERLAR tablosu ROTALAR ile BİREBİR',
     anahtarlar(KESIF.HANDLERLAR) === [...KESIF.ROTALAR].sort().join(','), anahtarlar(KESIF.HANDLERLAR));
   ok('⑮a · HANDLERLAR dondurulmuş (rota tablosu çalışma anında değişmez)',
@@ -3873,7 +3881,7 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
     ok('⑮b · KİLİT · `api/*.js` uç dosyası sayısı 12 (Hobby tavanı aşılmadı)',
       dosyalar.length === 12, `${dosyalar.length}: ${dosyalar.join(',')}`);
     ok('⑮b · yeni uç dosyası YOK — keşif `_` önekli MODÜL',
-      !dosyalar.some((f) => /tarama|sektor|radar|backtest|deger|arama|kesif/.test(f)), dosyalar.join(','));
+      !dosyalar.some((f) => /tarama|sektor|radar|backtest|deger|arama|takvim|kesif/.test(f)), dosyalar.join(','));
     ok('⑮b · `api/_kesif.js` gerçekten `_` önekli (fonksiyon sayılmaz)',
       existsSync(KESIF_PATH) && path.basename(KESIF_PATH).startsWith('_'));
 
@@ -3903,7 +3911,7 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
     ok('⑮b · yfin rewrite\'ı BOZULMADI (taklit edilen kalıp yerinde)',
       rew.some((x) => x.source === '/api/yfin' && x.destination === '/api/proxy?__rota=yfin'));
     ok('⑮b · `functions` bloğuna YENİ kalem girmedi (beşi proxy bütçesini paylaşıyor)',
-      !Object.keys(vercel.functions || {}).some((k) => /tarama|sektor|radar|backtest|deger|arama|kesif/.test(k)),
+      !Object.keys(vercel.functions || {}).some((k) => /tarama|sektor|radar|backtest|deger|arama|takvim|kesif/.test(k)),
       Object.keys(vercel.functions || {}).join(','));
     ok('⑮b · beş rota `api/proxy.js`in maxDuration bütçesinde',
       (vercel.functions || {})['api/proxy.js'] && typeof vercel.functions['api/proxy.js'].maxDuration === 'number',
@@ -4716,6 +4724,354 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
       !/from '\.\/(score|recommend|analyze|chart|pulse|news|causal|theme|compare)\.js'/.test(kesifKod));
     ok('⑮h · KİLİT · `_kesif.js` üretilmiş dosyalara YAZMIYOR (yalnız import)',
       !/writeFileSync|appendFileSync/.test(kesifKod));
+  }
+}
+
+
+// =========================================================================
+bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.js)');
+// =========================================================================
+// 13. FONKSİYON TUZAĞI: bu uç da YENİ DOSYA DEĞİL — `api/_takvim.js`
+// `_` önekli bir TAŞIYICI, rota `api/proxy.js`in `__rota=` çoklayıcısında.
+// ⑮b'deki kilitler (dosya sayısı 12 · rewrite birebirliği) bu rotayı da
+// otomatik kapsıyor, çünkü hepsi `KESIF.ROTALAR`dan okunuyor.
+//
+// AĞ YASAĞI: bu bölümdeki her denetim ya SAF ayrıştırıcıyı fikstürle
+// ölçüyor ya da `globalThis.fetch`i kara deliğe çevirip handler'ın
+// DÜRÜST kesinti cevabını (502 / null / tam:false) ölçüyor. Tek paket
+// dışarı çıkmıyor.
+{
+  const takvimSrc = readFileSync(TAKVIM_PATH, 'utf8');
+  const takvimKod = takvimSrc.split(/\r?\n/)
+    .filter((s) => !/^\s*(\/\/|\*|\/\*)/.test(s)).join('\n');
+
+  const cagirTakvim = async (method, query) => {
+    const res = sahteRes();
+    await KESIF.takvimHandler({ method, query }, res);
+    return res;
+  };
+
+  // --- ⑯a yüzey + ÖLÇÜLMÜŞ sabitler -----------------------------------
+  ok('⑯a · `takvimHandler` dışa aktarılmış ve HANDLERLAR tablosunda',
+    typeof KESIF.takvimHandler === 'function' && KESIF.HANDLERLAR.takvim === KESIF.takvimHandler);
+  ok('⑯a · `takvim` ROTALAR listesinde (tek kaynak)',
+    KESIF.ROTALAR.includes('takvim'), KESIF.ROTALAR.join(','));
+  ok('⑯a · saf ayrıştırıcılar dışa aktarılmış (ağsız sınanabilir)',
+    ['ayristirKAP', 'ayristirTemettu', 'kapZamani', 'kapSemboller', 'ondalik', 'cozVarlik']
+      .every((a) => typeof TAKVIM[a] === 'function'));
+  ok('⑯a · sayaç yardımcıları dışa aktarılmış',
+    typeof TAKVIM.bosTakvimSayac === 'function' && typeof TAKVIM.takvimTam === 'function');
+  ok('⑯a · kapsam beyaz listesi ÜÇ değer (sessiz genişleme yok)',
+    TAKVIM.KAPSAMLAR.join(',') === 'hepsi,kap,temettu', TAKVIM.KAPSAMLAR.join(','));
+  ok('⑯a · varsayılan kapsam beyaz listede',
+    TAKVIM.KAPSAMLAR.includes(TAKVIM.VARSAYILAN_KAPSAM), TAKVIM.VARSAYILAN_KAPSAM);
+  ok('⑯a · KAP tavanı kaynağın ÖLÇÜLEN sayfa boyunun (50) üstünde',
+    TAKVIM.AZAMI_KAP === 60 && TAKVIM.AZAMI_KAP > 50, String(TAKVIM.AZAMI_KAP));
+  ok('⑯a · temettü tavanı ÖLÇÜLMÜŞ bir sayı',
+    TAKVIM.AZAMI_TEMETTU === 400, String(TAKVIM.AZAMI_TEMETTU));
+  ok('⑯a · varsayılanlar tavanların İÇİNDE (sessiz kırpma yok)',
+    TAKVIM.VARSAYILAN_KAP >= 1 && TAKVIM.VARSAYILAN_KAP <= TAKVIM.AZAMI_KAP
+    && TAKVIM.VARSAYILAN_TEMETTU >= 1 && TAKVIM.VARSAYILAN_TEMETTU <= TAKVIM.AZAMI_TEMETTU,
+    `${TAKVIM.VARSAYILAN_KAP} / ${TAKVIM.VARSAYILAN_TEMETTU}`);
+  ok('⑯a · zaman aşımı webin İKİ tavanının BÜYÜĞÜ (8000 · 10000)',
+    TAKVIM.TAKVIM_ISTEK_MS === 10000, String(TAKVIM.TAKVIM_ISTEK_MS));
+  ok('⑯a · zaman aşımı proxy bütçesinin (30 sn) ALTINDA',
+    TAKVIM.TAKVIM_ISTEK_MS < 30000, String(TAKVIM.TAKVIM_ISTEK_MS));
+  ok('⑯a · kısa gövde eşiği HTML sayfası için ÖLÇÜLMÜŞ (1024)',
+    TAKVIM.ASGARI_GOVDE_BAYT === 1024, String(TAKVIM.ASGARI_GOVDE_BAYT));
+  ok('⑯a · tür makine kodu `KAP` — `_haber.js`in ilan ettiği kümede',
+    TAKVIM.TAKVIM_TURU === 'KAP' && HABER_TURLERI.includes(TAKVIM.TAKVIM_TURU),
+    TAKVIM.TAKVIM_TURU);
+  ok('⑯a · para birimi MAKİNE KODU (`TRY`), ekran simgesi DEĞİL',
+    TAKVIM.PARA_BIRIMI === 'TRY', TAKVIM.PARA_BIRIMI);
+  ok('⑯a · saat dilimi AÇIK ve SABİT (TR kalıcı UTC+03:00)',
+    TAKVIM.TAKVIM_SAAT_DILIMI === '+03:00', TAKVIM.TAKVIM_SAAT_DILIMI);
+  ok('⑯a · KAP madde alan kümesi yazılı ve `_haber.js` süzgeçlerini kapsıyor',
+    ['title', 'link', 'pubDate', 'symbol', 'type'].every((a) => TAKVIM.KAP_MADDE_ALANLARI.includes(a)),
+    TAKVIM.KAP_MADDE_ALANLARI.join(','));
+  ok('⑯a · temettü madde alan kümesi yazılı',
+    TAKVIM.TEMETTU_MADDE_ALANLARI.join(',') === 'symbol,date,dateHam,amount,yieldPct,currency',
+    TAKVIM.TEMETTU_MADDE_ALANLARI.join(','));
+  ok('⑯a · ay tabloları DONDURULMUŞ (çalışma anında değişmez)',
+    Object.isFrozen(TAKVIM.TR_AY_KISA) && Object.isFrozen(TAKVIM.TR_AY_TAM));
+  ok('⑯a · ay tabloları 12 ayın HEPSİNİ kapsıyor (kısa + tam)',
+    new Set(Object.values(TAKVIM.TR_AY_KISA)).size === 12
+    && new Set(Object.values(TAKVIM.TR_AY_TAM)).size === 12);
+
+  // --- ⑯b KONAK İZİN LİSTESİ · `_ag.js` AÇILMADI ----------------------
+  {
+    const agSrc = readFileSync(AG_PATH, 'utf8');
+    ok('⑯b · KİLİT · `_ag.js` IZINLI listesine takvim konağı EKLENMEDİ',
+      !/mynet|temettuhisseleri/.test(agSrc), 'temiz');
+    ok('⑯b · takvimin KENDİ izin listesi iki konak',
+      TAKVIM.IZINLI_KONAK.join(',') === 'finans.mynet.com,temettuhisseleri.com',
+      TAKVIM.IZINLI_KONAK.join(','));
+    // YENİ GÜVEN ALANI YOK: ikisi de `api/proxy.js`in kümesinde ZATEN var.
+    const proxyS = readFileSync(PROXY_PATH, 'utf8');
+    ok('⑯b · KİLİT · iki konak `api/proxy.js` izin kümesinde ZATEN vardı',
+      TAKVIM.IZINLI_KONAK.every((k) => proxyS.includes(k)), TAKVIM.IZINLI_KONAK.join(','));
+    ok('⑯b · iki kaynak adresi de KENDİ izin listesinden geçiyor',
+      TAKVIM.izinliTakvimAdresi(TAKVIM.KAP_URL) && TAKVIM.izinliTakvimAdresi(TAKVIM.TEMETTU_URL));
+    ok('⑯b · http (şifresiz) adres REDDEDİLİYOR',
+      TAKVIM.izinliTakvimAdresi('http://finans.mynet.com/borsa/kaphaberleri/') === false);
+    ok('⑯b · izin listesi dışı konak REDDEDİLİYOR',
+      TAKVIM.izinliTakvimAdresi('https://evil.example.com/x') === false);
+    ok('⑯b · alt alan adı KAÇAĞI yok (konak BİREBİR eşleşiyor)',
+      TAKVIM.izinliTakvimAdresi('https://finans.mynet.com.evil.example.com/x') === false);
+    ok('⑯b · adres olmayan girdi REDDEDİLİYOR (patlamadan)',
+      TAKVIM.izinliTakvimAdresi('') === false && TAKVIM.izinliTakvimAdresi(null) === false
+      && TAKVIM.izinliTakvimAdresi('bozuk') === false);
+  }
+
+  // --- ⑯c `kapZamani` — SAF, ÖLÇÜLMEYEN TARİH UYDURULMAZ --------------
+  ok('⑯c · "08 Haz 2026 11:01" → ISO + AÇIK offset',
+    TAKVIM.kapZamani('08 Haz 2026 11:01') === '2026-06-08T11:01:00+03:00',
+    String(TAKVIM.kapZamani('08 Haz 2026 11:01')));
+  ok('⑯c · tek haneli gün/saat İKİ HANEYE yastıklanıyor',
+    TAKVIM.kapZamani('1 Oca 2026 9:05') === '2026-01-01T09:05:00+03:00',
+    String(TAKVIM.kapZamani('1 Oca 2026 9:05')));
+  ok('⑯c · Türkçe karakterli ay adı (Şub · Ağu) çözülüyor',
+    TAKVIM.kapZamani('03 Şub 2026 10:00') === '2026-02-03T10:00:00+03:00'
+    && TAKVIM.kapZamani('03 Ağu 2026 10:00') === '2026-08-03T10:00:00+03:00');
+  ok('⑯c · Türkçe karaktersiz yazım da çözülüyor (sub · agu)',
+    TAKVIM.kapZamani('03 Sub 2026 10:00') === '2026-02-03T10:00:00+03:00'
+    && TAKVIM.kapZamani('03 Agu 2026 10:00') === '2026-08-03T10:00:00+03:00');
+  ok('⑯c · KURAL · biçim tutmazsa `null` — webin `new Date()` UYDURMASI YOK',
+    TAKVIM.kapZamani('dün') === null && TAKVIM.kapZamani('') === null
+    && TAKVIM.kapZamani(null) === null);
+  ok('⑯c · bilinmeyen ay adı → `null` (sıfırıncı aya düşmüyor)',
+    TAKVIM.kapZamani('08 Xyz 2026 11:01') === null);
+  ok('⑯c · aralık dışı gün/saat/dakika → `null`',
+    TAKVIM.kapZamani('32 Haz 2026 11:01') === null
+    && TAKVIM.kapZamani('08 Haz 2026 24:00') === null
+    && TAKVIM.kapZamani('08 Haz 2026 11:60') === null);
+  ok('⑯c · `kapZamani` SAAT OKUMUYOR (kaynakta Date.now/new Date yok)',
+    !/Date\.now\(|new Date\(/.test(takvimKod), 'temiz');
+
+  // --- ⑯d `kapSemboller` ----------------------------------------------
+  ok('⑯d · tek kod: `***IZFAS***` → [IZFAS]',
+    TAKVIM.kapSemboller('***IZFAS*** Pay Alım Satım').join(',') === 'IZFAS');
+  // ÖLÇÜLEN DAVRANIŞ · İKİZLİK: webin regexi (`[^*]+`) İÇİNDE
+  // yıldız GEÇEN bloğu EŞLEYEMİYOR, oysa app.js:255in KENDİ yorumu çoklu
+  // bildirimi (`***OMP ** ODP***`) desteklediğini SÖYLÜYOR. Regex BİREBİR
+  // korundu (ikiz kuralı: webin bastığı ile ucun bastığı AYRILMAZ); bu
+  // denetim ölçülen davranışı KİLİTLİYOR ki düzeltme İKİ YERDE aynı
+  // anda yapılsın. Rapora yazıldı.
+  ok('⑯d · ÖLÇÜM · webin regexi yıldızlı çoklu bloğu EŞLEMİYOR → `[]`',
+    TAKVIM.kapSemboller('***OMP ** ODP*** Birleşme').length === 0,
+    TAKVIM.kapSemboller('***OMP ** ODP*** Birleşme').join(','));
+  ok('⑯d · tek blokta birden çok kod (yıldızsız ayraç) ÇÖZÜLÜYOR',
+    TAKVIM.kapSemboller('***OMP, ODP*** Birleşme').join(',') === 'OMP,ODP',
+    TAKVIM.kapSemboller('***OMP, ODP*** Birleşme').join(','));
+  ok('⑯d · KURAL · kod yoksa `[]` (ölçtüm, yok) — null DEĞİL',
+    Array.isArray(TAKVIM.kapSemboller('Genel duyuru'))
+    && TAKVIM.kapSemboller('Genel duyuru').length === 0);
+  ok('⑯d · kod biçimine uymayan metin AYIKLANIYOR (küçük harf · uzun kod)',
+    TAKVIM.kapSemboller('***bist100 ASELS COKUZUNKOD***').join(',') === 'ASELS',
+    TAKVIM.kapSemboller('***bist100 ASELS COKUZUNKOD***').join(','));
+
+  // --- ⑯e `ondalik` — ÖLÇÜLEMEYEN SAYI 0 DEĞİL ------------------------
+  ok('⑯e · "1,2345" → 1.2345 (virgül ondalık)', TAKVIM.ondalik('1,2345') === 1.2345);
+  ok('⑯e · "1.2345" → 1.2345 (nokta ondalık)', TAKVIM.ondalik('1.2345') === 1.2345);
+  ok('⑯e · KURAL · sayı çıkmazsa `null`, 0 DEĞİL',
+    TAKVIM.ondalik('') === null && TAKVIM.ondalik('abc') === null
+    && TAKVIM.ondalik(null) === null);
+  ok('⑯e · 0 gerçekten ölçüldüyse 0 DÖNÜYOR (null ile karışmıyor)',
+    TAKVIM.ondalik('0') === 0);
+
+  // --- ⑯f `cozVarlik` -------------------------------------------------
+  ok('⑯f · adlı varlıklar çözülüyor (&Ccedil; &ouml; &uuml;)',
+    TAKVIM.cozVarlik('&Ccedil;&ouml;&uuml;') === 'Çöü', TAKVIM.cozVarlik('&Ccedil;&ouml;&uuml;'));
+  ok('⑯f · sayısal başvurular çözülüyor (&#231; &#x15F;)',
+    TAKVIM.cozVarlik('&#231;&#x15F;') === 'çş', TAKVIM.cozVarlik('&#231;&#x15F;'));
+  ok('⑯f · `&amp;` EN SONDA çözülüyor (çift kaçış varlığa dönmüyor)',
+    TAKVIM.cozVarlik('&amp;quot;') === '&quot;', TAKVIM.cozVarlik('&amp;quot;'));
+
+  // --- ⑯g `ayristirKAP` — fikstür, SIFIR ağ ---------------------------
+  {
+    const madde = (link, baslik, tarih) =>
+      `<a href="https://finans.mynet.com/borsa/haberdetay/${link}" class="x" title="${baslik}">`
+      + `<em class="title">${baslik}</em> <span class="date">${tarih}</span>`;
+    const html = [
+      madde('a-1', '***ASELS*** Pay Geri Alım', '08 Haz 2026 11:01'),
+      madde('a-2', '***THYAO, PGSUS*** Ortak A&ccedil;ıklama', '08 Haz 2026 10:30'),
+      madde('a-3', 'Endeks Duyurusu', 'tarih yok'),
+    ].join('\n');
+
+    const l = TAKVIM.ayristirKAP(html, 10);
+    ok('⑯g · üç madde de ayrıştı', l.length === 3, String(l.length));
+    ok('⑯g · alan kümesi ilan edilenle BİREBİR (sessiz alan yok)',
+      anahtarlar(l[0]) === [...TAKVIM.KAP_MADDE_ALANLARI].sort().join(','), anahtarlar(l[0]));
+    ok('⑯g · bağlantı kaynaktan ÖLÇÜLDÜ (uydurulmadı)',
+      l[0].link === 'https://finans.mynet.com/borsa/haberdetay/a-1', l[0].link);
+    ok('⑯g · tarih ISO + offset', l[0].pubDate === '2026-06-08T11:01:00+03:00', String(l[0].pubDate));
+    ok('⑯g · ham tarih metni DURUYOR (kaynak görülebilsin)',
+      l[0].pubDateHam === '08 Haz 2026 11:01', l[0].pubDateHam);
+    ok('⑯g · tür makine kodu `KAP`', l[0].type === 'KAP', l[0].type);
+    ok('⑯g · tek kodlu duyuruda `symbol` = o kod', l[0].symbol === 'ASELS', String(l[0].symbol));
+    ok('⑯g · çoklu kodda `symbol` İLK kod, tamamı `tickers`ta',
+      l[1].symbol === 'THYAO' && l[1].tickers.join(',') === 'THYAO,PGSUS',
+      `${l[1].symbol} / ${l[1].tickers.join(',')}`);
+    ok('⑯g · başlıktaki HTML varlığı ÇÖZÜLDÜ',
+      /Açıklama/.test(l[1].title), l[1].title);
+    ok('⑯g · KURAL · kodu olmayan duyuruda `symbol` null, `tickers` []',
+      l[2].symbol === null && Array.isArray(l[2].tickers) && l[2].tickers.length === 0);
+    ok('⑯g · KURAL · tarihi okunamayan duyuru ATILMIYOR, `pubDate` null',
+      l[2].pubDate === null && l[2].pubDateHam === 'tarih yok', String(l[2].pubDate));
+    ok('⑯g · `description`/`author` alanları DÖNMÜYOR (sabit = ölçüm değil)',
+      !('description' in l[0]) && !('author' in l[0]));
+
+    ok('⑯g · adet tavanı UYGULANIYOR', TAKVIM.ayristirKAP(html, 2).length === 2);
+    ok('⑯g · tavan üstü istek `AZAMI_KAP`a kırpılıyor (sınırsız yok)',
+      TAKVIM.ayristirKAP(html, 9999).length === 3);
+    ok('⑯g · azami 0 → boş liste', TAKVIM.ayristirKAP(html, 0).length === 0);
+    ok('⑯g · boş/geçersiz gövde → `[]` (patlamadan)',
+      TAKVIM.ayristirKAP('').length === 0 && TAKVIM.ayristirKAP(null).length === 0
+      && TAKVIM.ayristirKAP('<html>bomboş</html>').length === 0);
+  }
+
+  // --- ⑯h `ayristirTemettu` — fikstür, SIFIR ağ -----------------------
+  {
+    const ayBasi = (ad, yil) => `<tr class="table-light"><td colspan="2" class="small fw-semibold">${ad} ${yil}</td></tr>`;
+    const satir = (kod, gun, ay, verim, tutar) =>
+      `<tr><td><a href='/hisseanaliz/${kod}' class='l'>${kod}</a></td>`
+      + `<td class="small">${gun} ${ay}</td>`
+      + `<td><span class='badge'>% ${verim}</span></td>`
+      + `<td class="small">${tutar}₺</td></tr>`;
+    const html = [
+      ayBasi('Haziran', 2026),
+      satir('ASELS', 8, 'Haziran', '3,25', '1,2345'),
+      satir('ASELS', 8, 'Haziran', '3,25', '1,2345'), // kopya
+      satir('BOZUK', 8, 'Xyz', '1,00', '1,00'),       // ay adı tabloda YOK
+      ayBasi('Temmuz', 2026),
+      satir('THYAO', 15, 'Temmuz', '2,10', '4,50'),
+    ].join('\n');
+
+    const r = TAKVIM.ayristirTemettu(html, 50);
+    ok('⑯h · dönüş şekli {maddeler, atlanan, tekrar}',
+      anahtarlar(r) === 'atlanan,maddeler,tekrar', anahtarlar(r));
+    ok('⑯h · iki geçerli satır ayrıştı', r.maddeler.length === 2, String(r.maddeler.length));
+    ok('⑯h · alan kümesi ilan edilenle BİREBİR',
+      anahtarlar(r.maddeler[0]) === [...TAKVIM.TEMETTU_MADDE_ALANLARI].sort().join(','),
+      anahtarlar(r.maddeler[0]));
+    ok('⑯h · tarih `YYYY-MM-DD` DİZGESİ (Date nesnesi değil — dilim kaymaz)',
+      r.maddeler[0].date === '2026-06-08' && typeof r.maddeler[0].date === 'string',
+      String(r.maddeler[0].date));
+    ok('⑯h · yıl AY BAŞLIĞINDAN okundu (satırda yok, uydurulmadı)',
+      r.maddeler[1].date === '2026-07-15', String(r.maddeler[1].date));
+    ok('⑯h · tutar ve verim ÖLÇÜLDÜ',
+      r.maddeler[0].amount === 1.2345 && r.maddeler[0].yieldPct === 3.25,
+      `${r.maddeler[0].amount} / ${r.maddeler[0].yieldPct}`);
+    ok('⑯h · para birimi MAKİNE KODU `TRY` (₺ simgesi DEĞİL)',
+      r.maddeler[0].currency === 'TRY', r.maddeler[0].currency);
+    ok('⑯h · ham tarih metni DURUYOR', r.maddeler[0].dateHam === '8 Haziran', r.maddeler[0].dateHam);
+    ok('⑯h · KURAL · kopya satır DÜŞTÜ ve SAYILDI (sessizce yok olmadı)',
+      r.tekrar === 1, String(r.tekrar));
+    ok('⑯h · KURAL · ayrıştırılamayan satır ATLANDI ve SAYILDI',
+      r.atlanan === 1, String(r.atlanan));
+    ok('⑯h · ay başlığı OLMADAN gelen satır atlanıyor (yıl uydurulmuyor)',
+      TAKVIM.ayristirTemettu(satir('ASELS', 8, 'Haziran', '1,00', '1,00'), 10).maddeler.length === 0);
+    ok('⑯h · adet tavanı UYGULANIYOR', TAKVIM.ayristirTemettu(html, 1).maddeler.length === 1);
+    ok('⑯h · tavan üstü istek `AZAMI_TEMETTU`a kırpılıyor',
+      TAKVIM.ayristirTemettu(html, 99999).maddeler.length === 2);
+    ok('⑯h · boş/geçersiz gövde → boş liste (patlamadan)',
+      TAKVIM.ayristirTemettu('').maddeler.length === 0
+      && TAKVIM.ayristirTemettu(null).maddeler.length === 0);
+  }
+
+  // --- ⑯i sayaç: ÖLÇTÜM ⇄ ÖLÇEMEDİM ayrımı ---------------------------
+  {
+    const s = TAKVIM.bosTakvimSayac();
+    ok('⑯i · boş sayaç alan kümesi yazılı',
+      anahtarlar(s) === 'basari,bayt,hata,istek,kisa,zamanAsimi', anahtarlar(s));
+    ok('⑯i · boş sayaç TAM sayılıyor (hiç arıza yok)', TAKVIM.takvimTam(s) === true);
+    ok('⑯i · hata → tam DEĞİL', TAKVIM.takvimTam({ hata: 1, zamanAsimi: 0, kisa: 0 }) === false);
+    ok('⑯i · zaman aşımı → tam DEĞİL', TAKVIM.takvimTam({ hata: 0, zamanAsimi: 1, kisa: 0 }) === false);
+    ok('⑯i · KISA GÖVDE → tam DEĞİL (200 geldi diye ölçüm sayılmıyor)',
+      TAKVIM.takvimTam({ hata: 0, zamanAsimi: 0, kisa: 1 }) === false);
+    ok('⑯i · sayaç yoksa tam DEĞİL', TAKVIM.takvimTam(null) === false);
+    ok('⑯i · sayaç `_ag.js` sayacından AYRI nesne (skor sayacına karışmıyor)',
+      !('yahoo' in s) && !('sec' in s) && !('bist' in s), anahtarlar(s));
+  }
+
+  // --- ⑯j handler kapıları — AĞ YASAĞI altında ------------------------
+  {
+    const gercekFetch = globalThis.fetch;
+    let agDenemesi = 0;
+    globalThis.fetch = (...a) => { agDenemesi++; throw new Error('⑯ AĞ YASAĞI: ' + String(a[0])); };
+    try {
+      ok('⑯j · takvim POST kabul ETMİYOR → 405',
+        (await cagirTakvim('POST', {})).kod === 405);
+
+      const k1 = await cagirTakvim('GET', { kapsam: 'yok-boyle' });
+      ok('⑯j · bilinmeyen kapsam → 400 bad_kapsam (sessiz varsayılan YOK)',
+        k1.kod === 400 && k1.govde.error === 'bad_kapsam', `${k1.kod} ${k1.govde.error}`);
+      ok('⑯j · bad_kapsam izinli listeyi BİLDİRİYOR',
+        Array.isArray(k1.govde.izinli) && k1.govde.izinli.join(',') === TAKVIM.KAPSAMLAR.join(','),
+        (k1.govde.izinli || []).join(','));
+      ok('⑯j · bad_kapsam cevabı AĞA ÇIKMADAN döndü', agDenemesi === 0, String(agDenemesi));
+
+      for (const [alan, deger] of [['kapAdet', '0'], ['kapAdet', '61'], ['kapAdet', 'abc'],
+        ['temettuAdet', '0'], ['temettuAdet', '401'], ['temettuAdet', '1.5']]) {
+        const r = await cagirTakvim('GET', { [alan]: deger });
+        ok(`⑯j · ${alan}=${deger} → 400 bad_limit (kırpma YOK)`,
+          r.kod === 400 && r.govde.error === 'bad_limit' && r.govde.alan === alan,
+          `${r.kod} ${r.govde.error} ${r.govde.alan}`);
+      }
+      ok('⑯j · adet kapıları da AĞA ÇIKMADAN döndü', agDenemesi === 0, String(agDenemesi));
+
+      // Kaynakların İKİSİ de düştü → bu bir ölçüm değil, KESİNTİ.
+      const d = await cagirTakvim('GET', {});
+      ok('⑯j · her iki kaynak düştü → 502 takvim_alinamadi (boş liste YALANI yok)',
+        d.kod === 502 && d.govde.error === 'takvim_alinamadi', `${d.kod} ${d.govde.error}`);
+      ok('⑯j · 502 gövdesi SAYACI taşıyor (neyin düştüğü görünür)',
+        !!d.govde.sayac && d.govde.sayac.hata >= 1, JSON.stringify(d.govde.sayac || null));
+      ok('⑯j · 502 gövdesi yığın izi / `detail` SIZDIRMIYOR',
+        !('detail' in d.govde) && !('stack' in d.govde));
+      ok('⑯j · 502 gövdesinde uyarı cümlesi var', d.govde.uyari === UYARI);
+      ok('⑯j · kesinti cevabı KISA önbellekli (arıza 5 dk donmuyor)',
+        /max-age=30/.test(String(d.basliklar['cache-control'])), String(d.basliklar['cache-control']));
+      ok('⑯j · ağ GERÇEKTEN denendi (kapı sessizce atlanmadı)', agDenemesi >= 1, String(agDenemesi));
+
+      const tek = await cagirTakvim('GET', { kapsam: 'kap' });
+      ok('⑯j · tek kapsam düştüğünde de 502', tek.kod === 502, String(tek.kod));
+    } finally {
+      globalThis.fetch = gercekFetch;
+    }
+  }
+
+  // --- ⑯k KOPYA YASAĞI + sızıntı kapıları -----------------------------
+  ok('⑯k · `_takvim.js` ELLE yazıldığını söylüyor (üretilmiş değil)',
+    /ELLE YAZILMIŞ/i.test(takvimSrc));
+  ok('⑯k · uçta `Intl` YOK (HAM SAYI kuralı)', !/\bIntl\b/.test(takvimKod));
+  ok('⑯k · uçta `toFixed(` / `toLocaleString(` YOK',
+    !/toFixed\(|toLocaleString\(/.test(takvimKod));
+  ok('⑯k · uçta eşik/ağırlık/skor sözcüğü YOK (mantık motorda)',
+    !/\bscore\b|\bWEIGHT\b|\bthreshold\b|\bESIK\b/i.test(takvimKod), 'temiz');
+  ok('⑯k · gövdeye `detail:`/yığın izi sızdıran alan yok', !/detail:/.test(takvimKod));
+  ok('⑯k · kaynakta e-posta/anahtar YOK',
+    !/@gmail|ANTHROPIC|apiKey/.test(takvimSrc), 'temiz');
+  ok('⑯k · kimlik dizgesi SADE ve kişisel veri taşımıyor',
+    /day-starter\/1\.0 \(takvim-okuyucu\)/.test(takvimSrc)
+    && !/@/.test((takvimSrc.match(/'User-Agent':[^\n]*/) || [''])[0]));
+  ok('⑯k · ağ YALNIZ `sayfaCek` içinde (tek çıkış kapısı)',
+    takvimKod.split('fetch(').length - 1 === 1, String(takvimKod.split('fetch(').length - 1));
+  ok('⑯k · zaman aşımı AbortController ile kuruluyor (asılı istek yok)',
+    /new AbortController\(\)/.test(takvimKod) && /\.abort\(\)/.test(takvimKod));
+  ok('⑯k · `_takvim.js` motoru ya da ayarı İÇE ALMIYOR (skor yolu ayrı)',
+    !/_motor\.js|_ayar\.js|_ag\.js/.test(takvimKod), 'temiz');
+  ok('⑯k · `_takvim.js` dosya sistemine YAZMIYOR',
+    !/writeFileSync|appendFileSync/.test(takvimKod));
+  ok('⑯k · `_takvim.js` gerçekten `_` önekli (fonksiyon sayılmaz)',
+    existsSync(TAKVIM_PATH) && path.basename(TAKVIM_PATH).startsWith('_'));
+  ok('⑯k · webin iki ayrıştırıcısına İKİZLİK notu yazılı (sürüklenme bekçisi)',
+    /app\.js:229/.test(takvimSrc) && /app\.js:324/.test(takvimSrc));
+  ok('⑯k · KURAL · `new Date()` UYDURMASI kaynakta HİÇ yok',
+    !/new Date\(/.test(takvimKod), 'temiz');
+  // SKOR YOLU KİLİDİ: takvim mevcut uçlardan hiçbirine girmedi.
+  for (const [ad, yol] of [['score', SCORE_PATH], ['recommend', RECOMMEND_PATH], ['analyze', ANALYZE_PATH]]) {
+    ok(`⑯k · KİLİT · api/${ad}.js \`_takvim.js\`i TANIMIYOR`,
+      !/_takvim/.test(readFileSync(yol, 'utf8')));
   }
 }
 

@@ -1,7 +1,7 @@
 // =====================================================================
 //  DETAY GİRİŞİ — hisse detay kartları               (FAZ 3 / native)
 // ---------------------------------------------------------------------
-//  NE: `/hisse/[sembol]` ekranının beş kartını tek yerden dışa açar.
+//  NE: `/hisse/[sembol]` ekranının kartlarını tek yerden dışa açar.
 //
 //  NEDEN AYRI GİRİŞ (`@/components/detay`), KÖK BARREL'A EKLEMEK YOK:
 //  bu kartlar TEK ekrana ait ve `AnalyzeRow` sözleşmesine bağlı; kök
@@ -15,6 +15,10 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
+export { BacktestKart, type BacktestKartProps } from './BacktestKart';
+// `degerTuruOf` de dışa açık: ekran, kartı hiç basmamaya karar vermek
+// için aynı sembol→metal eşlemesini kullanıyor (gerekçesi DegerKart'ta).
+export { DegerKart, degerTuruOf, type DegerKartProps } from './DegerKart';
 export { DetayBasligi, type DetayBasligiProps } from './DetayBasligi';
 export { RiskOdulKart, type RiskOdulKartProps } from './RiskOdulKart';
 export { Satir, type SatirProps } from './Satir';

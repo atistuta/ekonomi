@@ -64,6 +64,15 @@ import { TA_WEIGHTS, TA_BENCHMARK, IMZA_AYAR } from './_ayar.js';
 import { canliAg, bosSayac, sayacTam } from './_ag.js';
 import { AZAMI_SORGU, PAZARLAR, temizleSembol, cozEndeks } from './_girdi.js';
 import { anahtar, oku, yaz, TTL_FIYAT } from './_onbellek.js';
+// TAKVİM TAŞIYICISI — ağ gövdesi ve HTML ayrıştırıcıları orada
+// (`api/_takvim.js`). Burada yalnız ROTA var: kapı, girdi denetimi,
+// önbellek ve gövde kurulumu. Taşıyıcı `_ag.js`e DOKUNMUYOR, kendi konak
+// izin listesini kullanıyor — gerekçe o dosyanın başlığında.
+import {
+  KAPSAMLAR, VARSAYILAN_KAPSAM,
+  AZAMI_KAP, VARSAYILAN_KAP, AZAMI_TEMETTU, VARSAYILAN_TEMETTU,
+  bosTakvimSayac, takvimTam, kapCek, temettuCek,
+} from './_takvim.js';
 
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
@@ -73,7 +82,7 @@ const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 //  tests/uc-test.mjs ⑮ bu listeyi okuyor. Bir ad üç yerde elle yazılsaydı
 //  birindeki yazım hatası 404'ü ancak canlıda gösterirdi.
 // ---------------------------------------------------------------------
-export const ROTALAR = Object.freeze(['tarama', 'sektor', 'radar', 'backtest', 'deger', 'arama']);
+export const ROTALAR = Object.freeze(['tarama', 'sektor', 'radar', 'backtest', 'deger', 'arama', 'takvim']);
 
 // ---------------------------------------------------------------------
 //  SINIRLAR — niye bu sayılar
@@ -171,8 +180,16 @@ export function motorBak() { return ENG; }
 //  ORTAK KAPILAR
 // =====================================================================
 
-/** CORS + OPTIONS + yöntem + motor kapısı. true dönerse cevap YAZILDI. */
-function kapi(req, res, yontemler) {
+/**
+ * CORS + OPTIONS + yöntem + motor kapısı. true dönerse cevap YAZILDI.
+ *
+ * `motorGerek` NİYE VAR: altı keşif rotası girdiyi MOTORDAN geçiriyor,
+ * motor kurulamadıysa cevap veremezler → 503. `takvim` rotası motora
+ * HİÇ DOKUNMUYOR (kaynağı iki HTML sayfası, çıktısı tarih listesi).
+ * Onun için de 503 dönmek, çalışan bir yolu ÖLÇÜLMEMİŞ bir arızayla
+ * kapatmak olurdu. Varsayılan `true` — mevcut altı rota DEĞİŞMEDİ.
+ */
+function kapi(req, res, yontemler, motorGerek = true) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', yontemler);
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -186,7 +203,7 @@ function kapi(req, res, yontemler) {
     res.status(405).json({ error: 'method_not_allowed', uyari: UYARI });
     return true;
   }
-  if (!motorHazir()) {
+  if (motorGerek && !motorHazir()) {
     console.error('api/_kesif: motor kurulamadi —', (KURULUM_HATASI && KURULUM_HATASI.message) || 'bilinmiyor');
     kisaOnbellek(res);
     res.status(503).json({ error: 'motor_kurulamadi', uyari: UYARI });
@@ -996,6 +1013,170 @@ export async function aramaHandler(req, res) {
   }
 }
 
+// =====================================================================
+//  ⑦ /api/takvim — KAP duyuruları + BIST temettü takvimi
+// =====================================================================
+//
+//  NİYE BU ROTA AÇILDI (ölçüm, 2026-10-29): webin iki takvim kaynağı
+//  TARAYICIDAN HTML kazıyor (`fetchMynetKAP` app.js:229 · `parseTemettuHtml`
+//  app.js:324). Sunucuda bu iki HTML'i ayrıştıran hiçbir şey YOKTU:
+//  `api/proxy.js?url=` yalnız ham HTML geçiriyor, motorda da ayrıştırıcı
+//  yok (ölçüm: `grep parseTemettuHtml api/_motor.js` boş). Yani ince
+//  istemci Türkçe ay adlı HTML kazımayı baştan yazmak zorundaydı.
+//
+//  MEVCUT UÇLARIN YETTİĞİ İKİ ÖZELLİK BURAYA GİRMEDİ (ölçüldü):
+//    · Kazanç (earn) sekmesi: `/api/yfin?deep=1&symbols=…` zaten
+//      `earnings{ts, epsAvg/High/Low, revAvg/High/Low}` + `price`
+//      döndürüyor — `fetchEarnBatch`in (app.js:9398) okuduğu küme BU.
+//      Senaryo matematiği (`earnScenario`) BİÇİMLEME, uca girmez.
+//    · Momentum sekmesi: `/api/recommend?symbols=…&vade=orta` gövdesinde
+//      `plan.momentum` = motorun `momentumInfo` çıktısının TAMAMI
+//      (`active`, `zone`, `adx`, `gapPct`, `sma50`, `sma200`). Süzme ve
+//      sıralama istemci işi. Yeni uç açmak aynı veriyi ikinci kez
+//      ölçmek olurdu.
+//
+//  HAM SAYI: dönen her alan ya kaynaktan ÖLÇÜLMÜŞ bir sayı/dizge ya da
+//  makine kodu (`type:'KAP'`, `currency:'TRY'`). Eşik, ağırlık, Türkçe
+//  tavsiye cümlesi ve ekran biçimlemesi YOK.
+//
+//  SÖZLEŞME
+//    GET /api/takvim[?kapsam=hepsi|kap|temettu][&kapAdet=N][&temettuAdet=N]
+//    200 → { kapsam,
+//            kap?:        (madde[]|null),   // kapsam kap/hepsi ise VAR
+//            kapAdet?:    (number|null),
+//            temettu?:    (madde[]|null),   // kapsam temettu/hepsi ise VAR
+//            temettuAdet?:(number|null),
+//            temettuAtlanan?:(number|null), temettuTekrar?:(number|null),
+//            sayac, tam, ms, uyari }
+//    400 → bad_kapsam | bad_limit
+//    405 → method_not_allowed (Allow başlığıyla)
+//    502 → takvim_alinamadi (İSTENEN KAYNAKLARIN HEPSİ okunamadı)
+//
+//  `null` NE ZAMAN: kaynak İSTENDİ ama okunamadı (HTTP hatası, zaman
+//  aşımı, kısa gövde) → `kap`/`temettu` = `null` ve `tam:false`.
+//  Kaynak okundu ama liste boşsa `[]` — "ölçtüm, yok". Kaynak HİÇ
+//  istenmediyse alan GÖVDEDE YOKTUR. Üçü ayrı şey.
+//
+//  SÜRÜM ALANI YOK (`surum`): bu rota motora dokunmuyor, dolayısıyla
+//  gövdesi `IMZA`/`IMZA_AYAR` değişince DEĞİŞMİYOR. Oraya imza yazmak
+//  ilgisiz bir bağımlılık ilan etmek olurdu.
+export async function takvimHandler(req, res) {
+  // `false`: motor kapısı ATLANIYOR — gerekçe `kapi` yorumunda.
+  if (kapi(req, res, 'GET, OPTIONS', false)) return;
+  const q = req.query || {};
+
+  // SESSİZ VARSAYILAN YOK: verilmemişse varsayılan, verilmiş ama
+  // beyaz listede değilse 400. Sessiz 'hepsi'ye düşme yok.
+  const kapsamHam = String(q.kapsam ?? '').trim().toLowerCase();
+  const kapsam = kapsamHam === '' ? VARSAYILAN_KAPSAM : kapsamHam;
+  if (!KAPSAMLAR.includes(kapsam)) {
+    kisaOnbellek(res);
+    res.status(400).json({ error: 'bad_kapsam', izinli: [...KAPSAMLAR], uyari: UYARI });
+    return;
+  }
+  const kapIstendi = kapsam === 'hepsi' || kapsam === 'kap';
+  const temettuIstendi = kapsam === 'hepsi' || kapsam === 'temettu';
+
+  // Adet kapıları — kırpma YOK, aralık dışı 400. Hangi alan bozuksa
+  // cevapta yazılı (`alan`), istemci kör kalmasın.
+  const adetOku = (ham, azami) => {
+    const n = sorguSayi(ham);
+    if (n === undefined) return undefined;
+    if (n === null) return null;
+    if (!Number.isInteger(n) || n < 1 || n > azami) return undefined;
+    return n;
+  };
+  const nKap = adetOku(q.kapAdet, AZAMI_KAP);
+  const nTemettu = adetOku(q.temettuAdet, AZAMI_TEMETTU);
+  if (nKap === undefined || nTemettu === undefined) {
+    kisaOnbellek(res);
+    res.status(400).json({
+      error: 'bad_limit',
+      alan: nKap === undefined ? 'kapAdet' : 'temettuAdet',
+      asgari: 1,
+      azami: nKap === undefined ? AZAMI_KAP : AZAMI_TEMETTU,
+      uyari: UYARI,
+    });
+    return;
+  }
+  const kapAzami = nKap === null ? VARSAYILAN_KAP : nKap;
+  const temettuAzami = nTemettu === null ? VARSAYILAN_TEMETTU : nTemettu;
+
+  const t0 = Date.now();
+  // Önbellek anahtarında MOTOR İMZASI YOK: gövde motordan bağımsız.
+  const obAnahtar = anahtar('takvim', { kapsam, kapAzami, temettuAzami });
+  const obVurus = await oku(obAnahtar);
+  if (obVurus) {
+    res.setHeader('X-Onbellek', 'isabet');
+    res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=600');
+    res.status(200).json({ ...obVurus, ms: Date.now() - t0 });
+    return;
+  }
+  res.setHeader('X-Onbellek', 'iska');
+
+  try {
+    const sayac = bosTakvimSayac();
+    // PARALEL ve `allSettled`: biri düşerse öteki basılmaya devam eder.
+    // Sıralı çekmek 2 × 10 sn = 20 sn ederdi; proxy'nin 30 sn bütçesinde
+    // kalır ama ekranı iki kat bekletirdi.
+    const [kapS, temettuS] = await Promise.allSettled([
+      kapIstendi ? kapCek({ sayac, azami: kapAzami }) : Promise.resolve(null),
+      temettuIstendi ? temettuCek({ sayac, azami: temettuAzami }) : Promise.resolve(null),
+    ]);
+    const kapD = kapS.status === 'fulfilled' ? kapS.value : null;
+    const temettuD = temettuS.status === 'fulfilled' ? temettuS.value : null;
+
+    // `null` = OKUNAMADI · `[]` = ÖLÇTÜM, YOK (başlıktaki kural).
+    const kap = kapIstendi ? (kapD && kapD.maddeler ? kapD.maddeler : null) : undefined;
+    const temettu = temettuIstendi ? (temettuD && temettuD.maddeler ? temettuD.maddeler : null) : undefined;
+
+    const istenenOkundu = (!kapIstendi || kap !== null) && (!temettuIstendi || temettu !== null);
+    // İSTENEN KAYNAKLARIN HEPSİ düştüyse bu bir ölçüm değil, kesinti.
+    if (!istenenOkundu && (!kapIstendi || kap === null) && (!temettuIstendi || temettu === null)) {
+      kisaOnbellek(res);
+      res.status(502).json({ error: 'takvim_alinamadi', kapsam, sayac, uyari: UYARI });
+      return;
+    }
+
+    const tam = takvimTam(sayac) && istenenOkundu;
+    if (tam) {
+      res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=600');
+    } else {
+      kisaOnbellek(res);
+    }
+
+    const govde = {
+      kapsam,
+      // İstenmeyen kaynağın alanı GÖVDEYE HİÇ GİRMİYOR.
+      ...(kapIstendi ? { kap, kapAdet: kap ? kap.length : null } : {}),
+      ...(temettuIstendi ? {
+        temettu,
+        temettuAdet: temettu ? temettu.length : null,
+        // Ayrıştırıcının ATLADIĞI ve TEKİLLEŞTİRDİĞİ satır sayısı
+        // görünür: sessizce kaybolan satır olmasın.
+        temettuAtlanan: temettuD ? temettuD.atlanan : null,
+        temettuTekrar: temettuD ? temettuD.tekrar : null,
+      } : {}),
+      sayac,
+      tam,
+      ms: Date.now() - t0,
+      uyari: UYARI,
+    };
+    // Yalnız TAM gövde önbellekleniyor; kesintiyi 5 dk dondurmak yok.
+    // TTL: iki kaynağın SIKI olanı. KAP dakika başı tazeleniyor (webin
+    // kendi yorumu, app.js:227), temettü takvimi gün içinde nadiren
+    // değişiyor (web 60 dk tutuyor, app.js:302). Ortak gövde için
+    // sıkısı alındı — temettü gereğinden sık tazelenir, ama KAP asla
+    // gereğinden eski görünmez.
+    if (tam) await yaz(obAnahtar, govde, TTL_FIYAT);
+    res.status(200).json(govde);
+  } catch (e) {
+    console.error('api/_kesif takvim:', (e && e.stack) || e);
+    kisaOnbellek(res);
+    res.status(502).json({ error: 'takvim_alinamadi', uyari: UYARI });
+  }
+}
+
 // ---------------------------------------------------------------------
 //  ROTA → HANDLER. `api/proxy.js` bu tabloyu okuyor; orada altı `if`
 //  yazılsaydı rota adı üç yerde değil dört yerde elle yazılmış olurdu.
@@ -1007,4 +1188,5 @@ export const HANDLERLAR = Object.freeze({
   backtest: backtestHandler,
   deger: degerHandler,
   arama: aramaHandler,
+  takvim: takvimHandler,
 });

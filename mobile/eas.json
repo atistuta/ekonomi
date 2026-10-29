@@ -17,7 +17,6 @@
     },
     "cihaz": {
       "distribution": "internal",
-      "channel": "development",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://day-starter.vercel.app"
       },

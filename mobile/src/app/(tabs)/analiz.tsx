@@ -57,6 +57,19 @@
 //  saniye; "kaç gün kaldı" sayacı YOK — cihaz saatiyle motor damgasını
 //  karıştırmak ölçüm uydurmaktır.
 //
+//  İKİ KART DAHA (₿ Kripto · 🥇 Kıymetli maden): web'in `renderCrypto`
+//  ve `renderMetals` blokları. Bunlar seçilen sembolden BAĞIMSIZ sabit
+//  evrenler, o yüzden EN ALTTA ve AYRI isteklerle. Liste künyesine
+//  eklenmediler çünkü künye ucu 12 sembolden fazlasını SESSİZCE kırpıyor
+//  — takip listesi + 10 kripto + 3 maden tek turda sınırı aşardı ve
+//  kırpılan sembol kullanıcıya "veri yok" gibi görünürdü.
+//
+//  BU İKİ KARTTA UÇ YOK DİYE YAPILMAYANLAR: 24s değişim, piyasa değeri
+//  sırası, hacim, BTC hâkimiyeti, arz, zirve uzaklığı (web'de CoinGecko
+//  ham geçişinden geliyordu) ve TL/gram maden fiyatları + ziynet
+//  kalemleri (truncgil ham geçişi). Ham geçiş bir SÖZLEŞME değil;
+//  ölçülmeyen alan çizilmiyor, istemcide türetilmiyor.
+//
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
@@ -88,7 +101,15 @@ import {
   ScreenShell,
   VeriYok,
 } from '@/components';
-import { BilancoKart, KarsilastirKart, TemettuKart } from '@/components/analiz';
+import {
+  BilancoKart,
+  KRIPTO_SEMBOLLER,
+  KarsilastirKart,
+  KriptoKart,
+  METAL_SEMBOLLER,
+  MetalKart,
+  TemettuKart,
+} from '@/components/analiz';
 import { formatOran, formatPercent, formatPrice, formatScore } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
 
@@ -155,6 +176,29 @@ export default function AnalizScreen() {
     [liste],
   );
   const kunye = useIstek(kunyeCagri, 'yfin:' + liste.join(','), { etkin: liste.length > 0 });
+
+  // ── KRİPTO + MADEN: SABİT evrenler, takip listesine BAĞLI DEĞİL ────
+  // NEDEN AYRI İKİ İSTEK (liste künyesiyle birleşmedi): künye ucu en
+  // çok 12 sembol alıyor ve fazlasını SESSİZCE kırpıyor
+  // (`api/_yfin.js` → `.slice(0, 12)`). Takip listesi + 10 kripto + 3
+  // maden tek turda 12'yi aşar ve kırpılan sembol kullanıcıya "veri
+  // yok" gibi görünürdü. Üç ayrı tur, üç ayrı durum kutusu.
+  //
+  // NEDEN `deep: false`: `deep=1` yalnız `calendarEvents` +
+  // `earningsTrend` modüllerini ekliyor (bilanço takvimi). Kriptoda ve
+  // vadeli maden sözleşmesinde bilanço YOK — iki modülü boşuna
+  // istemek her turda gereksiz dış çağrı demekti.
+  const kriptoCagri = useCallback(
+    (signal: AbortSignal) => fetchYfin(KRIPTO_SEMBOLLER.slice(), { deep: false, signal }),
+    [],
+  );
+  const kripto = useIstek(kriptoCagri, 'yfin:kripto');
+
+  const metalCagri = useCallback(
+    (signal: AbortSignal) => fetchYfin(METAL_SEMBOLLER.slice(), { deep: false, signal }),
+    [],
+  );
+  const metal = useIstek(metalCagri, 'yfin:metal');
 
   return (
     <ScreenShell
@@ -349,6 +393,23 @@ export default function AnalizScreen() {
         hata={kunye.hata}
         yenile={kunye.yenile}
         semboller={liste}
+      />
+
+      {/* NEDEN EN ALTTA: bu iki kart SEÇİLEN SEMBOLLE İLGİSİZ sabit
+          evrenler (kripto + maden). Ekranın konusu tek hissenin
+          dökümü; piyasa şeridi bağlam. Kendi istekleri, kendi durum
+          kutuları — biri düşerken öteki durmuyor. */}
+      <KriptoKart
+        veri={kripto.veri}
+        durum={kripto.durum}
+        hata={kripto.hata}
+        yenile={kripto.yenile}
+      />
+      <MetalKart
+        veri={metal.veri}
+        durum={metal.durum}
+        hata={metal.hata}
+        yenile={metal.yenile}
       />
     </ScreenShell>
   );

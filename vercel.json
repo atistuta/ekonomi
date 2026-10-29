@@ -27,7 +27,8 @@
     { "source": "/api/radar",    "destination": "/api/proxy?__rota=radar" },
     { "source": "/api/backtest", "destination": "/api/proxy?__rota=backtest" },
     { "source": "/api/deger",    "destination": "/api/proxy?__rota=deger" },
-    { "source": "/api/arama",    "destination": "/api/proxy?__rota=arama" }
+    { "source": "/api/arama",    "destination": "/api/proxy?__rota=arama" },
+    { "source": "/api/takvim",   "destination": "/api/proxy?__rota=takvim" }
   ],
   "regions": ["fra1"],
   "headers": [

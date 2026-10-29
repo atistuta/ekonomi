@@ -19,28 +19,35 @@
 //  istemcide uydurmak olurdu. Bu yüzden kart hareketin BÜYÜKLÜĞÜNÜ
 //  yazar, hareketi YORUMLAMAZ.
 //
-//  ── ÖLÇÜLDÜ (2026-10-26, KAYNAK OKUMASI — canlı istek atılmadı) ─────
-//  `/api/chart` ortak sembol kapısından geçiyor: `temizleSembol`
-//  (api/_girdi.js:132) → `SEMBOL_BICIM = /^[A-Z][A-Z0-9.\-]{0,7}$/`
-//  (api/_girdi.js:79). Bu biçim `^` ve `=` KARAKTERLERİNİ KABUL ETMİYOR.
-//  Uç dosyasının kendi başlığı da bunu açıkça yazıyor (api/chart.js,
-//  "ENDEKS (^GSPC, ^XU100) BU UÇTAN İSTENEMEZ" bloğu), istemci kapısı
-//  da `^` ile başlayan sembolü ağa ÇIKARMADAN kesiyor
-//  (mobile/src/api/client.ts:727).
-//  Dört kalemin tek tek sonucu:
-//    · XU100 (BIST) → biçim GEÇER. Motor `yahooSymbol` ile '.IS' ekliyor
-//      (api/_motor.js:95) → üst kaynağa `XU100.IS` gidiyor. Ucun KAPISI
-//      bu sembolü geçiriyor; üst kaynağın mum döndürüp döndürmediği
-//      ÖLÇÜLEMEDİ (bu turda canlı istek yasaktı) — kart boş seriyi
-//      "ölçemedim" diye DEĞİL, "bu aralıkta mum yok" diye yazar.
-//    · ^GSPC, ^IXIC → biçim REDDEDER (`^`). İstek kesin 400
-//      `bad_symbol`. Ağa çıkarmanın anlamı yok.
-//    · GC=F (altın onsu) → biçim REDDEDER (`=`). DİKKAT: istemci kapısı
-//      yalnız `^`e bakıyor, yani bu sembol ağa ÇIKAR ve 400 ile döner.
-//      Bu yüzden `destekli: false` BURADA yazılı: boşa istek atmıyoruz.
-//  Desteklenmeyen kalem GİZLENMİYOR, satırı basılıyor ve "bu sembol
-//  ölçülemedi" denip SEBEBİ yazılıyor. Satırı hiç basmamak, kullanıcıya
-//  "altın hareket etmedi" demek olurdu — ki bu bir yalan olur.
+//  ── ÖLÇÜLDÜ (2026-10-29, KAYNAK OKUMASI — canlı istek atılmadı) ─────
+//  ÖNCEKİ ÖLÇÜM (2026-10-26) ESKİDİ. O not "`/api/chart` ortak sembol
+//  kapısından geçiyor, `SEMBOL_BICIM` `^` ve `=` kabul etmiyor, bu
+//  yüzden yalnız XU100 ölçülebilir" diyordu. SUNUCU O KAPIYI AÇTI —
+//  deseni gevşeterek değil, AYRI ve KAPALI bir sözlük ekleyerek:
+//    · api/_girdi.js:119-131 — `ENDEKS_SOZLUGU` (donmuş, kapalı küme) ve
+//      dört kalemin DÖRDÜ de içinde: `^GSPC` (:121), `^IXIC` (:123),
+//      `GC=F` (:125), `XU100` (:130 → üst kaynağa `XU100.IS`).
+//    · api/_girdi.js:144-151 — `cozEndeks(ham)`: sözlükte varsa
+//      `{sym, market}`, yoksa `null`. `SEMBOL_BICIM`e HİÇ dokunmuyor.
+//    · api/chart.js:245 — `const hedef = cozEndeks(ham) ||
+//      temizleSembol(ham, gPazar || 'US');` → grafik ucu ÖNCE sözlüğe
+//      bakıyor, dört sembol de kapıdan GEÇİYOR. (Sözlük kalemi için
+//      istekteki `market` YOK SAYILIR; pazarı sözlük söyler.)
+//    · api/_girdi.js:161 — `ayristir()` hâlâ YALNIZ `temizleSembol`
+//      kullanıyor, yani skor/öneri/analiz/kıyas zinciri `^GSPC`'yi
+//      HÂLÂ reddediyor. Gevşeme sızmadı: açılan tek uç grafik ucu.
+//    · istemci kapısı da açık: mobile/src/api/client.ts:167-173
+//      (`ENDEKS_SEMBOLLER` + `endeksMi`) ve :816 — sözlükteki dördü ağa
+//      ÇIKIYOR, yalnız sözlük DIŞINDAKİ `^`/`=` sembolü kesiliyor.
+//  SONUÇ: dört kalemin `destekli` bayrağı da `true`, endeksler gerçekten
+//  `/api/chart`'tan çekiliyor. Bayrak ve `red` alanı SİLİNMEDİ: kapı
+//  yarın bir kalemi düşürürse karar yine TEK yerde yazılır ve aşağıdaki
+//  "bu sembol ölçülemedi" satırı olduğu gibi çalışır. Desteklenmeyen
+//  kalem GİZLENMEZ — satırı hiç basmamak kullanıcıya "altın hareket
+//  etmedi" demek olurdu, ki bu bir yalan olur.
+//  BU TURDA ÖLÇÜLMEYEN: üst kaynağın bu dört sembol için gerçekten mum
+//  döndürüp döndürmediği (canlı istek atılmadı). Boş seri "ölçemedim"
+//  DEĞİL, "bu aralıkta mum yok" diye yazılır.
 //
 //  ── BURADA HESAP VAR MI ────────────────────────────────────────────
 //  Tek aritmetik: günlük değişim = (son kapanış − ilk açılış) ÷ ilk
@@ -101,33 +108,9 @@ export type EndeksTanim = {
  */
 export const ENDEKS_NABIZ: readonly EndeksTanim[] = [
   { key: 'XU100', ad: 'BIST 100', emoji: '🇹🇷', sembol: 'XU100', pazar: 'BIST', destekli: true },
-  {
-    key: 'GSPC',
-    ad: 'S&P 500',
-    emoji: '🇺🇸',
-    sembol: '^GSPC',
-    pazar: 'US',
-    destekli: false,
-    red: "grafik ucu '^' ile başlayan sembolü kabul etmiyor",
-  },
-  {
-    key: 'IXIC',
-    ad: 'NASDAQ',
-    emoji: '💻',
-    sembol: '^IXIC',
-    pazar: 'US',
-    destekli: false,
-    red: "grafik ucu '^' ile başlayan sembolü kabul etmiyor",
-  },
-  {
-    key: 'GOLD',
-    ad: 'Altın (ons)',
-    emoji: '🥇',
-    sembol: 'GC=F',
-    pazar: 'US',
-    destekli: false,
-    red: "grafik ucu '=' içeren sembolü kabul etmiyor",
-  },
+  { key: 'GSPC', ad: 'S&P 500', emoji: '🇺🇸', sembol: '^GSPC', pazar: 'US', destekli: true },
+  { key: 'IXIC', ad: 'NASDAQ', emoji: '💻', sembol: '^IXIC', pazar: 'US', destekli: true },
+  { key: 'GOLD', ad: 'Altın (ons)', emoji: '🥇', sembol: 'GC=F', pazar: 'US', destekli: true },
 ];
 
 /**

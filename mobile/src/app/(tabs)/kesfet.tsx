@@ -66,9 +66,11 @@ import {
 import {
   FirsatlarKart,
   HaberSatiri,
+  NedenKart,
   RadarKart,
   SektorKart,
   TaramaKart,
+  TemaKart,
 } from '@/components/kesfet';
 import { radius, space, type, useTheme } from '@/theme';
 
@@ -146,6 +148,31 @@ export default function KesfetScreen() {
       {/* Sektor dagilimi -- Tarama ile AYNI hat (yfin kunye -> POST),
           ayni 12 sembol siniri. Yeni sekme ACILMADI. */}
       <SektorKart liste={liste} onSembol={sembolAc} />
+
+      {/* 🔭 Tema KENDİ ucuna gidiyor (`/api/theme`) ve girdisini KENDİ
+          topluyor: tema serbest metin, takip listesinden türetilemez.
+          Bu yüzden recommend dalının DIŞINDA — liste boşken de çalışır.
+
+          ⚠️ AYNI UÇ ARAMA SEKMESİNDE DE OKUNUYOR (ÖLÇÜLDÜ 2026-10-29:
+          arama.tsx:121) ve `?tema=` yol parametresi köprüsü Arama ↔ Bugün
+          arasında yaşıyor (arama.tsx:99 ↔ bugun.tsx:515). BU EKRAN O
+          PARAMETREYİ OKUMUYOR ve okutulmadı: üçüncü bir köprü ucu açmak
+          iki yönlü akışı tek taraflı bozardı. Kart kendi girdisini taşır.
+          Üst başlıktaki "tematik keşif Arama sekmesinde" notu bu yüzden
+          DEĞİŞTİRİLMEDİ: tema→haber akışı hâlâ orada; buradaki kart
+          tema→HİSSE ADAYI basıyor, ayrı bir okuma. */}
+      <TemaKart onSembol={sembolAc} />
+
+      {/* 📉 Neden GİRDİSİZ MONTE EDİLDİ — bilerek. Uç (`/api/causal`) ağa
+          hiç çıkmıyor: endeks hareketlerini ve gündem konseptlerini
+          İSTEMCİDEN bekliyor (client.ts `fetchCausal` başlığı). ÖLÇÜLDÜ
+          2026-10-29: `mobile/src/api` içinde bu girdiyi ölçen bir uç YOK
+          (`/api/pulse` makro duruş döndürüyor, konsept/sektör/ısı değil).
+          Girdiyi burada uydurmak (`pct`i fiyattan hesaplamak, `notable`
+          için eşik yazmak) istemciye formül ve eşik koymak olurdu. Kart
+          bu yüzden "ölçemedim" diyor; gündem üretimi sunucu işi ve ayrı
+          bir şeride ait. Prop açık: kaynak yazıldığında buraya takılır. */}
+      <NedenKart />
 
       {/* Gündem kartı KENDİ isteğini yapıyor: recommend turundan bağımsız,
           çünkü manşet ölçümü skor ölçümüne bağlı değil — biri düşerken

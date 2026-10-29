@@ -28,6 +28,11 @@
 // =====================================================================
 
 export { FirsatlarKart, type FirsatlarKartProps } from './FirsatlarKart';
+// 📉 Neden: POST /api/causal. UÇ AĞA ÇIKMIYOR — endeks hareketlerini ve
+// gündem konseptlerini İSTEMCİDEN bekliyor, bu yüzden girdi PROP
+// (ÖLÇÜLDÜ 2026-10-29: mobile/src/api içinde bu girdiyi ölçen uç yok).
+// Prop verilmedikçe kart uca gitmez, "ölçemedim" der.
+export { NedenKart, type NedenKartProps } from './NedenKart';
 // Tek manşet satırı — SALT SUNUM. Bugün'deki 🔭 tematik haber kartı ve
 // Arama'daki 📰 tema haberleri kartı aynı satırı basıyor (2026-10-25).
 export { HaberSatiri, type HaberSatiriProps } from './HaberSatiri';
@@ -36,3 +41,9 @@ export { RadarKart, type RadarKartProps } from './RadarKart';
 // gelir; yuzdeye cevirme kartin icinde TEK KEZ yapilir.
 export { SektorKart, type SektorKartProps } from './SektorKart';
 export { TaramaKart, type TaramaKartProps } from './TaramaKart';
+// 🔭 Tema: /api/theme. Girdi serbest METİN olduğu için kartın İÇİNDE
+// toplanıyor. Aynı uç Arama sekmesinde de okunuyor (arama.tsx:121) ve
+// `?tema=` yol parametresi akışı ORADA yaşıyor — bu kart o akışa
+// bağlanmadı (ÖLÇÜLDÜ 2026-10-29: kesfet.tsx `useLocalSearchParams`
+// okumuyor).
+export { TemaKart, type TemaKartProps } from './TemaKart';

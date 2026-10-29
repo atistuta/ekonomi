@@ -39,7 +39,7 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { fetchRadar, useIstek, type RadarTema } from '@/api';
@@ -68,11 +68,20 @@ export function RadarKart({ onSembol, baslangicSektor }: RadarKartProps) {
 
   // Sektör adları önbelleği (bkz. başlık). Yalnız DOLU sözlük yazılıyor:
   // boş bir cevap, elde duran adları silmesin.
+  //
+  // NEDEN `useEffect` DEĞİL (ŞERİT F6 / 2026-10-29): önbellek bir effect
+  // içinde `setSektorAdlari` ile yazılıyordu ve `react-hooks/
+  // set-state-in-effect` bunu HATA sayıyor (ölçüldü: eslint EXIT 1,
+  // RadarKart.tsx:74) — effect gövdesindeki setState basamaklı render
+  // doğuruyor. Davranış AYNI tutuldu: dolu sözlük gelirse önbellek
+  // güncellenir, boş/eksik cevap elde duranı SİLMEZ. Değişen tek şey
+  // yazmanın render sırasında olması (React'in "prop değişince state
+  // ayarla" deseni), yani bir render turu daha kısa.
   const [sektorAdlari, setSektorAdlari] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const s = veri?.sektorler;
-    if (s && Object.keys(s).length) setSektorAdlari(s);
-  }, [veri]);
+  const gelenAdlar = veri?.sektorler;
+  if (gelenAdlar && Object.keys(gelenAdlar).length && gelenAdlar !== sektorAdlari) {
+    setSektorAdlari(gelenAdlar);
+  }
 
   const temalar: RadarTema[] = veri?.temalar ?? [];
   // `semboller` SADECE `sektor=` verildiğinde geliyor (api/types.ts).
