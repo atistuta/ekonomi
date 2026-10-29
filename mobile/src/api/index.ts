@@ -41,6 +41,27 @@ export {
   type YfinOptions,
   type YfinResponse,
 } from './yfin';
+// NEDEN AYRI SATIR: `takvim.ts` skor zincirinin DIŞINDA bir uç (KAP
+// duyuruları + BIST temettü takvimi) ve `client.ts`'in sembol kapısından
+// geçmiyor — sembol parametresi hiç YOK, `vade` YOK, kendi kapsam beyaz
+// listesi ve iki ayrı adet tavanı (60 / 400) var. `client.ts` içine
+// katmak, skor sözleşmesiyle takvim sözleşmesini aynı dosyada
+// karıştırmak olurdu (`yfin.ts` ile aynı gerekçe). `client.ts`'e yalnız
+// ADRES eklendi (`ENDPOINTS.takvim`).
+export {
+  TAKVIM_AZAMI_KAP,
+  TAKVIM_AZAMI_TEMETTU,
+  TAKVIM_KAPSAMLAR,
+  TAKVIM_TIMEOUT_MS,
+  VARSAYILAN_TAKVIM_KAPSAM,
+  fetchTakvim,
+  type TakvimErrorCode,
+  type TakvimKapMadde,
+  type TakvimKapsam,
+  type TakvimOptions,
+  type TakvimResponse,
+  type TakvimTemettuMadde,
+} from './takvim';
 export { useIstek, type IstekAyar, type IstekDurum, type IstekSonuc } from './istek';
 export {
   BASLANGIC_LISTE,

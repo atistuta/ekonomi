@@ -35,3 +35,9 @@ export {
   TakipOlcumleriKarti,
   type TakipOlcumleriKartiProps,
 } from './TakipOlcumleriKarti';
+
+// FAZ 3: web'in `calendar` sekmesinin native karşılığı. Uç (`/api/takvim`)
+// ÜRETİMDE CANLIYDI ama `mobile/` içinde onu çağıran hiçbir şey yoktu
+// (ölçüldü 2026-10-29: `grep -rn "api/takvim" mobile/` → 0 eşleşme) —
+// ölçülmüş veri çöpe gidiyordu. Yeni SEKME açılmadı, 5'li menü değişmedi.
+export { TakvimKart, type TakvimKartProps } from './TakvimKart';

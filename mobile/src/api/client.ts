@@ -152,6 +152,13 @@ export const ENDPOINTS = {
   // rotası, o beşle AYNI yeniden-yazımdan geçiyor (vercel.json:30 →
   // `/api/proxy?__rota=arama`) — yeni Vercel fonksiyonu AÇILMADI.
   arama: '/api/arama',
+  // KAP DUYURULARI + BIST TEMETTÜ TAKVİMİ (api/_kesif.js `takvimHandler`,
+  // taşıyıcı api/_takvim.js). Yedinci keşif rotası, o altıyla AYNI
+  // yeniden-yazımdan geçiyor (vercel.json → `/api/proxy?__rota=takvim`) —
+  // yeni Vercel fonksiyonu AÇILMADI, `api/*.js` uç dosyası sayısı 12'de
+  // KALDI (Hobby tavanı). İstemci yeniden-yazımı bilmiyor: yol adı
+  // gerçek uç gibi davranıyor.
+  takvim: '/api/takvim',
 } as const;
 
 /**

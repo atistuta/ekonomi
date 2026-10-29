@@ -110,6 +110,7 @@ import {
   EndeksNabziKarti,
   PiyasaGundemiKarti,
   TakipOlcumleriKarti,
+  TakvimKart,
   type EndeksOlcum,
 } from '@/components/bugun';
 import { HaberSatiri } from '@/components/kesfet';
@@ -274,6 +275,13 @@ export default function BugunScreen() {
           kartı sembol başına çalışıyor, bu uç (`gundem=1`) sembolsüz.
           Kaynak başına ölçümü kendi içinde yazıyor. */}
       <PiyasaGundemiKarti />
+
+      {/* 🗓️ Takvim: web'in `calendar` sekmesinin karşılığı. MEVCUT
+          KARTLARIN ARDINA eklendi — sıralama "sembolden bağımsız ölçümler
+          önce" kuralını bozmuyor ve iki dış kaynak (KAP akışı + temettü
+          sayfası) okuduğu için turun en pahalısı en sonda. Kapsam çipi
+          kartın İÇİNDE: sekme açmak 5'li menüyü değiştirmek olurdu. */}
+      <TakvimKart />
 
       <Card title="Henüz ölçülmeyen kartlar" subtitle="Dürüst eksik listesi">
         <Text style={[type.small, { color: colors.textDim }]}>
