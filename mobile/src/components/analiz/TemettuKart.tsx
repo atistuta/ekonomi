@@ -9,19 +9,22 @@
 //  üretim):
 //      GET /api/yfin?symbols=AAPL&deep=1
 //      GET /api/yfin?symbols=THYAO.IS,KO&deep=1
-//  Cevapta temettü tarafından GELEN TEK ALAN `dividendYield`.
-//  GELMEYENLER: temettü kesinti (ex-date) tarihi, ödeme tarihi, beyan
-//  tarihi, hisse başı temettü TUTARI, dağıtım oranı, temettü geçmişi.
-//  `api/_yfin.js` → `fetchOne` bunların hiçbirini basmıyor
-//  (`summaryDetail`ten yalnız `dividendYield` okunuyor) ve `deep=1`
-//  de bir şey eklemiyor (`calendarEvents`ten YALNIZ `earnings`
-//  ayrıştırılıyor, `dividendDate` ayrıştırılmıyor).
+//  O gün cevapta temettü tarafından GELEN TEK ALAN `dividendYield`'dı.
 //
-//  Bu yüzden burada TAKVİM BASILMIYOR. Elimizde tarih yokken "Temettü
-//  Takvimi" başlığı altında boş bir takvim ya da uydurma bir gün
-//  göstermek, ürünün tek değişmez kuralını (veri yoksa UYDURMA)
-//  kırardı. Kart ne ölçüldüyse onu gösteriyor ve EKSİĞİ AÇIKÇA YAZIYOR
-//  — takvim satırı uç o alanları döndürdüğü gün eklenir.
+//  ── DÜZELTME (ÖLÇÜLDÜ 2026-10-29, `api/_yfin.js:118-128` okundu) ────
+//  Uç ARTIK tutar (`dividendRate`, `trailingAnnualDividendRate`,
+//  `lastDividendValue`), dağıtım oranı (`payoutRatio`), ikinci bir
+//  verim ölçeği (`dividendYield5y`, `trailingAnnualDividendYield`) ve
+//  ÜÇ TARİH (`lastDividendTs`, `exDividendTs`, `dividendTs`) da
+//  döndürüyor. HÂLÂ GELMEYEN yalnız ikisi: beyan (ilan) tarihi ve
+//  temettü geçmişi (`EKSIK_ALANLAR`).
+//
+//  BU KART YİNE DE YALNIZ VERİM BASIYOR: burası ÇOK SEMBOLLÜ bir liste
+//  (pazar süzgeci + verime göre sıralama) ve dokuz alanı her satıra
+//  sığdırmak satırı okunmaz yapardı. Tam künye TEK SEMBOLDE, hisse
+//  detay ekranındaki `components/detay/TemettuKart` kartında — orada üç
+//  ölçek (oran / yüzde puanı / para birimi) ayrı ayrı biçimleniyor.
+//  Kart yine ne ölçtüyse onu gösteriyor ve EKSİĞİ AÇIKÇA YAZIYOR.
 //
 //  BURADA HESAP YOK:
 //    · `dividendYield` ORAN (0-1) geliyor — ölçüldü: KO 0,0229 ·
@@ -78,17 +81,20 @@ function pazarOf(sembol: string): 'BIST' | 'US' {
 
 /**
  * Künye ucunun TEMETTÜ TARAFINDA DÖNDÜRMEDİĞİ alanlar — tek tek.
- * ÖLÇÜLDÜ (`api/_yfin.js` → `fetchOne`): `summaryDetail`ten yalnız
- * `dividendYield` okunuyor; `deep=1` yolunda `calendarEvents`ten yalnız
- * `earnings` ayrıştırılıyor. Liste kartta madde madde basılır; tahmin
- * değil, ölçülmüş bir eksiklik raporudur.
+ *
+ * LİSTE KISALDI (ÖLÇÜLDÜ 2026-10-29, `api/_yfin.js:118-128` kaynak
+ * okuma): tutar (`dividendRate`, `trailingAnnualDividendRate`,
+ * `lastDividendValue`), dağıtım oranı (`payoutRatio`) ve tarihler
+ * (`exDividendTs`, `dividendTs`, `lastDividendTs`) ARTIK GELİYOR —
+ * onları "ölçülmedi" diye yazmak ölçülmüş veriyi yok saymak olurdu.
+ * BU LİSTEDE KALAN İKİSİ gerçekten uçta YOK.
+ *
+ * BU KART O ALANLARI BASMIYOR (çok sembollü liste; dokuz alanı yan yana
+ * koymak satırı okunmaz yapardı): tam künye tek sembolde, hisse detay
+ * ekranındaki `components/detay/TemettuKart` kartında.
  */
 const EKSIK_ALANLAR: readonly string[] = [
-  'Temettü kesinti tarihi (ex-date)',
-  'Ödeme tarihi',
   'Beyan (ilan) tarihi',
-  'Hisse başı temettü tutarı',
-  'Dağıtım oranı (payout)',
   'Geçmiş temettü ödemeleri',
 ];
 
@@ -139,7 +145,7 @@ export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: Temet
   return (
     <Card
       title="💰 Temettü"
-      subtitle="Yalnız VERİM — tarih alanları bu uçtan gelmiyor"
+      subtitle="Listede yalnız VERİM — tutar/tarih alanları hisse ekranında"
       right={
         durum === 'veri' && olculen.length ? (
           <Pill label={olculen.length + ' sembol'} tone="info" glyph={null} size="sm" />
@@ -243,7 +249,7 @@ export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: Temet
                 <View style={styles.uyariBas}>
                   <Pill label="uçtan gelmiyor" tone="neutral" glyph={null} size="sm" />
                   <Text style={[type.smallBold, { color: colors.text, flex: 1 }]}>
-                    Bu kartta ölçülemeyen alanlar
+                    Künye ucunda hiç olmayan alanlar
                   </Text>
                 </View>
                 {/* MADDE MADDE: tek bir cümleye sıkıştırmak eksiğin
@@ -258,8 +264,9 @@ export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: Temet
                   </View>
                 ))}
                 <Text style={[type.micro, { color: colors.textFaint }]}>
-                  Bu alanlar künye cevabında HİÇ YOK (eksik ölçüm değil, alan yok). Takvim satırı,
-                  uç o alanları döndürdüğü gün eklenecek; uydurma tarih basılmıyor.
+                  Bu iki alan künye cevabında HİÇ YOK (eksik ölçüm değil, alan yok); uydurma tarih
+                  basılmıyor. Tutar, dağıtım oranı ve kesinti/ödeme tarihleri uçtan GELİYOR — bu
+                  liste kartında değil, hisse detay ekranındaki temettü künyesinde.
                 </Text>
               </View>
             </View>

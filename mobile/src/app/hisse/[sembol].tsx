@@ -67,6 +67,7 @@ import {
   RiskOdulKart,
   TeknikKart,
   TemelKart,
+  TemettuKart,
   TezKart,
   degerTuruOf,
 } from '@/components/detay';
@@ -163,6 +164,13 @@ export default function HisseDetayScreen() {
                   BIST'te `.IS` soneki ucun doğru pazarı bulması için
                   gerekiyor (yukarıdaki ".IS GERİ KAZANIMI" notu). */}
               <BacktestKart sembol={sembol} market={satir.market} vade="orta" />
+              {/* ANALYZE TURUNUN DIŞI (ŞERİT F): temettü alanları
+                  `/api/yfin` künyesinde, `AnalyzeRow`da HİÇ YOK. Kendi
+                  ucu, kendi zaman aşımı, kendi `Durum` gövdesi —
+                  `BacktestKart` ile aynı gerekçe. Sembol yine ekranın
+                  çözdüğü `sembol`: BIST'te `.IS` soneki künye ucunun
+                  doğru kaydı bulması için gerekiyor. */}
+              <TemettuKart sembol={sembol} />
               {/* DEĞER UCU HİSSE ÖLÇMÜYOR: yalnız metal/kripto. Kartı
                   hisse sembolünde HİÇ basmıyoruz — her hissede "bu uç
                   bunu ölçmüyor" kutusu göstermek ekranı gürültüye

@@ -34,10 +34,17 @@
 //    · `earnings` içinde GELEN alanlar: ts · estimate · epsAvg/High/Low
 //      · revAvg/High/Low · numAnalysts · epsGrowth · revGrowth.
 //      `parseEarnings` bunların DIŞINDA alan döndürmüyor.
-//    · TEMETTÜ TARAFINDA GELEN TEK ALAN: `dividendYield`.
-//      Temettü TARİHİ (ex-date / ödeme günü), temettü TUTARI,
-//      dağıtım oranı GELMİYOR — `fetchOne` böyle bir alan basmıyor
-//      ve ölçümde de yoktu. Bu yüzden burada o alanların türü YOK.
+//    · TEMETTÜ ALANLARI — ESKİ NOT GEÇERSİZ (düzeltildi 2026-10-29).
+//      Önceki ölçümde temettü tarafında yalnız `dividendYield` vardı.
+//      `api/_yfin.js` → `fetchOne` BUGÜN dokuz alan daha basıyor
+//      (kaynak okundu, satır 118-128): dividendRate · payoutRatio ·
+//      dividendYield5y · trailingAnnualDividendRate ·
+//      trailingAnnualDividendYield · lastDividendValue ·
+//      lastDividendTs · exDividendTs · dividendTs. Türleri aşağıda,
+//      BİRİMLERİYLE (üç ayrı ölçek var — oran / yüzde puanı / para).
+//      HÂLÂ GELMEYEN: beyan (ilan) tarihi — Yahoo `quoteSummary`'de yok
+//      — ve temettü GEÇMİŞİ (ayrı çağrı: `chart?events=div`). Bu ikisi
+//      için alan AÇILMADI; uydurulmuş bir alan olmasın.
 //
 //  BURADA HESAP YOK: bu dosya hiçbir oranı ölçeklemez, hiçbir skor
 //  üretmez. Gelen ham sayı aynen taşınır; biçimleme `lib/format.ts`.
@@ -146,6 +153,87 @@ export type YfinKunye = {
    * `0` GERÇEK BİR ÖLÇÜM: "temettü ödemiyor" demek, "veri yok" değil.
    */
   dividendYield?: number | null;
+
+  // ── TEMETTÜ KÜNYESİ (ÖLÇÜLDÜ 2026-10-29, KAYNAK OKUMA) ───────────
+  //  Ölçüm yeri: `api/_yfin.js` → `fetchOne` dönüş gövdesi. Dokuz alanın
+  //  tamamı `num(...)` süzgecinden geçiyor (`api/_yfin.js:47`:
+  //  `o && typeof o.raw === 'number' ? o.raw : null`) → ölçülemeyen alan
+  //  `null`, ASLA `0`. Bu yüzden hepsi `number | null`.
+  //
+  //  BİRİM TUZAĞI — ÜÇ FARKLI ÖLÇEK AYNI KARTTA: iki alan 0-1 ORAN, bir
+  //  alan YÜZDE PUANI, üç alan PARA BİRİMİ. Hepsini tek biçimleyiciye
+  //  vermek 100 kat yanlış sayı basmak olurdu; her alanın ölçeği
+  //  yanındaki yorumda yazıyor ve kart o yoruma göre biçimliyor.
+  //
+  //  BURADA ÖLÇEK DEĞİŞTİRİLMİYOR: hiçbir alan 100 ile çarpılmıyor,
+  //  bölünmüyor, saniye/milisaniye çevrimi burada yapılmıyor.
+  //
+  //  Bu dokuz alan `deep` ile DEĞİŞMİYOR (hepsi `summaryDetail` /
+  //  `defaultKeyStatistics` modüllerinde) — TEK İSTİSNA `dividendTs`.
+
+  /**
+   * Yıllık (ilan edilmiş) hisse başı temettü — **PARA BİRİMİ**
+   * (`currency` alanının birimi), oran DEĞİL.
+   * Kaynak: `summaryDetail.dividendRate`.
+   */
+  dividendRate?: number | null;
+  /**
+   * Dağıtım oranı (payout) — **ORAN (0-1)**, yüzde puanı DEĞİL.
+   * Kaynak: `summaryDetail.payoutRatio` (`api/_yfin.js:119` → "0–1 ORAN").
+   * Doğru biçimleyici `formatOran`; `formatPercent` 100 kat küçük basar.
+   */
+  payoutRatio?: number | null;
+  /**
+   * 5 yıl ortalama temettü verimi — **YÜZDE PUANI** (2.41 = %2,41),
+   * ORAN DEĞİL. Kaynak: `summaryDetail.fiveYearAvgDividendYield`
+   * (`api/_yfin.js:120` bu tuzağı ayrıca uyarıyor).
+   *
+   * DİKKAT: bu alan `dividendYield` ve `trailingAnnualDividendYield` ile
+   * AYNI ÖLÇEKTE DEĞİL. `formatOran`a verilmesi "2,41" yazdırır ve
+   * kullanıcı bunu 0-1 oranı sanır → 100 kat yanlış okuma.
+   */
+  dividendYield5y?: number | null;
+  /**
+   * Son 12 ayda FİİLEN ödenen hisse başı temettü — **PARA BİRİMİ**.
+   * Kaynak: `summaryDetail.trailingAnnualDividendRate`.
+   */
+  trailingAnnualDividendRate?: number | null;
+  /**
+   * Son 12 ay verimi — **ORAN (0-1)**, yüzde puanı DEĞİL.
+   * Kaynak: `summaryDetail.trailingAnnualDividendYield`
+   * (`api/_yfin.js:122` → "0–1 ORAN").
+   */
+  trailingAnnualDividendYield?: number | null;
+  /**
+   * Son TEK temettü ödemesinin hisse başı tutarı — **PARA BİRİMİ**.
+   * Kaynak: `defaultKeyStatistics.lastDividendValue`.
+   */
+  lastDividendValue?: number | null;
+  /**
+   * Son tek ödemenin tarihi — UNIX **SANİYE** (milisaniye DEĞİL).
+   * Kaynak: `defaultKeyStatistics.lastDividendDate`, `num()` ile ham
+   * `raw` okunuyor; Yahoo `quoteSummary` `raw` damgaları 10 hanelik
+   * saniye (aynı sözleşme `YfinEarnings.ts` ve `formatGunAyYil` için de
+   * geçerli). Biçimleyici: `formatGunAyYil` — saniyeyi kendisi
+   * milisaniyeye çeviriyor; ekranda `new Date(t * 1000)` yazılmıyor.
+   */
+  lastDividendTs?: number | null;
+  /**
+   * Temettü kesinti (ex-date) tarihi — UNIX **SANİYE**.
+   * Kaynak: `summaryDetail.exDividendDate`, yedek
+   * `calendarEvents.exDividendDate` (yedek YALNIZ `deep=1`'de dolu).
+   */
+  exDividendTs?: number | null;
+  /**
+   * Ödeme tarihi — UNIX **SANİYE**.
+   *
+   * YALNIZ `deep=1`: kaynak `calendarEvents.dividendDate` ve uç
+   * `deep ? num(ce.dividendDate) : null` yazıyor (`api/_yfin.js:128`).
+   * Yani `deep` kapalı istekte gelen `null` "ödeme tarihi yok" DEĞİL,
+   * "sorulmadı" demek — çağıran bu ayrımı bilmeli.
+   */
+  dividendTs?: number | null;
+
   /** Son fiyat (ham). */
   price?: number | null;
 };

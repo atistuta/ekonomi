@@ -24,4 +24,9 @@ export { RiskOdulKart, type RiskOdulKartProps } from './RiskOdulKart';
 export { Satir, type SatirProps } from './Satir';
 export { TeknikKart, type TeknikKartProps } from './TeknikKart';
 export { TemelKart, type TemelKartProps } from './TemelKart';
+// ŞERİT F: `/api/yfin` temettü alanları. Adı `components/analiz`
+// altındaki kartla aynı ama O KART BAŞKA: çok sembollü liste, yalnız
+// `dividendYield`. İki giriş ayrı olduğu için ad çakışması yok;
+// karıştırmamak için her iki dosyanın başlığında ayrım yazılı.
+export { TemettuKart, type TemettuKartProps } from './TemettuKart';
 export { TezKart, type TezKartProps } from './TezKart';
