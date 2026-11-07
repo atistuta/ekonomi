@@ -3859,3 +3859,47 @@ cikti; Android yapisi su an gundemde degil, TestFlight adiminda geri
 gelecek.
 
 Yeni yapi: `156e75e1-5424-4407-8979-3a5c82732fab`.
+
+### 45.2 45.1 YANLISTI · eklenti CIKARILAMIYOR (OLCULDU 2026-11-07)
+
+Yapi `156e75e1` — eklenti `plugins` dizisinden cikarilmis haliyle AYNI
+hatayla dustu. Yani §45.1'in "eklentiyi cikar" cozumu ISE YARAMIYOR.
+
+Olculen sebep (kaynak kodda):
+- `@expo/prebuild-config/build/plugins/withDefaultPlugins.js:171` —
+  `versionedExpoSDKPackages` listesi `expo-notifications`'i ICERIYOR.
+  Bu listedeki paketlerin ayar eklentisi prebuild'de KENDILIGINDEN
+  uygulaniyor; `app.json` → `plugins` dizisinde yazili olup olmamasi
+  FARK ETMIYOR.
+- Tek kacis `shouldSkipAutoPlugin` (`getAutolinkedPackages.js:35`): paket
+  AUTOLINK EDILMIYORSA atlaniyor. Yani eklentiyi durdurmanin tek yolu
+  paketi tumden kaldirmak / autolink'ten cikarmak — o zaman da
+  `mobile/src/api/bildirim.ts`'in tepedeki `import * as Notifications`
+  satiri cokecek.
+- Yetki yazan satir: `expo-notifications/plugin/build/withNotificationsIOS.js:11`
+  — `if (!config.modResults['aps-environment']) ... = mode`. Varsa
+  DOKUNMUYOR; yoksa yaziyor. Bizim mod'umuz ONCE kostugu icin silmek de
+  ise yaramaz (varsayilan eklentiler EN SON kayit oluyor).
+
+**KARAR:** §45.1'deki eklenti cikarma GERI ALINDI; `app.json` →
+`plugins` yeniden `expo-notifications` iceriyor (Android bildirim
+simgesi/rengi ayari da geri geldi).
+
+**ENGELLEYICI · Apple girisi sart.** Cihaz yapisi, Apple tarafinda
+App ID `com.sabahbulteni.app` icin "Push Notifications" yetenegi
+ACILMADAN ve AdHoc profil YENILENMEDEN tamamlanamaz. Profili yenilemek
+Apple hesabina giris (sifre + 2FA) ister; sifreyi ben YAZMAM. Kullanici
+kendi terminal sekmesinde su komutu kosup Apple girisini yapacak:
+
+    cd mobile
+    npx eas-cli@latest build -p ios --profile cihaz
+
+Etkilesimli kostugunda EAS Apple girisini soruyor, App ID'ye push
+yetenegini kendisi ekliyor ve profili yeniliyor. Bir kez yapildiktan
+sonra sonraki yapilar yine etkilesimsiz kosabilir.
+
+Yani §45'teki "bildirim kurulumu TestFlight'a ertelendi" karari
+UYGULANAMIYOR: bildirim KODU gonderildigi icin Apple yetenegi artik
+yapinin ON KOSULU. Ertelenebilen tek kalem Vercel/GitHub `PUSH_SECRET`
+ve APNs ANAHTARI (gercek bildirim gondermek icin); profil yetenegi
+ERTELENEMEZ.

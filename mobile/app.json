@@ -38,6 +38,10 @@
     "plugins": [
       "expo-router",
       [
+        "expo-notifications",
+        { "icon": "./assets/images/icon.png", "color": "#0F1522" }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#0F1522",
