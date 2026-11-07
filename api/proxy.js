@@ -45,6 +45,7 @@ export const config = {
 //  `await import` ile bedel yalnız keşif rotalarına düşüyor; ESM modül
 //  önbelleği sayesinde ikinci çağrıda kurulum yinelenmiyor.
 import { yfinHandler } from './_yfin.js';
+import { bildirimHandler } from './_bildirim.js';
 
 const UPSTREAM_TIMEOUT_MS = 25000;
 const CACHE_TTL_SEC       = 300;
@@ -133,6 +134,12 @@ export default async function handler(req, res) {
   // /api/yfin rewrite'i buraya dusuyor -> tasiyiciya devret. CORS basliklarini
   // yfinHandler kendisi kuruyor (ayni kume: *, GET/OPTIONS, 86400).
   if (req.query?.__rota === 'yfin') return yfinHandler(req, res);
+
+  // /api/bildirim rewrite'i buraya dusuyor -> tasiyiciya devret.
+  // TASIYICILAR tablosuna GIRMIYOR: o tablodaki on rota salt-okuma GET ucu ve
+  // tests/uc-test.mjs kapi (17)d her biri icin "POST -> 405" kilidi koyuyor.
+  // Bu uc POST ile YAZIYOR, o yuzden yfin ile ayni kalipta ayri dal.
+  if (req.query?.__rota === 'bildirim') return bildirimHandler(req, res);
 
   // Keşif rotaları (tarama/sektor/radar/backtest/deger) -> _kesif.js.
   // CORS başlıklarını taşıyıcının kendisi kuruyor (aynı küme + POST için

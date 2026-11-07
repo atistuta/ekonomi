@@ -151,6 +151,10 @@ export {
   nakitAyarla,
   nakitBakiye,
   portfoyDepo,
+  pushDepo,
+  pushIzinYaz,
+  pushJetonYaz,
+  pushYukle,
   sayiOku,
   senkronDepo,
   senkronKodYaz,
@@ -172,6 +176,8 @@ export {
   useHamleler,
   useKiyas,
   usePortfoy,
+  usePush,
+  usePushHazir,
   useSepet,
   useSenkron,
   useSenkronHazir,
@@ -189,6 +195,8 @@ export {
   type KiyasOge,
   type Pazar,
   type PortfoyOge,
+  type PushDurum,
+  type PushIzin,
   type SenkronAyar,
   type SepetGecmisKaydi,
   type SepetGirdi,
@@ -213,6 +221,22 @@ export {
   type SenkronCekSonuc,
   type SenkronGonderSonuc,
 } from './senkron';
+
+// NEDEN AYRI SATIR: `bildirim.ts` de AĞA ÇIKAR (`/api/bildirim`) ama
+// `client.ts`e GİRMEDİ — cihaz YETENEKLERİ (bildirim izni, Expo push
+// jetonu) ile ucu ve cihaz deposunu BİRLİKTE derliyor. `./senkron`
+// satırının aynı gerekçesi.
+export {
+  bildirimDurumOku,
+  bildirimIzniIste,
+  pushJetonAl,
+  pushKur,
+  type BildirimDurumSonuc,
+  type BildirimIzinSonuc,
+  type PushJetonSonuc,
+  type PushKurSebep,
+  type PushKurSonuc,
+} from './bildirim';
 
 // NEDEN AYRI SATIR: `sepet.ts` de CIHAZ DEPOSU ile ucu birlikte
 // derliyor — sepet kayitlarini sinifa gore ayirip ULASILABILEN fiyati

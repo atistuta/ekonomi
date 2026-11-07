@@ -21,6 +21,7 @@
   },
   "rewrites": [
     { "source": "/api/yfin", "destination": "/api/proxy?__rota=yfin" },
+    { "source": "/api/bildirim", "destination": "/api/proxy?__rota=bildirim" },
 
     { "source": "/api/tarama",   "destination": "/api/proxy?__rota=tarama" },
     { "source": "/api/sektor",   "destination": "/api/proxy?__rota=sektor" },

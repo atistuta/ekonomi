@@ -84,6 +84,9 @@ import {
   type Aralik,
   type AramaResponse,
   type BacktestResponse,
+  type BildirimDurumResponse,
+  type BildirimKayitGovde,
+  type BildirimKayitResponse,
   type CausalRequest,
   type CausalResponse,
   type ChartResponse,
@@ -247,6 +250,11 @@ export const ENDPOINTS = {
   // KALDI (Hobby tavani). Webde bu tarama TARAYICIDA donuyordu; olcum
   // uca tasindi, esik motorda kaldi.
   hareket: '/api/hareket',
+  // PUSH JETON KAYDI (cihazin Expo jetonunu buluta yazar, kayitli cihaz
+  // sayisini dondurur) — AYNI yeniden-yazim yolundan geciyor, bu yuzden
+  // YENI Vercel fonksiyonu ACILMADI; `api/*.js` sayisi 12'de KALDI
+  // (Hobby tavani). Webde karsiligi YOK: push yalniz native yuzeyde var.
+  bildirim: '/api/bildirim',
 } as const;
 
 /**
@@ -3034,4 +3042,107 @@ export async function fetchHareket(
     timeoutMs,
     signal,
   });
+}
+
+
+// =====================================================================
+//  PUSH JETON KAYDI — /api/bildirim                     (şerit B)
+// ---------------------------------------------------------------------
+//  ⚠️ GÜVENLİK: uç `/api/watchlist` ile AYNI kapıyı kullanıyor — kimlik
+//  doğrulaması YOK, `code` paylaşılan bir sır. Bu yüzden kodun BİÇİM
+//  kapısı da aynı (`watchlistKodKapisi`): iki yerde iki kural olmasın.
+//  Kod hata iletisinde TEKRAR EDİLMİYOR.
+//
+//  ⚠️ JETON EKRANA/HATAYA YAZILMIYOR: `bad_jeton` dalında bile jetonun
+//  kendisi iletiye konmuyor. Jeton kişiye özel bir adres; hata günlüğüne
+//  düşmesi sızıntıdır.
+//
+//  ÖLÇÜLDÜ DEĞİL — SÖZLEŞMEDEN: bu uç bu şeritte ÇALIŞTIRILMADI; şekil
+//  görevle verilen sözleşmeden alındı (200 → `{ok,sayi,updatedAt}` /
+//  GET → `{sayi,updatedAt}`; 400 `kod_yok`·`jeton_yok`·`bad_jeton`,
+//  405 `method_not_allowed`, 429 `rate_limited`, 502 `kv_yok`).
+//  Sözleşme TAHMİN EDİLMEDİ, genişletilmedi.
+//
+//  NEDEN `DEFAULT_TIMEOUT_MS`: /api/watchlist ile aynı kademe — tek KV
+//  turu. Ayrı bir kademe uydurmak ölçümsüz bir sayı olurdu.
+// ---------------------------------------------------------------------
+
+/**
+ * Kayıtlı cihaz sayısını OKUMA: GET /api/bildirim?code=<paylaşılan kod>
+ *
+ * Cevapta JETON LİSTESİ YOK (bilinçli sızıntı kapısı). Yani bu çağrı
+ * "bu cihaz kayıtlı mı?" sorusunu YANITLAMAZ; yalnız buluttaki cihaz
+ * SAYISINI verir. Cihazın kendi hâli `sb:push` kaydındadır.
+ *
+ * `updatedAt` `null` gelebilir ve o "hiç yazılmamış" demek — `0` değil.
+ */
+export async function fetchBildirimDurum(
+  code: string,
+  options: Omit<RequestOptions, 'query'> = {},
+): Promise<ApiResult<BildirimDurumResponse>> {
+  const kapi = watchlistKodKapisi(code);
+  if ('hata' in kapi) return { ok: false, error: kapi.hata };
+
+  return apiGet<BildirimDurumResponse>(ENDPOINTS.bildirim, {
+    query: { code: kapi.kod },
+    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    signal: options.signal,
+  });
+}
+
+/**
+ * Jeton YAZMA: POST /api/bildirim?code=<paylaşılan kod>
+ *
+ * ⚠️ Aynı kodu kullanan her cihaz AYNI kümeye yazar; kodu tahmin eden
+ * biri de kendi cihazını o kümeye EKLEYEBİLİR. Ekran bunu bir kimlik
+ * doğrulaması gibi anlatmamalı.
+ *
+ * Yerel kapı yalnız VARLIK ve küme denetimi yapıyor: jetonun BİÇİMİ
+ * burada doğrulanmıyor — biçim kuralı ucun kendi kuralı (`bad_jeton`),
+ * kopyalamak iki yerde iki kural demekti. `platform` ise kapalı küme
+ * ('ios' | 'android'); dışında bir değer ağa çıkmadan kesiliyor.
+ */
+export async function pushJetonKaydet(
+  code: string,
+  govde: BildirimKayitGovde,
+  options: Omit<RequestOptions, 'query'> = {},
+): Promise<ApiResult<BildirimKayitResponse>> {
+  const kapi = watchlistKodKapisi(code);
+  if ('hata' in kapi) return { ok: false, error: kapi.hata };
+
+  const jeton = String(govde?.token ?? '').trim();
+  if (jeton === '') {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Bu cihazın bildirim adresi alınamadı, gönderilecek kayıt yok.',
+        endpoint: ENDPOINTS.bildirim,
+        code: 'jeton_yok',
+      },
+    };
+  }
+
+  const platform = govde?.platform;
+  if (platform !== 'ios' && platform !== 'android') {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Bildirim kaydı yalnız telefon uygulamasından yapılabilir.',
+        endpoint: ENDPOINTS.bildirim,
+        code: 'bad_platform',
+      },
+    };
+  }
+
+  return apiPost<BildirimKayitResponse>(
+    ENDPOINTS.bildirim,
+    { token: jeton, platform },
+    {
+      query: { code: kapi.kod },
+      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      signal: options.signal,
+    },
+  );
 }

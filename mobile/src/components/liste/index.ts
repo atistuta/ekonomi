@@ -27,3 +27,8 @@ export { NakitKart, type NakitKartProps } from './NakitKart';
 // `hamlelerDepo` / `useHamleler` / `AZAMI_HAMLE` native'de VARDI ve HİÇ
 // gösterilmiyordu — `HamleKart` o günlüğün İLK tüketicisi.
 export { HamleKart, type HamleKartProps } from './HamleKart';
+// ŞERİT B: telefon bildiriminin CİHAZ yüzeyi. `SenkronKart` listeleri
+// buluta taşıyordu ama CİHAZI kaydeden hiçbir ekran yoktu — izin de
+// jeton da uygulamadan hiç istenmiyordu. Eksik olan ekran, veri değil.
+// Yeni SEKME açılmadı, 5'li menü değişmedi.
+export { BildirimKart, type BildirimKartProps } from './BildirimKart';

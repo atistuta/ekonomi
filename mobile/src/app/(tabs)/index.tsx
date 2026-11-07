@@ -64,7 +64,7 @@ import {
   TickerRow,
   VeriYok,
 } from '@/components';
-import { ListelerKart } from '@/components/liste';
+import { BildirimKart, ListelerKart } from '@/components/liste';
 import { formatPrice, formatScore } from '@/lib/format';
 import { hisseAc } from '@/lib/gezinme';
 import { depoCalisiyorMu } from '@/lib/kalici';
@@ -180,6 +180,15 @@ export default function ListelerScreen() {
                 adlandırılmış listeler, evren anahtarı, ekle/çıkar/sil.
                 Aynı `sb:lists` kaydını yazıyor, ikinci kayıt açmıyor. */}
             <ListelerKart />
+
+            {/* ŞERİT B: telefon bildiriminin CİHAZ yüzeyi. `SenkronKart`
+                LİSTELERİ buluta taşıyor (o kart `ListelerKart`ın en
+                altında duruyor, ölçüldü: ListelerKart.tsx:109), bu kart
+                ise CİHAZI bildirim kümesine kaydediyor — ikisi ayrı
+                ölçüm, biri ötekinin yerine geçmiyor. Bu yüzden hemen
+                `ListelerKart`ın ARDINA, yani senkron kartının yanına
+                kondu. YENİ SEKME AÇILMADI. */}
+            <BildirimKart />
 
             <Card title="Liste nerede saklanıyor?">
               <Text style={[type.small, { color: colors.textDim }]}>

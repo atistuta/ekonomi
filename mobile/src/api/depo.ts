@@ -102,6 +102,15 @@ export const ANAHTARLAR = {
   aramalar: 'sb:recentSearch',
   gostergeler: 'sb:tickers',
   gizliGostergeler: 'sb:ticker:hidden',
+  /**
+   * NATIVE'E ÖZEL — webde karşılığı YOK. Kümenin başlığı "web ile BİREBİR"
+   * diyor; bu satır o kuralın BİLİNÇLİ istisnası ve şerit görevinde
+   * açıkça istendi. Cihazın push jetonu/izni yalnız telefonda anlamlı,
+   * web lab'ın okuyacağı bir karşılığı olamaz. `ANAHTARLAR` hiçbir yerde
+   * döngüyle gezilmiyor (ölçüldü: `Object.values(ANAHTARLAR)` yok), bu
+   * yüzden satırın eklenmesi web türlerinin yüklenmesini etkilemiyor.
+   */
+  push: 'sb:push',
 } as const;
 
 /** Bu katmanın şema sürümü. Web'in kayıt ŞEKLİ değişmez (başlık notu). */
@@ -1844,6 +1853,125 @@ export function bildirimEvreni(): BildirimEvreni {
     }
   }
   return { kayitlar, liste, kapali, tekrar, pazarsiz };
+}
+
+// ---------------------------------------------------------------------
+//  21.4 CİHAZIN PUSH DURUMU (`sb:push`) — NATIVE'E ÖZEL
+// ---------------------------------------------------------------------
+//  NE SAKLANIYOR: bu CİHAZIN Expo push jetonu, platformu, bildirim izni
+//  ve jetonun uca son yazıldığı an. Bulutta KAÇ cihaz kayıtlı olduğu
+//  BURADA DEĞİL — o ucun `sayi` alanı, cihaz deposunun bilgisi değil.
+//
+//  JETON NEDEN CİHAZDA: `/api/bildirim` jetonu GERİ DÖNDÜRMÜYOR (sızıntı
+//  kapısı bilerek kapalı). "Bu cihaz kayıtlı mı?" sorusunun tek yanıtı
+//  cihazın kendi kaydı. Jeton bir SIR değil ama kişiye özel bir
+//  adrestir: ekranda GÖSTERİLMİYOR, loglanmıyor.
+//
+//  `izin` ÜÇ HÂL: 'bilinmiyor' = HİÇ sorulmadı (ölçülmedi), 'verildi',
+//  'reddedildi'. Varsayılan 'bilinmiyor' — "reddedildi" DEĞİL; ölçülmemiş
+//  hâli olumsuz ölçüme çevirmek sessiz uydurma olurdu.
+//
+//  `ts` = jetonun uca son başarıyla yazıldığı an, ISO metin. `null` =
+//  hiç yazılmadı (sıfır değil, yok).
+// ---------------------------------------------------------------------
+
+/** İznin ÖLÇÜLEN hâli. 'bilinmiyor' = henüz sorulmadı. */
+export type PushIzin = 'bilinmiyor' | 'verildi' | 'reddedildi';
+
+export type PushDurum = {
+  /** Bu cihazın Expo push jetonu. `null` = alınamadı/alınmadı. */
+  jeton: string | null;
+  /** Jetonun alındığı platform ('ios' | 'android'). `null` = ölçülmedi. */
+  platform: string | null;
+  /** Bildirim izninin ölçülen hâli. */
+  izin: PushIzin;
+  /** Jetonun uca son yazıldığı an (ISO). `null` = hiç yazılmadı. */
+  ts: string | null;
+};
+
+const PUSH_BOS: PushDurum = { jeton: null, platform: null, izin: 'bilinmiyor', ts: null };
+
+/**
+ * Kayıt süzgeci. Jetonun BİÇİMİ burada doğrulanmıyor (uç kendi
+ * doğrulamasını yapıyor, `bad_jeton`); yalnız TÜR ve boşluk ayıklanıyor.
+ * Tanınmayan `izin` değeri 'bilinmiyor'a düşüyor ve `budandi` ile
+ * yüzeye çıkıyor — bozuk kaydı "reddedildi" sanmak yanlış olurdu.
+ */
+function pushSuz(ham: unknown): { deger: PushDurum; budandi: boolean } {
+  if (!nesneMi(ham)) {
+    return { deger: PUSH_BOS, budandi: ham != null };
+  }
+  const o = ham as Record<string, unknown>;
+  const hamJeton = typeof o.jeton === 'string' ? o.jeton.trim() : '';
+  const hamPlatform = typeof o.platform === 'string' ? o.platform.trim() : '';
+  const hamIzin = typeof o.izin === 'string' ? o.izin : '';
+  const izin: PushIzin =
+    hamIzin === 'verildi' || hamIzin === 'reddedildi' || hamIzin === 'bilinmiyor'
+      ? hamIzin
+      : 'bilinmiyor';
+  const hamTs = typeof o.ts === 'string' ? o.ts.trim() : '';
+  const budandi =
+    (o.jeton != null && hamJeton === '') ||
+    (o.izin != null && hamIzin !== izin) ||
+    (o.ts != null && hamTs === '');
+  return {
+    deger: {
+      jeton: hamJeton === '' ? null : hamJeton,
+      platform: hamPlatform === '' ? null : hamPlatform,
+      izin,
+      ts: hamTs === '' ? null : hamTs,
+    },
+    budandi,
+  };
+}
+
+export const pushDepo = turYap<PushDurum>(ANAHTARLAR.push, () => ({ ...PUSH_BOS }), pushSuz);
+
+/** Kaydı cihazdan okur. `depoBaslat` bunu ÇAĞIRMIYOR (web türü değil). */
+export function pushYukle(): Promise<PushDurum> {
+  return pushDepo.oku();
+}
+
+export function usePush(): PushDurum {
+  return useTur(pushDepo);
+}
+
+export function usePushHazir(): boolean {
+  return useTurHazir(pushDepo);
+}
+
+/**
+ * İzin hâlini yazar. Jetona DOKUNMAZ: izin geri alınsa bile cihazın
+ * daha önce aldığı jeton bir ölçümdür, onu silmek ölçümü silmek olur.
+ */
+export async function pushIzinYaz(izin: PushIzin): Promise<boolean> {
+  const mevcut = pushDepo.al();
+  if (mevcut.izin === izin) return true;
+  return pushDepo.yaz({ ...mevcut, izin });
+}
+
+/**
+ * Jetonu + platformu + uca yazma anını saklar. `ts` BURADA üretilmiyor;
+ * çağıran veriyor, çünkü "uca yazıldı" bilgisi ucun yanıtına ait, cihaz
+ * saatinin tahminine değil. `jeton` boşsa kayıt TEMİZLENİR (jeton
+ * alınamadı hâli), `ts` de düşer — yoksa ekran "kayıtlı" derdi.
+ */
+export async function pushJetonYaz(
+  jeton: string,
+  platform: string,
+  ts: string | null,
+): Promise<boolean> {
+  const mevcut = pushDepo.al();
+  const temiz = metin(jeton).trim();
+  if (temiz === '') {
+    return pushDepo.yaz({ ...mevcut, jeton: null, platform: null, ts: null });
+  }
+  return pushDepo.yaz({
+    ...mevcut,
+    jeton: temiz,
+    platform: metin(platform).trim() || null,
+    ts: ts == null || ts.trim() === '' ? null : ts.trim(),
+  });
 }
 
 // Bilgi amaçlıdır, yatırım tavsiyesi değildir.

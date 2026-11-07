@@ -6,6 +6,7 @@
 import fs from 'node:fs/promises';
 import { XMLParser } from 'fast-xml-parser';
 import { getWatchlist } from './watchlist.mjs';
+import { pushGonder, oncelikCevir } from './bildirim.mjs';
 
 const KAP_RSS    = 'https://www.kap.org.tr/tr/api/disclosures/rss';
 const NTFY_TOPIC = process.env.NTFY_TOPIC;
@@ -14,8 +15,11 @@ const SEEN_PATH  = new URL('./.seen.json', import.meta.url);
 const PRIME      = process.env.PRIME === '1'; // sessiz tohumlama: tara, 'görüldü' işaretle, GÖNDERME
 const MAX_PUSH   = 10;                         // tek çalıştırmada en fazla bildirim (patlama emniyeti)
 
-if (!NTFY_TOPIC && !PRIME) {
-  console.error('NTFY_TOPIC env var missing.');
+// Gonderim kanali: native push (PUSH_SECRET) BIRINCIL, ntfy (NTFY_TOPIC) ek/geriye donuk.
+// PRIME degilse ve HICBIR kanal yoksa cik; ikisinden biri varsa devam et.
+const PUSH_VAR = !!process.env.PUSH_SECRET; // yalniz VARLIK bilgisi — sir hicbir yere yazilmaz
+if (!PRIME && !NTFY_TOPIC && !PUSH_VAR) {
+  console.error('Bildirim kanali yok: PUSH_SECRET veya NTFY_TOPIC tanimlanmali.');
   process.exit(1);
 }
 
@@ -49,15 +53,34 @@ async function fetchXML(url) {
   return parser.parse(await res.text());
 }
 
+// Donus sozlesmesi DEGISMEDI: true = en az bir kanaldan gitti, false = hic gitmedi.
+// (Cagiran yer bu degere gore .seen.json'a isler ve MAX_PUSH sayar.)
 async function notify({ title, message, click, tags = [], priority = 4 }) {
-  try {
-    const r = await fetch('https://ntfy.sh/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: NTFY_TOPIC, title, message, click, tags, priority }),
-    });
-    return r.ok;
-  } catch { return false; }
+  let gitti = false;
+
+  // 1) Native push (birincil) — jetonlar ucta; isci jeton gormez.
+  const n = await pushGonder({
+    baslik: title,
+    mesaj: message,
+    url: click || null,
+    oncelik: oncelikCevir(priority), // ntfy 5 -> 'high', digerleri -> 'normal'
+  });
+  if (n.ok) gitti = true;
+
+  // 2) ntfy (geriye donuk uyum) — YALNIZ NTFY_TOPIC tanimliysa EK OLARAK.
+  //    Kullanici ntfy'i kaldirdiginda bu blok kendiliginden susar.
+  if (NTFY_TOPIC) {
+    try {
+      const r = await fetch('https://ntfy.sh/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: NTFY_TOPIC, title, message, click, tags, priority }),
+      });
+      if (r.ok) gitti = true;
+    } catch { /* ntfy dustu: native push basarili olduysa gitti=true kalir */ }
+  }
+
+  return gitti;
 }
 
 const matches = [];

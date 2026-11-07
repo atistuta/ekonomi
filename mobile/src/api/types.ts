@@ -3474,3 +3474,54 @@ export type HareketErrorCode =
   | 'method_not_allowed'
   | 'motor_yok'
   | 'hareket_alinamadi';
+
+// =====================================================================
+//  PUSH JETON KAYDI — /api/bildirim                     (şerit B)
+// ---------------------------------------------------------------------
+//  NE: bu cihazın Expo push jetonunu buluta YAZAN ve kaç cihaz kayıtlı
+//  olduğunu SAYAN ucun şekli.
+//
+//  ⚠️ GÜVENLİK — KİMLİK DOĞRULAMASI YOK: uç `code` sorgu değerini
+//  paylaşılan SIR gibi kullanıyor, aynen `/api/watchlist` gibi. Bu
+//  yüzden kod kaynağa GÖMÜLMÜYOR, hata iletisine YAZILMIYOR.
+//
+//  ⚠️ JETON GERİ DÖNMÜYOR — BİLEREK: ne POST ne GET jeton listesi
+//  veriyor. Kodu ele geçiren biri cihaz ADRESLERİNİ toplayamaz; bu
+//  sızıntı kapısı kapalı tutuluyor. Sonuç: "bu cihaz kayıtlı mı?"
+//  sorusunu uç YANITLAMAZ, yanıt cihazın kendi kaydındadır (`sb:push`).
+//
+//  ⚠️ `sayi` BULUTTAKİ cihaz sayısı, bu cihazın hâli DEĞİL. Uç
+//  göndermezse `null` yazılır — sıfır DEĞİL (sessiz sıfır yasak).
+// =====================================================================
+
+/** POST gövdesi. İkisi de ZORUNLU; eksikse uç `jeton_yok` döner. */
+export type BildirimKayitGovde = {
+  token: string;
+  platform: 'ios' | 'android';
+};
+
+/** POST cevabı. Jeton GERİ DÖNMÜYOR (yukarıdaki not). */
+export type BildirimKayitResponse = {
+  ok: true;
+  /** Buluttaki kayıtlı cihaz sayısı — uçta sayıldı. */
+  sayi: number;
+  /** UNIX **MİLİSANİYE**. */
+  updatedAt: number;
+};
+
+/** GET cevabı. Jeton LİSTESİ YOK (yukarıdaki not). */
+export type BildirimDurumResponse = {
+  /** Buluttaki kayıtlı cihaz sayısı — uçta sayıldı. */
+  sayi: number;
+  /** Son yazma anı, UNIX **MİLİSANİYE**. Kayıt yoksa `null`. */
+  updatedAt: number | null;
+};
+
+/** Makine hata kodları (`/api/bildirim` sözleşmesi). */
+export type BildirimErrorCode =
+  | 'kod_yok'
+  | 'jeton_yok'
+  | 'bad_jeton'
+  | 'method_not_allowed'
+  | 'rate_limited'
+  | 'kv_yok';

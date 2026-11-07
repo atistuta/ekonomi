@@ -17,6 +17,7 @@
 // =====================================================================
 
 import type {
+  BildirimErrorCode,
   DuyarlilikKod,
   FirsatCls,
   HareketErrorCode,
@@ -34,6 +35,8 @@ import type {
   NedenKutupKodu,
   NedenUzlasmaKodu,
   NedenYonKodu,
+  PushIzin,
+  PushKurSebep,
   Vade,
   VarlikSinifi,
 } from '@/api';
@@ -794,4 +797,65 @@ export const HAREKET_ARIZA_SOZLUK: Record<HareketErrorCode, string> = {
   method_not_allowed: 'Uç bu istek biçimini kabul etmiyor.',
   motor_yok: 'Ölçüm motoru yüklenemedi — ölçüm yapılamadı.',
   hareket_alinamadi: 'Motora ulaşıldı ama gün içi mumlar okunamadı.',
+};
+
+// =====================================================================
+//  BİLDİRİM YÜZÜ  (/api/bildirim + cihaz izni — şerit B)
+// ---------------------------------------------------------------------
+//  Cümlelerde SAYI YOK: kaç cihazın kayıtlı olduğunu UÇ sayıyor
+//  (`sayi`), ekran o sayıyı ayrı basıyor. Cümleye sayı yazmak ikinci
+//  bir kaynak doğurur ve biri değişince öteki sessizce yanlış kalır.
+//
+//  Cümleler ÖLÇÜM dili: ne olduğunu söylüyor, ne yapılacağını
+//  söylemiyor; vaat kurmuyor.
+//
+//  ÜÇ HÂL AYRI: izin HİÇ sorulmadı · verildi · reddedildi. "Sorulmadı"
+//  ile "reddedildi" aynı cümleye konmuyor — ölçülmemişi olumsuz ölçüm
+//  gibi anlatmak olurdu.
+// =====================================================================
+
+/** `PushDurum.izin` → tam cümle. */
+export const PUSH_IZIN_SOZLUK: Record<PushIzin, string> = {
+  bilinmiyor: 'Bildirim izni bu cihazda henüz sorulmadı.',
+  verildi: 'Bu cihaz bildirim göstermeye izinli.',
+  reddedildi: 'Bu cihazda bildirim izni kapalı — telefon ayarlarından açılabilir.',
+};
+
+/** Aynı hâlin ROZET boyu karşılığı — kart başlığında yer dar. */
+export const PUSH_IZIN_ROZET: Record<PushIzin, string> = {
+  bilinmiyor: 'sorulmadı',
+  verildi: 'izinli',
+  reddedildi: 'kapalı',
+};
+
+/**
+ * `pushKur` başarısız dalının `sebep`i → cümle. Her durak AYRI cümle
+ * taşıyor; "bir şeyler ters gitti" demek, hangi adımın ölçülemediğini
+ * gizlemek olurdu.
+ */
+export const PUSH_KUR_SOZLUK: Record<PushKurSebep, string> = {
+  kapali:
+    'Senkron kodu girilmedi — kod olmadan bu cihaz bildirim için kaydedilemiyor.',
+  reddedildi: 'Bildirim izni verilmedi, bu cihaz kaydedilmedi.',
+  sorulamadi: 'Bildirim izni okunamadı — izin durumu ölçülemedi.',
+  cihaz_degil:
+    'Bildirim adresi yalnız gerçek telefonda alınabiliyor; benzeticide ölçüm yapılamıyor.',
+  platform_disi: 'Bu platformda bildirim kaydı yapılamıyor.',
+  proje_yok: 'Uygulama kimliği okunamadı — bildirim adresi istenemedi.',
+  jeton_alinamadi: 'Bu cihazın bildirim adresi alınamadı.',
+  uc_hatasi: 'Kayıt sunucusuna ulaşıldı ama işlem tamamlanamadı.',
+};
+
+/**
+ * Ucun MAKİNE hata kodu → cümle. İstemci kapıları (`pushJetonKaydet`)
+ * kendi cümlesini zaten taşıyor; bu sözlük SUNUCUDAN DÖNEN kodu ekranda
+ * bir cümleyle anmak için var.
+ */
+export const BILDIRIM_ARIZA_SOZLUK: Record<BildirimErrorCode, string> = {
+  kod_yok: 'Senkron kodu gönderilmedi.',
+  jeton_yok: 'Bildirim adresi gönderilmedi.',
+  bad_jeton: 'Gönderilen bildirim adresi uçta geçerli bulunmadı.',
+  method_not_allowed: 'Uç bu istek biçimini kabul etmiyor.',
+  rate_limited: 'Uç bu kod için çok sık istek aldı, kayıt şimdilik alınmadı.',
+  kv_yok: 'Kayıt deposuna ulaşılamadı — kayıt yapılamadı.',
 };

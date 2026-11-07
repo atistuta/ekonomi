@@ -3605,3 +3605,82 @@ Kalan isler ARTIK OZELLIK DEGIL: (a) deploy — kullanici yapacak,
 BEKLEYEN KULLANICI KARARLARI: igneli gosterge senkronu (§41),
 `expo-notifications` bagimliligi (cihaz bildirimi icin).
 - `git add --` BEKLIYOR: `mobile/src/components/bugun/AniHareketKart.tsx`.
+
+## 43. BILDIRIM ARTIK APP'IN KENDISINDEN GIDIYOR (OLCULDU 2026-11-07)
+
+Kullanici istegi: "onceden ntfy ile webden mobile bildirim gonderiyorduk ama
+artik direkt app uzerinden bildirimler gidecek."
+
+### Ne yapildi — uc serit
+
+**Serit A · sunucu ucu: `api/_bildirim.js` (YENI)**
+- `_` onekli, `vercel.json` rewrite + `api/proxy.js` dalinda devrediliyor.
+  `api/*.js` rota dosyasi sayisi HALA 12 (Hobby tavani). Kapi (18)a kilitliyor.
+- Uc mod:
+  1. `POST /api/bildirim` → cihaz jetonu kaydet. Yanit: `{ok, sayi, updatedAt}`.
+  2. `GET  /api/bildirim?code=...` → `{sayi, updatedAt}`. **Jeton listesi ASLA
+     donmuyor.**
+  3. `POST /api/bildirim?mod=gonder` → Expo'ya gonder. `x-push-secret`
+     BASLIGINDA sir ister. Yanit: `{ok, gonderildi, elendi}`.
+- KV anahtari **`push:<kod>`** — kendi anahtari.
+  KARAR GEREKCESI (olculdu): `api/watchlist.js:282` `kv.set(key, payload)` ile
+  tum kaydi eziyor (`payload = {list, portfolio, updatedAt}`). Jetonlar
+  `wl:<kod>` icinde yasarsa HER liste eslemesinde silinirdi.
+  `api/watchlist.js` bu yuzden HIC ELLENMEDI; kapi (18)e iki yari da kilitliyor.
+- `TASIYICILAR` tablosuna GIRMEDI. GEREKCE (olculdu): kapi (17)d o tablodaki
+  on rotanin HER BIRI icin `POST → 405 method_not_allowed` bekliyor; bu uc POST
+  ile yaziyor. Bu yuzden `yfin` ile ayni kalipta ayri `__rota` dali.
+- Cihaz tavani `AZAMI_JETON = 10`; yeni jeton eklenince en ESKI dusuyor, ayni
+  jeton iki kez gelirse kopya uretmiyor, kaydi tazeliyor.
+- Hiz freni: 60 sn penceresinde kimlik basina 20 kayit (`429 rate_limited`).
+  IP hicbir yere YAZILMIYOR.
+- 401 sebebi AYRISTIRILMIYOR (sir-yok / sir-yanlis ayni `yetki_yok`).
+
+**Serit B · telefon yuzu**
+- `mobile/src/api/bildirim.ts` (YENI): `bildirimDurumOku`, `bildirimIzniIste`,
+  `pushJetonAl`, `pushKur`.
+- `mobile/src/api/depo.ts`: `ANAHTARLAR.push = 'sb:push'`, `usePush`,
+  `pushIzinYaz`, `pushJetonYaz`.
+- `mobile/src/components/liste/BildirimKart.tsx` (YENI) → Listeler sekmesinde,
+  `ListelerKart`'in altinda. **Jeton ekrana ASLA basilmiyor.**
+- `mobile/app.json`: `expo-notifications` eklentisi.
+
+**Serit C · isci gondericisi**
+- `worker/bildirim.mjs` (YENI): `pushGonder({baslik, mesaj, url, oncelik})`
+  → `{ok, gonderildi, elendi}`; `oncelikCevir(priority)`.
+- `worker/poll.mjs` + `worker/movers.mjs`: `notify()` once native'e gonderiyor,
+  `NTFY_TOPIC` tanimliysa ntfy'ye de. `true/false` sozlesmesi DEGISMEDI, bu
+  yuzden `.seen.json` davranisi ve `MAX_PUSH` aynen korundu.
+  Sert cikis artik IKI kanalin da yoklugunu istiyor.
+
+### OLCULDU
+- `node tests/uc-test.mjs` → **2451 denetim gecti**, 0 basarisiz (kapi (18)
+  a–f dahil: 29 yeni denetim).
+- `node tests/uretim-test.mjs` → 73 denetim gecti.
+- `node tests/parity.mjs` → FARK 0, 29 karsilastirma noktasi birebir.
+- `mobile/`: `npx tsc --noEmit` → 0 hata; `npx eslint src` → 0 hata.
+- `node --check`: `worker/bildirim.mjs`, `worker/poll.mjs`, `worker/movers.mjs`,
+  `api/_bildirim.js`, `api/proxy.js` → hepsi gecti.
+- Isci esikleri HEAD ile karsilastirildi: `MAX_PUSH = 10`, `pushedForTicker >= 3`,
+  `macroPushed >= 4`, `WINDOW_MS`, `slice(-1000)`, movers `TH` govdesi `diff` ile
+  BIREBIR AYNI.
+- `vercel.json` rewrite sayisi 18 → 19 (`/api/bildirim`).
+- Sizinti taramasi: `api/_bildirim.js` icinde hic `console.*` yok; sir yalniz
+  `req.headers['x-push-secret']`'ten okunuyor, URL/query'de yok.
+
+### OLCULMEDI (gercek cihaz / kullanici onayi gerekiyor)
+- **Gercek bildirim HIC GONDERILMEDI.** Isci canli kosturulmadi (kural).
+- `expo-notifications` NATIVE modul. **OTA (`eas update`) bunu TASIYAMAZ** —
+  yeni `eas build` sart. iOS uzaktan bildirim icin ayrica APNs anahtari
+  kullanicinin kendi Apple hesabinda uretilmeli (girisi kullanici kendi yapar).
+- `PUSH_SECRET` henuz tanimli degil:
+  1. Vercel ortam degiskeni,
+  2. GitHub Actions deposu sirri,
+  3. `.github/workflows/poll-kap.yml` icindeki "Run poll (haber)" ve
+     "Run movers (fiyat sicramasi)" adimlarina `env:` satiri
+     (serit C is akisina DOKUNMADI — bu adim elde).
+  ASLA `EXPO_PUBLIC_` olamaz, ASLA loglanmaz.
+- `expo-notifications` eklentisinde `mode` anahtari BILEREK bos: `aps-environment`
+  yaziyor, `production` dev-client denemesini kirar → EAS yapi profiline birakildi.
+- Android kucuk ikon `icon.png` 96x96 tumu-beyaz bicim DEGIL; dolu kare
+  gorunebilir. Yayinda duzeltilecek.

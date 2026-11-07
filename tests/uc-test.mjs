@@ -174,6 +174,7 @@ import * as TAKVIM from '../api/_takvim.js';
 // `proxy.js` modül düzeyinde YALNIZ `_yfin.js`i içe alıyor; ikisinde de
 // modül düzeyi istek YOK (ölçüldü: `_yfin.js`te her `fetch` fonksiyon içi).
 import { TASIYICI_ROTALARI } from '../api/proxy.js';
+import * as BILDIRIM from '../api/_bildirim.js';
 import * as DEGISIM from '../api/_degisim.js';
 import * as GUNDEM from '../api/_gundem.js';
 import * as KRIPTO from '../api/_kripto.js';
@@ -4900,16 +4901,16 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
       // ⑰ EKİ: degisim/kripto/metal de AYNI çoklayıcıya bindi, ama ayrı
       // taşıyıcıda (`_kesif.js` DEĞİL). Liste yine ELLE yazılmıyor:
       // `proxy.js`in kendi `TASIYICI_ROTALARI` tablosundan geliyor.
-      const izinliRota = new Set(['yfin', ...KESIF.ROTALAR, ...TASIYICI_ROTALARI]);
+      const izinliRota = new Set(['yfin', 'bildirim', ...KESIF.ROTALAR, ...TASIYICI_ROTALARI]);
       const kacak = rew.filter((x) => {
         const m = /^\/api\/([a-z]+)$/.exec(String(x.source));
         return !m || !izinliRota.has(m[1]) || x.destination !== `/api/proxy?__rota=${m[1]}`;
       });
       ok('⑮b · KİLİT · ROTALAR ∪ {yfin} ∪ TAŞIYICILAR D I Ş I N D A rewrite YOK (ters yön)',
         kacak.length === 0, kacak.map((x) => `${x.source}→${x.destination}`).join(' | ') || 'temiz');
-      ok('⑮b · KİLİT · rewrite sayısı = ROTALAR + yfin + TAŞIYICILAR (fazla/eksik yol yok)',
-        rew.length === KESIF.ROTALAR.length + 1 + TASIYICI_ROTALARI.length,
-        `${rew.length} rewrite · 7+1+${TASIYICI_ROTALARI.length} bekleniyor`);
+      ok('⑮b · KİLİT · rewrite sayısı = ROTALAR + yfin + bildirim + TAŞIYICILAR (fazla/eksik yol yok)',
+        rew.length === KESIF.ROTALAR.length + 2 + TASIYICI_ROTALARI.length,
+        `${rew.length} rewrite · ${KESIF.ROTALAR.length}+2+${TASIYICI_ROTALARI.length} bekleniyor`);
     }
     ok('⑮b · yfin rewrite\'ı BOZULMADI (taklit edilen kalıp yerinde)',
       rew.some((x) => x.source === '/api/yfin' && x.destination === '/api/proxy?__rota=yfin'));
@@ -9157,5 +9158,145 @@ bolum('28 bildirim senkronu <-> webin /api/watchlist yazmasi');
     && kartKod34.includes("durum === 'veri' && govde"));
 }
 
+
+// =====================================================================
+//  KAPI ⑱ · /api/bildirim — NATIVE PUSH JETON DEFTERİ
+// ---------------------------------------------------------------------
+//  Neyi kilitliyor:
+//   a) taşıyıcı sözleşmesi (ROTA + HANDLERLAR) ve `_` öneki → fonksiyon
+//      sayısı 12'de kalıyor (Hobby tavanı).
+//   b) proxy ayrı dalda devrediyor, `TASIYICILAR` tablosuna GİRMİYOR.
+//      Gerekçe ölçülmüş: ⑰d o tablodaki her rota için POST→405 bekliyor,
+//      bu uç ise POST ile yazıyor.
+//   c) SIZINTI: jeton hiçbir yanıtta geri dönmüyor; sır yalnız başlıkta
+//      okunuyor, URL/query'den ASLA.
+//   d) `jetonBirlestir` saf: birleştiriyor (ezmiyor), kopya üretmiyor,
+//      tavanı aşmıyor.
+//   e) `wl:` anahtarına DOKUNMUYOR — kendi `push:` anahtarında duruyor
+//      (watchlist.js kaydı `kv.set` ile eziyor; jeton orada yaşayamaz).
+// =====================================================================
+{
+  const BILDIRIM_PATH = path.join(ROOT, 'api', '_bildirim.js');
+  const bSrc = readFileSync(BILDIRIM_PATH, 'utf8');
+  // Yorum satirlari ATILMIS gorunum: aciklamalarda gecen wl: ve
+  // ExponentPushToken[...] bicim metni sizinti SAYILMAZ.
+  const bKod = bSrc.replace(/\/\/[^\n]*/g, '');
+
+  // --- (a) taşıyıcı sözleşmesi ---------------------------------------
+  ok('⑱a · _bildirim.js `_` önekli (fonksiyon olarak sayılmıyor)',
+    existsSync(BILDIRIM_PATH) && !existsSync(path.join(ROOT, 'api', 'bildirim.js')));
+  ok('⑱a · ROTA === "bildirim"', BILDIRIM.ROTA === 'bildirim');
+  ok('⑱a · HANDLERLAR.bildirim fonksiyon (donmuş tablo)',
+    typeof BILDIRIM.HANDLERLAR?.bildirim === 'function'
+    && Object.isFrozen(BILDIRIM.HANDLERLAR));
+  ok('⑱a · api/*.js rota dosyası sayısı HÂLÂ 12 (Hobby tavanı)',
+    readdirSync(path.join(ROOT, 'api')).filter((f) => f.endsWith('.js') && !f.startsWith('_')).length === 12,
+    `${readdirSync(path.join(ROOT, 'api')).filter((f) => f.endsWith('.js') && !f.startsWith('_')).length} dosya`);
+
+  // --- (b) proxy devri ----------------------------------------------
+  const pSrc18 = readFileSync(path.join(ROOT, 'api', 'proxy.js'), 'utf8');
+  ok('⑱b · proxy.js bildirim dalı yfin kalıbında',
+    pSrc18.includes("if (req.query?.__rota === 'bildirim') return bildirimHandler(req, res);")
+    && pSrc18.includes("import { bildirimHandler } from './_bildirim.js';"));
+  ok('⑱b · KİLİT · bildirim TASIYICI_ROTALARI İÇİNDE DEĞİL (⑰d POST→405 çakışması)',
+    !TASIYICI_ROTALARI.includes('bildirim'));
+  ok('⑱b · vercel.json bildirim rewrite\'ı var',
+    JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8')).rewrites
+      .some((x) => x.source === '/api/bildirim' && x.destination === '/api/proxy?__rota=bildirim'));
+
+  // --- (c) sızıntı kilitleri ----------------------------------------
+  const gonderimGovde = bSrc.slice(bSrc.indexOf('async function expoGonder'));
+  ok('⑱c · KİLİT · sır yalnız BAŞLIKTAN okunuyor, query\'den ASLA',
+    bSrc.includes("req.headers['x-push-secret']")
+    && !/query[^\n]*(secret|sir|sır)/i.test(bSrc)
+    && !/__push_secret|[?&]secret=/.test(bSrc));
+  ok('⑱c · KİLİT · sır hiçbir log/console satırına girmiyor',
+    !/console\.[a-z]+\([^)]*PUSH_SECRET/.test(bSrc)
+    && !/console\.[a-z]+\([^)]*beklenen/.test(bSrc));
+  ok('⑱c · KİLİT · jeton yanıt gövdesinde GERİ DÖNMÜYOR',
+    !/\.json\(\{[^}]*\b(jetonlar|token|jeton)\s*:/.test(bKod));
+  ok('⑱c · GET yalnız SAYI veriyor (sayi + updatedAt)',
+    bSrc.includes('sayi: jetonlar.length'));
+  ok('⑱c · ölçülmemiş zaman `null`, `0` DEĞİL',
+    bSrc.includes("(kayit && kayit.updatedAt) || null"));
+  ok('⑱c · Expo ucu SABİT literal (istemciden konak gelmiyor)',
+    bSrc.includes("const EXPO_UC = 'https://exp.host/--/api/v2/push/send'")
+    && BILDIRIM.IZINLI_KONAK.includes('exp.host')
+    && (bKod.match(/EXPO_UC\s*=/g) || []).length === 1
+    && /await fetch\(EXPO_UC,/.test(bKod));
+  ok('⑱c · 401 sebebi AYRIŞTIRILMIYOR (sır-yok / sır-yanlış sızıntısı)',
+    (bSrc.match(/yetki_yok/g) || []).length === 1);
+  ok('⑱c · GET/POST dışı yöntem 405 + method_not_allowed',
+    bSrc.includes("res.status(405).json({ error: 'method_not_allowed' })"));
+  ok('⑱c · yanıt no-store (jeton sayısı önbelleğe girmiyor)',
+    bSrc.includes("res.setHeader('Cache-Control', 'no-store')"));
+
+  // --- (d) jetonBirlestir SAF davranış ------------------------------
+  const J1 = 'ExponentPushToken[aaaaaaaaaaaaaaaaaaaaaa]';
+  const J2 = 'ExponentPushToken[bbbbbbbbbbbbbbbbbbbbbb]';
+  ok('⑱d · jeton biçim süzgeci: geçerli kabul, çöp red',
+    BILDIRIM.jetonGecerli(J1)
+    && BILDIRIM.jetonGecerli('ExpoPushToken[cccccccccccccccccccccc]')
+    && !BILDIRIM.jetonGecerli('merhaba')
+    && !BILDIRIM.jetonGecerli('ExponentPushToken[]')
+    && !BILDIRIM.jetonGecerli(null));
+  ok('⑱d · boş deftere ekleme → 1 kayıt',
+    BILDIRIM.jetonBirlestir(null, { token: J1, platform: 'ios' }, 1000).length === 1);
+  ok('⑱d · KİLİT · BİRLEŞTİRİYOR, ezmiyor (ikinci cihaz eklenince 2 kayıt)',
+    BILDIRIM.jetonBirlestir(
+      BILDIRIM.jetonBirlestir(null, { token: J1, platform: 'ios' }, 1000),
+      { token: J2, platform: 'android' }, 2000).length === 2);
+  ok('⑱d · aynı jeton iki kez → KOPYA YOK, kayıt tazelenir',
+    (() => {
+      const r = BILDIRIM.jetonBirlestir(
+        BILDIRIM.jetonBirlestir(null, { token: J1, platform: 'ios' }, 1000),
+        { token: J1, platform: 'ios' }, 5000);
+      return r.length === 1 && r[0].ts === 5000;
+    })());
+  ok('⑱d · tavan AZAMI_JETON aşılmıyor, en ESKİ düşüyor',
+    (() => {
+      let liste = null;
+      for (let i = 0; i < BILDIRIM.AZAMI_JETON + 5; i += 1) {
+        liste = BILDIRIM.jetonBirlestir(liste,
+          { token: `ExponentPushToken[${String(i).padStart(22, 'z')}]`, platform: 'ios' }, 1000 + i);
+      }
+      return liste.length === BILDIRIM.AZAMI_JETON
+        && liste[0].ts === 1000 + 5;
+    })(), `tavan ${BILDIRIM.AZAMI_JETON}`);
+  ok('⑱d · platform beyaz listesi (ios/android), gerisi null',
+    BILDIRIM.platformSuz('iOS') === 'ios'
+    && BILDIRIM.platformSuz('android') === 'android'
+    && BILDIRIM.platformSuz('windows') === null
+    && BILDIRIM.platformSuz(undefined) === null);
+  ok('⑱d · kod kuralı watchlist.js ile AYNI',
+    BILDIRIM.kodGecerli('atahan-bulten-9f3c')
+    && !BILDIRIM.kodGecerli('ab')
+    && !BILDIRIM.kodGecerli('kod boşluklu'));
+  ok('⑱d · CORS kaynak kuralı: üretim + yerel, yabancı HAYIR',
+    BILDIRIM.kaynakIzinli('https://day-starter.vercel.app')
+    && BILDIRIM.kaynakIzinli('http://localhost:5173')
+    && !BILDIRIM.kaynakIzinli('https://kotu.example.com'));
+
+  // --- (e) KV ayrımı -------------------------------------------------
+  ok('⑱e · KİLİT · kendi anahtarı `push:<kod>` (wl: anahtarına DOKUNMUYOR)',
+    BILDIRIM.anahtar('ABC') === 'push:abc'
+    && !/wl:/.test(bKod));
+  const wlSrc18 = readFileSync(path.join(ROOT, 'api', 'watchlist.js'), 'utf8');
+  ok('⑱e · watchlist.js DEĞİŞMEDİ (hâlâ kv.set ile tüm kaydı eziyor)',
+    wlSrc18.includes('const payload = { list: clean, portfolio: cleanPf, updatedAt: Date.now() };')
+    && !wlSrc18.includes('jetonlar'));
+
+  // --- (f) yasal + ham sayı -----------------------------------------
+  ok('⑱f · yasal uyarı dosyada',
+    bSrc.includes('yatırım tavsiyesi değildir'));
+  ok('⑱f · uçta eşik/ağırlık/skor üretimi YOK',
+    !/skor|agirlik|ağırlık|puan\s*=/i.test(bSrc.replace(/\/\/[^\n]*/g, '')));
+  ok('⑱f · işçi göndericisi uçla AYNI alan adlarını bekliyor',
+    (() => {
+      const w = readFileSync(path.join(ROOT, 'worker', 'bildirim.mjs'), 'utf8');
+      return w.includes('gonderildi') && w.includes('elendi')
+        && w.includes('x-push-secret') && w.includes('mod=gonder');
+    })());
+}
 
 bitir();
