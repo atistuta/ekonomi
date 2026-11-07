@@ -216,8 +216,12 @@ export {
 // kurar, uca yazar, ucun döndürdüğü anı cihaza saklar. `./hareket`
 // satırının aynı gerekçesi.
 export {
+  UI_SURUM,
   senkronCek,
   senkronGonder,
+  senkronListeAktar,
+  uiListeleriCikar,
+  type SenkronAktarSonuc,
   type SenkronCekSonuc,
   type SenkronGonderSonuc,
 } from './senkron';

@@ -8102,12 +8102,30 @@ bolum('28 bildirim senkronu <-> webin /api/watchlist yazmasi');
     !kartSrc28.includes('bir hata oluştu') && !kartSrc28.includes('Bilinmeyen hata'));
 
   // --- (5) OKUMA SALT GOSTERIM (web `adoptRemoteState` yok) -----------
-  ok('28f · native uzaktan gelen durumu BENIMSEMIYOR',
-    !senkronKod28.includes('adoptRemoteState') && !senkronKod28.includes('veri.ui')
-    && !kartKod28.includes('.ui'));
+  // KARAR DEGISTI (bkz. §44): webdeki listeler artik telefona
+  // ALINABILIYOR. Kilitlenen sey "benimseme YOK" degil, benimsemenin
+  // KENDILIGINDEN kosmamasi: `senkronCek` hala salt gosterim ve
+  // aktarma hicbir `useEffect` icinden cagrilmiyor (ayrinti KAPI ⑳).
+  ok('28f · benimseme KENDILIGINDEN kosmuyor (yalniz kullanicinin dugmesi)',
+    !senkronKod28.includes('adoptRemoteState')
+    && (() => {
+      const g = senkronKod28.slice(
+        senkronKod28.indexOf('export async function senkronCek'),
+        senkronKod28.indexOf('export const UI_SURUM'),
+      );
+      const efektler = kartKod28.match(/useEffect\([\s\S]*?\}, \[[^\]]*\]\);/g) || [];
+      return g.length > 100
+        && !/listeleriAktar|listelerDepo/.test(g)
+        && !efektler.some((e) => e.includes('senkronListeAktar'));
+    })());
   ok('28f · besteci `ui` GONDERMIYOR da (govde yalniz list/portfolio)',
     senkronKod28.includes('{ list: evren.kayitlar, portfolio: [] }')
-    && !/\bui:/.test(senkronKod28));
+    && (() => {
+      const i = senkronKod28.indexOf('export async function senkronGonder');
+      const j = senkronKod28.indexOf('export async function senkronCek');
+      const g = senkronKod28.slice(i, j);
+      return i > 0 && j > i && g.length > 100 && !/\bui:/.test(g);
+    })());
   ok('28f · bulut ozeti SALT GOSTERIM oldugu EKRANDA yazili',
     kartSrc28.includes('cihazdaki listelere uygulanmıyor'));
   ok('28f · okuma cihazdaki listelere YAZMIYOR',
@@ -9297,6 +9315,119 @@ bolum('28 bildirim senkronu <-> webin /api/watchlist yazmasi');
       return w.includes('gonderildi') && w.includes('elendi')
         && w.includes('x-push-secret') && w.includes('mod=gonder');
     })());
+}
+
+// =====================================================================
+//  KAPI ⑲ · WEBDEKİ LİSTELER TELEFONA — `ui.lists` BENİMSENMESİ
+// ---------------------------------------------------------------------
+//  Neyi kilitliyor:
+//   a) iki tarafın `ui` SÜRÜMÜ aynı sayı (web `SYNC_STATE_V`, native
+//      `UI_SURUM`). Biri değişip öteki kalırsa aktarma sessizce durur.
+//   b) ham uzak kayıt CİHAZIN KENDİ SÜZGECİNDEN geçiyor (`listelerSuz`),
+//      yani liste başına 8 sembol sınırı uzaktan gelene de uygulanıyor.
+//   c) EZMİYOR: cihazda olup bulutta olmayan liste KORUNUYOR; boş gelen
+//      kayıt hiç yazmıyor.
+//   d) KENDİLİĞİNDEN KOŞMUYOR: aktarma yalnız kullanıcının bastığı
+//      düğmeyle, üstelik iki basışla.
+//   e) native'de skor/eşik matematiği YOK.
+// =====================================================================
+{
+  const SENK_PATH = path.join(ROOT, 'mobile', 'src', 'api', 'senkron.ts');
+  const DEPO19_PATH = path.join(ROOT, 'mobile', 'src', 'api', 'depo.ts');
+  const LISTE19_PATH = path.join(ROOT, 'mobile', 'src', 'api', 'liste.ts');
+  const IDX19_PATH = path.join(ROOT, 'mobile', 'src', 'api', 'index.ts');
+  const KART19_PATH = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'SenkronKart.tsx');
+  const senkSrc = readFileSync(SENK_PATH, 'utf8');
+  const depo19 = readFileSync(DEPO19_PATH, 'utf8');
+  const liste19 = readFileSync(LISTE19_PATH, 'utf8');
+  const idx19 = readFileSync(IDX19_PATH, 'utf8');
+  const kart19 = readFileSync(KART19_PATH, 'utf8');
+  const appSrc19 = readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+
+  // --- (a) sürüm eşleşmesi -------------------------------------------
+  ok('⑲a · KİLİT · web SYNC_STATE_V ile native UI_SURUM AYNI sayı',
+    /const SYNC_STATE_V = 1\b/.test(appSrc19)
+    && /export const UI_SURUM = 1;/.test(senkSrc));
+  ok('⑲a · web `ui` gövdesi hâlâ { v, lists, compare }',
+    appSrc19.includes('return { v: SYNC_STATE_V, lists: loadLists(), compare: loadCompare() };'));
+  ok('⑲a · native yalnız `lists` alanını okuyor, surum tutmazsa null',
+    senkSrc.includes("if (n.v !== UI_SURUM) return null;")
+    && senkSrc.includes("if (!Array.isArray(n.lists)) return null;"));
+  ok('⑲a · `uiListeleriCikar` SAF: ağa çıkmıyor, cihaza yazmıyor',
+    (() => {
+      const g = senkSrc.slice(
+        senkSrc.indexOf('export function uiListeleriCikar'),
+        senkSrc.indexOf('export type SenkronAktarSonuc'),
+      );
+      return g.length > 80 && !/fetch|await|yaz\(/.test(g);
+    })());
+
+  // --- (b) cihazın kendi süzgeci -------------------------------------
+  const aktarGovde = depo19.slice(
+    depo19.indexOf('export async function listeleriAktar'),
+    depo19.indexOf('export async function listeyeEkle'),
+  );
+  ok('⑲b · KİLİT · uzak kayıt `listelerSuz` süzgecinden geçiyor',
+    aktarGovde.length > 200 && aktarGovde.includes('listelerSuz(ham)'));
+  ok('⑲b · dizi değilse `bicim` sebebiyle red (yazma YOK)',
+    aktarGovde.includes("if (!Array.isArray(ham))")
+    && aktarGovde.includes("sebep: 'bicim'"));
+  ok('⑲b · budama SESSİZ DEĞİL: `budandi` çağırana dönüyor',
+    aktarGovde.includes('budandi,'));
+
+  // --- (c) ezmiyor ---------------------------------------------------
+  ok('⑲c · KİLİT · cihazda olup bulutta olmayan liste KORUNUYOR',
+    aktarGovde.includes('const korunanlar = mevcut.filter((l) => !gelenKimlik.has(l.id));')
+    && aktarGovde.includes('listelerDepo.yaz([...gelen, ...korunanlar])'));
+  ok('⑲c · boş gelen kayıt HİÇ YAZMIYOR',
+    (() => {
+      const i = aktarGovde.indexOf("sebep: 'bos'");
+      const j = aktarGovde.indexOf('listelerDepo.yaz(');
+      return i > 0 && j > i;
+    })());
+  ok('⑲c · web `adoptRemoteState` DEĞİŞMEDİ (topluca eziyor, native etkilenmiyor)',
+    appSrc19.includes("localStorage.setItem(LISTS_LS_KEY, JSON.stringify(ui.lists));"));
+  ok('⑲c · düz görünüm de tazeleniyor (iki yazar aynı anahtarı paylaşıyor)',
+    (() => {
+      const g = liste19.slice(liste19.indexOf('export async function listeleriAktar'));
+      return g.slice(0, 400).includes('duzTazele();');
+    })());
+
+  // --- (d) kendiliğinden koşmuyor ------------------------------------
+  ok('⑲d · KİLİT · aktarma `useEffect` içinden ÇAĞRILMIYOR',
+    (() => {
+      const efektler = kart19.match(/useEffect\([\s\S]*?\}, \[[^\]]*\]\);/g) || [];
+      return efektler.length >= 1 && !efektler.some((e) => e.includes('senkronListeAktar'));
+    })());
+  ok('⑲d · İKİ BASIŞ: ilk basış yalnız onay istiyor',
+    kart19.includes('if (!aktarOnay) {')
+    && kart19.includes('setAktarOnay(true);')
+    && kart19.includes("aktarOnay ? 'Onaylıyorum, getir' : 'Webdeki listeleri getir'"));
+  ok('⑲d · düğme kod yokken ya da istek sürerken kapalı',
+    (() => {
+      const i = kart19.indexOf("'Webdeki listeleri getir'");
+      return i > 0 && kart19.slice(i, i + 220).includes('disabled={!acik || mesgul}');
+    })());
+  ok('⑲d · `senkronCek` HÂLÂ salt gösterim (cihaza yazmıyor)',
+    (() => {
+      const g = senkSrc.slice(
+        senkSrc.indexOf('export async function senkronCek'),
+        senkSrc.indexOf('export const UI_SURUM'),
+      );
+      return g.length > 100 && !/listeleriAktar|listelerDepo/.test(g);
+    })());
+
+  // --- (e) bariyer + yasal + hesap yok -------------------------------
+  ok('⑲e · bariyerden dışa açık (`@/api` tek kapı)',
+    idx19.includes('  senkronListeAktar,')
+    && idx19.includes('  uiListeleriCikar,')
+    && idx19.includes('  type SenkronAktarSonuc,'));
+  ok('⑲e · yasal uyarı iki dosyada da duruyor',
+    senkSrc.includes('yatırım tavsiyesi değildir')
+    && kart19.includes('yatırım tavsiyesi değildir'));
+  ok('⑲e · aktarma yolunda eşik/ağırlık/skor üretimi YOK',
+    !/skor|puan\s*=|ağırlık|agirlik/i.test(aktarGovde)
+    && !/skor|puan\s*=/i.test(senkSrc.replace(/\/\/[^\n]*/g, '')));
 }
 
 bitir();

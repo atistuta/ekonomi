@@ -45,6 +45,7 @@ import {
   listeBildirimAyarla as depoListeBildirimAyarla,
   listeEvreneAl as depoListeEvreneAl,
   listedenCikar as depoListedenCikar,
+  listeleriAktar as depoListeleriAktar,
   listeleriAl as depoListeleriAl,
   listeOlustur as depoListeOlustur,
   listeSil as depoListeSil,
@@ -216,7 +217,7 @@ export function useListe(): string[] {
 //  Gerekçe ve reddin sebebi `api/depo.ts:listeyeEkle` içinde.
 // ---------------------------------------------------------------------
 
-export type { ListeKaydi, ListeOge, YazSonuc } from './depo';
+export type { ListeAktarSonuc, ListeKaydi, ListeOge, YazSonuc } from './depo';
 export { evrenSemboller, useListeler } from './depo';
 
 /** Adlandırılmış kayıttan düz görünümü tazeler (yalnız "mobil" listesi). */
@@ -254,6 +255,17 @@ export async function listeEvreneAl(id: string, dahil: boolean) {
 
 export async function listeBildirimAyarla(id: string, acik: boolean) {
   return depoListeBildirimAyarla(id, acik);
+}
+
+/**
+ * Webden gelen listeleri cihaza alir. DUZ GORUNUM DE TAZELENIYOR:
+ * "mobil" listesi iki yazarin (kalici.ts / depo.ts) ayni anahtarini
+ * paylasiyor; tazelemeden o gorunum eski kaydi gostermeye devam ederdi.
+ */
+export async function listeleriAktar(ham: unknown) {
+  const sonuc = await depoListeleriAktar(ham);
+  duzTazele();
+  return sonuc;
 }
 
 export async function listeyeEkle(id: string, sembol: string) {

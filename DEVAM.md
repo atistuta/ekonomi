@@ -3684,3 +3684,66 @@ artik direkt app uzerinden bildirimler gidecek."
   yaziyor, `production` dev-client denemesini kirar → EAS yapi profiline birakildi.
 - Android kucuk ikon `icon.png` 96x96 tumu-beyaz bicim DEGIL; dolu kare
   gorunebilir. Yayinda duzeltilecek.
+
+## 44. WEBDEKI LISTELER TELEFONA AKTARILIYOR (OLCULDU 2026-11-07)
+
+Kullanici: "webdeki listelerimi aktar." §41'de native uzak `ui` yukunu
+BILEREK benimsemiyordu; o kapi bu istekle acildi.
+
+### §41 engeli NIYE dustu — olcum
+- Web liste kaydi (`app.js:2126` `createList`):
+  `{ id, name, items: [{symbol, market, query}], inUniverse, notify }`
+- Native `ListeKaydi` (`mobile/src/api/depo.ts:146`): ALAN ALAN AYNI.
+- Iki taraf AYNI anahtari kullaniyor: `sb:lists` (`app.js:2120` /
+  `ANAHTARLAR.listeler`).
+- §41'deki gerekce "sekli native tarafinda HIC olculmedi" idi; olculdu,
+  birebir ayni cikti.
+
+### Kararlar
+- **EZME YOK, BIRLESTIRME VAR.** Ayni `id` gelirse uzak kayit yaziliyor
+  (web o listenin dogruluk kaynagi), cihazda OLUP bulutta OLMAYAN liste
+  KORUNUYOR. Web `adoptRemoteState` (`app.js:2131`) localStorage'i
+  topluca eziyor; ayni sey burada telefonda acilmis listeleri sessizce
+  silerdi.
+- **KENDILIGINDEN KOSMUYOR.** `senkronCek` hala SALT GOSTERIM. Aktarma
+  yalniz kullanicinin bastigi dugmeyle, ustelik IKI BASISLA. Gerekce: kod
+  PAYLASILAN bir sir ve ucta kimlik dogrulama yok (§21.3).
+- **HAM GIRDIYE GUVENILMIYOR.** Gelen deger cihazin kendi
+  `listelerSuz`/`listeKaydiSuz` suzgecinden geciyor → sembol normali,
+  pazar esleme, liste basina 8 sembol (`AZAMI_SEMBOL`). Budama SESSIZ
+  DEGIL: `budandi` kullaniciya yaziliyor.
+- **BOS GELEN YAZMAZ.** `lists: []` "webde liste yok" da olabilir, bozuk
+  kayit da; ayirt edemedigimiz icin cihaza DOKUNMUYOR.
+- **SURUM KAPISI.** Web `SYNC_STATE_V = 1` ↔ native `UI_SURUM = 1`.
+  Eslesmezse hicbir sey benimsenmiyor.
+
+### Dokunulan dosyalar
+- `mobile/src/api/depo.ts` — `ListeAktarSonuc`, `listeleriAktar(ham)`.
+- `mobile/src/api/liste.ts` — sarmalayici + `duzTazele()` (iki yazar ayni
+  anahtari paylasiyor).
+- `mobile/src/api/senkron.ts` — `UI_SURUM`, `uiListeleriCikar` (SAF),
+  `senkronListeAktar`. `senkronGonder`/`senkronCek` DEGISMEDI.
+- `mobile/src/api/index.ts` — bariyer genisledi.
+- `mobile/src/components/liste/SenkronKart.tsx` — "Webdeki listeleri
+  getir" dugmesi (iki basis) + sonuc sayilari.
+- `tests/uc-test.mjs` — KAPI ⑲ (18 denetim). Eski ㉘f iddiasi
+  ("benimseme YOK") artik yanlis oldugu icin YENI kurala cevrildi:
+  benimseme var ama KENDILIGINDEN kosmuyor. Ikinci ㉘f greb'i
+  daraltildi — `ui:` taramasi yalniz `senkronGonder` govdesinde.
+
+### OLCULDU
+- `node tests/uc-test.mjs` → ✅ 2469 denetim, KAPI ⑲ 18/18.
+- `node tests/uretim-test.mjs` → ✅ 73 denetim.
+- `node tests/parity.mjs` → ✅ FARK 0, 29 nokta.
+- `mobile/`: `npx tsc --noEmit` → 0 hata, `npx eslint src` → 0 hata.
+- POST govdesi DEGISMEDI: `{ list: evren.kayitlar, portfolio: [] }` —
+  telefon hala buluta `ui` GONDERMIYOR (yalniz OKUYOR).
+
+### OLCULMEDI
+- Aktarma GERCEK cihazda, CANLI ucla hic denenmedi — yalniz metin kapisi
+  ve tur denetimi var.
+- Bulutta `ui.v !== 1` ya da `ui: null` olan gercek bir kayitla
+  denenmedi.
+- Budama yolu (8 sembolu asan gercek web listesi) canli denenmedi.
+- Aktarmadan sonra "Bugun"/"Kesfet" seritlerinin yeni listelerle
+  tazelenme suresi olculmedi.

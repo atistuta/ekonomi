@@ -20,10 +20,17 @@
 //  KOD GERİ BASILMIYOR: kayıtlı kod ne ekrana ne hata cümlesine
 //  yazılıyor — ekran kaydına ya da hata günlüğüne sır düşmesin.
 //
-//  OKUMA SALT GÖSTERİM: bulutta ne durduğu YAZILIR, cihazdaki listelere
-//  UYGULANMAZ. Web `adoptRemoteState` ile uzaktan geleni localStorage'a
-//  yazıyor (`app.js:2131`); native bunu yapmıyor, çünkü o şekil (`ui`)
-//  webin kendi iç durumu ve native tarafında HİÇ ölçülmedi.
+//  OKUMA KENDİLİĞİNDEN UYGULAMIYOR: "Bulutta ne var?" yalnız GÖSTERİR.
+//  Webdeki listeleri bu cihaza almak AYRI ve KULLANICININ BASTIĞI bir
+//  adım ("Webdeki listeleri getir"), üstelik İKİ BASIŞLIK: ilk basış ne
+//  olacağını yazar, ikincisi uygular. Gerekçe: kod PAYLAŞILAN bir sır
+//  ve uçta kimlik doğrulama yok — sessiz bir benimseme, telefondaki
+//  listeleri kullanıcının bilmediği bir anda değiştirirdi.
+//
+//  AKTARMA EZMİYOR: aynı kimlikli liste güncellenir, bu cihazda olup
+//  bulutta olmayan liste KORUNUR (gerekçe `api/depo.ts:listeleriAktar`).
+//  Web `adoptRemoteState` (`app.js:2131`) localStorage'ı topluca eziyor;
+//  burada aynısı telefonda açılmış listeleri sessizce silerdi.
 //
 //  BURADA HESAP YOK: ekrandaki her sayı ya cihazdaki kayıttan ya ucun
 //  cevabından geliyor; eşik/ağırlık/formül yok, skora girmiyor.
@@ -39,6 +46,7 @@ import {
   senkronCek,
   senkronGonder,
   senkronKodYaz,
+  senkronListeAktar,
   senkronYukle,
   useHazir,
   useSenkron,
@@ -73,6 +81,9 @@ export function SenkronKart() {
   const [tamam, setTamam] = useState<string | null>(null);
   const [bulut, setBulut] = useState<BulutOzet | null>(null);
   const [mesgul, setMesgul] = useState(false);
+  // İKİ BASIŞ: cihazdaki listeleri değiştiren tek düğme bu, ilk basış
+  // yalnız ne olacağını yazıyor.
+  const [aktarOnay, setAktarOnay] = useState(false);
 
   // Bu tür `depoBaslat`ın okuduğu web türlerinden DEĞİL (native'e özel),
   // bu yüzden kaydı kartın kendisi okutuyor.
@@ -125,6 +136,37 @@ export function SenkronKart() {
           ' sembol saydı (gönderilen ' +
           s.evren.kayitlar.length +
           ').',
+      );
+    });
+  };
+
+  const aktar = () => {
+    if (!aktarOnay) {
+      setBildirim(null);
+      setTamam(null);
+      setAktarOnay(true);
+      return;
+    }
+    setAktarOnay(false);
+    setMesgul(true);
+    setBildirim(null);
+    setTamam(null);
+    void senkronListeAktar().then((s) => {
+      setMesgul(false);
+      if (!s.ok) {
+        // Sebep OLDUĞU GİBİ: kart kendi cümlesini uydurmuyor.
+        setBildirim(s.mesaj);
+        return;
+      }
+      setTamam(
+        'Webden alındı: ' +
+          s.eklenen +
+          ' yeni liste, ' +
+          s.guncellenen +
+          ' liste güncellendi, ' +
+          s.korunan +
+          ' liste bu cihazda korundu.' +
+          (s.budandi ? ' Bazı kayıtlar sınırı aştığı için budandı.' : ''),
       );
     });
   };
@@ -222,6 +264,23 @@ export function SenkronKart() {
             onPress={cek}
           />
         </View>
+
+        <View style={styles.satir}>
+          <Dugme
+            label={aktarOnay ? 'Onaylıyorum, getir' : 'Webdeki listeleri getir'}
+            size="sm"
+            variant="outline"
+            disabled={!acik || mesgul}
+            onPress={aktar}
+          />
+        </View>
+
+        {aktarOnay ? (
+          <Text style={[type.micro, { color: colors.gold }]}>
+            {'Buluttaki listeler bu cihaza alınacak: aynı listeler güncellenecek, ' +
+              'yalnız bu cihazda olan listeler korunacak. Onaylamak için tekrar bas.'}
+          </Text>
+        ) : null}
 
         {bildirim ? (
           <Text style={[type.micro, { color: colors.negative }]}>{bildirim}</Text>

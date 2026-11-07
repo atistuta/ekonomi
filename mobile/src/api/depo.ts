@@ -1025,6 +1025,74 @@ export async function listeBildirimAyarla(id: string, acik: boolean): Promise<Ya
 }
 
 /**
+ * `listeleriAktar` sonucu. Sayilar OLAN BITENI anlatiyor — kac liste
+ * eklendi, kac liste uzerine yazildi, cihazda kac liste KORUNDU.
+ * Hicbiri esik/agirlik/skor DEGIL.
+ */
+export type ListeAktarSonuc =
+  | { ok: true; eklenen: number; guncellenen: number; korunan: number; budandi: boolean }
+  | { ok: false; sebep: 'bicim' | 'bos' | 'yazilamadi'; mesaj: string };
+
+/**
+ * WEBDEKI LISTELERI BU CIHAZA ALIR (kullanici istegiyle).
+ *
+ * NEDEN ARTIK VAR: `senkron.ts` basligi uzun sure "uzak `ui`
+ * BENIMSENMIYOR" diyordu, gerekcesi "webin ic durumunun sekli native
+ * tarafinda HIC olculmedi" idi. O gerekce OLCUMLE dustu: web liste
+ * kaydi `{id, name, items:[{symbol,market,query}], inUniverse, notify}`
+ * (`app.js:2126` `createList`) ile buradaki `ListeKaydi` (depo.ts:146)
+ * ALAN ALAN AYNI, ve iki taraf AYNI anahtari kullaniyor
+ * (`sb:lists` — `app.js:2120` / `ANAHTARLAR.listeler`).
+ *
+ * HAM GIRDIYE GUVENILMIYOR: gelen deger `unknown`; cihazdaki her
+ * okumanin gectigi `listelerSuz`/`listeKaydiSuz` suzgecinden geciyor.
+ * Boylece sembol normali, pazar esleme ve LISTE BASINA 8 sembol siniri
+ * (`AZAMI_SEMBOL`) uzaktan gelen kayda da aynen uyguluyor. Budama
+ * SESSIZ DEGIL: `budandi` bayragi cagirana donuyor.
+ *
+ * EZMIYOR, BIRLESTIRIYOR: ayni `id`de gelen kayit cihazdakinin uzerine
+ * yaziliyor (web o listenin dogruluk kaynagi), cihazda OLUP bulutta
+ * OLMAYAN liste KORUNUYOR. Web `adoptRemoteState` (`app.js:2131`)
+ * localStorage'i topluca eziyor; burada ayni sey yalnizca telefonda
+ * acilmis listeleri sessizce silerdi.
+ *
+ * BOS GELEN YAZMAZ: `lists: []` "webde liste yok" demek olabilir de,
+ * yanlis kod / bozuk kayit da olabilir. Ikisini ayirt edemedigimiz icin
+ * bos gelen kayit cihazdaki listelere DOKUNMUYOR, sebep donuyor.
+ */
+export async function listeleriAktar(ham: unknown): Promise<ListeAktarSonuc> {
+  if (!Array.isArray(ham)) {
+    return {
+      ok: false,
+      sebep: 'bicim',
+      mesaj: 'Gelen kayit liste dizisi degil — cihazdaki listelere dokunulmadi.',
+    };
+  }
+  const { deger: gelen, budandi } = listelerSuz(ham);
+  if (gelen.length === 0) {
+    return {
+      ok: false,
+      sebep: 'bos',
+      mesaj: 'Gelen kayitta gecerli liste yok — cihazdaki listelere dokunulmadi.',
+    };
+  }
+  const mevcut = listelerDepo.al();
+  const gelenKimlik = new Set(gelen.map((l) => l.id));
+  const mevcutKimlik = new Set(mevcut.map((l) => l.id));
+  const korunanlar = mevcut.filter((l) => !gelenKimlik.has(l.id));
+  const eklenen = gelen.filter((l) => !mevcutKimlik.has(l.id)).length;
+  const yazildi = await listelerDepo.yaz([...gelen, ...korunanlar]);
+  if (!yazildi) return { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+  return {
+    ok: true,
+    eklenen,
+    guncellenen: gelen.length - eklenen,
+    korunan: korunanlar.length,
+    budandi,
+  };
+}
+
+/**
  * Listeye sembol ekler. SINIR LİSTE BAŞINA 8 (`AZAMI_SEMBOL`): bir liste
  * tek bir uç turuna karşılık geliyor ve uç nokta aşımı KIRPMIYOR, 400 ile
  * reddediyor (api/_girdi.js, liste.ts:30-33). Birden çok liste olabilir,
