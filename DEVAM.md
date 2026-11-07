@@ -3823,3 +3823,39 @@ expo-updates build phase". Gunlugun tamami:
 - Uygulama gercek iPhone'a KURULMADI; hicbir ozellik cihazda denenmedi.
 - `appVersion` politikasiyla OTA'nin gercek cihaza DUSTUGU gorulmedi.
 - Bildirim hic denenmedi (kurulum ertelendi — yukari bak).
+
+### 45.1 IKINCI YAPI HATASI · push yetkisi (OLCULDU 2026-11-07)
+
+Yapi `3b0650fb` — parmak izi hatasi GITTI, Xcode adiminda dustu:
+`XCODE_BUILD_ERROR` · *Provisioning profile "[expo]
+com.sabahbulteni.app AdHoc 1793265393019" doesn't include the Push
+Notifications capability / the aps-environment entitlement.*
+
+Kok neden: `expo-notifications` AYAR EKLENTISI (`app.json` → `plugins`)
+iOS'ta kosulsuz `aps-environment` yetkisi yaziyor. Apple tarafindaki App
+ID'de "Push Notifications" yetenegi ACIK DEGIL, dolayisiyla 8 gun once
+uretilmis profil bu yetkiyi tasimiyor. Profilin yenilenmesi Apple
+girisi (sifre + 2FA) ister — bu da kullanicinin isi ve §45'te zaten
+TestFlight'a ERTELENDI.
+
+**KARAR:** `expo-notifications` AYAR EKLENTISI `app.json` → `plugins`
+dizisinden CIKARILDI. Paket ve KOD yerinde duruyor
+(`mobile/src/api/bildirim.ts` degismedi); cikan yalnizca yetki yazan
+eklenti kaydi. Boylece cihaz yapisi Apple girisi olmadan tamamlaniyor.
+
+**TESTFLIGHT ADIMINDA GERI ALINACAK — uc kalem, hepsi bir arada:**
+1. Apple Developer → App ID `com.sabahbulteni.app` → "Push
+   Notifications" yetenegini AC.
+2. `app.json` → `plugins` dizisine geri ekle:
+   `["expo-notifications", { "icon": "./assets/images/icon.png",
+   "color": "#0F1522" }]` — magaza yapisi icin `"mode": "production"`
+   de dusunulecek (dev-client denemesini bozar, bkz. §43).
+3. EAS'ta APNs anahtari + profilin yenilenmesi, ayrica Vercel ve GitHub
+   Actions'ta `PUSH_SECRET`.
+Bu uc kalem BIRLIKTE yapilmazsa yapi yine duser.
+
+Yan etki: eklenti cikarken Android bildirim simgesi/rengi ayari da
+cikti; Android yapisi su an gundemde degil, TestFlight adiminda geri
+gelecek.
+
+Yeni yapi: `156e75e1-5424-4407-8979-3a5c82732fab`.
