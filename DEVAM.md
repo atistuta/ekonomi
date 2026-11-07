@@ -3747,3 +3747,79 @@ BILEREK benimsemiyordu; o kapi bu istekle acildi.
 - Budama yolu (8 sembolu asan gercek web listesi) canli denenmedi.
 - Aktarmadan sonra "Bugun"/"Kesfet" seritlerinin yeni listelerle
   tazelenme suresi olculmedi.
+
+## 45. TUM DEPLOYLAR + iOS YAPI HATASI COZULDU (OLCULDU 2026-11-07)
+
+Kullanici: "bildirim kurulumu kismini erteleyelim, test flightta yapariz.
+... tum deploylari yap, her sey hazir olsun."
+
+### KARAR · bildirim KURULUMU TestFlight adimina ERTELENDI
+Bildirim KODU gonderildi (bkz. §43, commit e851677 + 1be5ef9). Ertelenen
+yalniz KURULUM:
+- Vercel'de `PUSH_SECRET` ortam degiskeni,
+- GitHub Actions depo sirri olarak ayni deger,
+- Apple tarafinda APNs anahtari.
+Bunlar TestFlight adiminda, kullanicinin kendi hesabiyla yapilacak. O ana
+kadar bildirim gitmez; uygulamanin geri kalani etkilenmez.
+
+### WEB DEPLOY · zaten canli
+- Vercel GitHub tumlesmesi her `git push`ta Production deploy aciyor.
+  c334d15 icin deploy 05:20:48Z, "success".
+- **TUZAK:** calisma kopyasi `app.js` CRLF (869451 bayt), git nesnesi LF.
+  `git show HEAD:app.js | wc -c` = 855026 = CANLI boyut. Canliyla
+  KIYASLARKEN daima `git show HEAD:<yol>` kullan, calisma dosyasini ASLA.
+- Vercel CLI OTURUMU KAPALI (`vercel whoami` → "Logged out"). Gerek de
+  yok; giris etkilesimli, kullanicinin isi.
+- Dagitim basina deploy adresleri koruma duvarinin arkasinda (263 bayt
+  doner). Yalnizca `https://day-starter.vercel.app` gercek icerigi verir.
+
+### iOS YAPI HATASI · kok neden ve cozum
+Yapi `3ffe87dd` ERRORED, 84s: "Unknown error. See logs of the Configure
+expo-updates build phase". Gunlugun tamami:
+- EAS gunluk dosyasi **brotli** sikistirilmis JSONL'dir (`Content-Encoding:
+  br`). Python'da brotli yok → `node -e "zlib.brotliDecompressSync(...)"`
+  ile acilir. utf-8 metin olarak indirmek dosyayi BOZAR.
+- Gercek hata: `Runtime version calculated on local machine not equal to
+  runtime version calculated during build.`
+  - yerel: `e30cbde6...`  ·  EAS: `b28838fb...`
+  - parmak izi farkinin BASI: `{"op":"added","filePath":"ios",
+    "reasons":["bareNativeDir"]}` — EAS prebuild'de `ios/` dizinini
+    uretiyor, yerelde `ios/` YOK (`.gitignore:43`). `fingerprint`
+    politikasinda bu fark her yapiyi dusuruyor.
+  - ikincil fark: `node_modules/@expo/log-box` ve
+    `react-native-worklets` hash'leri (EAS taze kurulum, farkli yama).
+- **COZUM:** `mobile/app.json` → `expo.ios.runtimeVersion.policy`
+  `fingerprint` → **`appVersion`**. Android zaten `appVersion`. Artik iki
+  platform TEK calisma surumu: `1.0.0`.
+  - Bedeli: ayni `version` ile native bagimlilik degisirse OTA, o modulu
+    tasimayan yapiya gidebilir. KURAL: native paket eklendiginde/
+    kaldirildiginda `expo.version` YUKSELTILECEK.
+- Yan onarim: `expo doctor` 1 denetimden dusuyordu (`expo-updates`
+  ~57.0.26, beklenen ~57.0.27). `npx expo install expo-updates@~57.0.27`
+  ile hizalandi.
+
+### EAS · olculen bayraklar
+- `eas device:list` etkilesimsiz calismaz; `--apple-team-id K79M286U78`
+  sart. Kayitli tek iPhone: UDID `00008110-000848A614D1401E`.
+- `eas update --non-interactive` `--environment` ister
+  (development|preview|production).
+- `eas build:view <id> --json` HICBIR SEY basmaz. `eas build:list
+  --limit 1 --non-interactive --json` kullan; kaydinda `error`,
+  `fingerprint`, `logFiles[]` (15 dakikalik imzali GCS adresi) var.
+- Apple sifresi/2FA GEREKMEDI: dagitim sertifikasi (bitis 2027-06-25) ve
+  profil `S4264TB2H3` EAS'ta hazir — "All credentials are ready to build".
+
+### OLCULDU
+- `node tests/uc-test.mjs` → ✅ 2469 denetim.
+- `node tests/uretim-test.mjs` → ✅ 73 denetim.
+- `node tests/parity.mjs` → ✅ FARK 0, 29 nokta.
+- `mobile/`: `npx tsc --noEmit` → 0, `npx eslint src` → 0.
+- OTA yayinlandi: dal `cihaz`, calisma surumu **1.0.0**, iOS+Android tek
+  grup `0db3bb4f-a63c-460f-87ed-e03e1e8dc9b6`.
+- Yeni iOS yapisi baslatildi: `3b0650fb-0ec2-42ef-9658-7eb49438a091`.
+
+### OLCULMEDI
+- Yeni yapinin SONUCU (bu satir yazilirken kuyrukta).
+- Uygulama gercek iPhone'a KURULMADI; hicbir ozellik cihazda denenmedi.
+- `appVersion` politikasiyla OTA'nin gercek cihaza DUSTUGU gorulmedi.
+- Bildirim hic denenmedi (kurulum ertelendi — yukari bak).
