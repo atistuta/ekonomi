@@ -31,12 +31,16 @@ jobs:
         working-directory: worker
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          SYNC_CODE: ${{ secrets.SYNC_CODE }}
         run: node poll.mjs
 
       - name: Run movers (fiyat sıçraması)
         working-directory: worker
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
+          SYNC_CODE: ${{ secrets.SYNC_CODE }}
         run: node movers.mjs
 
       - name: Commit state
