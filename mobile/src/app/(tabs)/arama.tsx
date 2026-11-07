@@ -37,11 +37,32 @@
 //  KÖPRÜ: 📡 Bugün ekranındaki 🔭 tematik haber arama alanı ile bu ekran
 //  `tema` yol parametresiyle bağlı — iki yönde de aynı tema taşınıyor.
 //
+//  ── 🕘 SON ARAMALAR: CİHAZ-YEREL, AĞ TURU YOK ──────────────────────
+//  Depo katmanı ZATEN VARDI (`api/depo.ts`: `aramalarDepo` · `AZAMI_ARAMA`
+//  = 12 · `aramaHatirla()`), ama HİÇBİR ekran okumuyordu (ölçüldü: bu
+//  simgeler yalnız `depo.ts` ve `api/index.ts` içinde geçiyordu). Bu
+//  ekran onları kullanıyor; YENİ BAĞIMLILIK EKLENMEDİ (sürücü depo
+//  katmanının kendi sürücüsü), yeni uç ÇAĞRILMADI.
+//
+//  NEDEN YALNIZ "Sembol ölç" KAYDEDİLİYOR: depo kaydı `{symbol, market}`.
+//  Tema metni sembol DEĞİL ve pazarı ÖLÇÜLMEMİŞTİR; 'yapay zeka'yı
+//  sembol gibi yazmak uydurma kayıt olurdu. Ekranda bu AÇIKÇA yazıyor.
+//
+//  KAYIT SUNUCUYA GİTMİYOR: `aramalarDepo` cihaz deposu; temizleme de
+//  cihazda (`aramalarDepo.temizle()`).
+//
 //  NEDEN SEMBOL SONUCU TEK SATIR: istek tek sembolle gidiyor; sözleşme
 //  sınırı 8 ve o sınır listenin işi (bkz. api/liste.ts).
 //
 //  BURADA HESAP YOK: fiyat/skor/bant uçtan; ekleme sınırı bile motor
 //  sözleşmesinden (AZAMI_SEMBOL) okunuyor.
+//
+//  ── SIRALAMA KURALI (TASARIM TURU 2) ───────────────────────────────
+//  1) Girdi (sembol/tema kutusu) — ekranın işi aramak
+//  2) Cihazdaki geçmiş: son aramalar
+//  3) Ölçüm sonuçları: aday · sembol sonucu
+//  4) Tematik keşif ve tema haberleri (girdi bekleyen yüzeyler) en sonda
+//  ÖLÇÜLDÜ 2026-10-31: bu sekme kurala ZATEN UYUYOR; kart taşınmadı.
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
@@ -51,16 +72,22 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
+  AZAMI_ARAMA,
   AZAMI_HABER_SORGU,
   AZAMI_SEMBOL,
+  aramaHatirla,
+  aramalarDepo,
   ekle,
   fetchNews,
   fetchRecommend,
   fetchTheme,
   haberOlcumEksik,
   temaKodMetni,
+  useAramalar,
   useIstek,
   useListe,
+  useTurHazir,
+  type AramaKaydi,
   type HaberMadde,
 } from '@/api';
 import {
@@ -68,6 +95,7 @@ import {
   Dugme,
   Durum,
   HaberOlcumEksikRozet,
+  Katlanir,
   OlcemedimKutu,
   OlcumEksikRozet,
   Pill,
@@ -76,9 +104,10 @@ import {
   VeriYok,
 } from '@/components';
 import { AdayKarti } from '@/components/arama';
-import { HaberSatiri } from '@/components/kesfet';
+import { DuyarlilikOzeti, HaberSatiri } from '@/components/kesfet';
 import { formatPrice, formatScore } from '@/lib/format';
-import { radius, space, type, useTheme } from '@/theme';
+import { hisseAc } from '@/lib/gezinme';
+import { hitSlopMin, radius, space, type, useTheme } from '@/theme';
 
 export default function AramaScreen() {
   const { colors } = useTheme();
@@ -110,6 +139,21 @@ export default function AramaScreen() {
     setMetin(gelenTema);
     setTemaSorgu(gelenTema);
   }
+
+  /**
+   * "Sembol ölç" tek kapı: isteği açar VE cihaz kaydını yazar. İki çağrı
+   * yeri (düğme + klavye) aynı kapıdan geçiyor ki biri kaydetmeyi
+   * unutmasın. Yazma sonucu SESSİZCE YUTULMUYOR: kota/özel pencere
+   * yüzünden yazılamazsa sebep bildirim satırına düşüyor (`YazSonuc`).
+   */
+  const olc = useCallback((ham: string) => {
+    const sembol = ham.trim().toUpperCase();
+    if (!sembol) return;
+    setSembolSorgu(sembol);
+    void aramaHatirla(sembol).then((sonuc) => {
+      if (!sonuc.ok) setBildirim(sonuc.mesaj);
+    });
+  }, []);
 
   const sembolCagri = useCallback(
     (signal: AbortSignal) => fetchRecommend([sembolSorgu], { vade: 'orta', signal }),
@@ -143,7 +187,7 @@ export default function AramaScreen() {
           placeholderTextColor={colors.textFaint}
           autoCorrect={false}
           returnKeyType="search"
-          onSubmitEditing={() => setSembolSorgu(metin.trim().toUpperCase())}
+          onSubmitEditing={() => olc(metin)}
           accessibilityLabel="Sembol ya da tema arama alanı"
           style={[
             styles.alan,
@@ -158,7 +202,7 @@ export default function AramaScreen() {
         <View style={styles.dugmeler}>
           <Dugme
             label="Sembol ölç"
-            onPress={() => setSembolSorgu(metin.trim().toUpperCase())}
+            onPress={() => olc(metin)}
             disabled={!metin.trim()}
           />
           <Dugme
@@ -181,6 +225,16 @@ export default function AramaScreen() {
             'birlikte aranır, pazar TAHMİN EDİLMEZ.'}
         </Text>
       </Card>
+
+      {/* Son aramalar AĞ TURU AÇMIYOR: cihaz deposundan okuyor. Aday
+          listesinin ÜSTÜNDE, çünkü "yine aynı sembol" en kısa yol. */}
+      <SonAramalarKarti
+        onSec={(sembol) => {
+          setMetin(sembol);
+          setBildirim(null);
+          olc(sembol);
+        }}
+      />
 
       {/* Gecikme, iptal ve tüm dallar (pazar ölçülemedi · motor yok ·
           ölçüm tamamlanmadı · eşleşme yok) kartın İÇİNDE. */}
@@ -213,12 +267,10 @@ export default function AramaScreen() {
                 price={satir.plan?.seviye?.price ?? satir.fa.price}
                 currency={satir.market === 'BIST' ? 'TRY' : null}
                 changePct={null}
-                onPress={() => router.push({
-                    pathname: '/hisse/[sembol]',
-                    // `pazar`: uc BIST sembolunu sonek SILEREK donduruyor; detay
-                    // ekrani bu bilgiyle `.IS`'i geri kazaniyor (bkz. o ekran).
-                    params: { sembol: satir.sym, pazar: satir.market },
-                  })}
+                // `pazar`: uc BIST sembolunu sonek SILEREK donduruyor; detay
+                // ekrani bu bilgiyle `.IS`'i geri kazaniyor (bkz. o ekran).
+                // TASARIM TURU 2: tek gezinme kalibi (`lib/gezinme.ts`).
+                onPress={() => hisseAc(satir.sym, satir.market)}
                 right={
                   <View style={styles.sag}>
                     {/* `right` verilince TickerRow fiyati kendi basmiyor. */}
@@ -314,6 +366,83 @@ export default function AramaScreen() {
 }
 
 /**
+ * 🕘 SON ARAMALAR — cihaz deposu, UÇ YOK.
+ *
+ * NE: `aramalarDepo` kayıtları (`{symbol, market}`, en yeni başta, sınır
+ * `AZAMI_ARAMA`). Satıra basmak aynı sembolü yeniden ÖLÇTÜRÜYOR.
+ *
+ * ÜÇ DAL AYRI: depo okuması BİTMEDİ (kayıt var mı bilinmiyor) · okundu
+ * ve kayıt YOK (ölçülmüş "boş") · kayıt var. Boş liste 0 kayıt diye
+ * sunulmuyor, okuma bitmeden "yok" YAZILMIYOR.
+ *
+ * `market` ALANI UÇTAN DEĞİL: depo katmanı `.IS` sonekine bakıp
+ * yazıyor (`depo.ts` `pazarOf`, biçim eşlemesi). Burada ham basılıyor,
+ * yeniden türetilmiyor.
+ *
+ * BURADA HESAP YOK: sıralama ve sınır deponun, satırda sayı yok.
+ */
+function SonAramalarKarti({ onSec }: { onSec: (sembol: string) => void }) {
+  const { colors } = useTheme();
+  const aramalar = useAramalar();
+  const hazir = useTurHazir(aramalarDepo);
+
+  return (
+    <Card
+      title="🕘 Son aramalar"
+      subtitle={'Bu cihazda saklanır · en çok ' + AZAMI_ARAMA + ' kayıt · sunucuya gitmez'}
+      right={
+        hazir && aramalar.length ? (
+          <Pill label={aramalar.length + ' kayıt'} tone="neutral" glyph={null} size="sm" />
+        ) : null
+      }>
+      {!hazir ? (
+        <Text style={[type.micro, { color: colors.textDim }]}>
+          Cihaz kaydı okunuyor — kayıt olup olmadığı henüz BİLİNMİYOR.
+        </Text>
+      ) : aramalar.length === 0 ? (
+        <VeriYok kartsiz metin="Bu cihazda ölçülmüş sembol araması yok." />
+      ) : (
+        <>
+          <View style={styles.dugmeler}>
+            {aramalar.map((k: AramaKaydi) => (
+              <Dugme
+                key={k.market + ':' + k.symbol}
+                label={k.symbol + ' · ' + k.market}
+                size="sm"
+                variant="outline"
+                tone="neutral"
+                onPress={() => onSec(k.symbol)}
+              />
+            ))}
+          </View>
+          <Dugme
+            label="Son aramaları temizle"
+            size="sm"
+            variant="outline"
+            tone="info"
+            // Kayıt SİLİNİYOR (boş dizi yazmak değil): depo kaydı
+            // kaldırılıyor, bellek boşa dönüyor (`TurDepo.temizle`).
+            onPress={() => {
+              void aramalarDepo.temizle();
+            }}
+          />
+        </>
+      )}
+
+      {/* TASARIM: bu not kartın NEDEN'i, ÖLÇÜMÜ değil; her açılışta iki
+          satır yer kaplıyordu. VARSAYILAN KAPALI — metin AYNEN korundu,
+          silinmedi. */}
+      <Katlanir baslik="Hangi aramalar kaydedilir?" ozet="yalnız ölçülmüş semboller">
+        <Text style={[type.micro, { color: colors.textFaint }]}>
+          {'Yalnız “Sembol ölç” ile ölçülen semboller kaydediliyor. Tema metni sembol DEĞİL ve ' +
+            'pazarı ölçülmemiştir — tema aramaları buraya YAZILMIYOR.'}
+        </Text>
+      </Katlanir>
+    </Card>
+  );
+}
+
+/**
  * 📰 TEMA HABERLERİ — `/api/news`, aynı tema.
  *
  * NEDEN AYRI İSTEK: 🔭 keşif turu (/api/theme) yavaş ve anahtara bağlı;
@@ -369,6 +498,11 @@ function TemaHaberleriKarti({ sorgu }: { sorgu: string }) {
         />
       ) : null}
 
+      {/* DUYARLILIK ÖZETİ — ucun `duyarlilik` katmanı (api/news.js).
+          Alan HİÇ gelmediyse bileşen hiçbir şey basmıyor; `null` ise
+          "ölçemedim" der. Manşetler bu ölçüme BAĞLI DEĞİL. */}
+      {durum === 'veri' && !eksik ? <DuyarlilikOzeti duyarlilik={veri?.duyarlilik} /> : null}
+
       {durum === 'veri' && veri && veri.adet === 0 && !eksik ? (
         <VeriYok
           kartsiz
@@ -417,10 +551,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: space.md,
     // Dokunma hedefi: tek elle rahat ulaşılsın (bkz. layout.ts hitSlopMin).
-    minHeight: 44,
+    minHeight: hitSlopMin,
   },
   dugmeler: { flexDirection: 'row', gap: space.sm, flexWrap: 'wrap' },
-  sag: { alignItems: 'flex-end', gap: 2 },
-  aday: { gap: 2, paddingVertical: space.sm },
+  sag: { alignItems: 'flex-end', gap: space.xxs },
+  aday: { gap: space.xxs, paddingVertical: space.sm },
   haberler: { paddingTop: space.xs },
 });

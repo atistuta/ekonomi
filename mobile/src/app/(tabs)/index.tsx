@@ -29,10 +29,18 @@
 //  duruyor. Bulut senkronu (Supabase) hâlâ ayrı bir ayak ve anahtarı yok;
 //  ekran bunu ayrı kartta dürüstçe söylüyor.
 //
+//  ── SIRALAMA KURALI (TASARIM TURU 2) ───────────────────────────────
+//  1) Kullanıcının kendi listesinin ölçümü (tek `FlatList`, tek tur)
+//  2) Liste yönetimi (Listeler kartı)
+//  3) Künye/saklama açıklaması — "nerede saklanıyor" kartı en sonda
+//  ÖLÇÜLDÜ 2026-10-31: bu sekme kurala ZATEN UYUYOR; hiçbir kart
+//  taşınmadı, yalnız kural yazıya geçti. Tek pull-to-refresh yüzeyi
+//  burada (`RefreshControl`) — sıralama turunda kaydırıcıya
+//  DOKUNULMADI.
+//
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
@@ -58,6 +66,7 @@ import {
 } from '@/components';
 import { ListelerKart } from '@/components/liste';
 import { formatPrice, formatScore } from '@/lib/format';
+import { hisseAc } from '@/lib/gezinme';
 import { depoCalisiyorMu } from '@/lib/kalici';
 import { space, type, useTheme } from '@/theme';
 
@@ -208,12 +217,11 @@ function Satir({ satir }: { satir: RecommendRow }) {
         currency={satir.market === 'BIST' ? 'TRY' : null}
         changePct={null}
         style={styles.satirTicker}
-        onPress={() => router.push({
-                    pathname: '/hisse/[sembol]',
-                    // `pazar`: uc BIST sembolunu sonek SILEREK donduruyor; detay
-                    // ekrani bu bilgiyle `.IS`'i geri kazaniyor (bkz. o ekran).
-                    params: { sembol: satir.sym, pazar: satir.market },
-                  })}
+        // `pazar`: uc BIST sembolunu sonek SILEREK donduruyor; detay
+        // ekrani bu bilgiyle `.IS`'i geri kazaniyor (bkz. o ekran).
+        // TASARIM TURU 2: cagri bicimi `lib/gezinme.ts` kalibina alindi
+        // (ayni rotaya iki ayri bicimde gidiliyordu); params AYNI.
+        onPress={() => hisseAc(satir.sym, satir.market)}
         right={
           <View style={styles.sag}>
             {/* NEDEN FIYAT BURADA: `right` verildiginde TickerRow kendi fiyat

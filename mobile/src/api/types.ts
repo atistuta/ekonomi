@@ -52,6 +52,139 @@ export type TaBreakdown = {
   weight: number | null;
 };
 
+/**
+ * Mum örüntüsünün MAKİNE KODU — motorun `detectCandlePattern` dönüşündeki
+ * `code`. ÖLÇÜLDÜ (app.js:4413-4448): sekiz değer. Küme SABİT; motor
+ * dokuzuncuyu eklerse tür derlemede yakalanmaz diye `| string` yok —
+ * bilinmeyen kod ekranda HAM basılıyor (bkz. `MUM_ETIKET`).
+ */
+export type TaHamMumKodu =
+  | 'bullishEngulfing'
+  | 'bearishEngulfing'
+  | 'darkCloudCover'
+  | 'piercingLine'
+  | 'bullishHarami'
+  | 'bearishHarami'
+  | 'hammer'
+  | 'shootingStar';
+
+/**
+ * HAM GÖSTERGE SÖZLÜĞÜ — `/api/score` ve `/api/analyze` gövdesinde
+ * `sonuclar[i].ta.ham` (eklendi 2026-10-29; uç tarafı `taHamGostergeler`,
+ * app.js:1491).
+ *
+ * ⚠️ BU BLOK SKORUN PARÇASI DEĞİL: eşik, ağırlık, yorum TAŞIMIYOR. Uç
+ * yalnız SON BARDAKİ skalerleri + iki sabit-küme makine kodunu veriyor;
+ * istemci onları BASAR, yorumlamaz (türev oran kurmak §5.1 ihlali).
+ *
+ * ⚠️ ÜÇ AYRI BİRİM AYNI SÖZLÜKTE — uçtaki birim notunun (app.js:1480)
+ * birebir aynısı, her alanın yanında yazılı:
+ *   · PARA (enstrümanın `currency`'si, ÇARPAN YOK): fiyat · ema20 ·
+ *     sma50 · sma200 · bollUst/Orta/Alt · atr · tenkan · kijun ·
+ *     senkouA/B · fibHi/Lo/Fark · vpPoc/Vah/Val · ofFiyatDegisim
+ *   · 0-100 YÜZDE PUANI: rsi · rsi3Once · stochK · stochD · adx ·
+ *     plusDI · minusDI · ofAlisYuzde
+ *   · FİYAT BİRİMİ FARK: macdCizgi · macdSinyal · macdHist · macdHistOnceki
+ *   · HACİM (adet): obv · obv20Once · ofCvdDegisim · ofBugunDelta
+ *   · BİRİMSİZ KAT: ofBugunZ
+ *   · BAR SAYISI: bar · ichiBase · ofPencere
+ *
+ * ⚠️ PENCERE AYRIMI (uç başlığı aynısını yazıyor): ema/sma/rsi/macd/
+ * adx/stoch/atr/obv/ichimoku son barda pencereden BAĞIMSIZ; `fib*`,
+ * `vp*`, `of*` ise VERİLEN pencereye göre hesaplanıyor ve uç 5y/1d
+ * kullanıyor (web görünen periyodu kullanıyor) → bu üç grup web
+ * kartıyla EŞİT ÇIKMAZ. `bar` bu yüzden dönüyor; ekran o pencereyi
+ * etikette YAZMAK ZORUNDA.
+ *
+ * Hesaplanamayan alan `null` — `0` DEĞİL (0 geçerli bir OBV/MACD değeri).
+ */
+export type TaHam = {
+  /** Kaç mumla ölçüldü — BAR SAYISI (uç penceresi: 5y/1d). */
+  bar: number | null;
+  /** Son kapanış — PARA. */
+  fiyat: number | null;
+  /** PARA. */
+  ema20: number | null;
+  /** PARA. */
+  sma50: number | null;
+  /** PARA. */
+  sma200: number | null;
+  /** 0-100 YÜZDE PUANI. */
+  rsi: number | null;
+  /** 3 bar önceki RSI — 0-100 YÜZDE PUANI. Fark İSTEMCİDE KURULMAZ. */
+  rsi3Once: number | null;
+  /** 0-100 YÜZDE PUANI. */
+  stochK: number | null;
+  /** 0-100 YÜZDE PUANI. */
+  stochD: number | null;
+  /** FİYAT BİRİMİ FARK. */
+  macdCizgi: number | null;
+  /** FİYAT BİRİMİ FARK. */
+  macdSinyal: number | null;
+  /** FİYAT BİRİMİ FARK. */
+  macdHist: number | null;
+  /** Bir önceki bardaki histogram — FİYAT BİRİMİ FARK. */
+  macdHistOnceki: number | null;
+  /** PARA. */
+  bollUst: number | null;
+  /** PARA. */
+  bollOrta: number | null;
+  /** PARA. */
+  bollAlt: number | null;
+  /** 0-100 YÜZDE PUANI. */
+  adx: number | null;
+  /** 0-100 YÜZDE PUANI. */
+  plusDI: number | null;
+  /** 0-100 YÜZDE PUANI. */
+  minusDI: number | null;
+  /** Ortalama gerçek aralık — PARA. Fiyata BÖLÜNMEZ (türetme olurdu). */
+  atr: number | null;
+  /** HACİM (adet). `0` GERÇEK bir ölçüm. */
+  obv: number | null;
+  /** 20 bar önceki OBV — HACİM (adet). Değişim İSTEMCİDE KURULMAZ. */
+  obv20Once: number | null;
+  /** PARA. */
+  tenkan: number | null;
+  /** PARA. */
+  kijun: number | null;
+  /** PARA (bulut `ichiBase` bar geride okunmuş hâli — uç öyle veriyor). */
+  senkouA: number | null;
+  /** PARA. */
+  senkouB: number | null;
+  /** Bulutun kaydırma uzunluğu — BAR SAYISI. */
+  ichiBase: number | null;
+  /** Fib penceresinin tepesi — PARA. PENCEREYE BAĞLI (5y/1d). */
+  fibHi: number | null;
+  /** Fib penceresinin dibi — PARA. PENCEREYE BAĞLI. */
+  fibLo: number | null;
+  /** Tepe−dip farkı, UÇ ÖLÇTÜ — PARA. İstemci çıkarma YAPMAZ. */
+  fibFark: number | null;
+  /** Pencerenin yönü — MAKİNE KODU ('up' | 'down'), yorum değil. */
+  fibYon: 'up' | 'down' | null;
+  /** Hacim profili denge noktası — PARA. PENCEREYE BAĞLI. */
+  vpPoc: number | null;
+  /** Değer alanı üst sınırı — PARA. PENCEREYE BAĞLI. */
+  vpVah: number | null;
+  /** Değer alanı alt sınırı — PARA. PENCEREYE BAĞLI. */
+  vpVal: number | null;
+  /** Alış tarafı payı — 0-100 YÜZDE PUANI. PENCEREYE BAĞLI. */
+  ofAlisYuzde: number | null;
+  /** Kümülatif delta eğimi — HACİM (adet). PENCEREYE BAĞLI. */
+  ofCvdDegisim: number | null;
+  /** Aynı pencerede fiyat eğimi — PARA. PENCEREYE BAĞLI. */
+  ofFiyatDegisim: number | null;
+  /** Günün deltasının BİRİMSİZ KAT ölçüsü. PENCEREYE BAĞLI. */
+  ofBugunZ: number | null;
+  /** Günün deltası — HACİM (adet). PENCEREYE BAĞLI. */
+  ofBugunDelta: number | null;
+  /** Emir akışı penceresi — BAR SAYISI. */
+  ofPencere: number | null;
+  /** Son mum örüntüsünün MAKİNE KODU; örüntü yoksa `null`. */
+  mumKodu: TaHamMumKodu | null;
+  /** Örüntünün motor etiketi — MAKİNE KODU ('bull' | 'bear' | 'neutral'). */
+  mumSinyali: 'bull' | 'bear' | 'neutral' | null;
+};
+
 export type ScoreTa = {
   /** 0-100. `null` → ölçülemedi/üretilmedi, sebebi `why`. */
   score: number | null;
@@ -66,12 +199,41 @@ export type ScoreTa = {
   bars?: number;
   benchBars?: number;
   breakdown?: TaBreakdown[];
+  /**
+   * HAM GOSTERGE DEGERLERI — motorun `taHamGostergeler` dokumu
+   * (app.js:1470). 42 alan, hepsi `number | null` (iki alan makine
+   * kodu). Burada hicbir esik/agirlik YOK: ekran yalniz basar.
+   *
+   * UC DAL: alan gelmediyse `undefined` ("sorulmadi" — eski uc),
+   * `null` ("olcemedi"), sayi ("olctum"). `0` ile `null` ayri.
+   *
+   * ⚠️ PENCEREYE BAGLI: uc bu dokumu 5y/1d penceresinde uretiyor;
+   * webin karti gorunen periyodu kullaniyor. `fib*`, `vp*`, `of*`
+   * alanlari BU YUZDEN web kartiyla AYNI SAYIYI VERMEZ — kac mumla
+   * olculdugu `bar` alaninda.
+   */
+  ham?: TaHam | null;
 };
 
 export type FaCriterion = {
   key: string;
   weight: number | null;
   score: number | null;
+  /**
+   * Kriterin MAKİNE KODU — ör. `d2e.yuksek` (#12, 2026-11-03).
+   * Motorun `faKriterKod()` dalı; cümle TAŞINMIYOR, cümleyi
+   * `lib/sozluk.ts` `FA_KRITER_SOZLUK` kuruyor.
+   *
+   * ÜÇ DURUM TELDE KORUNUYOR: alan HİÇ YOKSA kriter sözlükte sorulmadı;
+   * `null` ise sorulup ÖLÇÜLEMEDİ; dolu ise dal belli.
+   */
+  kod?: string | null;
+  /**
+   * Cümlenin dayandığı HAM ölçümler — `pct` · `kat` · `oran` · `tutar`
+   * gibi. `birim` bir MAKİNE KODU (`TRY` / `USD`), cümle değil.
+   * Boş sözlük "ölçtüm, sayı çıkmadı"; alanın yokluğu "sormadım".
+   */
+  sayilar?: Record<string, number | string> | null;
 };
 
 export type ScoreFa = {
@@ -268,15 +430,93 @@ export type PlanRiskOdul = {
   rrRatio: number | null;
 };
 
+/**
+ * ATR/FİYAT ORANININ OYNAKLIK SINIFI — motorun `atrVolKod`u (Ş8 #14).
+ *
+ * NİYE SINIF TAŞINIYOR, ORAN DEĞİL: `seviye.atr` ile `seviye.price`
+ * telde ZATEN var, oran burada bölünebilirdi. Taşınan şey oranın
+ * SINIFLANDIRILMASI — eşikler (2 / 4) motorda kalsın diye (§5.1).
+ *
+ * `kod: null` = ATR var ama fiyat yok → oran ÖLÇÜLEMEDİ (web'de bu
+ * durumda sınıf etiketi boş kalıyordu). `atrPct: 0` UYDURMA DEĞİL,
+ * geçerli bir ölçüm: hiç hareket etmemiş bar.
+ *
+ * `stopKat` SAYI dizisi ([1.5, 2]): webdeki "stop/pozisyon için ATR'nin
+ * 1.5-2 katı" cümlesindeki iki sayı. İstemciye yazılsa istemciye eşik
+ * yazmak olurdu; cümlenin SAYILARI uçtan geliyor.
+ */
+export type PlanOynaklik = {
+  atr: number | null;
+  atrPct: number | null;
+  /** Sabit küme: 'yuksek' | 'orta' | 'dusuk'. `null` = oran ölçülemedi. */
+  kod: 'yuksek' | 'orta' | 'dusuk' | null;
+  stopKat: number[] | null;
+};
+
+/**
+ * AYNI ORANIN PLAN/STOP BANDI — motorun `atrPlanKod`u (Ş8 #14).
+ *
+ * NİYE İKİNCİ ALAN: web bu oranı İKİ YERDE hesaplıyor ve iki farklı
+ * soruya cevap veriyordu (ölçüldü 2026-11-03, uc-test ⑤g). ATR kartı
+ * ÜÇ KADEMELİ sınıf basıyor; katalizör satırı ise yalnız UÇLARDA
+ * (>=4 / <1.5) konuşup ARADA SUSUYOR. Tek alana indirmek o SESSİZ BANDI
+ * sessizce silerdi.
+ *
+ * ÜÇ HAL AYRI: alan `null` = ÖLÇEMEDİM (ATR ya da fiyat yok) ·
+ * `kod: null` = ÖLÇTÜM, söylenecek bir şey yok (SESSİZ BANT; ekranda
+ * cümle BASILMAZ) · dolu kod = o bandın cümlesi.
+ */
+export type PlanAtrBandi = {
+  atrPct: number | null;
+  /** Sabit küme: 'genis' | 'sakin'. `null` = sessiz bant. */
+  kod: 'genis' | 'sakin' | null;
+};
+
 /** `plan = null` → TA koşmadı (ör. vade 'gunici'). Hata DEĞİL. */
 export type Plan = {
   seviye: PlanSeviye | null;
   yakinlik: PlanYakinlik | null;
   momentum: PlanMomentum | null;
   riskOdul: PlanRiskOdul | null;
+  /** `undefined` = uç bu alanı göndermedi · `null` = ölçemedim. */
+  oynaklik?: PlanOynaklik | null;
+  /** `undefined` = uç göndermedi · `null` = ölçemedim · `kod:null` = sessiz. */
+  atrPlan?: PlanAtrBandi | null;
 };
 
-export type RecommendRow = ScoreRow & { plan: Plan | null };
+/**
+ * Fırsat sınıfı — motorun `oppTag().cls` KAPALI KÜMESİ (app.js:9111).
+ * Serbest Türkçe metin (`oppTag().txt` = '🔥 Güçlü Fırsat'...) tele
+ * ÇIKMIYOR; cümleyi istemci bu koda bakıp kendi sözlüğünden seçiyor.
+ * Eşikler (66/56/52/48/44) YALNIZ motorda.
+ */
+export type FirsatCls = 'strong' | 'good' | 'watch' | 'neutral' | 'weak' | 'risk';
+
+/**
+ * Fırsat katmanı — HAM SAYI + SABİT KÜME. Hesabın tamamı motorda
+ * (`buyZoneProximity` + `momentumInfo` + `priceOppAdj` + `oppCombined`),
+ * uçta ve burada eşik/ağırlık/formül YOK.
+ *
+ * `fiyatPuan` = alım bandına uzaklığın teknik skora KATKISI (±, 0 da
+ * geçerli bir ölçüm: `levels` yoksa düzeltme yapılamadı demektir).
+ * `bilesik` = teknik skor + `fiyatPuan`, 2..99 arası kırpılmış.
+ *
+ * `firsat = null` → katman ÖLÇÜLEMEDİ (teknik skor yok ya da satır yok).
+ * Hata DEĞİL — `plan = null` ile aynı dürüstlük dalı. Alanın HİÇ
+ * gelmemesi (`undefined`) ise "uç bu sürümde göndermiyor"; ikisi AYRI
+ * çizilir, 0 basılmaz.
+ */
+export type Firsat = {
+  fiyatPuan: number | null;
+  bilesik: number | null;
+  cls: FirsatCls | null;
+};
+
+export type RecommendRow = ScoreRow & {
+  plan: Plan | null;
+  /** `undefined` = uç göndermedi · `null` = ölçülemedi (api/_akis.js). */
+  firsat?: Firsat | null;
+};
 
 export type RecommendResponse = Omit<ScoreResponse, 'sonuclar'> & {
   sonuclar: RecommendRow[];
@@ -449,6 +689,59 @@ export type ChartKunye = {
 };
 
 /**
+ * ⚡ Gün içi ölçüm eşikleri — MOTORDAN geliyor (`PULSE_TH`). İstemci bu
+ * sayıları YAZMIYOR, yalnız taşıyor: hangi kümenin okunduğunu
+ * `GuniciOlcum.esikKumesi` söylüyor.
+ */
+export type GuniciEsik = {
+  day: number;
+  hour: number;
+  step: number;
+};
+
+/**
+ * ⚡ GÜN İÇİ ÖLÇÜM. Uç bu bloğu YALNIZ `interval=5m` iken doluyor.
+ *
+ * NİYE SADECE 5 DAKİKA: motorun `analyzeIntraday`ı saatlik değişimi
+ * "son 12 bar" olarak alıyor (`~60 dk = 12 x 5dk`). 15m/60m/1d
+ * adımlarında aynı sayı 3 saatlik ya da 12 GÜNLÜK değişim olurdu;
+ * yanlış etiketli sayı basmak yerine uç `null` dönüyor ve nedenini
+ * `guniciKod` ile söylüyor.
+ *
+ * `sudden`/`bigDay` MAKİNE KODU: cümle `mobile/src/lib/sozluk.ts`te
+ * seçiliyor, burada değil. `spark` TELDE YOK — `mumlar[]` aynı seriyi
+ * zaten taşıyor.
+ */
+export type GuniciOlcum = {
+  /** Anlık fiyat (künyeden ya da son kapanış). */
+  price: number;
+  /** Önceki kapanış — gün değişiminin tabanı. */
+  prevClose: number;
+  /** Gün değişimi, YÜZDE PUAN (ör. 6 = %6). */
+  dayChg: number;
+  /** Son ~60 dakikanın değişimi, YÜZDE PUAN. */
+  hourChg: number;
+  /** Son barın hacmi / ortalama hacim. Ham oran, 1 = ortalama. */
+  rvol: number;
+  /** Fiyat gün içi önceki en yüksekleri aştı mı. */
+  breakout: boolean;
+  /** Saatlik VEYA günlük eşik aşıldı mı (motorun `pulseIsSudden`ı). */
+  sudden: boolean;
+  /** Yalnız GÜNLÜK eşik aşıldı mı. */
+  bigDay: boolean;
+  esik: GuniciEsik;
+  /** Hangi eşik kümesi okundu: istemci TAHMİN ETMİYOR. */
+  esikKumesi: 'US' | 'BIST' | 'CRYPTO' | 'METAL';
+};
+
+/**
+ * `gunici === null` olduğunda NEDEN. `'adim_uygun_degil'` = sormadım
+ * (5 dakikalık adım değil) · `'mum_az'` = ölçemedim (3'ten az mum).
+ * `null` = ölçtüm, `gunici` dolu.
+ */
+export type GuniciKod = 'adim_uygun_degil' | 'mum_az' | null;
+
+/**
  * Grafik cevabı. `tam === false` → 200 olsa bile ÖLÇÜM EKSİK; aynı
  * `olcumEksik()` yardımcısı bu gövdede de çalışır (`tam` + `sayac`
  * alanları skor cevabıyla aynı şekilde).
@@ -462,6 +755,9 @@ export type ChartResponse = {
   /** `mumlar.length` — sunucunun saydığı; istemci yeniden saymaz. */
   adet: number;
   kunye: ChartKunye | null;
+  /** `null` ise `guniciKod` nedenini söyler — sayı UYDURULMUYOR. */
+  gunici: GuniciOlcum | null;
+  guniciKod: GuniciKod;
   sayac: Sayac;
   tam: boolean;
   surum: ScoreSurum;
@@ -516,9 +812,34 @@ export const VARSAYILAN_MADDE = 10;
 export const AZAMI_HABER_SORGU = 256;
 
 /**
- * Tek manşet. Dört alan, HEPSİ HAM metin (api/_haber.js MADDE_ALANLARI).
+ * Madde TÜRÜ beyaz listesi — UCUN KENDİ kümesinin kopyası
+ * (`api/_haber.js:98 HABER_TURLERI`). Uç bu kümeyi İSTEMCİ İÇİN ilan
+ * ediyor ("'KAP' kümede yazılı ki istemci tarafı aynı sözlüğü
+ * kullanabilsin"), o yüzden burada tekrarlanması sessiz genişleme
+ * değil.
+ *
+ * ÖLÇÜLDÜ (api/_haber.js:99, :241-242): `/api/news` taşıyıcısı YALNIZ
+ * `'NEWS'` üretir — tek kaynağı Google News RSS ve KAP duyurusu oradan
+ * GELMEZ. Yani 'KAP' süzgeci bu uçta "ölçtüm, yok" demek; "ölçemedim"
+ * ya da "bozuk" demek DEĞİL. KAP maddesi native'de ayrı uçta yaşıyor
+ * (`/api/takvim` → `TakvimKapMadde`).
+ */
+export const HABER_TURLERI = ['NEWS', 'KAP'] as const;
+export type HaberTuru = (typeof HABER_TURLERI)[number];
+
+/**
+ * Tek manşet. HEPSİ HAM metin (api/_haber.js:81 MADDE_ALANLARI).
  * `source` ve `link` BOŞ DİZGİ olabilir — taşıyıcı bulamadığında
  * uydurmuyor, boş bırakıyor; ekran da uydurmaz.
+ *
+ * `type`/`symbol` NEDEN SORU İŞARETLİ (ÖLÇÜLDÜ 2026-10-29): uç bu iki
+ * alanı `MADDE_ALANLARI` kümesinde İLAN EDİYOR ve haber kipinde her
+ * maddeye yazıyor (api/_haber.js:242) — ama sözleşme tipi bugüne dek
+ * dört alan sayıyordu, bu yüzden alanlar gövdede GELDİĞİ HÂLDE hiçbir
+ * ekrana ulaşmıyordu. Opsiyonel bırakıldılar: alan gelmediğinde
+ * (eski dağıtım) `undefined` = "sormadım/gelmedi" dalı çizilebilsin,
+ * `''`/`null` ile karışmasın. Gündem kipi ikisini de ZORUNLU kılıyor
+ * (`GundemMadde`).
  */
 export type HaberMadde = {
   title: string;
@@ -526,6 +847,10 @@ export type HaberMadde = {
   /** Üst kaynağın verdiği gibi (RFC-822). Biçimleme istemcide. */
   pubDate: string;
   source: string;
+  /** `HABER_TURLERI` kümesinden; bu taşıyıcıda daima 'NEWS'. */
+  type?: string;
+  /** Sembole bağlı değilse `null` — BOŞ DİZGE DEĞİL (uç başlığı). */
+  symbol?: string | null;
 };
 
 /**
@@ -542,6 +867,102 @@ export type HaberSayac = {
   bayt: number;
 };
 
+/**
+ * Duyarlılık rengi — motorun `sentiLabel().cls` KAPALI KÜMESİ
+ * (app.js:9027). YALNIZ RENK için; cümle için `kod` var.
+ */
+export type DuyarlilikCls = 'bull' | 'neutral' | 'bear';
+
+/**
+ * Duyarlılık CÜMLE kodu — `api/news.js DUYARLILIK_KODU`.
+ *
+ * NİYE `cls` YETMİYOR (ÖLÇÜLDÜ 2026-10-31): motorun BEŞ cümlesi ÜÇ
+ * `cls`e düşüyor — 'Pozitif haber akışı' ile 'Hafif pozitif' ikisi de
+ * 'bull'. İstemci ikisini `cls` ile ayırmak için 0.35 eşiğini BİLMEK
+ * zorunda kalırdı; eşik istemcide YASAK. Bu yüzden uç motorun kendi
+ * cümlesini sabit kümeli bir koda çeviriyor, eşik motorda kalıyor.
+ *
+ * `'yok'` = hiç sinyal veren manşet YOK · `'notr'` = sinyaller var ama
+ * birbirini götürdü. İkisi de `cls: 'neutral'`; AYNI cümleyle basmak
+ * yalan olurdu.
+ */
+export type DuyarlilikKod =
+  | 'pos_guclu'
+  | 'pos_hafif'
+  | 'notr'
+  | 'neg_hafif'
+  | 'neg_guclu'
+  | 'yok';
+
+/**
+ * Manşet BAŞINA ham kutupluluk. `sira` = `maddeler` dizisindeki indeks
+ * (madde nesnesinin İÇİNE yazılmadı — taşıyıcı sözleşmesi sessizce
+ * büyümesin), `pol` = motorun `scoreHeadline().s` değeri.
+ * Yalnız SİNYAL VEREN manşetler listede, yani `basliklar.length` ≤ `adet`.
+ */
+export type DuyarlilikBaslik = {
+  sira: number;
+  pol: number;
+};
+
+/**
+ * Haber duyarlılık katmanı — HAM SAYI + SABİT KÜME. Hesabın tamamı
+ * motorda (`scoreHeadline` + `sentiAggregate` + `sentiLabel`); uçta ve
+ * burada sözlük/eşik YOK. YENİ AĞ İSTEĞİ DE YOK: eldeki manşet
+ * listesinden hesaplanıyor.
+ *
+ * `duyarlilik = null` → motor kurulamadı, yani ÖLÇEMEDİM (sıfır değil);
+ * manşet akışı buna rağmen çalışır (bilinçli bölünme: haberi görmek
+ * skordan daha temel).
+ *
+ * `alan` NEYİN ölçüldüğünü BİLDİRİYOR. ÖLÇÜLMÜŞ SAPMA: web puanı
+ * `title + description` üzerinden hesaplıyor, bu taşıyıcıda
+ * `description` YOK — `alan: ['title']`. Sapma sayıyla örtülmedi.
+ */
+export type Duyarlilik = {
+  /** `sentiAggregate` çıkışı, −1..+1 bandı. */
+  puan: number;
+  /** Sıkıştırma ÖNCESİ toplam — teşhis için. */
+  ham: number;
+  /** Sinyal veren manşet ADEDİ. `0` → `kod: 'yok'`. */
+  sinyal: number;
+  basliklar: DuyarlilikBaslik[];
+  /** Puana giren manşet toplamı (`maddeler.length`). */
+  adet: number;
+  cls: DuyarlilikCls | null;
+  kod: DuyarlilikKod | null;
+  /** Hangi alanlar okundu — şimdilik daima `['title']`. */
+  alan: string[];
+};
+
+/**
+ * TEMA HABER KATMANI — `/api/news?...&adaylar=` kipinin KARDEŞ ALANI
+ * (Ş8 #8a, api/news.js `temaKatmani`).
+ *
+ * NEDEN VAR: `/api/theme` yalnız `{symbol, market, name, reason}`
+ * döndürüyor; hangi adayın hangi MANŞETTE geçtiği uçtan GELMİYORDU ve
+ * web bunu tarayıcıda kuruyordu (eşik + durak sözcük listesi + sembol
+ * kelime-sınırı regex'i orada). Hesap motora taşındı; burada yalnız
+ * SAYI ve SIRA var — eşik, ağırlık, formül YOK.
+ *
+ * NEDEN SIRA DİZİSİ: `adaylar[SEMBOL]` aynı cevabın `maddeler` dizisine
+ * İNDEKS taşıyor, manşet nesnesinin kopyasını değil. Gövde ikiye
+ * katlanmıyor ve iki kopyanın birbirinden kayması imkânsız.
+ *
+ * DÖRT HAL: alan `undefined` = istemci `adaylar=` sormadı · `null` =
+ * uçta motor kurulamadı (ÖLÇEMEDİM) · `adaylar: {}` = aday
+ * gönderilmedi · `adaylar[SEMBOL] = []` = ÖLÇTÜM, o sembol hiçbir
+ * manşette geçmiyor (uydurma `0` değil, ölçüm).
+ */
+export type TemaHaber = {
+  /** Sorgudan ayıklanan anlamlı sözcükler. BOŞ = ilgi ÖLÇÜLEMEDİ. */
+  sozcukler: string[];
+  /** İlgisiz sayılan maddelerin SIRASI. `maddeler` SÜZÜLMEZ. */
+  ilgisiz: number[];
+  /** İstemcinin gönderdiği HAM sembol → eşleşen madde sıraları. */
+  adaylar: Record<string, number[]>;
+};
+
 export type NewsResponse = {
   q: string;
   market: HaberPazar;
@@ -549,6 +970,19 @@ export type NewsResponse = {
   maddeler: HaberMadde[];
   /** `maddeler.length` — sunucunun saydığı; istemci yeniden saymaz. */
   adet: number;
+  /** `undefined` = uç göndermedi · `null` = motor kurulamadı. */
+  duyarlilik?: Duyarlilik | null;
+  /**
+   * `undefined` = `adaylar=` SORULMADI · `null` = uçta motor kurulamadı.
+   * Kip ②/③ (sembol / gündem) bu alanı HİÇ taşımaz: ikisinde de serbest
+   * metin sorgu yok, dolayısıyla ilgi süzgeci ölçülemez.
+   */
+  tema?: TemaHaber | null;
+  /**
+   * Duyarlılık puanı motorun sözlüğüne bağlı → imza TAŞINIYOR. Manşet
+   * METNİ motora bağlı değil, ona verilen PUAN bağlı.
+   */
+  surum?: ScoreSurum;
   sayac: HaberSayac;
   /** `false` → 200 olsa bile ÖLÇEMEDİM (hata/zaman aşımı/kısa gövde). */
   tam: boolean;
@@ -564,7 +998,12 @@ export type NewsErrorCode =
   | 'bad_limit'
   | 'limit_buyuk'
   | 'method_not_allowed'
-  | 'haber_alinamadi';
+  | 'haber_alinamadi'
+  // `adaylar=` kipinin kendi kodları (api/news.js:529-543).
+  | 'adaylar_kip'
+  | 'cok_aday'
+  | 'bad_aday'
+  | 'bad_aday_pazar';
 
 /**
  * Haber cevabı için "ölçemedim" sorusu. `olcumEksik()` BU GÖVDEDE
@@ -581,6 +1020,66 @@ export function haberOlcumEksik(
   if (!s) return false;
   return (s.hata ?? 0) > 0 || (s.zamanAsimi ?? 0) > 0 || (s.kisa ?? 0) > 0;
 }
+
+/**
+ * `/api/news?symbols=` kipinde SATIR BAŞINA ölçüm (api/news.js:620-637).
+ *
+ * NEDEN SATIR BAŞINA SAYAÇ: uç sembolleri PARALEL çekiyor; bir sembolün
+ * beslemesi düşerse ötekiler ölçülmüş kalır. `adet: 0` + `tam: true` =
+ * "bu hissede haber YOK" (ölçüm), `tam: false` = "ÖLÇEMEDİM". Ekran bu
+ * ikisini aynı cümleyle anlatamaz, bu yüzden alan ikiye ayrı duruyor.
+ *
+ * `duyarlilik` SATIRIN KENDİ manşetlerinden: gövde kökündeki birleşik
+ * puan tek hisseyi anlatmaz. `null` = uçta motor kurulamadı.
+ */
+export type SembolHaberSatiri = {
+  symbol: string;
+  market: Market;
+  /** Bu sembolün madde sayısı — istemci `maddeler`i yeniden saymaz. */
+  adet: number;
+  /** Bu SATIRIN kendi ölçümü tam mı. */
+  tam: boolean;
+  duyarlilik?: Duyarlilik | null;
+};
+
+/**
+ * `/api/news?symbols=A,B` — ÇOKLU SEMBOL (kip ②).      (2026-11-03)
+ *
+ * NEDEN `NewsResponse` YENİDEN KULLANILMIYOR: bu kipte `q` DİZGİ DEĞİL
+ * (`null` — serbest metin yok), `symbols[]` ve `semboller[]` alanları
+ * `NewsResponse`'ta YOK, ve `market` burada HABER YERELİ değil SEMBOL
+ * PAZARI (US | BIST; uç `PAZAR_ESLEME` ile habere çeviriyor). Tek tipte
+ * birleştirmek `market`in iki ayrı kümeyi taşıdığını gizlerdi.
+ *
+ * `maddeler` BÜTÜN satırların maddeleri TEK düz dizide; hangi satırdan
+ * geldiği maddenin `symbol` alanında (`HaberMadde.symbol`). Dizi sembole
+ * göre GRUPLANMIŞ GELMEZ — gruplamak isteyen ekran `symbol`e bakar.
+ *
+ * `tema` bu kipte HİÇ taşınmaz: ilgi süzgeci serbest metne bağlı.
+ */
+export type HisseHaberleriResponse = {
+  /** Bu kipte DAİMA `null` — kipi gövdeden okumanın ikinci yolu. */
+  q: null;
+  /** Ucun ayrıştırdığı semboller, istek sırasıyla. */
+  symbols: string[];
+  /** SEMBOL pazarı (haber yereli DEĞİL). */
+  market: Market;
+  /** SEMBOL BAŞINA madde sınırı. */
+  limit: number;
+  maddeler: HaberMadde[];
+  /** `maddeler.length` — bütün satırların toplamı. */
+  adet: number;
+  semboller: SembolHaberSatiri[];
+  /** BÜTÜN maddelerin birleşik puanı. `null` = motor kurulamadı. */
+  duyarlilik?: Duyarlilik | null;
+  surum?: ScoreSurum;
+  /** Satır sayaçlarının TOPLAMI (`sayacTopla`). */
+  sayac: HaberSayac;
+  /** Satırların HEPSİ tam mı — biri düşerse `false`. */
+  tam: boolean;
+  ms: number;
+  uyari: string;
+};
 
 // =====================================================================
 //  /api/pulse SÖZLEŞME TİPLERİ — ⚡ MAKRO NABIZ        (FAZ 3 / native)
@@ -729,6 +1228,77 @@ export type NabizHaberler = {
   tam: boolean;
 };
 
+/**
+ * ⚠️ FİYAT YALANLAMA kaynağı (api/pulse.js → motor
+ * `pulseRealityCodes`). `dir` = bu ölçümün HANGİ yönü söylediği;
+ * duruşunun beklediği yönden FARKLIysa çelişki sayılır.
+ *
+ * `kod` MAKİNE KODU, Türkçesi `lib/sozluk.ts`te seçilir.
+ * Yanındaki sayılar HAM: `genislik` = evrenin ortalama teknik skoru
+ * (0-100), `n` = ölçüme giren satır sayısı, `adet` = yönü tutan
+ * satır sayısı, `ort` = yüzde PUANI ortalaması (oran DEĞİL).
+ * EŞİK YOK: 45/55/30dk/6/0,70/1,0 motorda kalıyor, uçta GÖRÜNMEZ.
+ */
+export type GerceklikKaynak = {
+  dir: 'weak' | 'strong';
+  kod: 'genislik_zayif' | 'genislik_guclu' | 'satirlar_eksi' | 'satirlar_arti' | string;
+  genislik?: number;
+  n?: number;
+  adet?: number;
+  ort?: number;
+};
+
+/**
+ * `want` = duruşun BEKLEDİĞİ fiyat yönü. `null` → duruş nötr, yani
+ * yalanlanacak bir yön İDDİASI YOK (boş `celiski` ile AYNI ŞEY
+ * DEĞİL: boş `celiski` "yön iddia edildi, fiyat çelişmedi" demek).
+ * `kaynaklar` = ölçülen bütün fiyat kaynakları; `celiski` = onlardan
+ * yönü TUTMAYANLAR. Girdi eksikse kaynak ÜRETİLMEZ (varsayılan
+ * konulmaz) ve nesi eksik olduğu `eksikGerceklik` dizisinde yazar.
+ */
+export type GerceklikOlcum = {
+  want: 'weak' | 'strong' | null;
+  kaynaklar: GerceklikKaynak[];
+  celiski: GerceklikKaynak[];
+};
+
+/**
+ * ⚠️ MAKRO YORUMUN KODLARI (api/pulse.js → motor
+ * `pulseMakroYorumKod`). CÜMLE YOK, KOD var; Türkçesi
+ * `lib/sozluk.ts`te seçilir.
+ *
+ * `kod`:
+ *  · 'sakin' → pencerede makro manşet YOK
+ *  · 'notr'  → manşet var, yön dengede
+ *  · 'hawk' / 'dove' → yön okundu
+ * 'sakin' ile 'notr' AYNI ŞEY DEĞİL — ekran ikisini ayrı çiziyor.
+ *
+ * `taze` = yön son 2 günlük manşetlerden mi besleniyor.
+ * `inflIsinma` / `inflSoguma` = enflasyon yönü motorun EŞİĞİNİ
+ * geçti mi (eşiğin SAYISI motorda kalır, uca gelmez).
+ * `uyumlu` = duruşun yönüyle AYNI yöne giden sembol adları (en çok
+ * 3). BOŞ OLMASI "uyumlu sembol yok" demek DEĞİL: satır
+ * gönderilmediyse hiç ölçülmedi — bunu `eksikYorum` söylüyor.
+ */
+export type MakroYorum = {
+  kod: 'sakin' | 'hawk' | 'dove' | 'notr' | string;
+  taze: boolean;
+  inflIsinma: boolean;
+  inflSoguma: boolean;
+  uyumlu: string[];
+};
+
+/**
+ * Bir ani-hareket satırının makro etiketi (motor
+ * `pulseMakroEtiketKod`). `kod` MAKİNE KODU: sektörü duruşun
+ * BASKI yönündeyse 'faiz_baski', RÜZGÂR yönündeyse 'faiz_ruzgar'.
+ * Etiket ÇIKMAYAN satır dizide YER ALMAZ.
+ */
+export type MakroEtiket = {
+  sembol: string;
+  kod: 'faiz_baski' | 'faiz_ruzgar' | string;
+};
+
 export type PulseResponse = {
   durus: NabizDurus;
   taze: NabizTaze;
@@ -741,6 +1311,54 @@ export type PulseResponse = {
   haberler: NabizHaberler | null;
   /** Verilmeyen konjonktür girdileri: 'genislik' | 'enflasyonBaskisi' | 'risk'. */
   eksik: string[];
+  /** ⚠️ Duruş ile fiyat çelişiyor mu — motor ölçümü. */
+  gerceklik: GerceklikOlcum;
+  /**
+   * Fiyat-yalanlama için VERİLMEYEN girdiler:
+   * 'genislik' | 'genislikYas' | 'gunDegisimleri'. Boş değilse ilgili
+   * kaynak ÖLÇÜLMEDİ — çelişki yokluğu "fiyat onaylıyor" demek
+   * DEĞİL, ekran bunu açıkça yazar.
+   */
+  eksikGerceklik: string[];
+  /** ⚠️ Makro yorumun KODLARI — cümle `lib/sozluk.ts`te örülür. */
+  yorum: MakroYorum;
+  /**
+   * Yorum için VERİLMEYEN girdiler: şu an yalnız 'satirlar'.
+   * Boş değilse `yorum.uyumlu` ÖLÇÜLMEDİ — boş olması "uyumlu
+   * sembol yok" demek DEĞİL.
+   */
+  eksikYorum: string[];
+  /**
+   * Ani-hareket satırlarının makro etiketleri.
+   * `null` → satır GÖNDERİLMEDİ, HİÇ ÖLÇÜLMEDİ.
+   * `[]`   → ölçüldü, hiçbir satır etiket almadı.
+   * İKİSİ AYRI HAL — ekran ikisini ayrı yazıyor.
+   */
+  etiketler: MakroEtiket[] | null;
+  /** Pencerede makro manşet VAR mI (web'in `hasData`sı). */
+  varMi: boolean;
+  /**
+   * 🗞️ Pencerede okunan, BAĞLANTILI makro manşetler — en yeniden
+   * eskiye, en çok 3 (web'in `headlines`ı ile AYNI küme ve AYNI tavan).
+   *
+   * `[]` = ÖLÇÜLDÜ, gösterilebilir manşet yok (bağlantısız manşet
+   * listeye girmiyor, web de almiyor). `undefined` = bu alanı HİÇ
+   * GÖNDERMEYEN bir uç sürümüyle konuşuluyor — OTA native'i sunucudan
+   * önde taşıyabilir, o durumda ekran BİR ŞEY ÇİZMİYOR; boş dizi
+   * saymak "manşet yok" YALANI olurdu. Şu anki uç alanı HER ZAMAN
+   * gönderiyor.
+   *
+   * Bağlantı uçta ŞEMA DOĞRULAMASINDAN geçiyor (yalnız http/https);
+   * native onu `Linking.openURL` ile açıyor.
+   */
+  mansetler?: HaberMadde[];
+  /** Son 2 günde okunan makro manşet SAYISI (ham). */
+  taze2g: number;
+  /**
+   * En yeni makro manşetin zamanı (ms epoch). Tarihi okunamayan
+   * manşet SAYILMAZ; hiç okunamazsa `null` — 0 DEĞİL.
+   */
+  sonManset: number | null;
   surum: ScoreSurum;
   ms: number;
   uyari: string;
@@ -771,6 +1389,8 @@ export type PulseErrorCode =
   | 'bad_enflasyonBaskisi'
   | 'bad_risk'
   | 'bad_simdi'
+  | 'bad_satirlar'
+  | 'cok_satir'
   | 'method_not_allowed'
   | 'motor_kurulamadi'
   | 'nabiz_hesaplanamadi';
@@ -854,14 +1474,21 @@ export const AZAMI_GOVDE_BAYT = 65536;
 
 /**
  * Bir endeks hareketi — İSTEK girdisi.
- * `pct` günlük değişim yüzdesi (HAM sayı; istemci yuvarlamaz),
- * `notable` belirginlik eşiği (yüzde, ≥0). Eşiği AŞMAYAN hareket ucta
- * elenir (api/_motor.js:1752) — bu bir hata değil, kapsam dışı.
+ * `pct` günlük değişim yüzdesi (HAM sayı; istemci yuvarlamaz).
+ *
+ * `notable` (belirginlik eşiği, yüzde puan, ≥0) SEÇİMLİK oldu
+ * (2026-11-03). ÖLÇÜLDÜ (api/causal.js `ayristirGovde`): gönderilmezse
+ * uç eşiği motorun `INDEX_ESIK` tablosundan `kind`e göre OKUYOR, yani
+ * eşik SUNUCUDA kalıyor. Önce ZORUNLUYDU ve bu, native istemciyi
+ * ölçemediği bir eşiği uydurmaya zorluyordu (§5.1 ihlali).
+ * GÖNDERİLİRSE TABLOYU EZER — web kendi ölçümünü yollamaya devam
+ * edebilsin diye. Eşiği AŞMAYAN hareket ucta elenir
+ * (api/_motor.js:1752) — bu bir hata değil, kapsam dışı.
  */
 export type NedenHareketGirdi = {
   kind: NedenKind;
   pct: number;
-  notable: number;
+  notable?: number;
 };
 
 /** Konseptin bir manşeti — ucun OKUDUĞU tek alan saat yaşı (:188). */
@@ -1231,6 +1858,22 @@ export type SektorHisse = {
   sym: string;
   market: Market;
   basis: SektorBasis | null;
+  /**
+   * KIMLIK ALANLARI (api/_kesif.js:441-467). Istemcinin ölçüm
+   * kaydinda GONDERDIGI metinlerin yankisi — uc bunlari
+   * gruplamaya/medyana/siralamaya HIC SOKMUYOR, yalniz geri veriyor.
+   * Gonderilmediyse `undefined`, gonderilip bos geldiyse `null`.
+   */
+  name?: string | null;
+  industry?: string | null;
+  /**
+   * Sirket is tanimi. Uc 400 KARAKTERDE kirpiyor (`SEKTOR_BIZ_AZAMI`,
+   * api/_kesif.js:143) ve kirptigini `bizSummaryKirpik` ile BILDIRIYOR
+   * — ekran bu kirpmayi SESSIZ GECMEZ.
+   */
+  bizSummary?: string | null;
+  /** `true` → yukaridaki metin 400 karakterde KIRPILDI. */
+  bizSummaryKirpik?: boolean;
   trailingPE: number | null;
   forwardPE: number | null;
   revenueGrowth: number | null;
@@ -1617,6 +2260,10 @@ export type GundemResponse = {
   besleme: GundemBesleme[];
   /** İki beslemede birden çıkıp TEKİLLEŞTİRİLEN madde sayısı. */
   tekrar: number;
+  /** `undefined` = uç göndermedi · `null` = motor kurulamadı. */
+  duyarlilik?: Duyarlilik | null;
+  /** Duyarlılık puanı motorun sözlüğüne bağlı → imza TAŞINIYOR. */
+  surum?: ScoreSurum;
   sayac: HaberSayac;
   /** `false` → beslemelerin bir kısmı okunamadı (eksik ölçüm). */
   tam: boolean;
@@ -1630,6 +2277,148 @@ export type GundemResponse = {
  * `method_not_allowed`, `haber_alinamadi`) `NewsErrorCode` ile aynı.
  */
 export type GundemErrorCode = NewsErrorCode | 'bad_gundem' | 'gundem_ve_sorgu';
+
+// =====================================================================
+//  /api/gundem SÖZLEŞME TİPLERİ — KONSEPT KİPİ        (FAZ 3 / native)
+// ---------------------------------------------------------------------
+//  NE: `GET /api/gundem[?kapsam=TR|US|HEPSI]` cevabının TypeScript
+//  karşılığı. Alanlar TAHMİN EDİLMEDİ: `api/_gundem.js`in indirgeme
+//  işlevlerinden (`basligaIndir` :112, `konseptiIndir` :129,
+//  `ozetiIndir` :166) ve 200 gövdesini kuran bloktan (:296-315) okundu.
+//
+//  NEDEN `GundemResponse`DAN AYRI: o uç MANŞET taşıyor
+//  (`/api/news?gundem=1` → `maddeler[]`), bu uç aynı manşetlerden motorun
+//  çıkardığı KONSEPTİ taşıyor (`konseptler[]` + `ozet`). İkisi aynı
+//  beslemeleri okur ama farklı şey ölçer; tek tipe bağlamak ekranda
+//  birini öteki sanmaya davet olurdu.
+//
+//  ── DÖRT DÜRÜST DURUM ──────────────────────────────────────────────
+//  `konseptler: []` + `bos: true`  → ÖLÇTÜM, eşiği geçen konsept yok.
+//  502 `gundem_alinamadi`          → HİÇBİR besleme okunamadı (kesinti).
+//  `tam: false`                    → beslemelerin BİR KISMI okunamadı;
+//                                    200 ve konseptler gerçek, ölçüm EKSİK.
+//  `rotasyon: null`                → özet rotasyon ÖLÇMEDİ.
+//
+//  ── TÜRKÇE CÜMLE UÇTA YOK ──────────────────────────────────────────
+//  Motorun `label`/`note`/`mood`/`toneLabel.label` alanları TELE
+//  GİRMİYOR; yerine `key`, `moodKod`, `toneKod`, `heat`, `risk` MAKİNE
+//  KODLARI geliyor. Cümleyi `src/lib/sozluk.ts` seçiyor.
+//
+//  ── `hisseler` HER ZAMAN BOŞ, VE BUNU KOD SÖYLÜYOR ─────────────────
+//  Motor rotasyon hisselerini KULLANICI EVRENİNE göre eşliyor, yani
+//  sunucuda saf değil (api/_gundem.js:166 gerekçesi). Uç boş dizi +
+//  `hisseKod: 'evren_olculmedi'` gönderiyor; ekran "ölçmedim" yazar,
+//  uydurma liste BASMAZ.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/** İzinli kapsamlar — `api/_gundem.js KAPSAMLAR` (:70). */
+export const GUNDEM_KAPSAMLAR = ['TR', 'US', 'HEPSI'] as const;
+export type GundemKapsam = (typeof GUNDEM_KAPSAMLAR)[number];
+
+/** Ucun kapsam varsayılanı: boş/eksik girdi `HEPSI`ye iner (:83). */
+export const VARSAYILAN_GUNDEM_KAPSAM: GundemKapsam = 'HEPSI';
+
+/**
+ * Konseptin bir manşeti — `basligaIndir` (:112). Motorun ağırlık ve
+ * küçük harfli gövdesi GEÇMİYOR (iç iş).
+ * `link` GÜVENLİ: http/https dışı şema ucta boşa düşürülüyor (:100),
+ * yani boş dizgi "bağlantı ÖLÇÜLEMEDİ" demek — `Linking.openURL`
+ * çağrılmaz.
+ * `ageH` HAM saat (yuvarlanmamış); `null` = ölçülemedi, ASLA 0.
+ */
+export type GundemBaslik = {
+  title: string;
+  link: string;
+  pubDate: string;
+  ageH: number | null;
+};
+
+/**
+ * Bir gündem konsepti — `konseptiIndir` (:129).
+ *
+ * `sozcuk`: yalnız KEŞİFLE gelen konseptte (`yeni: true`) dolu; tanımlı
+ * konseptte `null` çünkü cümleyi sözlük `key`den seçiyor.
+ * `sectors`: `[sektör kodu, yön]` demeti; uzunluğu 2 olmayan öğe ucta
+ * süzülüyor. `NedenSektorYon` ile AYNI küme (`/api/causal` girdisine
+ * doğrudan verilebiliyor).
+ * `tone`/`skor`: HAM sayı, `null` = ölçülemedi.
+ * `n`: konsepti besleyen manşet sayısı (sayaç → `0` meşru).
+ * `toneKod`: motorun `sentiLabel().cls`i — ETİKET DEĞİL.
+ */
+export type GundemKonsept = {
+  key: string;
+  sozcuk: string | null;
+  yeni: boolean;
+  risk: NedenRisk | null;
+  sectors: [string, NedenSektorYon | string][];
+  heat: NedenIsi;
+  tone: number | null;
+  skor: number | null;
+  n: number;
+  toneKod: string | null;
+  heads: GundemBaslik[];
+};
+
+/**
+ * Sektör rotasyonu. `hisseler` DAİMA boş ve `hisseKod` niye boş
+ * olduğunu söylüyor — bkz. blok başlığı.
+ */
+export type GundemRotasyon = {
+  heat: NedenIsi;
+  n: number;
+  hisseler: string[];
+  /** `'evren_olculmedi'` → sunucu sabit bir evren ölçmedi. */
+  hisseKod: string;
+};
+
+/** Gündem özeti — `ozetiIndir` (:166). `mood` (Türkçe) DÜŞTÜ. */
+export type GundemOzet = {
+  moodKod: 'bull' | 'bear' | 'neutral' | string;
+  riskOn: number;
+  riskOff: number;
+  upSectors: string[];
+  downSectors: string[];
+  poolN: number;
+  /** `null` = rotasyon ÖLÇÜLMEDİ (boş nesne değil). */
+  rotasyon: GundemRotasyon | null;
+};
+
+/**
+ * Kaynak başına ölçüm satırı. `GundemBesleme`ye bu uç `yerel` ekliyor
+ * (HEPSI kapsamında iki yerel karışıyor, ekran hangisi düştü diyebilsin).
+ */
+export type GundemKonseptBesleme = GundemBesleme & {
+  yerel: GundemYerel | string;
+};
+
+export type GundemKonseptResponse = {
+  kapsam: GundemKapsam | string;
+  yereller: (GundemYerel | string)[];
+  /** Kaynak başına ölçüm — SESSİZCE DÜŞÜRÜLEMEZ. */
+  besleme: GundemKonseptBesleme[];
+  /** Sıra MOTORUN (skora göre); istemci yeniden sıralamaz. */
+  konseptler: GundemKonsept[];
+  ozet: GundemOzet;
+  /** `true` = ÖLÇTÜM, konsept yok. `error` ile KARIŞTIRILMASIN. */
+  bos: boolean;
+  sayac: HaberSayac;
+  /** `false` → beslemelerin bir kısmı okunamadı (eksik ölçüm). */
+  tam: boolean;
+  /** Motorun ölçüm anı (ms). */
+  ts: number;
+  onbellek: boolean;
+  ms: number;
+  uyari: string;
+};
+
+/** Makine hata kodları (api/_gundem.js:217, 224, 230, 288, 321). */
+export type GundemKonseptErrorCode =
+  | 'method_not_allowed'
+  | 'motor_kurulamadi'
+  | 'bad_kapsam'
+  | 'gundem_alinamadi';
 
 // =====================================================================
 //  /api/arama SÖZLEŞME TİPLERİ — ÇOK PAZARLI ADAY   (FAZ 3 / native)
@@ -1756,3 +2545,932 @@ export type AramaErrorCode =
   | 'method_not_allowed'
   | 'motor_kurulamadi'
   | 'arama_yapilamadi';
+// =====================================================================
+//  /api/degisim · /api/kripto · /api/metal SÖZLEŞME TİPLERİ
+//                                                     (FAZ 3 / native)
+// ---------------------------------------------------------------------
+//  NE: Üç ucun GET cevabının TypeScript karşılığı. Üçünün de native
+//  bağlantısı BUGÜNE KADAR SIFIRDI (`ENDPOINTS`te yoktular), yani bu
+//  blok yeni bir yüzey değil, ÖLÇÜLMEMİŞ ÜÇ UCUN sözleşmesi.
+//
+//  ÖLÇÜLDÜ (2026-11-03, KAYNAK OKUMA — CANLI ÇAĞRI YAPILMADI):
+//  alan adları, makine kodları ve kapalı kümeler `api/_degisim.js`,
+//  `api/_kripto.js`, `api/_metal.js` ve `api/_haber.js`ten birebir
+//  okundu. ⚠️ ÖLÇÜLMEDİ: üç ucun canlı cevabı (yerel DNS kırık,
+//  DEVAM.md 12. bölüm) — tipler üretimden doğrulanmadı.
+//
+//  ── ÜÇÜ DE `api/proxy.js` YENİDEN-YAZIMIYLA TAŞINIYOR ──────────────
+//  `vercel.json` → `/api/proxy?__rota=degisim|kripto|metal`. Vercel
+//  Hobby'nin 12 fonksiyon tavanı yüzünden ayrı dosya AÇILMADI; istemci
+//  yeniden-yazımı bilmiyor.
+//
+//  ── ÜÇÜNCÜ DURUM: SEÇİMLİK ALAN "SORMADIM" DEMEK ───────────────────
+//  Bu üç uçta seçimlik (`?`) alanların anlamı ÖZELDİR: alan gövdede
+//  YOKSA o ölçüm İSTENMEMİŞTİR (`undefined` = sormadım). İstenmiş ama
+//  okunamamışsa alan VAR ve `null`dır (ölçemedim). İkisi birbirine
+//  ÇEVİRİLMEZ — `?? 0` yazmak ölçülmeyen sayıyı ekrana basmak olurdu.
+//
+//  ── `/api/metal` FİYAT UCU DEĞİL ───────────────────────────────────
+//  Adı yanıltıcı: bu uç üç maden için HABER MADDESİ döner (TR + dünya
+//  RSS), fiyat DÖNMEZ. Fiyat isteyen `/api/degisim`i `GC=F` ile çağırır.
+//  Bu yüzden tipler `HaberMadde`yi yeniden kullanıyor.
+//
+//  ⚠️ BU BLOKTA EŞİK / AĞIRLIK / FORMÜL YOK. Kapalı kümeler sunucunun
+//  beyaz listelerinin KOPYASI, karar değil.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+/**
+ * Üç ucun PAYLAŞTIĞI üst-kaynak sayacı. Şekli `HaberSayac` ile birebir
+ * aynı ama AYRI tip: kaynakları ayrı (Yahoo / CoinGecko / RSS) ve
+ * birini öteki için kullanmak iki ölçümü sessizce takas etmek olurdu.
+ * `kisa` = 200 döndü ama gövde besleme değil: ÖLÇEMEDİM.
+ */
+export type FiyatSayac = {
+  istek: number;
+  basari: number;
+  hata: number;
+  zamanAsimi: number;
+  kisa: number;
+  bayt: number;
+};
+
+// ---------------------------------------------------------------------
+//  /api/degisim — ÇOK DÖNEMLİ YÜZDE DEĞİŞİM
+// ---------------------------------------------------------------------
+
+/** İzinli dönemler — `api/_degisim.js DONEM_ANAHTARLARI` kopyası. */
+export const DEGISIM_DONEMLER = [
+  'saatlik',
+  'gunluk',
+  'haftalik',
+  'aylik',
+  'alti',
+  'yillik',
+] as const;
+export type DegisimDonem = (typeof DEGISIM_DONEMLER)[number];
+
+/**
+ * Tek çağrıda istenebilecek EN ÇOK sembol — `AZAMI_SEMBOL` kopyası.
+ * Uç tavanı aşan isteği SESSİZCE KIRPMIYOR, 400 `cok_sembol` diyor;
+ * bu yüzden kapı yerelde de var (ağa çıkmadan aynı cümle).
+ */
+export const DEGISIM_AZAMI_SEMBOL = 12;
+
+/**
+ * Dönem → gövdedeki alan adları. Uç her dönem için İKİ alan yazıyor:
+ * yüzde (`alan`) ve o yüzdenin REFERANS fiyatı (`refAlan`). Eşleme
+ * `DONEMLER` dizisinin kopyası; ekran hangi alanı okuyacağını
+ * sözleşmeden öğrenir, alan adı string birleştirerek KURULMAZ.
+ */
+export const DEGISIM_DONEM_ALANLARI: Readonly<
+  Record<DegisimDonem, { alan: keyof DegisimSatir; refAlan: keyof DegisimSatir }>
+> = {
+  saatlik: { alan: 'chgIntradayPct', refAlan: 'refIntraday' },
+  gunluk: { alan: 'chg1dPct', refAlan: 'ref1d' },
+  haftalik: { alan: 'chg7dPct', refAlan: 'ref7d' },
+  aylik: { alan: 'chg30dPct', refAlan: 'ref30d' },
+  alti: { alan: 'chg182dPct', refAlan: 'ref182d' },
+  yillik: { alan: 'chg365dPct', refAlan: 'ref365d' },
+};
+
+/**
+ * Bir sembolün değişim satırı — `sembolDegisim()` dönüşü.
+ *
+ * `ok`: bu sembolün KOTASI okundu mu (`kota.price != null`). Kota
+ * yoksa HİÇBİR dönem ölçülemez, çünkü güncel değer orada.
+ * `gecikmeli`: MAKİNE BAYRAĞI (`market === 'BIST'`) — "gecikmeli"
+ * yazısını ekran basar, uç cümle kurmaz.
+ * `marketTs`: ms epoch; `null` = ölçülemedi.
+ * `...Pct` alanları YÜZDE PUAN, `ref...` alanları FİYAT (satırın
+ * `currency`siyle). Hepsi HAM: yuvarlama istemcide.
+ *
+ * Dönem alanları SEÇİMLİK çünkü uç yalnız İSTENEN dönemleri yazıyor:
+ * alan yoksa "sormadım", alan `null` ise "ölçemedim".
+ */
+export type DegisimSatir = {
+  /** Çözülmüş sembol (endeks sözlüğünden geçmiş hâli). */
+  symbol: string;
+  market: Market | string;
+  /** Yahoo tarafındaki karşılığı — teşhis için. */
+  ysym: string;
+  ok: boolean;
+  price: number | null;
+  prevClose: number | null;
+  currency: string | null;
+  marketTs: number | null;
+  gecikmeli: boolean;
+  chgIntradayPct?: number | null;
+  refIntraday?: number | null;
+  chg1dPct?: number | null;
+  ref1d?: number | null;
+  chg7dPct?: number | null;
+  ref7d?: number | null;
+  chg30dPct?: number | null;
+  ref30d?: number | null;
+  chg182dPct?: number | null;
+  ref182d?: number | null;
+  chg365dPct?: number | null;
+  ref365d?: number | null;
+};
+
+export type DegisimResponse = {
+  /** `"PAZAR:SEMBOL"` biçiminde — istenen HAM metin DEĞİL. */
+  semboller: string[];
+  /** Gövdede gerçekten yazılı dönemler; istenmeyen dönem YOK. */
+  donemler: (DegisimDonem | string)[];
+  /** Sıra İSTENEN sembol sırası; istemci yeniden sıralamaz. */
+  satirlar: DegisimSatir[];
+  sayac: FiyatSayac;
+  /** `false` → en az bir adres okunamadı, ölçüm EKSİK. */
+  tam: boolean;
+  uyari: string;
+  ms: number;
+};
+
+/** Makine hata kodları (api/_degisim.js sözleşme bloğu). */
+export type DegisimErrorCode =
+  | 'semboller_yok'
+  | 'bad_sembol'
+  | 'cok_sembol'
+  | 'bad_donem'
+  | 'method_not_allowed'
+  | 'degisim_alinamadi';
+
+// ---------------------------------------------------------------------
+//  /api/kripto — COINGECKO PAZAR SATIRLARI
+// ---------------------------------------------------------------------
+
+/** Tek çağrıda EN ÇOK kimlik — `api/_kripto.js AZAMI_ID` kopyası. */
+export const KRIPTO_AZAMI_ID = 50;
+
+/**
+ * CoinGecko kimlik biçimi — `api/_kripto.js ID_BICIM` kopyası.
+ * Küçük harf, rakam, tire, nokta (`bitcoin`, `avalanche-2`).
+ * Bu bir KARAR değil, sunucunun düzenli ifadesinin aynısı: uymayan
+ * kimlik kesin 400 `bad_id` alır, ağa çıkmasının anlamı yok.
+ */
+export const KRIPTO_ID_BICIM = /^[a-z0-9][a-z0-9.\-]{0,47}$/;
+
+/**
+ * Bir coin — `ayristirCoin()`. BİRİMLER ALAN ADINDA:
+ * `...Usd` dolar, `...Pct` yüzde puan, `...Adet` coin sayısı.
+ *
+ * `maxSupplyAdet`: `null` = ÜST SINIR YOK (sınırsız arz), ölçülemedi
+ * DEĞİL. İkisi aynı değere düşüyor ama anlamı farklı; ekran bunu
+ * "sınırsız" diye yazar, "—" diye YAZMAZ.
+ * `athTs`: ms epoch. `sparkline7dUsd`: YALNIZ `?sparkline=1` ile.
+ */
+export type KriptoCoin = {
+  id: string;
+  /** BÜYÜK harfe çevrilmiş; `null` = ölçülemedi. */
+  symbol: string | null;
+  name: string | null;
+  priceUsd: number | null;
+  marketCapRank: number | null;
+  marketCapUsd: number | null;
+  priceChange24hPct: number | null;
+  totalVolumeUsd: number | null;
+  circulatingSupplyAdet: number | null;
+  maxSupplyAdet: number | null;
+  athUsd: number | null;
+  athChangePct: number | null;
+  athTs: number | null;
+  sparkline7dUsd?: number[];
+};
+
+/**
+ * Pazar baskınlığı — `market_cap_percentage` (küçük harf anahtar →
+ * YÜZDE PUAN). `null` = istendi ama okunamadı. Alan HİÇ YOKSA
+ * `?kuresel=0` denmiştir (sormadım).
+ */
+export type KriptoKuresel = Record<string, number>;
+
+export type KriptoResponse = {
+  /** İstenen kimlikler, istenen SIRADA. */
+  idler: string[];
+  /**
+   * Ölçülen coinler, `idler` sırasına geri dizilmiş. Tanınmayan kimliği
+   * üst kaynak SESSİZCE DÜŞÜRÜYOR ve bu `tam`ı DÜŞÜRMÜYOR — ekran
+   * eksiği `idler.length` ile `coinler.length` farkından görür.
+   */
+  coinler: KriptoCoin[];
+  sayac: FiyatSayac;
+  tam: boolean;
+  /** Alan YOKSA sormadım, `null` ise ölçemedim. */
+  kuresel?: KriptoKuresel | null;
+  uyari: string;
+  ms: number;
+};
+
+/** Makine hata kodları (api/_kripto.js sözleşme bloğu). */
+export type KriptoErrorCode =
+  | 'kripto_id_yok'
+  | 'cok_id'
+  | 'bad_id'
+  | 'method_not_allowed'
+  | 'kripto_alinamadi';
+
+// ---------------------------------------------------------------------
+//  /api/metal — ÜÇ MADEN × TR/DÜNYA HABERİ  (FİYAT DEĞİL)
+// ---------------------------------------------------------------------
+
+/** İzinli madenler — `api/_metal.js METAL_ANAHTARLARI` kopyası. */
+export const METAL_MADENLER = ['altin', 'gumus', 'platin'] as const;
+export type MetalMaden = (typeof METAL_MADENLER)[number];
+
+/** İzinli kapsamlar — `api/_metal.js KAPSAMLAR` kopyası. */
+export const METAL_KAPSAMLAR = ['hepsi', 'tr', 'dunya'] as const;
+export type MetalKapsam = (typeof METAL_KAPSAMLAR)[number];
+
+/** Ucun varsayılanı: boş/eksik kapsam `hepsi`ye iner. */
+export const VARSAYILAN_METAL_KAPSAM: MetalKapsam = 'hepsi';
+
+/** Madde sayısı tavanı/varsayılanı — `api/_haber.js`. */
+export const METAL_AZAMI_LIMIT = 25;
+export const METAL_VARSAYILAN_LIMIT = 10;
+
+/**
+ * Bir madenin haber satırı. `tr` ve `dunya` SEÇİMLİK: yalnız İSTENEN
+ * yerel gövdede var (`?kapsam=tr` → `dunya` alanı HİÇ YOK). Boş dizi
+ * "o yerelde madde çıkmadı" demek; alanın yokluğu "sormadım".
+ */
+export type MetalSatir = {
+  maden: MetalMaden | string;
+  /**
+   * Yahoo karşılığı (`GC=F`, `SI=F`, `PL=F`).
+   * ⚠️ ÖLÇÜLDÜ: bunlardan yalnız `GC=F` `/api/degisim`e verilebiliyor —
+   * ötekiler endeks sözlüğünde YOK ve `=` taşıdıkları için sembol
+   * kapısından geçmiyor. Fiyat köprüsü bu yüzden ÜÇTE BİR.
+   */
+  ysym: string;
+  tr?: HaberMadde[];
+  dunya?: HaberMadde[];
+};
+
+export type MetalResponse = {
+  madenler: (MetalMaden | string)[];
+  kapsam: MetalKapsam | string;
+  limit: number;
+  /** Maddelerin güvenilir alan listesi — sürükleme sessiz kalmasın. */
+  maddeAlanlari: string[];
+  satirlar: MetalSatir[];
+  sayac: FiyatSayac;
+  tam: boolean;
+  uyari: string;
+  ms: number;
+};
+
+/** Makine hata kodları (api/_metal.js sözleşme bloğu). */
+export type MetalErrorCode =
+  | 'bad_maden'
+  | 'bad_kapsam'
+  | 'bad_limit'
+  | 'method_not_allowed'
+  | 'metal_alinamadi';
+
+// ---------------------------------------------------------------------
+//  /api/kur — DÖVİZ / GRAM METAL KURU  (TRUNCGIL today.json)
+// ---------------------------------------------------------------------
+
+/** Tek çağrıda EN ÇOK kod — `api/_kur.js AZAMI_KOD` kopyası. */
+export const KUR_AZAMI_KOD = 40;
+
+/**
+ * Kod biçimi — `api/_kur.js KOD_BICIM` kopyası.
+ *
+ * ⚠️ KODLAR KÜÇÜLTÜLMEZ: üst kaynağın anahtarları KARIŞIK HARF
+ * (`USD`, `EUR`, `GBP` büyük; `gram-altin`, `gumus`, `platin` küçük).
+ * `usd` ile `USD` üst kaynakta AYNI ŞEY DEĞİL — sarmal da bu yüzden
+ * `toLowerCase()` UYGULAMIYOR (kripto sarmalının tersine).
+ */
+export const KUR_KOD_BICIM = /^[A-Za-z][A-Za-z0-9-]{0,23}$/;
+
+/** Web ikizinin şeritte bastığı YERLEŞİK kodlar — `app.js` `loadRates`
+ *  (`USD`/`EUR`/`GBP`/`gram-altin`) ve `config.js` `truncgilKey`
+ *  (`gumus`, `platin`). Bu bir KARAR değil, webin okuduğu kod kümesi. */
+export const KUR_WEB_KODLARI = ['USD', 'EUR', 'GBP', 'gram-altin', 'gumus', 'platin'] as const;
+
+/**
+ * Tek kur satırı — `ayristirKalem()`. BİRİM ALAN ADINDA: `...Try` TÜRK
+ * LİRASI (USD = 1 doların TL fiyatı, gram-altin = 1 gramın TL fiyatı),
+ * `degisimPct` YÜZDE PUAN.
+ *
+ * `fiyatTry` + `fiyatKaynak`: satış yoksa alışa düşülüyor ve HANGİSİ
+ * olduğu yazılı — iki farklı ölçümün sessizce karışmaması için. Uç
+ * fiyatı HİÇ çözemediği satırı GÖNDERMİYOR, bu yüzden `fiyatTry`
+ * dolu gelir; tip gevşek bırakıldı ki gövde bozulursa ekran `0`
+ * basmasın.
+ */
+export type KurSatir = {
+  kod: string;
+  satisTry: number | null;
+  alisTry: number | null;
+  fiyatTry: number | null;
+  fiyatKaynak: 'satis' | 'alis' | null;
+  degisimPct: number | null;
+  /** Üst kaynağın kendi sınıf etiketi ("Döviz", "Altın"). Çevrilmez. */
+  tur: string | null;
+};
+
+export type KurResponse = {
+  /** İstenen kodlar, istenen SIRADA. */
+  kodlar: string[];
+  /**
+   * Ölçülen satırlar. Üst kaynakta OLMAYAN kod burada HİÇ görünmez ve
+   * bu `tam`ı DÜŞÜRMEZ — ekran eksiği `kodlar.length` ile
+   * `kurlar.length` farkından görür (kripto ucuyla AYNI sözleşme).
+   */
+  kurlar: KurSatir[];
+  /** Üst kaynağın kendi güncelleme dizgesi, OLDUĞU GİBİ; tarihe
+   *  çevrilmez (biçimi sözleşmeli değil). `null` = alan yok. */
+  guncellemeMetni: string | null;
+  sayac: FiyatSayac;
+  /** `false` → üst kaynak okunamadı, ölçüm EKSİK. */
+  tam: boolean;
+  uyari: string;
+  ms: number;
+};
+
+/** Makine hata kodları (api/_kur.js sözleşme bloğu). */
+export type KurErrorCode =
+  | 'kur_kod_yok'
+  | 'cok_kod'
+  | 'bad_kod'
+  | 'method_not_allowed'
+  | 'kur_alinamadi';
+
+// ---------------------------------------------------------------------
+//  /api/iceriden — İÇERİDEN İŞLEMLER (SEC Form 4 · KAP bildirimi)
+// ---------------------------------------------------------------------
+//  TEMEL SKORA DAHİL DEĞİL — web ikizinin başlığı birebir böyle
+//  (`app.js:5127`) ve kullanıcı tercihi (2026-08-15) "yalnız bilgi,
+//  skoru etkilemez". Bu yüzden hiçbir alanı skor girdisi değil.
+//
+//  BİRİM ALAN ADINDA: `...Adet` PAY ADEDİ, `...Tutar` İŞLEMİN PARA
+//  TUTARI (üst kaynağın kendi biriminde — SEC ABD doları basıyor,
+//  ÇEVRİM YOK). `tarih` üst kaynağın KENDİ dizgesi, biçimi sözleşmeli
+//  değil.
+
+/** Uç hangi iki pazarı tanıyor (api/_iceriden.js `PAZARLAR`). Üçüncü
+ *  bir değer 400 alıyor — sessiz `US` varsayımı YOK. */
+export const ICERIDEN_PAZARLAR = ['US', 'BIST'] as const;
+export type IceridenPazar = (typeof ICERIDEN_PAZARLAR)[number];
+
+/** Uçtaki `SEMBOL_BICIM` ile BİREBİR. Nokta/tire ABD sembolleri için
+ *  (`BRK.B`, `RDS-A`). */
+export const ICERIDEN_SEMBOL_BICIM = /^[A-Za-z][A-Za-z0-9.\-]{0,11}$/;
+
+/** Sayaç — `FiyatSayac` + `yok`. `yok` 404 demek, yani VERİ CEVABI
+ *  ("böyle bir kayıt yok"); `hata`/`zamanAsimi` ise "ölçemedim". */
+export type IceridenSayac = FiyatSayac & { yok: number };
+
+/**
+ * Durum kodu — Türkçesi `src/lib/sozluk.ts`'de çözülüyor (§5.1).
+ *  - `ok`              ölçüldü, taşınan kayıt var
+ *  - `kayit_yok`       sembolün SEC kaydı yok (ETF / yabancı özel şirket)
+ *  - `bildirim_yok`    pencerede Form 4 / KAP maddesi yok
+ *  - `acik_piyasa_yok` bildirim var ama açık piyasa alım/satımı yok
+ */
+export type IceridenDurumKodu =
+  | 'ok'
+  | 'kayit_yok'
+  | 'bildirim_yok'
+  | 'acik_piyasa_yok';
+
+/** Yön kodu — ESİK YOK, yalnız işaret karşılaştırması. `null` = açık
+ *  piyasa işlemi hiç yok. */
+export type IceridenYonKodu =
+  | 'alim'
+  | 'satim'
+  | 'alim_agirlikli'
+  | 'satim_agirlikli'
+  | 'dengeli';
+
+/** Bildirimi verenin şirketle ilişkisi. Türkçesi sözlükte. */
+export type IceridenIliskiKodu = 'yk' | 'yonetici' | 'ortak10';
+
+/** KAP yolunda maddelerin HANGİ kaynaktan geldiği. */
+export type IceridenKaynakKodu = 'kap' | 'haber' | 'kap_haber';
+
+/** Tek Form 4 kaydı. Ölçülemeyen alan `null`, ASLA `0`. */
+export type IceridenKayit = {
+  tarih: string | null;
+  sahip: string | null;
+  iliskiKodlari: IceridenIliskiKodu[];
+  /** `officerTitle` — ÜST KAYNAĞIN KENDİ METNİ, çevrilecek kod değil. */
+  unvan: string | null;
+  alisAdet: number;
+  alisTutar: number;
+  satisAdet: number;
+  satisTutar: number;
+  /** Açık piyasa işlemi OLMAYAN kalem sayısı (opsiyon icrası, RSU,
+   *  vergi kesintisi). Tutarı taşınmıyor, yalnız SAYILIYOR. */
+  digerAdet: number;
+};
+
+export type IceridenToplam = {
+  alisAdet: number;
+  alisTutar: number;
+  satisAdet: number;
+  satisTutar: number;
+  digerAdet: number;
+  netTutar: number;
+};
+
+/** KAP / haber maddesi — başlık + adres + üst kaynağın tarih dizgesi. */
+export type IceridenMadde = {
+  baslik: string;
+  adres: string | null;
+  tarih: string | null;
+};
+
+export type IceridenUsGovde = {
+  pazar: 'US';
+  sembol: string;
+  /** 10 haneli sıfır dolgulu CIK; `null` = sembolün SEC kaydı yok. */
+  cik: string | null;
+  durumKodu: IceridenDurumKodu;
+  yonKod: IceridenYonKodu | null;
+  pencereGun: number;
+  /** SESSİZ KIRPMA YOK: pencerede seçilen belge sayısı. */
+  bildirimSayisi: number;
+  /** Gerçekten okunabilen kayıt sayısı (`kayitlar` tavana kırpılı). */
+  okunan: number;
+  toplam: IceridenToplam | null;
+  kayitlar: IceridenKayit[];
+  kaynakAdres: string | null;
+};
+
+export type IceridenBistGovde = {
+  pazar: 'BIST';
+  sembol: string;
+  durumKodu: IceridenDurumKodu;
+  kaynakKodu: IceridenKaynakKodu;
+  /** Süzgeçten geçen HAM madde sayısı (kırpmadan önce). */
+  bulunan: number;
+  maddeSayisi: number;
+  maddeler: IceridenMadde[];
+  kaynakAdres: string | null;
+};
+
+export type IceridenOrtak = {
+  sayac: IceridenSayac;
+  /** `false` → üst kaynak okunamadı, ölçüm EKSİK. */
+  tam: boolean;
+  uyari: string;
+  ms: number;
+};
+
+export type IceridenResponse =
+  | (IceridenUsGovde & IceridenOrtak)
+  | (IceridenBistGovde & IceridenOrtak);
+
+/** Makine hata kodları (api/_iceriden.js sözleşme bloğu). */
+export type IceridenErrorCode =
+  | 'sembol_yok'
+  | 'bad_sembol'
+  | 'bad_pazar'
+  | 'method_not_allowed'
+  | 'iceriden_alinamadi';
+
+// ---------------------------------------------------------------------
+//  /api/neden — "NEDEN HAREKET EDİYOR?"
+// ---------------------------------------------------------------------
+//  Webde bu kart TARAYICIDA hesaplanıyordu (`fillSpWhy`). Native istemci
+//  hesap YAPMAZ: eşik (3.0 / 1.2 / 0.12) ve karar ağacı MOTORDA, uç
+//  yalnız KAPALI KOD döndürüyor; Türkçe cümle `src/lib/sozluk.ts`te
+//  seçiliyor.
+//
+//  SKORA GİRMEZ: ne teknik ne temel skor bu kodları okur.
+// ---------------------------------------------------------------------
+
+export const NEDEN_PAZARLAR = ['US', 'BIST'] as const;
+export type NedenPazar = (typeof NEDEN_PAZARLAR)[number];
+
+/** İstemci ön kapısı — uç `_girdi.js` SEMBOL_BICIM'inden gevşek OLAMAZ. */
+export const NEDEN_SEMBOL_BICIM = /^[A-Za-z][A-Za-z0-9.\-]{0,11}$/;
+
+/** Günlük hareketin büyüklüğü. `olcum_yok` = ölçemedim, "sakin" DEĞİL. */
+export type NedenHareketKodu = 'olcum_yok' | 'sakin' | 'belirgin' | 'sert';
+
+/** Hareketin yönü. */
+export type NedenYonKodu = 'olcum_yok' | 'yatay' | 'yukselis' | 'dusus';
+
+/**
+ * Haber akışının yönü. `sinyal_yok` ("eşleyen sözcük görmedim") ile
+ * `notr` ("gördüm, dengeli") AYRI olgu.
+ */
+export type NedenHaberYonKodu = 'sinyal_yok' | 'notr' | 'pozitif' | 'negatif';
+
+/** Hareket ile haber akışının uzlaşması — kartın asıl cümlesi. */
+export type NedenUzlasmaKodu =
+  | 'olcum_yok'
+  | 'sakin'
+  | 'haber_uyumlu'
+  | 'celiski'
+  | 'haber_yok';
+
+/** Tek manşetin kutbu. */
+export type NedenKutupKodu = 'notr' | 'pozitif' | 'negatif';
+
+export type NedenBaslik = {
+  baslik: string | null;
+  adres: string | null;
+  kaynak: string | null;
+  tarih: string | null;
+  /** Ham kutupluluk — teşhis için; ekranda SAYI olarak basılmıyor. */
+  pol: number | null;
+  kutupKod: NedenKutupKodu | null;
+};
+
+/**
+ * Duyarlılık katmanı. `null` = ÖLÇEMEDİM (uçta motor kurulamadı).
+ * `alan` NEYİN puanlandığını bildiriyor: taşıyıcıda `description` YOK,
+ * bu yüzden uç puanı web puanından SAPAR ve bu alan sapmayı yazıyor.
+ */
+export type NedenHaber = {
+  sorgu: string;
+  puan: number;
+  ham: number;
+  sinyal: number;
+  adet: number;
+  cls: string | null;
+  kod: string | null;
+  alan: string[];
+};
+
+export type NedenKodKumeleri = {
+  hareket: string[];
+  yon: string[];
+  haberYon: string[];
+  uzlasma: string[];
+  kutup: string[];
+};
+
+export type NedenResponse = {
+  sembol: string;
+  pazar: NedenPazar;
+  ysym: string;
+  fiyat: number | null;
+  oncekiKapanis: number | null;
+  paraBirimi: string | null;
+  marketTs: number | null;
+  /** BIST kotası gecikmeli gelir — MAKİNE BAYRAĞI, cümle değil. */
+  gecikmeli: boolean;
+  /** Yüzde PUAN (oran değil). `null` = ölçemedim. */
+  yuzde: number | null;
+  hareketKod: NedenHareketKodu;
+  yonKod: NedenYonKodu;
+  /** `null` = duyarlılık ölçülemedi. */
+  haberYonKod: NedenHaberYonKodu | null;
+  uzlasmaKod: NedenUzlasmaKodu;
+  kodKumeleri: NedenKodKumeleri;
+  haber: NedenHaber | null;
+  basliklar: NedenBaslik[];
+  /** SESSİZ KIRPMA YOK: listeye girmeyen sinyalli manşet sayısı. */
+  atilan: number;
+  sayac: { fiyat: FiyatSayac; haber: HaberSayac };
+  /** `false` → iki kaynaktan biri okunamadı, ölçüm EKSİK. */
+  tam: boolean;
+  surum: { motor: string; ayar: string };
+  onbellek: boolean;
+  uyari: string;
+  ms: number;
+};
+
+/** Makine hata kodları (api/_neden.js sözleşme bloğu). */
+export type NedenErrorCode =
+  | 'symbol_yok'
+  | 'bad_symbol'
+  | 'bad_market'
+  | 'motor_yok'
+  | 'method_not_allowed'
+  | 'neden_alinamadi';
+
+// =====================================================================
+//  /api/katalizor SÖZLEŞME TİPLERİ — 📅 Katalizör / Risk   (ŞERİT (G))
+// ---------------------------------------------------------------------
+//  Webin "Katalizör / Risk" satırı (`fillCatalysts`, app.js) ÜÇ bacaklı.
+//  Native'de bacaklar AYRI yerlerden besleniyor — ölçülerek bölündü:
+//    ① OYNAKLIK : `/api/analyze` satırındaki `oynaklik` + `atrPlan`
+//                 kodları (ZATEN geliyor, `RiskOdulKart` okuyor).
+//                 Bu uçta YOK — ikinci bir ATR ölçümü açılmadı.
+//    ② TEMETTÜ  : BU UÇ. Gün farkı + 45 gün eşiği webde TARAYICIDAYDI,
+//                 ikisi de motora taşındı (`katGunFarki`/`katTemettuKod`).
+//    ③ HABER UYARISI : sabit CÜMLE → `src/lib/sozluk.ts`, uçta DEĞİL.
+//
+//  SKORA GİRMEZ: dönen kodlar hiçbir skora girdi değildir.
+//
+//  EŞİK TAŞINMIYOR: 45 gün sayısı bu dosyada YOK. Native yalnız kodu
+//  okuyor; eşik sunucuda, motorun içinde.
+// =====================================================================
+
+export const KATALIZOR_PAZARLAR = ['US', 'BIST'] as const;
+export type KatalizorPazar = (typeof KATALIZOR_PAZARLAR)[number];
+
+/**
+ * Yaklaşan temettü kodu — KAPALI küme (`ENG.KAT_TEMETTU_KODLARI`).
+ * `yakin` = eşik içinde · `uzak` = ölçüldü, eşiğin dışında ·
+ * `gecti` = tarih geçmiş. `null` = ölçülemedi.
+ */
+export const KATALIZOR_TEMETTU_KODLARI = ['yakin', 'uzak', 'gecti'] as const;
+export type KatalizorTemettuKodu = (typeof KATALIZOR_TEMETTU_KODLARI)[number];
+
+/**
+ * Ölçülen tarihin TÜRÜ. İki pazar AYNI tarihi yayınlamıyor: BIST
+ * kaynağı ÖDEME gününü, Yahoo künyesi birincil olarak KESİLME gününü
+ * veriyor. Uç hangisini ölçtüğünü SÖYLÜYOR; ekran ikisini
+ * karıştırmasın diye tür de basılıyor.
+ */
+export const KATALIZOR_TARIH_TURLERI = ['odeme', 'kesilme'] as const;
+export type KatalizorTarihTuru = (typeof KATALIZOR_TARIH_TURLERI)[number];
+
+export type KatalizorKodKumeleri = {
+  temettu: readonly string[];
+  tarihTuru: readonly string[];
+};
+
+export type KatalizorTemettu = {
+  /** `YYYY-MM-DD` — BIST kaynağı dizge veriyor; US'te `null`. */
+  tarih: string | null;
+  /** Milisaniye. `null` = tarih ölçülemedi (0 BASILMAZ). */
+  tarihMs: number | null;
+  tarihTuru: KatalizorTarihTuru | null;
+  /** TAM gün sayısı. `0` = temettü BUGÜN (geçerli ölçüm). */
+  gun: number | null;
+  kod: KatalizorTemettuKodu | null;
+  /** Tek ödeme tutarı. US künyesinde YOK → `null` (yıllık tutar buraya yazılmıyor). */
+  tutar: number | null;
+  paraBirimi: string | null;
+  /** YÜZDE PUANI (oran değil). US'te `null` — künyenin `dividendYield`i ORAN. */
+  verimYuzde: number | null;
+  odendi: boolean | null;
+  /** Kaynakta bu sembol için KAÇ kayıt vardı. */
+  adet: number | null;
+};
+
+export type KatalizorResponse = {
+  sembol: string;
+  pazar: KatalizorPazar;
+  ysym: string;
+  /** `null` = kaynak okunamadı · `gun`/`kod` null = yaklaşan temettü YOK. */
+  temettu: KatalizorTemettu | null;
+  kodKumeleri: KatalizorKodKumeleri;
+  /** SESSİZ KIRPMA YOK: seçilen dışında kaç gelecek kayıt vardı. */
+  atilan: number;
+  /** Tarihi okunamayan kayıt sayısı. */
+  tarihiOkunamayan: number;
+  sayac: Record<string, unknown>;
+  /** `false` → kaynak EKSİK okundu, ölçüm tamamlanmadı. */
+  tam: boolean;
+  surum: { motor: string; ayar: string };
+  onbellek: boolean;
+  uyari: string;
+  ms: number;
+};
+
+/** Makine hata kodları (api/_katalizor.js sözleşme bloğu). */
+export type KatalizorErrorCode =
+  | 'symbol_yok'
+  | 'bad_symbol'
+  | 'bad_market'
+  | 'motor_yok'
+  | 'method_not_allowed'
+  | 'katalizor_alinamadi';
+
+// ---------------------------------------------------------------------
+//  /api/mali — MALİ TABLOLAR (bilanço / gelir tablosu HAM kalemleri)
+// ---------------------------------------------------------------------
+//  Kaynak: ABD'de SEC XBRL `companyconcept`, BIST'te İş Yatırım
+//  `MaliTablo` (XI_29). İkisi de YILLIK dönem taşıyor.
+//
+//  UÇ HESAP YAPMIYOR, BU DOSYA DA YAPMAZ: marj, oran, büyüme, FAVÖK,
+//  net borç YOK — hepsi TÜRETME ve §5.1 gereği motorun işi. Burada
+//  yalnız ÖLÇÜLEN kalem ve dönem ekseni var.
+//
+//  BİRİM ÇEVRİLMİYOR: `birim` üst kaynağın kendi birimi (SEC `USD`,
+//  İş Yatırım `TRY`). Çarpan uygulanmıyor — ölçülmeyen bir kuru ima
+//  etmemek için.
+//
+//  ÜÇ DEĞERLİ DÜRÜSTLÜK: kalem LİSTEDE YOKSA o pazarda SORULMADI;
+//  `degerler[i] === null` ise SORULDU ama ÖLÇÜLEMEDİ; `0` ise
+//  "ölçtüm, sıfır çıktı". Üçü ASLA birbirine çevrilmiyor.
+
+/** Uç hangi iki pazarı tanıyor (api/_mali.js `PAZARLAR`). Üçüncü bir
+ *  değer 400 alıyor — sessiz `US` varsayımı YOK. */
+export const MALI_PAZARLAR = ['US', 'BIST'] as const;
+export type MaliPazar = (typeof MALI_PAZARLAR)[number];
+
+/** Uçtaki `SEMBOL_BICIM` ile BİREBİR. Nokta/tire ABD sembolleri için
+ *  (`BRK.B`, `RDS-A`). */
+export const MALI_SEMBOL_BICIM = /^[A-Za-z][A-Za-z0-9.\-]{0,11}$/;
+
+/** Sayaç — `FiyatSayac` + `yok`. `yok` 404 demek: SEC'te bir us-gaap
+ *  etiketinin OLMAMASI olağan, yani VERİ CEVABI; `hata`/`zamanAsimi`
+ *  ise "ölçemedim" ve `tam`ı bozuyor. */
+export type MaliSayac = FiyatSayac & { yok: number };
+
+/**
+ * Kalem kodu — KAPALI KÜME (api/_mali.js `KALEM_KODLARI`). Türkçesi
+ * `src/lib/sozluk.ts`'de çözülüyor; bu dosyada cümle YOK.
+ *
+ * HER PAZAR HER KODU TAŞIMIYOR: `serbestNakitAkisi` ve
+ * `duranVarliklar` yalnız BIST yolunda, `yatirimHarcamasi` ve
+ * `toplamVarliklar`/`toplamYukumlulukler` yalnız US yolunda SORULUYOR.
+ * Eksik kod "ölçülemedi" DEĞİL, "o kaynakta sorulmuyor" demek.
+ */
+export type MaliKalemKodu =
+  | 'gelir'
+  | 'brutKar'
+  | 'faaliyetKari'
+  | 'netKar'
+  | 'amortisman'
+  | 'faaliyetNakitAkisi'
+  | 'yatirimHarcamasi'
+  | 'serbestNakitAkisi'
+  | 'donenVarliklar'
+  | 'duranVarliklar'
+  | 'toplamVarliklar'
+  | 'nakitVeBenzeri'
+  | 'kisaVadeliYatirimlar'
+  | 'stoklar'
+  | 'kisaVadeliYukumlulukler'
+  | 'toplamYukumlulukler'
+  | 'kisaVadeliFinansalBorc'
+  | 'uzunVadeliFinansalBorc'
+  | 'ozkaynak';
+
+/**
+ * Durum kodu — Türkçesi `src/lib/sozluk.ts`'de (§5.1).
+ *  - `ok`         ölçüldü, taşınan kalem var
+ *  - `kayit_yok`  sembolün SEC kaydı yok (ETF / yabancı özel şirket)
+ *  - `tablo_yok`  kaynak cevap verdi ama yıllık dönem çıkmadı
+ *  - `kalem_yok`  dönem bulundu ama hiçbir kalem ölçülemedi
+ *
+ * ARIZA DEĞİL: üst kaynak okunamadığında uç 502 `mali_alinamadi`
+ * dönüyor, bu dört kod VERİ CEVABI.
+ */
+export type MaliDurumKodu = 'ok' | 'kayit_yok' | 'tablo_yok' | 'kalem_yok';
+
+/** Tek kalem. `degerler` `donemler` ile AYNI SIRADA ve AYNI UZUNLUKTA;
+ *  ölçülemeyen dönem `null`, ASLA `0`. */
+export type MaliKalem = {
+  kod: MaliKalemKodu;
+  degerler: (number | null)[];
+  /** Hangi `itemCode` / us-gaap etiketi okundu — ŞEFFAFLIK alanı.
+   *  İstemci bunu HESABA sokmuyor, yalnız kaynak izi. `null` = kalem
+   *  hiçbir etiketten okunamadı. */
+  kaynakEtiket: string | null;
+};
+
+export type MaliResponse = {
+  pazar: MaliPazar;
+  sembol: string;
+  /** Yalnız ABD yolunda: 10 haneli sıfır dolgulu CIK. `null` =
+   *  sembolün SEC kaydı yok. BIST yolunda alan HİÇ GELMİYOR. */
+  cik?: string | null;
+  durumKodu: MaliDurumKodu;
+  donemTuru: 'yillik';
+  /** Uçtan İSTENEN dönem sayısı — `donemler.length` ile AYRI tutuluyor
+   *  ki SESSİZ KIRPMA görünür olsun. */
+  donemIstenen: number;
+  /** En GÜNCEL dönem BAŞTA. ABD'de `YYYY-MM-DD` dönem bitişi, BIST'te
+   *  `YYYY` yılı — biçim pazara göre DEĞİŞİYOR, istemci bunu ayrıştırıp
+   *  hesap yapmıyor, olduğu gibi gösteriyor. */
+  donemler: string[];
+  /** Üst kaynağın KENDİ birimi (`USD` / `TRY`). `null` = okunamadı. */
+  birim: string | null;
+  kalemler: MaliKalem[];
+  /** Kullanıcının KENDİ gözüyle bakacağı kaynak sayfa. */
+  kaynakAdres: string | null;
+  sayac: MaliSayac;
+  /** `false` → üst kaynak EKSİK okundu, ölçüm tamamlanmadı. */
+  tam: boolean;
+  uyari: string;
+  ms: number;
+};
+
+/** Makine hata kodları (api/_mali.js sözleşme bloğu). */
+export type MaliErrorCode =
+  | 'sembol_yok'
+  | 'bad_sembol'
+  | 'bad_pazar'
+  | 'method_not_allowed'
+  | 'mali_alinamadi';
+
+// ---------------------------------------------------------------------
+//  /api/hareket — ANİ HAREKET TARAMASI (gün içi mum ölçümü)
+// ---------------------------------------------------------------------
+//  Kaynak: `api/_hareket.js`. Verilen sembollerin GÜN İÇİ mumları
+//  okunup her biri için "ani hareket mi" ölçümü dönüyor.
+//
+//  UÇ TÜRKÇE CÜMLE DÖNDÜRMÜYOR: her karar KAPALI KÜMEDEN bir kod
+//  (`HareketKodu`), gerisi HAM SAYI. Cümle `src/lib/sozluk.ts`te
+//  seçiliyor. Tek Türkçe alan `uyari` ve o OLDUĞU GİBİ basılıyor.
+//
+//  EŞİK CEVABA GİRMİYOR: uç, ölçümün dayandığı eşik nesnesini BİLİNÇLİ
+//  OLARAK dışarı vermiyor. Bu yüzden bu dosyada da eşik alanı YOK —
+//  istemci tarafında eşik/ağırlık/formül yeniden kurulmuyor.
+//
+//  `rvol` HAM VE YORUMSUZ: uç `rvol` için kod ÜRETMİYOR — sayı ham
+//  geliyor, hüküm yok. Ekranda da hüküm kurulmuyor.
+//
+//  KAPSAM BIST + US: kripto ve maden uçta TANIMLI DEĞİL, bu yüzden
+//  `market` kümesi `Market` ile aynı.
+//
+//  ÜÇ DEĞERLİ DÜRÜSTLÜK: sayı alanı `null` ise ÖLÇÜLEMEDİ, `0` ise
+//  "ölçtüm, sıfır çıktı"; `kodlar` boş dizi ise "ölçtüm, kapalı kümeden
+//  hiçbir kod çıkmadı". Üçü ASLA birbirine çevrilmiyor.
+
+/**
+ * Tek çağrıda istenebilecek EN ÇOK sembol — `api/_hareket.js`
+ * `AZAMI_SEMBOL` kopyası.
+ *
+ * Uç tavanı aşan isteği SESSİZCE KIRPMIYOR, 400 `cok_sembol` diyor; bu
+ * yüzden kapı yerelde de var (ağa çıkmadan aynı cümle).
+ *
+ * `AZAMI_SEMBOL` (ortak haber sembol kapısı, 8) İLE AYNI DEĞİL: bu uç
+ * kendi tavanını taşıyor. İkisini tek sabite indirmek, biri
+ * değiştiğinde ötekini sessizce bozmak olurdu.
+ */
+export const HAREKET_AZAMI_SEMBOL = 12;
+
+/**
+ * Satırın taşıyabileceği karar kodları — KAPALI KÜME
+ * (`api/_hareket.js` `HAREKET_KODLARI`). Türkçesi `src/lib/sozluk.ts`te.
+ *
+ *  - `ani`       gün içi hareket ölçümü eşiği geçti
+ *  - `buyuk_gun` günlük değişim ölçümü eşiği geçti
+ *  - `kirilma`   önceki tepe aşıldı
+ *
+ * Eşiklerin KENDİSİ burada YOK ve olmayacak: motorun ayarı.
+ */
+export const HAREKET_KODLARI = ['ani', 'buyuk_gun', 'kirilma'] as const;
+export type HareketKodu = (typeof HAREKET_KODLARI)[number];
+
+/**
+ * Bir sembolün ani-hareket satırı.
+ *
+ * `ok`: motor bu sembol için ÖLÇÜM YAPABİLDİ mi. `false` ise bütün
+ * sayılar `null` ve `kodlar` boş — uç yetersiz seride ölçüm UYDURMUYOR.
+ * `gecikmeli`: MAKİNE BAYRAĞI (`market === 'BIST'`) — "gecikmeli"
+ * yazısını ekran basar, uç cümle kurmaz.
+ * `marketTs`: MİLİSANİYE epoch (uçta saniye değil), `null` = ölçülemedi.
+ * `gunYuzde` / `saatYuzde`: YÜZDE PUAN, ham. `rvol`: ORAN (kat), ham ve
+ * YORUMSUZ. `mumSayisi`: ölçümün dayandığı bar sayısı — şeffaflık
+ * alanı, `null` = seri hiç okunamadı.
+ * `ysym`: üst kaynaktaki karşılığı — teşhis için.
+ *
+ * Gün içi nokta serisi (`spark`) uçta BİLİNÇLİ OLARAK dışarıda
+ * bırakıldı; grafik `/api/chart` ucunda. Bu yüzden bu tipte de yok.
+ */
+export type HareketSatir = {
+  symbol: string;
+  market: Market | string;
+  ysym: string;
+  ok: boolean;
+  price: number | null;
+  prevClose: number | null;
+  currency: string | null;
+  marketTs: number | null;
+  gecikmeli: boolean;
+  gunYuzde: number | null;
+  saatYuzde: number | null;
+  rvol: number | null;
+  mumSayisi: number | null;
+  /** Kapalı kümeden çıkan kodlar. BOŞ DİZİ = ölçtüm, kod çıkmadı. */
+  kodlar: HareketKodu[];
+};
+
+export type HareketResponse = {
+  /** `"SEMBOL:PAZAR"` biçiminde — istenen HAM metin DEĞİL. */
+  semboller: string[];
+  /** Sıra İSTENEN sembol sırası; uç ölçülemeyen sembol için de satır
+   *  üretiyor, istemci yeniden sıralamıyor. */
+  satirlar: HareketSatir[];
+  /** Kaç satırda `ani` kodu var — UÇTA sayıldı. Ekran cümlesini bu
+   *  sayıdan kuruyor, satırları yeniden saymıyor. */
+  aniSayisi: number;
+  /** Ucun KAPALI KÜMESİ, cevapla birlikte geliyor. İstemcideki
+   *  `HAREKET_KODLARI` kopyasıyla ayrışma SESSİZ KALMASIN diye var. */
+  kodlar: (HareketKodu | string)[];
+  /** `FiyatSayac` ile AYNI ŞEKİL (istek/basari/hata/zamanAsimi/kisa/
+   *  bayt) — yeni bir sayaç tipi üretmek ikizleme olurdu. */
+  sayac: FiyatSayac;
+  /** `false` → en az bir adres okunamadı, ölçüm EKSİK. */
+  tam: boolean;
+  imza: { motor: string; ayar: string };
+  uyari: string;
+  ms: number;
+};
+
+/** Makine hata kodları (`api/_hareket.js` sözleşmesi). */
+export type HareketErrorCode =
+  | 'semboller_yok'
+  | 'bad_sembol'
+  | 'cok_sembol'
+  | 'method_not_allowed'
+  | 'motor_yok'
+  | 'hareket_alinamadi';

@@ -31,6 +31,29 @@
 //  'gunici') plan hiç gelmiyor. O satır burada plansız görünür ve
 //  sebebi yazılır; uydurma seviye üretilmez.
 //
+//  ── BANT ETİKETİ + KATKI DÖKÜMÜ (eklendi 2026-10-29, ŞERİT F) ─────
+//  Webdeki fırsat satırı bir bant etiketi (`r.label` / `r.cls`) ve
+//  gösterge katkılarını da yazıyor; native satır bunların HİÇBİRİNİ
+//  basmıyordu, oysa ikisi de `/api/recommend` gövdesinde GELİYOR:
+//    · bileşke bant → `composite.label`, yoksa `composite.band`
+//    · teknik bant  → `ta.label` (sınıfı `ta.cls`)
+//    · katkılar     → `ta.breakdown[] = {key, score, weight}`
+//  ÖLÇÜLDÜ (api/types.ts:61-68, :93-99): alanların hepsi SORU İŞARETLİ
+//  ve `null` olabiliyor — motor bandı üretemediğinde sebebi `why`de
+//  yazıyor. Bu yüzden etiket YOKSA rozet HİÇ basılmıyor; eşikten bant
+//  türetmek (ör. "skor 70 üstü → güçlü") istemciye motor mantığı
+//  taşımak olurdu ve YAPILMADI.
+//
+//  ROZET TONU NÖTR, `cls`e GÖRE RENKLENDİRİLMEDİ: sınıf kodunu renge
+//  çevirmek, motorun sınıfına istemcide bir "iyi/kötü" yorumu eklemek
+//  demekti. Sınıf metin olarak rozetin yanında yazılı — okunabiliyor,
+//  yorumlanmıyor.
+//
+//  KATKIDAN YALNIZ İLK 2: döküm 8+ gösterge taşıyabiliyor ve satır bir
+//  LİSTE satırı. Sıra MOTORUN sırası — istemci yeniden dizmiyor, bu
+//  yüzden "ilk 2" keyfi bir seçim değil, motorun önceliği. Kesildiği de
+//  yazılı (`+N`), sessizce düşmüyor.
+//
 //  VERİ BU KARTIN İÇİNDE ÇEKİLMİYOR: `fetch` yok. Tur sahibi ekran
 //  (Keşfet sekmesi) tek bir istek atıyor ve sonucu üç karta prop
 //  olarak veriyor — üç kart üç ayrı istek atsa aynı veri için üç tur
@@ -43,7 +66,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { ApiError, IstekDurum, Market, RecommendRow, Sayac } from '@/api';
 import { Card, Durum, OlcumEksikRozet, Pill, VeriYok } from '@/components';
-import { EMPTY, formatOran, formatPrice } from '@/lib/format';
+import { EMPTY, formatImzaliSkor, formatOran, formatPrice, formatScore } from '@/lib/format';
+import { FIRSAT_SOZLUK, sozluktenSec } from '@/lib/sozluk';
 import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
 
 export type FirsatlarKartProps = {
@@ -64,7 +88,13 @@ export type FirsatlarKartProps = {
    * sekmenin işi). Verilmezse satır basılabilir GÖRÜNMÜYOR: dokununca
    * hiçbir şey olmayan bir satır, çalışıyormuş gibi görünen bir yalan.
    */
-  onSembol?: (sym: string) => void;
+  /**
+   * Satıra dokunulunca çağrılır. `pazar` İKİNCİ PARAMETRE (TASARIM
+   * TURU 2): bu satırın pazar kodu uçtan geliyor ve hisse ekranı onu
+   * `.IS` ekini koymak için kullanıyor; düşürülürse BIST sembolü ABD'de
+   * ölçülüyor (ölçüm: `app/hisse/[sembol].tsx` başlığı).
+   */
+  onSembol?: (sym: string, pazar?: string | null) => void;
   /** Kaç satır gösterilsin. Sıralı listede dip kuyruğu kesmek için. */
   azami?: number;
 };
@@ -81,6 +111,20 @@ function paraBirimi(market: Market): string | null {
 function rrDegeri(satir: RecommendRow): number | null {
   const v = satir.plan?.riskOdul?.rrRatio;
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** Boş/boşluk dizgiyi `null`a indirir: boş rozet basmamak için. */
+function metinVarsa(v: string | null | undefined): string | null {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s === '' ? null : s;
+}
+
+/**
+ * Bileşke bant etiketi — motorun yazdığı metin. `label` yoksa `band`
+ * kodu basılıyor (kod da motorun; istemci ikisini de üretmiyor).
+ */
+function bilesikBant(satir: RecommendRow): string | null {
+  return metinVarsa(satir.composite.label) ?? metinVarsa(satir.composite.band);
 }
 
 export function FirsatlarKart({
@@ -170,13 +214,35 @@ function FirsatSatiri({
   onSembol,
 }: {
   satir: RecommendRow;
-  onSembol?: (sym: string) => void;
+  /**
+   * Satıra dokunulunca çağrılır. `pazar` İKİNCİ PARAMETRE (TASARIM
+   * TURU 2): bu satırın pazar kodu uçtan geliyor ve hisse ekranı onu
+   * `.IS` ekini koymak için kullanıyor; düşürülürse BIST sembolü ABD'de
+   * ölçülüyor (ölçüm: `app/hisse/[sembol].tsx` başlığı).
+   */
+  onSembol?: (sym: string, pazar?: string | null) => void;
 }) {
   const { colors } = useTheme();
   const sv = satir.plan?.seviye ?? null;
   const birim = paraBirimi(satir.market);
   const rr = rrDegeri(satir);
   const yk = satir.plan?.yakinlik?.state ?? null;
+
+  // Bant etiketleri: üretilemediyse `null` — eşikten TÜRETİLMİYOR.
+  const bant = bilesikBant(satir);
+  const taBant = metinVarsa(satir.ta.label);
+  const taSinif = metinVarsa(satir.ta.cls);
+  // FIRSAT KATMANI (api/_akis.js `firsatKatmani`) — HAM sayı + KAPALI
+  // KÜME. Hesabın tamamı motorda (`buyZoneProximity` + `momentumInfo` +
+  // `priceOppAdj` + `oppCombined`); burada eşik/ağırlık/formül YOK.
+  // Cümle `cls`e bakıp `lib/sozluk.ts`ten seçiliyor; kod sözlükte yoksa
+  // `null` döner ve cümle HİÇ basılmaz (uydurma yapılmaz).
+  const fr = satir.firsat;
+  const frCumle = fr ? sozluktenSec(FIRSAT_SOZLUK, fr.cls) : null;
+  // Katkı dökümü: motorun sırası korunuyor, ilk 2 basılıyor.
+  const dokum = satir.ta.breakdown ?? [];
+  const dokumIlk = dokum.slice(0, 2);
+  const dokumKalan = dokum.length - dokumIlk.length;
 
   const govde = (
     <>
@@ -192,6 +258,58 @@ function FirsatSatiri({
           {'rr ' + (rr === null ? EMPTY : formatOran(rr))}
         </Text>
       </View>
+
+      {/* BANT ROZETLERİ — motorun etiketi, tonu NÖTR (yorum yok). Etiket
+          üretilmediyse rozet HİÇ basılmıyor; "bant yok" cümlesi de
+          yazılmıyor, çünkü satırın asıl ölçümü (seviye/oran) ayrıca
+          anlatılıyor ve her satıra ikinci bir eksiklik notu koymak kartı
+          gürültüye boğardı. */}
+      {bant || taBant ? (
+        <View style={styles.bantlar}>
+          {bant ? (
+            <Pill label={'bileşke: ' + bant} tone="neutral" variant="outline" glyph={null} size="sm" />
+          ) : null}
+          {taBant ? (
+            <Pill
+              label={'teknik: ' + taBant + (taSinif ? ' (' + taSinif + ')' : '')}
+              tone="neutral"
+              variant="outline"
+              glyph={null}
+              size="sm"
+            />
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* FIRSAT KATMANI — ÜÇ AYRI DAL, hiçbiri diğerinin yerine geçmiyor:
+            · alan HİÇ gelmedi (`undefined`) → uç bu sürümde göndermiyor,
+              satıra not DÜŞÜLMEZ (eski uçla çalışan istemci her satıra
+              yanlış bir eksiklik notu basardı).
+            · alan `null` → uç ÖLÇEMEDİ (teknik skor yok). Bu söylenir.
+            · sayılar var → HAM basılır; `0` da geçerli bir ölçüm olduğu
+              için gizlenmez (`fiyatPuan` 0 = düzeltme sıfır çıktı). */}
+      {fr === undefined ? null : fr === null ? (
+        <Text style={[type.micro, { color: colors.textFaint }]}>
+          Fiyat uygunluğu ölçülemedi — bileşik skor üretilmedi.
+        </Text>
+      ) : (
+        <Text style={[type.micro, styles.num, { color: colors.textFaint }]}>
+          {'bileşik ' +
+            formatScore(fr.bilesik) +
+            '  ·  fiyat katkısı ' +
+            formatImzaliSkor(fr.fiyatPuan) +
+            (frCumle ? '  ·  ' + frCumle : '')}
+        </Text>
+      )}
+
+      {/* KATKI DÖKÜMÜ — gösterge adı ve motorun verdiği skor, HAM. */}
+      {dokumIlk.length ? (
+        <Text style={[type.micro, styles.num, { color: colors.textFaint }]}>
+          {'katkı: ' +
+            dokumIlk.map((d) => d.key + ' ' + formatScore(d.score)).join('  ·  ') +
+            (dokumKalan > 0 ? '  ·  +' + String(dokumKalan) + ' gösterge daha' : '')}
+        </Text>
+      ) : null}
 
       {sv ? (
         <>
@@ -220,7 +338,7 @@ function FirsatSatiri({
 
   return (
     <Pressable
-      onPress={() => onSembol(satir.sym)}
+      onPress={() => onSembol(satir.sym, satir.market)}
       accessibilityRole="button"
       accessibilityLabel={satir.sym + ' plan satırı — analize git'}
       hitSlop={space.sm}
@@ -244,6 +362,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
   },
   ust: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  bantlar: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   bosluk: { flex: 1 },
   uyari: {
     flexDirection: 'row',

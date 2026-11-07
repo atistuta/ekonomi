@@ -46,6 +46,24 @@ export const radius = {
 /** Dokunma hedefi alt sınırı (Apple HIG 44pt / Material 48dp). */
 export const hitSlopMin = 44;
 
+/**
+ * Ölçüm satırlarının DEĞER sütunu için asgari genişlik.
+ *
+ * NEDEN JETON (TASARIM TURU 1): ham döküm bölümlerinde alt alta 7-12
+ * satır geliyor; değerler `tabular-nums` ile aynı rakam genişliğinde
+ * basılsa bile sütunun SOL kenarı her satırın karakter sayısına göre
+ * kayıyordu, göz sayıları karşılaştıramıyordu. Sabit bir alt genişlik
+ * sütunu tek hizaya oturtuyor. Sayı buradan geliyor ki altı kart aynı
+ * hizayı paylaşsın ve dosyalara sihirli sayı dağılmasın.
+ *
+ * NEDEN 92: en uzun gerçek değer "1.234.567,89 ₺" biçimi (`formatPrice`)
+ * `type.bodyBold` 15pt'de bu genişliğe sığıyor; daha geniş değer sütunu
+ * uzun etiketlerin (ör. "Nakit Kalitesi (OCF > Net Kâr)") iki satıra
+ * düşmesine yol açıyor. ÖLÇÜLMEDİ: cihazda render edilmedi, bu değer
+ * punto/metrik hesabı — ilk cihaz turunda doğrulanmalı.
+ */
+export const olcumDegerSutunu = 92;
+
 /** Okunabilir içerik genişliği — geniş ekranda (web/tablet) satır uzamasın. */
 export const maxContentWidth = 680;
 

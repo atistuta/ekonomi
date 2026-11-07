@@ -15,3 +15,15 @@
 export { ListelerKart, type ListelerKartProps } from './ListelerKart';
 export { ListeBlogu, type ListeBloguProps } from './ListeBlogu';
 export { YeniListeKart, type YeniListeKartProps } from './YeniListeKart';
+export { SenkronKart, type SenkronKartProps } from './SenkronKart';
+export { SepetKart, type SepetKartProps } from './SepetKart';
+// FAZ 3: sepete YAZMA yüzeyleri. `depo.ts` sepet türü native'de OKUNUYORDU
+// (`SepetKart`) ama ona yazan hiçbir ekran yoktu; sepet kaydı buluta da
+// gönderilmiyor (senkron gövdesi yalnız takip listesini taşıyor), yani
+// telefonda sepet kurmanın HİÇBİR yolu yoktu. Eksik olan ekran, veri değil.
+// Yeni SEKME açılmadı, 5'li menü değişmedi.
+export { SepetEkleKart, type SepetEkleKartProps } from './SepetEkleKart';
+export { NakitKart, type NakitKartProps } from './NakitKart';
+// `hamlelerDepo` / `useHamleler` / `AZAMI_HAMLE` native'de VARDI ve HİÇ
+// gösterilmiyordu — `HamleKart` o günlüğün İLK tüketicisi.
+export { HamleKart, type HamleKartProps } from './HamleKart';

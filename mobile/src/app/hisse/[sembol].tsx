@@ -18,11 +18,22 @@
 //  için beş istek atmak aynı veriyi beş kez ölçmek, dahası kartların
 //  farklı turlardan beslenip birbiriyle çelişmesi olurdu.
 //
-//  NEDEN VADE 'orta' SABİT: detay ekranı bir "genel bakış"; vade
-//  seçiciyi buraya koymak Analiz sekmesinin işini ikinci bir yerde
-//  tekrarlamaktı. 'gunici' vadede teknik ayak zaten koşmaz ve plan
-//  `null` gelir — ekran bunu dürüstçe söylüyor (RiskOdulKart), ama
-//  varsayılan olarak seçmiyor.
+//  VADE ARTIK SEÇİLEBİLİR (eski not düştü): bu ekran vadeyi 'orta'ya
+//  SABİTLİYORDU ve gerekçesi "vade seçici Analiz sekmesinin işi"
+//  diyordu. Ölçüldü: motor DÖRT pencere taşıyor (gunici · kisa · orta ·
+//  uzun, `api/_ayar.js` VADELER) ve `/api/analyze` ile `/api/backtest`
+//  ikisi de `vade` alıyor — sabit değer, motorun üç penceresini
+//  ekrandan tamamen siliyordu. Seçici `VadeSecici` komponenti, cümlesi
+//  `lib/sozluk.ts`; VARSAYILAN HÂLÂ 'orta'.
+//
+//  ÖNBELLEK ANAHTARI VADEYİ TAŞIYOR: `useIstek` anahtarı çıplak
+//  `sembol` idi. Vade eklenince anahtar genişletilmek ZORUNDAYDI —
+//  yoksa vade değiştirildiğinde önceki vadenin önbellekli satırı
+//  basılır ve ekran yeni vadeyi gösterdiğini SANIRDI.
+//
+//  'gunici' vadede teknik ayak koşmaz ve plan `null` gelir; ekran bunu
+//  dürüstçe söylüyor (RiskOdulKart) ve seçicinin altındaki not da
+//  söylüyor — boş kart arıza sanılmasın.
 //
 //  NEDEN `ScreenShell`: zorunlu yasal uyarıyı (`Disclaimer`) ekranın en
 //  altında kendisi basıyor; burada elle yerleştirmek, bir gün uyarının
@@ -55,15 +66,21 @@
 // =====================================================================
 
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { fetchAnalyze, useIstek, useListe, type AnalyzeRow } from '@/api';
-import { Card, Durum, Dugme, ScreenShell, VeriYok } from '@/components';
+import { fetchAnalyze, useIstek, useListe, type AnalyzeRow, type Vade } from '@/api';
+import { Card, Durum, Dugme, ScreenShell, VadeSecici, VeriYok } from '@/components';
 import {
   BacktestKart,
   DegerKart,
   DetayBasligi,
+  DetayEylemler,
+  HaberKart,
+  HareketKart,
+  IceridenKart,
+  KatalizorKart,
+  SirketKart,
   RiskOdulKart,
   TeknikKart,
   TemelKart,
@@ -102,11 +119,17 @@ export default function HisseDetayScreen() {
     return buyuk;
   }, [params.sembol, params.pazar, liste]);
 
+  // VARSAYILAN 'orta' KORUNDU: eski davranış seçim yapılmadığında
+  // birebir aynı. Vade bu ekranın durumu — kart değil ekran soruyor.
+  const [vade, setVade] = useState<Vade>('orta');
+
   const cagri = useCallback(
-    (signal: AbortSignal) => fetchAnalyze(sembol ? [sembol] : [], { vade: 'orta', signal }),
-    [sembol],
+    (signal: AbortSignal) => fetchAnalyze(sembol ? [sembol] : [], { vade, signal }),
+    [sembol, vade],
   );
-  const { durum, veri, hata, yenile } = useIstek(cagri, sembol ?? '', {
+  // ANAHTAR VADEYİ TAŞIYOR: çıplak `sembol` anahtarı vade değişince
+  // önceki vadenin önbellekli satırını basardı.
+  const { durum, veri, hata, yenile } = useIstek(cagri, (sembol ?? '') + '|' + vade, {
     etkin: Boolean(sembol),
   });
 
@@ -133,6 +156,15 @@ export default function HisseDetayScreen() {
         </Card>
       ) : (
         <>
+          {/* VADE SEÇİCİ: `Durum`dan ÖNCE, çünkü analiz turu 45-55 sn
+              sürüyor ve seçici iskeletin ARKASINDA kalsaydı kullanıcı
+              bekleme boyunca vadeyi değiştiremezdi. */}
+          <Card
+            title="Vade"
+            subtitle="Motorun hangi penceresi sorulacak — teknik skor, plan ve geçmiş ölçüm bu seçime göre gelir.">
+            <VadeSecici deger={vade} onDegis={setVade} />
+          </Card>
+
           {/* Yükleniyor · boş · dört hata türü: tek gövde. */}
           <Durum
             durum={durum}
@@ -154,8 +186,26 @@ export default function HisseDetayScreen() {
           {satir ? (
             <>
               <DetayBasligi satir={satir} />
+              {/* YAZMA EYLEMLERI: webde hisse sayfasinin ust
+                  seridinde ikisi de var. Native'de listeye ekleme
+                  YALNIZ Arama sekmesindeydi, kiyas setine ekleme
+                  ise HIC YOKTU. Pazar burada da cagirandan
+                  gidiyor; ekran pazar CIKARIMI yapmiyor. */}
+              <DetayEylemler sembol={sembol} market={satir.market} />
+              {/* ANALYZE TURUNUN DISINDA, EN USTTE: "bu sirket ne
+                  yapiyor?" sorusunun cevabi native detayda HIC
+                  YOKTU — kullanici tanimadigi bir sembolde skoru
+                  okuyordu. Teknik/temel kartlardan ONCE duruyor
+                  cunku webde de bolum ust tarafta. Pazar BURAYA
+                  GECMIYOR: kunye ucu sembolun kendi yazimiyla
+                  calisiyor ve kart ters pazar denemesi YAPMIYOR. */}
+              <SirketKart sembol={sembol} />
               <TeknikKart satir={satir} />
-              <TemelKart satir={satir} />
+              {/* `sembol` AYRICA VERİLİYOR: kart piyasa değeri için
+                  künye ucuna kendi turunu atıyor ve o uç BIST'te `.IS`
+                  sonekini istiyor — `satir.sym` o soneki taşımayabilir
+                  (yukarıdaki ".IS GERİ KAZANIMI" notu). */}
+              <TemelKart satir={satir} sembol={sembol} />
               <TezKart satir={satir} />
               <RiskOdulKart satir={satir} />
               {/* ANALYZE TURUNUN DIŞI: kendi ucu, kendi zaman aşımı,
@@ -163,7 +213,7 @@ export default function HisseDetayScreen() {
                   Sembol `satir.sym` DEĞİL, ekranın çözdüğü `sembol`:
                   BIST'te `.IS` soneki ucun doğru pazarı bulması için
                   gerekiyor (yukarıdaki ".IS GERİ KAZANIMI" notu). */}
-              <BacktestKart sembol={sembol} market={satir.market} vade="orta" />
+              <BacktestKart sembol={sembol} market={satir.market} vade={vade} />
               {/* ANALYZE TURUNUN DIŞI (ŞERİT F): temettü alanları
                   `/api/yfin` künyesinde, `AnalyzeRow`da HİÇ YOK. Kendi
                   ucu, kendi zaman aşımı, kendi `Durum` gövdesi —
@@ -171,6 +221,42 @@ export default function HisseDetayScreen() {
                   çözdüğü `sembol`: BIST'te `.IS` soneki künye ucunun
                   doğru kaydı bulması için gerekiyor. */}
               <TemettuKart sembol={sembol} />
+              {/* ANALYZE TURUNUN DISI: webdeki "Katalizor / Risk"
+                  satirinin YAKLASAN TEMETTU bacagi. Gun farki ve 45 gun
+                  esigi webde TARAYICIDA hesaplaniyordu -> karar motora,
+                  hesap `/api/katalizor` ucuna tasindi; kart yalniz
+                  KAPALI KOD okuyor. TEMETTUKART'IN HEMEN ALTINDA: ust
+                  kart ham tarihleri, bu kart EN YAKIN tarihi, kalan gun
+                  sayisini ve bandini basiyor. Oynaklik bacagi
+                  `RiskOdulKart`ta — ayni ATR iki kez istenmiyor.
+                  SKORA GIRMEZ. PAZAR BURADAN GIDIYOR. */}
+              <KatalizorKart sembol={sembol} pazar={satir.market} />
+              {/* ANALYZE TURUNUN DISI: webde bu bolum
+                  TARAYICIDA hesaplaniyordu (`fillSpWhy`) ve native'e
+                  tasinamiyordu — karar motora, hesap `/api/neden`
+                  ucuna tasindi, kart yalniz KAPALI KOD okuyor.
+                  HABERDEN ONCE duruyor: bugunku hareketin OZETI, ve
+                  mansetleri okumadan once "ne oldu?" sorusuna
+                  cevabi o veriyor. SKORA GIRMEZ — kart bunu ekranda
+                  yaziyor. PAZAR BURADAN GIDIYOR; kart pazar
+                  CIKARIMI yapmiyor. */}
+              <HareketKart sembol={sembol} pazar={satir.market} />
+              {/* ANALYZE TURUNUN DIŞI: haber alanları `AnalyzeRow`da HİÇ
+                  YOK, haber ucu ayrı `maxDuration` kademesinde —
+                  `BacktestKart`/`TemettuKart` ile aynı gerekçe. Webdeki
+                  hisse sayfasının "Gelişmeler" bölümünün (app.js:7923)
+                  native karşılığı; detay ekranında KARŞILIĞI YOKTU.
+                  PAZAR BURADAN GİDİYOR: uç `market`i SEMBOL pazarı
+                  olarak alıyor ve kart pazar ÇIKARIMI yapmıyor. */}
+              <HaberKart sembol={sembol} market={satir.market} />
+              {/* ANALYZE TURUNUN DIŞI: içeriden işlem bildirimleri
+                  `AnalyzeRow`da HİÇ YOK, kendi ucu var. TEMEL SKORA
+                  DAHİL DEĞİL (kullanıcı tercihi) — kart bunu ekranda
+                  yazıyor. PAZAR BURADAN GİDİYOR: US ayağı SEC Form 4,
+                  BIST ayağı KAP bildirimi okuyor; kart pazar ÇIKARIMI
+                  yapmıyor. Haberden SONRA duruyor: ikisi de "ne oldu?"
+                  bölümü ama bu AYNI uçtan değil. */}
+              <IceridenKart sembol={sembol} pazar={satir.market} />
               {/* DEĞER UCU HİSSE ÖLÇMÜYOR: yalnız metal/kripto. Kartı
                   hisse sembolünde HİÇ basmıyoruz — her hissede "bu uç
                   bunu ölçmüyor" kutusu göstermek ekranı gürültüye

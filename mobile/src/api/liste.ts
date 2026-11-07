@@ -42,6 +42,7 @@ import { listeOku, listeYaz } from '@/lib/kalici';
 import {
   listelerDepo,
   listelerTazele,
+  listeBildirimAyarla as depoListeBildirimAyarla,
   listeEvreneAl as depoListeEvreneAl,
   listedenCikar as depoListedenCikar,
   listeleriAl as depoListeleriAl,
@@ -249,6 +250,10 @@ export async function listeYenidenAdlandir(id: string, ad: string) {
 
 export async function listeEvreneAl(id: string, dahil: boolean) {
   return depoListeEvreneAl(id, dahil);
+}
+
+export async function listeBildirimAyarla(id: string, acik: boolean) {
+  return depoListeBildirimAyarla(id, acik);
 }
 
 export async function listeyeEkle(id: string, sembol: string) {

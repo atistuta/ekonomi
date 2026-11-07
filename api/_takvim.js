@@ -103,7 +103,10 @@ export const PARA_BIRIMI = 'TRY';
 // Dönen maddelerin alan kümeleri BURADA yazılı — kaynak yarın yeni bir
 // kolon eklediğinde sözleşmemiz sessizce büyümesin.
 export const KAP_MADDE_ALANLARI = ['title', 'link', 'pubDate', 'pubDateHam', 'source', 'type', 'symbol', 'tickers'];
-export const TEMETTU_MADDE_ALANLARI = ['symbol', 'date', 'dateHam', 'amount', 'yieldPct', 'currency'];
+// `paid` 2026-10-29'da EKLENDİ (ikizi app.js:6681 `paid: d.date <= today`).
+// Mevcut altı alanın ADI/BİRİMİ/TİPİ DEĞİŞMEDİ — `yieldPct` hâlâ YÜZDE
+// PUANI, ×100 yapılmamış.
+export const TEMETTU_MADDE_ALANLARI = ['symbol', 'date', 'dateHam', 'amount', 'yieldPct', 'currency', 'paid'];
 
 // `type` DEĞERİ: `api/_haber.js`in `HABER_TURLERI` kümesindeki 'KAP'.
 // O dosya 'KAP'ı ilan ediyor ama ÜRETEMİYOR ("tek kaynağı Google News
@@ -229,7 +232,15 @@ export function kapZamani(s) {
  * @returns {string[]}
  */
 export function kapSemboller(baslik) {
-  const blok = String(baslik ?? '').match(/\*\*\*([^*]+)\*\*\*/);
+  // İKİZ REGEX — app.js:257 ile BİREBİR. ÖLÇÜM (2026-10-30, canlı
+  // /api/takvim?kapsam=hepsi, 30 KAP maddesi): eski `[^*]+` bloğu
+  // `***GRFIN ** EMVAR***` biçimini EŞLEMİYOR ve 16/30 maddede
+  // `symbol: null` basılıyordu — null kalan 16 maddenin 16'sı DA bu
+  // biçimdi, başka kaçırılan biçim YOK. Tembel `[\s\S]+?` blok İÇİNDEKİ
+  // iki-yıldız ayraçları geçer, kapanış hâlâ ÜÇ yıldız arar (`***A*** x
+  // ***B***` iki bloğu BİRLEŞTİRMEZ). Aynı 30 maddede sonuç: 16 düzeldi,
+  // 0 null kaldı, önceden ayrışan 14 maddede değişiklik YOK.
+  const blok = String(baslik ?? '').match(/\*\*\*([\s\S]+?)\*\*\*/);
   if (!blok) return [];
   return blok[1].split(/[\s*,]+/).filter((t) => /^[A-Z][A-Z0-9]{1,5}$/.test(t));
 }
@@ -307,6 +318,70 @@ export function ondalik(s) {
 }
 
 /**
+ * Epoch ms → Türkiye yerel takvim günü, `YYYY-MM-DD`.
+ *
+ * NİYE ELLE: `toISOString()` UTC basar; sunucu UTC koştuğu için TR'de
+ * 29 Ekim 01:00 olan an UTC'de hâlâ 28 Ekim'dir ve o gün ödenen temettü
+ * "ödenmedi" görünürdü. Offset `TAKVIM_SAAT_DILIMI` ile AÇIK (TR
+ * 2016'dan beri kalıcı UTC+03:00, yaz saati yok — dosya başındaki not).
+ *
+ * NİYE `Date` NESNESİ KULLANILMIYOR: bu dosyanın sözleşmesi "saat
+ * okumaz" (tests/uc-test.mjs ⑯c ve ⑯k `new Date(`/`Date.now(`
+ * geçmediğini DENETLİYOR). Bu yüzden gün→takvim çevrimi tamsayı
+ * aritmetiğiyle yapılıyor (Hinnant `civil_from_days`; 1970-01-01'i
+ * 0 sayan gün numarası ↔ Gregoryen tarih, artık yıl kuralı dâhil).
+ *
+ * SAF: saati KENDİ OKUMAZ, `ms` DIŞARIDAN gelir. Bu yüzden dışa
+ * aktarılıyor — test sabit bir anla ölçebiliyor.
+ *
+ * @param {number} ms  epoch milisaniye
+ * @returns {string|null} `YYYY-MM-DD`, ölçülemezse null
+ */
+export function trTakvimGunu(ms) {
+  if (!Number.isFinite(ms)) return null;
+  const kaydirma = 3 * 3600 * 1000;   // +03:00, TAKVIM_SAAT_DILIMI ile aynı
+  const gun = Math.floor((ms + kaydirma) / 86400000);
+  if (!Number.isFinite(gun)) return null;
+  // 719468 = 1970-01-01'in 0000-03-01 köklü gün sayısı (Mart başlangıçlı
+  // takvimde artık gün yılın SONUNDA kalır, bölme düzgünleşir).
+  const z = gun + 719468;
+  const cag = Math.floor(z / 146097);            // 400 yıllık çağ
+  const cg = z - cag * 146097;                   // çağ içindeki gün
+  const cy = Math.floor((cg - Math.floor(cg / 1460) + Math.floor(cg / 36524)
+    - Math.floor(cg / 146096)) / 365);           // çağ içindeki yıl
+  const yd = cg - (365 * cy + Math.floor(cy / 4) - Math.floor(cy / 100)); // yıl günü
+  const ap = Math.floor((5 * yd + 2) / 153);     // Mart köklü ay (0=Mart)
+  const d = yd - Math.floor((153 * ap + 2) / 5) + 1;
+  const ay = ap + (ap < 10 ? 3 : -9);            // 1..12
+  const yil = cy + cag * 400 + (ay <= 2 ? 1 : 0);
+  return `${yil}-${ikiHane(ay)}-${ikiHane(d)}`;
+}
+
+/**
+ * Bu temettü ÖDENDİ Mİ — İKİZİ app.js:6681 (`paid: d.date <= today`).
+ *
+ * TARİH KARŞILAŞTIRMASI BİR OLGUDUR, türetme değil: eşik, ağırlık ya da
+ * karar cümlesi taşımıyor. Web `Date` nesnesi karşılaştırıyor; burada iki
+ * `YYYY-MM-DD` dizgesi SÖZLÜK SIRASIYLA karşılaştırılıyor — sabit genişlikli
+ * ISO tarihte bu AYNI sonucu verir ve saat diliminden bağımsızdır.
+ * BUGÜN ÖDENEN `true` (web de `<=` kullanıyor, `<` değil).
+ *
+ * Ölçülemeyen `null` DÖNER, `false` DEĞİL: "bilmiyorum" ile "henüz
+ * ödenmedi" aynı şey değil.
+ *
+ * SAF.
+ * @param {string|null} tarih  maddenin `date` alanı
+ * @param {string|null} bugun  karşılaştırma günü (`YYYY-MM-DD`)
+ * @returns {boolean|null}
+ */
+export function temettuOdendi(tarih, bugun) {
+  const g = /^(20\d{2})-(\d{2})-(\d{2})$/;
+  if (typeof tarih !== 'string' || !g.test(tarih)) return null;
+  if (typeof bugun !== 'string' || !g.test(bugun)) return null;
+  return tarih <= bugun;
+}
+
+/**
  * temettuhisseleri.com temettü takvimi sayfasını maddelere ayır.
  *
  * İKİZİ: app.js:324 `parseTemettuHtml`. Regexler ve ay↔satır eşleme
@@ -326,9 +401,12 @@ export function ondalik(s) {
  *
  * @param {string} html
  * @param {number} azami
+ * @param {string|null} [bugun]  `YYYY-MM-DD` — `paid` için karşılaştırma
+ *        günü. VERİLMEZSE `paid: null` (uydurma "ödenmedi" YOK). Saat
+ *        buradan OKUNMUYOR; çağıran veriyor, fonksiyon SAF kalıyor.
  * @returns {{maddeler:object[], atlanan:number, tekrar:number}}
  */
-export function ayristirTemettu(html, azami = VARSAYILAN_TEMETTU) {
+export function ayristirTemettu(html, azami = VARSAYILAN_TEMETTU, bugun = null) {
   const metin = String(html ?? '');
   const sinir = Math.max(0, Math.min(AZAMI_TEMETTU, Number(azami) || 0));
   if (!metin || !sinir) return { maddeler: [], atlanan: 0, tekrar: 0 };
@@ -387,6 +465,10 @@ export function ayristirTemettu(html, azami = VARSAYILAN_TEMETTU) {
       // Verim ÖLÇÜLEMEDİYSE null, 0 DEĞİL.
       yieldPct: verimYuzde,
       currency: PARA_BIRIMI,
+      // GEÇMİŞ/GELECEK DİLİMİ: istemci `paid` ile kendi ikiye bölüyor
+      // (ikizi app.js:6690 — gelecek üstte, geçmiş altta). Uçta sıralama
+      // ya da "yakın geçmiş" penceresi YOK; o bir EKRAN kararı.
+      paid: temettuOdendi(tarih, bugun),
     });
   }
   return { maddeler: out, atlanan, tekrar };
@@ -469,8 +551,11 @@ export async function kapCek(sec = {}) {
 export async function temettuCek(sec = {}) {
   const sayac = sec.sayac || bosTakvimSayac();
   const azami = Number(sec.azami) || VARSAYILAN_TEMETTU;
+  // `bugun` ÇAĞIRANDAN gelir (rota `trTakvimGunu(Date.now())` veriyor);
+  // verilmezse `paid` alanı null kalır, uydurulmaz.
+  const bugun = typeof sec.bugun === 'string' ? sec.bugun : null;
   const r = await sayfaCek(TEMETTU_URL, { sayac });
   if (r.govde === null) return { maddeler: null, atlanan: null, tekrar: null, sayac };
-  const a = ayristirTemettu(r.govde, azami);
+  const a = ayristirTemettu(r.govde, azami, bugun);
   return { maddeler: a.maddeler, atlanan: a.atlanan, tekrar: a.tekrar, sayac };
 }

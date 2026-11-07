@@ -31,6 +31,11 @@ import { Card } from '@/components';
 import { space, type, useTheme } from '@/theme';
 
 import { ListeBlogu } from './ListeBlogu';
+import { SenkronKart } from './SenkronKart';
+import { HamleKart } from './HamleKart';
+import { NakitKart } from './NakitKart';
+import { SepetEkleKart } from './SepetEkleKart';
+import { SepetKart } from './SepetKart';
 import { YeniListeKart } from './YeniListeKart';
 
 export type ListelerKartProps = Record<string, never>;
@@ -88,6 +93,20 @@ export function ListelerKart() {
       ))}
 
       <YeniListeKart mevcutSayi={listeler.length} />
+
+      <SepetKart />
+
+      {/* SIRA: oku → yaz → kayıt. `SepetKart` sepeti ve ölçülen fiyatları
+          gösteriyor; altındaki iki kart ona YAZIYOR; `HamleKart` de yazılan
+          her şeyin günlüğü. Nakit ayrı kartta çünkü `sepeteEkle` `cash`
+          girdisini reddediyor (gerekçe kartların başlıklarında). */}
+      <SepetEkleKart />
+
+      <NakitKart />
+
+      <HamleKart />
+
+      <SenkronKart />
     </View>
   );
 }

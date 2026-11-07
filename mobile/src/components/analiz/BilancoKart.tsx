@@ -66,7 +66,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { ApiError, IstekDurum, YfinKunye, YfinResponse } from '@/api';
+import type { ApiError, IstekDurum, YfinKunye, YfinResponse, YfinSenaryo } from '@/api';
 import { YFIN_AZAMI_SEMBOL } from '@/api';
 import { Card, Durum, Pill, VeriYok } from '@/components';
 import { formatCompact, formatGunAyYil, formatOran, formatPrice } from '@/lib/format';
@@ -141,6 +141,21 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
   // Uç 12'den fazlasını SESSİZCE kırpıyor (`api/yfin.ts` YFIN_AZAMI_SEMBOL
   // gerekçesi) — aşım varsa kullanıcıya söylenir, uydurulmaz.
   const asim = Math.max(0, semboller.length - YFIN_AZAMI_SEMBOL);
+
+  // SENARYO NOTU — DORT HAL AYRI CUMLE. `undefined` ile `null`i ayni
+  // cumleye koymak "uc gondermedi" ile "uc olcemedi"yi karistirmak
+  // olurdu; eski ucla calisan istemci her karta yanlis bir eksiklik
+  // notu basardi. Bos nesne GECERLI BIR OLCUM: "olctum, cikmadi".
+  // Buradaki tek islem `Object.keys(...).length` — sayma, hesap degil.
+  const senaryoAlan = veri?.senaryo;
+  let senaryoNotu: string | null = null;
+  if (durum === 'veri' && takvimli.length) {
+    if (senaryoAlan === undefined)
+      senaryoNotu = 'Bilanco senaryosu bu surumde uctan gelmiyor.';
+    else if (senaryoAlan === null) senaryoNotu = 'Bilanco senaryosu ucta olculemedi.';
+    else if (!Object.keys(senaryoAlan).length)
+      senaryoNotu = 'Senaryo olculdu ama hicbir sembolde analist dagilimi cikmadi.';
+  }
 
   return (
     <Card
@@ -227,7 +242,16 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
             ) : null}
 
             {gorunen.map((k) => (
-              <TakvimSatiri key={k.symbol} kunye={k} />
+              // SENARYO SEMBOLLE GELIYOR, indeksle degil: bu liste
+              // once `ok`a gore suzuldu, sonra tarihe gore siralandi ve
+              // pazar suzgecinden gecti. Indeks tasinsa senaryo sessizce
+              // baska hissenin satirina dusebilirdi.
+              //
+              // `veri?.senaryo?.[...]` ucun DORT HALINI oldugu gibi
+              // tasiyor: alan yok / `null` / sembol anahtari yok hepsi
+              // `undefined`a dusuyor ve satir hicbir sey cizmiyor; ayrimi
+              // SATIR DEGIL kart dibindeki not yapiyor (asagida).
+              <TakvimSatiri key={k.symbol} kunye={k} senaryo={veri?.senaryo?.[k.symbol]} />
             ))}
 
             {!takvimli.length ? (
@@ -253,6 +277,15 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
                 <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                   {takvimsiz.join(', ') +
                     ' — künye geldi ama takvim alanı boş (veri cevabı, kesinti değil).'}
+                </Text>
+              </View>
+            ) : null}
+
+            {senaryoNotu ? (
+              <View style={styles.dipnot}>
+                <Pill label="senaryo" tone="neutral" glyph={null} size="sm" />
+                <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
+                  {senaryoNotu}
                 </Text>
               </View>
             ) : null}
@@ -290,7 +323,21 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
  * `currency` kullanmak gelirin başına yanlış simge koymak olurdu.
  * Bilinmiyorsa simge UYDURULMAZ (`formatPrice` zaten basmaz).
  */
-function TakvimSatiri({ kunye }: { kunye: YfinKunye }) {
+function TakvimSatiri({
+  kunye,
+  senaryo,
+}: {
+  kunye: YfinKunye;
+  /**
+   * Ucun bu sembol icin donderdigi senaryo. HESAP MOTORDA: tepki
+   * katsayisi (K=2,0) ve +-%40 tavani `api/_motor.js` `earnScenario`da;
+   * BURADA carpma, bolme, esik, karsilastirma YOK (S5.1).
+   *
+   * `undefined` = yok (uc gondermedi / olcemedi / bu sembolde cikmadi)
+   * -> hicbir sey cizilmez. 0 UYDURULMAZ.
+   */
+  senaryo?: YfinSenaryo;
+}) {
   const { colors } = useTheme();
   const e = kunye.earnings;
   if (!e) return null;
@@ -381,6 +428,36 @@ function TakvimSatiri({ kunye }: { kunye: YfinKunye }) {
         deger={e.numAnalysts != null ? String(e.numAnalysts) : '—'}
         alt={null}
       />
+      {/* SENARYO — uc kutu, HAM SAYI. `px` fiyat, `ret` KESIR
+          (`formatOran`, `formatPercent` DEGIL: o yuzde PUANI bekliyor,
+          lib/format.ts:63-67). Olcek degistirmek motorun isi. */}
+      {senaryo ? (
+        'tight' in senaryo ? (
+          // MAKINE KODU `tight` — analistler tek noktada. Uc ozdes %0
+          // kutusu cizmek "senaryo olctum" demek olurdu; cumle secilir.
+          <Text style={[type.micro, { color: colors.textFaint }]}>
+            Senaryo bandi yok: analist beklentileri tek noktada toplanmis, dagilim sifir.
+          </Text>
+        ) : (
+          <>
+            <Olcum
+              etiket="Boga senaryosu"
+              deger={formatPrice(senaryo.bull.px, kur) + '  ·  ' + formatOran(senaryo.bull.ret, 4)}
+              alt="ham fiyat · kesir — mekanik cerceve, tahmin degil"
+            />
+            <Olcum
+              etiket="Baz senaryo"
+              deger={formatPrice(senaryo.base.px, kur) + '  ·  ' + formatOran(senaryo.base.ret, 4)}
+              alt="konsensus tutarsa"
+            />
+            <Olcum
+              etiket="Ayi senaryosu"
+              deger={formatPrice(senaryo.bear.px, kur) + '  ·  ' + formatOran(senaryo.bear.ret, 4)}
+              alt="ham fiyat · kesir"
+            />
+          </>
+        )
+      ) : null}
     </View>
   );
 }

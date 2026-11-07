@@ -28,7 +28,18 @@
     { "source": "/api/backtest", "destination": "/api/proxy?__rota=backtest" },
     { "source": "/api/deger",    "destination": "/api/proxy?__rota=deger" },
     { "source": "/api/arama",    "destination": "/api/proxy?__rota=arama" },
-    { "source": "/api/takvim",   "destination": "/api/proxy?__rota=takvim" }
+    { "source": "/api/takvim",   "destination": "/api/proxy?__rota=takvim" },
+
+    { "source": "/api/degisim",  "destination": "/api/proxy?__rota=degisim" },
+    { "source": "/api/gundem",   "destination": "/api/proxy?__rota=gundem" },
+    { "source": "/api/hareket", "destination": "/api/proxy?__rota=hareket" },
+    { "source": "/api/iceriden", "destination": "/api/proxy?__rota=iceriden" },
+    { "source": "/api/kripto",   "destination": "/api/proxy?__rota=kripto" },
+    { "source": "/api/kur",      "destination": "/api/proxy?__rota=kur" },
+    { "source": "/api/mali",     "destination": "/api/proxy?__rota=mali" },
+    { "source": "/api/metal",    "destination": "/api/proxy?__rota=metal" },
+    { "source": "/api/neden",    "destination": "/api/proxy?__rota=neden" },
+    { "source": "/api/katalizor", "destination": "/api/proxy?__rota=katalizor" }
   ],
   "regions": ["fra1"],
   "headers": [

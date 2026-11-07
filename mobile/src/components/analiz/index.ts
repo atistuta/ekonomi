@@ -28,5 +28,7 @@
 export { BilancoKart, type BilancoKartProps } from './BilancoKart';
 export { KarsilastirKart, type KarsilastirKartProps } from './KarsilastirKart';
 export { KRIPTO_SEMBOLLER, KriptoKart, type KriptoKartProps } from './KriptoKart';
+export { MaliTablolarKart, type MaliTablolarKartProps } from './MaliTablolarKart';
 export { METAL_SEMBOLLER, MetalKart, type MetalKartProps } from './MetalKart';
 export { TemettuKart, type TemettuKartProps } from './TemettuKart';
+export { TezDefteriKart, type TezDefteriKartProps } from './TezDefteriKart';

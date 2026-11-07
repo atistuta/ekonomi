@@ -21,13 +21,21 @@
 import { useColorScheme } from 'react-native';
 
 import { darkColors, lightColors, type ColorTokens } from './colors';
-import { elevation, gutter, hitSlopMin, maxContentWidth, radius, space } from './layout';
+import {
+  elevation,
+  gutter,
+  hitSlopMin,
+  maxContentWidth,
+  olcumDegerSutunu,
+  radius,
+  space,
+} from './layout';
 import { numeric, textRole, type, weight } from './typography';
 
 export type { ColorTokens } from './colors';
 export type { Signal, Tone } from './signal';
 export { signalOf, toneColors } from './signal';
-export { elevation, gutter, hitSlopMin, maxContentWidth, radius, space };
+export { elevation, gutter, hitSlopMin, maxContentWidth, olcumDegerSutunu, radius, space };
 export { numeric, textRole, type, weight };
 export { darkColors, lightColors };
 

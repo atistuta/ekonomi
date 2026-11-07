@@ -34,6 +34,22 @@
 //  (api/_haber.js:528). Hata kutusu değil, EKSİK ÖLÇÜM notu basılıyor;
 //  gelen manşetler gerçek ve gösteriliyor.
 //
+//  ── NEDEN "TÜMÜ" ÇİPİ YOK (ÖLÇÜLDÜ 2026-10-29) ────────────────────
+//  Webin Genel sekmesi maddeyi `x.region` alanıyla taşıyıp HEPSİ/TR/
+//  DÜNYA diye süzüyor (app.js:6570). Bu uçta O ALAN YOK: `GundemMadde`
+//  altı alan sayıyor (title · link · pubDate · source · type · symbol)
+//  ve `api/_haber.js` ile `api/news.js` içinde `region` dizgisi HİÇ
+//  geçmiyor. Yerel, MADDENİN alanı değil İSTEĞİN parametresi
+//  (`?market=TR|US`) — bu yüzden aşağıdaki çipler istemcide süzgeç
+//  değil, AYRI BİR ÖLÇÜM turu açıyor; doğru karşılığı da bu.
+//
+//  "Tümü" çipi iki turu (TR + US) istemcide birleştirmek demekti ve o
+//  birleşik listede hangi manşetin hangi yerelden geldiği SÖYLENEMEZDİ
+//  (madde yerel taşımıyor); dahası "kaynak başına ölçüm" muhasebesi iki
+//  turun beslemelerine bölünüp hangi kaynağın düştüğü bulanıklaşırdı.
+//  Ölçemediğimiz bir şeyi birleştirip tek liste gibi sunmak yerine çip
+//  AÇILMADI.
+//
 //  ── BURADA HESAP YOK ──────────────────────────────────────────────
 //  Manşetten yön/duygu çıkarmak ⚡ Nabız'ın işi ve o mantık MOTORDA.
 //  Bu kart `adet`, `tekrar`, `besleme[].adet` sayılarını SUNUCUDAN
@@ -68,7 +84,7 @@ import {
   Pill,
   VeriYok,
 } from '@/components';
-import { HaberSatiri } from '@/components/kesfet';
+import { DuyarlilikOzeti, HaberSatiri } from '@/components/kesfet';
 import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
 
 export type PiyasaGundemiKartiProps = {
@@ -189,6 +205,14 @@ export function PiyasaGundemiKarti({ limit }: PiyasaGundemiKartiProps) {
           </Text>
         </View>
       ) : null}
+
+      {/* DUYARLILIK ÖZETİ — ucun `duyarlilik` katmanı (api/news.js
+          gündem dalı). Alan HİÇ gelmediyse bileşen hiçbir şey basmıyor;
+          `null` ise "ölçemedim" der. YEREL ÇİPİ UCUN PARAMETRESİ, ekran
+          süzgeci DEĞİL: uç TR/US için ayrı ölçüm döndürüyor, bu yüzden
+          `suzuldu` notu YOK — puan ekranda basılan manşetlerin tamamını
+          kapsıyor. Manşetler bu ölçüme BAĞLI DEĞİL. */}
+      {durum === 'veri' && !eksik ? <DuyarlilikOzeti duyarlilik={veri?.duyarlilik} /> : null}
 
       {durum === 'veri' && veri && veri.adet === 0 && !eksik ? (
         <VeriYok

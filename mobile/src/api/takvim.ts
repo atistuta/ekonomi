@@ -98,6 +98,17 @@ export const TAKVIM_AZAMI_KAP = 60;
 export const TAKVIM_AZAMI_TEMETTU = 400;
 
 /**
+ * Ucun temettu icin ILAN ETTIGI varsayilan adet. Istemci bir adet
+ * GONDERMEDIGINDE ucun uyguladigi tavan budur — sayi UYDURULMADI,
+ * `api/_takvim.js` sozlesmesinden okundu.
+ *
+ * NEDEN BURADA: tavanin dolup dolmadigini gorebilmek icin istemcinin
+ * "ne sorduguna" karsilik gelen sayiyi bilmesi gerekiyor (gelecek
+ * temettu tuzagi — `TakvimResponse.temettuGelecekAdet` notu).
+ */
+export const TAKVIM_VARSAYILAN_TEMETTU = 120;
+
+/**
  * Tek KAP duyurusu. Alan kümesi ucun ilan ettiği küme
  * (`api/_takvim.js` `KAP_MADDE_ALANLARI`) — FAZLA alan türetilmedi.
  *
@@ -151,6 +162,16 @@ export type TakvimTemettuMadde = {
   yieldPct: number;
   /** Makine kodu ('TRY'), ekran simgesi değil (`PARA_BIRIMI`). */
   currency: string;
+  /**
+   * Odeme gunu GECTI mi — `temettuOdendi(tarih, bugun)`
+   * (api/_takvim.js). UC DEGER, UCU DE AYRI:
+   *   · `true`  → tarih BUGUN ya da GECMIS
+   *   · `false` → tarih GELECEK
+   *   · `null`  → OLCULEMEDI (uca `bugun` gelmedi / tarih cozulmedi)
+   *
+   * ⚠️ `null` "odenmedi" DEGIL. `false` ile `null` ayni yazilamaz.
+   */
+  paid: boolean | null;
 };
 
 /**
@@ -174,6 +195,24 @@ export type TakvimResponse = {
   temettuAtlanan?: number | null;
   /** TEKİLLEŞTİRİLEN satır sayısı. */
   temettuTekrar?: number | null;
+  /**
+   * `paid === true` olan satir sayisi — UCUN saydigi adet
+   * (api/_kesif.js sozlesmesi + api/_takvim.js govdesi).
+   */
+  temettuGecmisAdet?: number | null;
+  /**
+   * `paid === false` olan satir sayisi (GELECEK odemeler).
+   *
+   * ⚠️ OLCULMUS TUZAK: kaynak aylari OCAK→ARALIK siralı basiyor ve uc
+   * maddeleri DOKUMAN SIRASINDA tavana kadar aliyor. Yilin ikinci
+   * yarisinda varsayilan tavan (120) GECMIS satirlarla dolabiliyor ve
+   * gelecek temettu HIC gorunmeyebiliyor. Istemci `temettuGelecekAdet
+   * === 0` ve basilan adet tavana degmis ise `temettuAdet=400` ile
+   * YENIDEN SORMALI (uc bunu kendisi yapmiyor).
+   */
+  temettuGelecekAdet?: number | null;
+  /** Ucun `paid` kiyasinda kullandigi gun (ISO) — `null` → yoktu. */
+  temettuBugun?: string | null;
   /**
    * Şekli `HaberSayac` ile BİREBİR aynı (ölçüldü: aynı altı alan).
    * Bu yüzden `haberOlcumEksik()` bu gövdede kullanılabiliyor ve

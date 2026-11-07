@@ -60,11 +60,15 @@
     },
     {
       "name": "ta",
-      "lines": 771
+      "lines": 1068
+    },
+    {
+      "name": "mum",
+      "lines": 62
     },
     {
       "name": "fa-core",
-      "lines": 26
+      "lines": 165
     },
     {
       "name": "fmt",
@@ -72,7 +76,7 @@
     },
     {
       "name": "composite",
-      "lines": 15
+      "lines": 36
     },
     {
       "name": "holistic",
@@ -80,11 +84,103 @@
     },
     {
       "name": "fa-bist",
-      "lines": 154
+      "lines": 180
     },
     {
       "name": "fa-us",
-      "lines": 292
+      "lines": 316
+    },
+    {
+      "name": "causal",
+      "lines": 68
+    },
+    {
+      "name": "makro-faz",
+      "lines": 117
+    },
+    {
+      "name": "nabiz-yon",
+      "lines": 88
+    },
+    {
+      "name": "nabiz-esik",
+      "lines": 8
+    },
+    {
+      "name": "nabiz-gunici",
+      "lines": 27
+    },
+    {
+      "name": "nabiz-gerceklik",
+      "lines": 103
+    },
+    {
+      "name": "backtest",
+      "lines": 99
+    },
+    {
+      "name": "fmt-kisa",
+      "lines": 11
+    },
+    {
+      "name": "crypto",
+      "lines": 117
+    },
+    {
+      "name": "metal",
+      "lines": 105
+    },
+    {
+      "name": "haber-skor",
+      "lines": 50
+    },
+    {
+      "name": "firsat",
+      "lines": 50
+    },
+    {
+      "name": "scan",
+      "lines": 92
+    },
+    {
+      "name": "sektor",
+      "lines": 216
+    },
+    {
+      "name": "radar",
+      "lines": 109
+    },
+    {
+      "name": "kiyas-uc",
+      "lines": 19
+    },
+    {
+      "name": "earn-senaryo",
+      "lines": 16
+    },
+    {
+      "name": "tema-norm",
+      "lines": 8
+    },
+    {
+      "name": "tema-ilgi",
+      "lines": 23
+    },
+    {
+      "name": "tema-kanit",
+      "lines": 36
+    },
+    {
+      "name": "gundem-sozluk",
+      "lines": 157
+    },
+    {
+      "name": "gundem-skor",
+      "lines": 131
+    },
+    {
+      "name": "endeks-esik",
+      "lines": 8
     }
   ],
   "symbols": {
@@ -168,82 +264,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 73.196757
+            "score": 73.196757,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 12.362162
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 70.783943
+            "score": 70.783943,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 19.447247
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 62.663199
+            "score": 62.663199,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 12.962
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 66.163317
+            "score": 66.163317,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": 15.315865
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 95.596502
+            "score": 95.596502,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 53.486883
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 38.743687
+            "score": 38.743687,
+            "kod": "netTrend.azaldi",
+            "sayilar": {
+              "pct": -6.256313
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 42.543258
+            "score": 42.543258,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 0.446593,
+              "nakit": 316495910210,
+              "borc": 708690498442,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 59.890694
+            "score": 59.890694,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 2.681042
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 71.807488
+            "score": 71.807488,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.838681
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 43.59065
+            "score": 43.59065,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 0.987188
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 60.626752
+            "score": 60.626752,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.893376,
+              "stok": 48836793164,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 69.64089
+            "score": 69.64089,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 48450545378,
+              "pct": 4.306144,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 218810548035,
+              "netKar": 139092773392,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 8.099208,
+              "simdi": 5.915477
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 42
+            "score": 42,
+            "kod": "gmUp.zayifliyor",
+            "sayilar": {
+              "onceki": 19.171217,
+              "simdi": 16.280959
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 45
+            "score": 45,
+            "kod": "crUp.zayifliyor",
+            "sayilar": {
+              "onceki": 1.007001,
+              "simdi": 0.987188
+            }
           }
         ]
       },
@@ -336,82 +508,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 82.475947
+            "score": 82.475947,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 16.579976
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 84.781387
+            "score": 84.781387,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 27.100771
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 58.775886
+            "score": 58.775886,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 11.88219
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 88.040846
+            "score": 88.040846,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": 35.051057
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 93.873207
+            "score": 93.873207,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 47.024528
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 95
+            "score": 95,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 76.813055
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 100
+            "score": 100,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 5.784481,
+              "nakit": 34251789455,
+              "borc": 5921324571,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 89.616077
+            "score": 89.616077,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 0.25542
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 91.237904
+            "score": 91.237904,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.171004
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 72.036753
+            "score": 72.036753,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.386239
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 50.953862
+            "score": 50.953862,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.802692,
+              "stok": 86741749501,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 73.259617
+            "score": 73.259617,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 11795450370,
+              "pct": 5.551082,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 57586211067,
+              "netKar": 35230657924,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": 6.269718,
+              "simdi": 6.932022
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 31.744106,
+              "simdi": 31.825237
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 45
+            "score": 45,
+            "kod": "crUp.zayifliyor",
+            "sayilar": {
+              "onceki": 1.52117,
+              "simdi": 1.386239
+            }
           }
         ]
       },
@@ -504,82 +752,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 26.429173
+            "score": 26.429173,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 0.332366
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 90.760325
+            "score": 90.760325,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 31.140488
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 18.794125
+            "score": 18.794125,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 0.233566
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 20.787485
+            "score": 20.787485,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": -7.895842
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 79.521327
+            "score": 79.521327,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 24.401659
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 15
+            "score": 15,
+            "kod": "netTrend.azaldi",
+            "sayilar": {
+              "pct": -95.598733
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 62.13377
+            "score": 62.13377,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 0.975938,
+              "nakit": 135983623562,
+              "borc": 139336326173,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 70.066902
+            "score": 70.066902,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 2.017376
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 82.825228
+            "score": 82.825228,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.532633
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 93.149638
+            "score": 93.149638,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 2.143705
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 87.166329
+            "score": 87.166329,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 1.379158,
+              "stok": 105259072436,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 100
+            "score": 100,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 56251603677,
+              "pct": 22.865659,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 76608436400,
+              "netKar": 817650057,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 3.338292,
+              "simdi": 0.124316
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 42
+            "score": 42,
+            "kod": "gmUp.zayifliyor",
+            "sayilar": {
+              "onceki": 9.803298,
+              "simdi": 8.88645
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 45
+            "score": 45,
+            "kod": "crUp.zayifliyor",
+            "sayilar": {
+              "onceki": 2.396894,
+              "simdi": 2.143705
+            }
           }
         ]
       },
@@ -672,82 +996,159 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 40.469566
+            "score": 40.469566,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 3.597573
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 37.062562
+            "score": 37.062562,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 5.95705
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 45.463331
+            "score": 45.463331,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 8.07745
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 20.929329
+            "score": 20.929329,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": -7.817039
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 39.345482
+            "score": 39.345482,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 2.172741
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 86.852698
+            "score": 86.852698,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 41.198533
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 100
+            "score": 100,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 3.772137,
+              "nakit": 126280941414,
+              "borc": 33477290812,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 67107916108,
+              "birim": "TRY"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 92.010803
+            "score": 92.010803,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.135873
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 72.704597
+            "score": 72.704597,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.39578
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 73.187044
+            "score": 73.187044,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 1.029676,
+              "stok": 73181555374,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 67.303686
+            "score": 67.303686,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 35384483460,
+              "pct": 3.618731,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 58248914527,
+              "netKar": 35177601845,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": 4.191254,
+              "simdi": 5.046282
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 8.394807,
+              "simdi": 9.782824
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 1.247516,
+              "simdi": 1.39578
+            }
           }
         ]
       },
@@ -840,82 +1241,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 36.172624
+            "score": 36.172624,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 2.598285
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 36.152338
+            "score": 36.152338,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 5.672606
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 56.364521
+            "score": 56.364521,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 11.212367
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 79.884848
+            "score": 79.884848,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": 24.85606
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 93.299615
+            "score": 93.299615,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 44.873556
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 35.557094
+            "score": 35.557094,
+            "kod": "netTrend.azaldi",
+            "sayilar": {
+              "pct": -9.442906
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 38.404924
+            "score": 38.404924,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 0.356629,
+              "nakit": 16665054016,
+              "borc": 46729413471,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 83.545236
+            "score": 83.545236,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 0.905868
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 88.057942
+            "score": 88.057942,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.315548
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 47.022181
+            "score": 47.022181,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.028888
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 23.797869
+            "score": 23.797869,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.526406,
+              "stok": 64116535347,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 64.333593
+            "score": 64.333593,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 23309609902,
+              "pct": 2.745174,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 48166785145,
+              "netKar": 22062351035,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 7.891897,
+              "simdi": 5.541444
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 17.479401,
+              "simdi": 19.33906
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 0.99154,
+              "simdi": 1.028888
+            }
           }
         ]
       },
@@ -1008,82 +1485,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 42.589729
+            "score": 42.589729,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 4.090635
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 55.830043
+            "score": 55.830043,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 12.65002
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 90.139714
+            "score": 90.139714,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 21.783095
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 80.499899
+            "score": 80.499899,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": 25.624873
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 93.267905
+            "score": 93.267905,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 44.754644
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 23.675062
+            "score": 23.675062,
+            "kod": "netTrend.azaldi",
+            "sayilar": {
+              "pct": -21.324938
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 50.07148
+            "score": 50.07148,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 0.640874,
+              "nakit": 75334761953,
+              "borc": 117549953890,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 75.569421
+            "score": 75.569421,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 1.658516
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 64.900639
+            "score": 64.900639,
+            "kod": "d2e.orta",
+            "sayilar": {
+              "oran": 1.045807
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 61.599825
+            "score": 61.599825,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.23714
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 68.162678
+            "score": 68.162678,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.964025,
+              "stok": 58091478516,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82.957457
+            "score": 82.957457,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 95820482501,
+              "pct": 9.793887,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 123764030731,
+              "netKar": 40021552986,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 11.893242,
+              "simdi": 7.539399
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 42
+            "score": 42,
+            "kod": "gmUp.zayifliyor",
+            "sayilar": {
+              "onceki": 9.17729,
+              "simdi": 8.351154
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 45
+            "score": 45,
+            "kod": "crUp.zayifliyor",
+            "sayilar": {
+              "onceki": 1.247706,
+              "simdi": 1.23714
+            }
           }
         ]
       },
@@ -1176,82 +1729,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 43.27865
+            "score": 43.27865,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 4.250849
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 66.932579
+            "score": 66.932579,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 17.696627
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 30.051826
+            "score": 30.051826,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 3.544655
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 52.682669
+            "score": 52.682669,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": 8.841334
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 66.996351
+            "score": 66.996351,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 15.712548
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 95
+            "score": 95,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 63.777321
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 41.167813
+            "score": 41.167813,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 0.416692,
+              "nakit": 48457635616,
+              "borc": 116291371369,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 16.76008
+            "score": 16.76008,
+            "kod": "ndEbitda.yuksek",
+            "sayilar": {
+              "kat": 5.63384
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 80.350827
+            "score": 80.350827,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.601366
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 63.19268
+            "score": 63.19268,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.259895
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 51.550788
+            "score": 51.550788,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.808289,
+              "stok": 59724921579,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 67.379604
+            "score": 67.379604,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 9626948142,
+              "pct": 3.64106,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 46789811790,
+              "netKar": 11239227652,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": 1.31391,
+              "simdi": 1.882757
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 22.644029,
+              "simdi": 27.606439
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 45
+            "score": 45,
+            "kod": "crUp.zayifliyor",
+            "sayilar": {
+              "onceki": 1.686634,
+              "simdi": 1.259895
+            }
           }
         ]
       },
@@ -1344,82 +1973,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 33.098496
+            "score": 33.098496,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 1.883371
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 18
+            "score": 18,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": -5.545252
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 28.775957
+            "score": 28.775957,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 3.169399
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 40.292045
+            "score": 40.292045,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": 2.646023
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 66.880387
+            "score": 66.880387,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 15.657327
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 95
+            "score": 95,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 689.133782
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 53.646113
+            "score": 53.646113,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 0.74017,
+              "nakit": 524308994623,
+              "borc": 708363129892,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 22.613247
+            "score": 22.613247,
+            "kod": "ndEbitda.yuksek",
+            "sayilar": {
+              "kat": 5.183596
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 60.229511
+            "score": 60.229511,
+            "kod": "d2e.orta",
+            "sayilar": {
+              "oran": 1.240437
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 30.908147
+            "score": 30.908147,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 0.871892
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 52.320192
+            "score": 52.320192,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.815502,
+              "stok": 229733823821,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 34
+            "score": 34,
+            "kod": "fcfPos.negatif",
+            "sayilar": {
+              "tutar": -344607212448,
+              "pct": -15.916248,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 40
+            "score": 40,
+            "kod": "accruals.donusmuyor",
+            "sayilar": {
+              "ocf": -120061826866,
+              "netKar": 40777403397,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": -0.135307,
+              "simdi": 0.651196
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 20.343608,
+              "simdi": 25.527543
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 45
+            "score": 45,
+            "kod": "crUp.zayifliyor",
+            "sayilar": {
+              "onceki": 0.897887,
+              "simdi": 0.871892
+            }
           }
         ]
       },
@@ -1512,82 +2217,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 38.300672
+            "score": 38.300672,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 3.09318
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 93.616773
+            "score": 93.616773,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 35.42516
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 22.292637
+            "score": 22.292637,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 1.26254
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 62.455115
+            "score": 62.455115,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": 13.550055
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 86.301538
+            "score": 86.301538,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 32.876923
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 95
+            "score": 95,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 122.305512
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 67.617289
+            "score": 67.617289,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 1.109935,
+              "nakit": 386249091379,
+              "borc": 347992389312,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 67.768142
+            "score": 67.768142,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 2.167295
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 67.99999
+            "score": 67.99999,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.944445
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 21.594387
+            "score": 21.594387,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 0.787222
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 48.016681
+            "score": 48.016681,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.775156,
+              "stok": 42993722629,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 34
+            "score": 34,
+            "kod": "fcfPos.negatif",
+            "sayilar": {
+              "tutar": -191976069106,
+              "pct": -66.207032,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 102719948972,
+              "netKar": 8969084555,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": -0.999455,
+              "simdi": 0.185706
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 96.528247,
+              "simdi": 103.520643
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 0.776801,
+              "simdi": 0.787222
+            }
           }
         ]
       },
@@ -1680,82 +2461,158 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 58.053499
+            "score": 58.053499,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 7.68686
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 48.968931
+            }
           },
           {
             "key": "roe",
             "weight": 0.1,
-            "score": 41.079827
+            "score": 41.079827,
+            "kod": "roe.nominal-try",
+            "sayilar": {
+              "pct": 6.788184
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.08,
-            "score": 83.760565
+            "score": 83.760565,
+            "kod": "revYoY.nominal-try",
+            "sayilar": {
+              "pct": 29.700706
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.07,
-            "score": 93.0823
+            "score": 93.0823,
+            "kod": "revCagr.nominal-try",
+            "sayilar": {
+              "pct": 44.058626
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.07,
-            "score": 15
+            "score": 15,
+            "kod": "netTrend.azaldi",
+            "sayilar": {
+              "pct": -32.648533
+            }
           },
           {
             "key": "cashLt",
             "weight": 0.08,
-            "score": 58.088178
+            "score": 58.088178,
+            "kod": "cashLt.oran",
+            "sayilar": {
+              "oran": 0.86356,
+              "nakit": 124808964058,
+              "borc": 144528339559,
+              "birim": "TRY"
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 88.406713
+            "score": 88.406713,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 0.384995
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 79.976706
+            "score": 79.976706,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.611758
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 84.863909
+            "score": 84.863909,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.702663
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 93.543212
+            "score": 93.543212,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 1.692902,
+              "stok": 1057415725,
+              "birim": "TRY"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82.210474
+            "score": 82.210474,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 25531178807,
+              "pct": 9.467082,
+              "birim": "TRY"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 132061227843,
+              "netKar": 20730209508,
+              "birim": "TRY"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 6.830243,
+              "simdi": 3.516772
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 25.890911,
+              "simdi": 29.843722
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 1.251653,
+              "simdi": 1.702663
+            }
           }
         ]
       },
@@ -1844,92 +2701,173 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 100
+            "score": 100,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 63.663069
+            }
           },
           {
             "key": "ebitdaMargin",
             "weight": 0.07,
-            "score": 100
+            "score": 100,
+            "kod": "ebitdaMargin.olculdu",
+            "sayilar": {
+              "pct": 66.431
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 99.565083
+            "score": 99.565083,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 44.347625
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 84.23296
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 100
+            "score": 100,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 60.22381
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 100
+            "score": 100,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 83.375903
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 100
+            "score": 100,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 100.045095
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 95
+            "score": 95,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 122.732889
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 38199000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 91.794309
+            "score": 91.794309,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.145713
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 100
+            "score": 100,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 4.588949
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 100
+            "score": 100,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 3.854971,
+              "stok": 31575000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82
+            "score": 82,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 127006000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 40
+            "score": 40,
+            "kod": "accruals.donusmuyor",
+            "sayilar": {
+              "ocf": 134360000000,
+              "netKar": 192880000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 61.529771,
+              "simdi": 60.22381
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 69.847111,
+              "simdi": 74.67439
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 4.214,
+              "simdi": 4.588949
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 46.419469
+            "score": 46.419469,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 28.986094
+            }
           }
         ]
       },
@@ -2018,87 +2956,164 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 100
+            "score": 100,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 40.305389
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 100
+            "score": 100,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 55.127637
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 96.186787
+            "score": 96.186787,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 30.233483
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 96.217982
+            "score": 96.217982,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 17.636238
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 71.356242
+            "score": 71.356242,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 17.788687
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 67.860356
+            "score": 67.860356,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 16.123979
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 82.58188
+            "score": 82.58188,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 31.3428
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 36549000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 92.996171
+            "score": 92.996171,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.091083
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 61.122908
+            "score": 61.122908,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.230327
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 80.882097
+            "score": 80.882097,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 1.222052,
+              "stok": 1397000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82
+            "score": 82,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 66987000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 182935000000,
+              "netKar": 133749000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": 16.45097,
+              "simdi": 17.636238
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 42
+            "score": 42,
+            "kod": "gmUp.zayifliyor",
+            "sayilar": {
+              "onceki": 68.823742,
+              "simdi": 67.944093
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 45
+            "score": 45,
+            "kod": "crUp.zayifliyor",
+            "sayilar": {
+              "onceki": 1.353446,
+              "simdi": 1.230327
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 45.267521
+            "score": 45.267521,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 29.808914
+            }
           }
         ]
       },
@@ -2187,92 +3202,172 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 97.618605
+            "score": 97.618605,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 27.618605
+            }
           },
           {
             "key": "ebitdaMargin",
             "weight": 0.07,
-            "score": 94.638882
+            "score": 94.638882,
+            "kod": "ebitdaMargin.olculdu",
+            "sayilar": {
+              "pct": 35.979161
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 90.953552
+            "score": 90.953552,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 31.430328
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 119.912574
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 100
+            "score": 100,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 33.639822
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 63.909036
+            "score": 63.909036,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 14.242398
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 38.625071
+            "score": 38.625071,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 1.812536
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 81.865028
+            "score": 81.865028,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 29.865028
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 90.891507
+            "score": 90.891507,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 0.118767
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 74.42846
+            "score": 74.42846,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.765876
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 45.230636
+            "score": 45.230636,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.003295
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 64.4282
+            "score": 64.4282,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.929014,
+              "stok": 11092000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82
+            "score": 82,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 136683000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 146724000000,
+              "netKar": 128930000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": 29.94917,
+              "simdi": 33.639822
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 46.67825,
+              "simdi": 48.652916
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 0.867992,
+              "simdi": 1.003295
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 34.154128
+            "score": 34.154128,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 38.605505
+            }
           }
         ]
       },
@@ -2361,82 +3456,154 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 100
+            "score": 100,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 54.77094
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 97.762452
+            "score": 97.762452,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 41.643678
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 38.128435
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 100
+            "score": 100,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 26.486931
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 76.040323
+            "score": 76.040323,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 20.050404
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 67.739533
+            "score": 67.739533,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 16.066444
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 95
+            "score": 95,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 111.299352
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 142310000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 91.559443
+            "score": 91.559443,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.156389
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 97.79185
+            "score": 97.79185,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 2.723981
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 100
+            "score": 100,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 2.644757,
+              "stok": 9991000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82
+            "score": 82,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 53273000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 40
+            "score": 40,
+            "kod": "accruals.donusmuyor",
+            "sayilar": {
+              "ocf": 185675000000,
+              "netKar": 244205000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": 23.02008,
+              "simdi": 26.486931
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 1.903745,
+              "simdi": 2.723981
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 64.710487
+            "score": 64.710487,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 17.644757
+            }
           }
         ]
       },
@@ -2525,92 +3692,172 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 84.368683
+            "score": 84.368683,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 17.44031
+            }
           },
           {
             "key": "ebitdaMargin",
             "weight": 0.07,
-            "score": 72.907178
+            "score": 72.907178,
+            "kod": "ebitdaMargin.olculdu",
+            "sayilar": {
+              "pct": 21.77599
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 73.454285
+            "score": 73.454285,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 20.807936
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 91.619448
+            "score": 91.619448,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 24.52431
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 84.570649
+            "score": 84.570649,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 12.34666
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 67.109794
+            "score": 67.109794,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 15.766568
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 58.635696
+            "score": 58.635696,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 11.731284
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 90.229506
+            "score": 90.229506,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 48.991167
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 91.489659
+            "score": 91.489659,
+            "kod": "ndEbitda.dusuk",
+            "sayilar": {
+              "kat": 0.054679
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 89.726573
+            "score": 89.726573,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.239701
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 47.318111
+            "score": 47.318111,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.033116
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 58.651304
+            "score": 58.651304,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 0.874856,
+              "stok": 38184000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 38
+            "score": 38,
+            "kod": "fcfPos.negatif",
+            "sayilar": {
+              "tutar": -11625000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 161403000000,
+              "netKar": 135281000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 13.310172,
+              "simdi": 12.34666
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 0.637277,
+              "simdi": 0.713052
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 1.024069,
+              "simdi": 1.033116
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 58.219791
+            "score": 58.219791,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 21.112631
+            }
           }
         ]
       },
@@ -2699,87 +3946,162 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 99.835222
+            "score": 99.835222,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 29.835222
+            }
           },
           {
             "key": "ebitdaMargin",
             "weight": 0.07,
-            "score": 100
+            "score": 100,
+            "kod": "ebitdaMargin.olculdu",
+            "sayilar": {
+              "pct": 48.042252
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 100
+            "score": 100,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 57.087716
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 92.855291
+            "score": 92.855291,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 26.069114
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 92.21499
+            "score": 92.21499,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 15.134369
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 82.121653
+            "score": 82.121653,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 27.652066
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 75.777046
+            "score": 75.777046,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 19.893831
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 40.232635
+            "score": 40.232635,
+            "kod": "netTrend.azaldi",
+            "sayilar": {
+              "pct": -4.767365
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 6596000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 87.953828
+            "score": 87.953828,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.320281
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 93.804502
+            "score": 93.804502,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 2.225563
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 97.804502
+            "score": 97.804502,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 2.225563,
+              "birim": "USD"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82
+            "score": 82,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 40976000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 130301000000,
+              "netKar": 68098000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 24.260714,
+              "simdi": 15.134369
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 1.973274,
+              "simdi": 2.225563
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 49.10403
+            "score": 49.10403,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 27.06855
+            }
           }
         ]
       },
@@ -2868,92 +4190,173 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 80.268975
+            "score": 80.268975,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 15.576807
+            }
           },
           {
             "key": "ebitdaMargin",
             "weight": 0.07,
-            "score": 60.962716
+            "score": 60.962716,
+            "kod": "ebitdaMargin.olculdu",
+            "sayilar": {
+              "pct": 16.346689
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 79.926885
+            "score": 79.926885,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 24.403825
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 50.541354
+            "score": 50.541354,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 9.570987
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 67.040254
+            "score": 67.040254,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 7.617446
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 91.635135
+            "score": 91.635135,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 39.543919
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 62.651559
+            "score": 62.651559,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 13.643599
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 95
+            "score": 95,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 127.028934
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 9885000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 93.944246
+            "score": 93.944246,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.047989
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 96.873769
+            "score": 96.873769,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 2.609221
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 95.266286
+            "score": 95.266286,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 1.908286,
+              "stok": 8468000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82
+            "score": 82,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 8403000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 10080000000,
+              "netKar": 6434000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": 3.787757,
+              "simdi": 7.617446
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 47.621622,
+              "simdi": 53.204213
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 78
+            "score": 78,
+            "kod": "crUp.gucleniyor",
+            "sayilar": {
+              "onceki": 2.491009,
+              "simdi": 2.609221
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 10
+            "score": 10,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 155.923077
+            }
           }
         ]
       },
@@ -3042,92 +4445,173 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 40.785908
+            "score": 40.785908,
+            "kod": "netMargin.ince",
+            "sayilar": {
+              "pct": 3.671141
+            }
           },
           {
             "key": "ebitdaMargin",
             "weight": 0.07,
-            "score": 31.297988
+            "score": 31.297988,
+            "kod": "ebitdaMargin.olculdu",
+            "sayilar": {
+              "pct": 5.215356
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 67.671296
+            "score": 67.671296,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": 18.032407
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 32.890511
+            "score": 32.890511,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 4.379562
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 37.928416
+            "score": 37.928416,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 2.561202
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 58.684965
+            "score": 58.684965,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 11.754745
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 45.388651
+            "score": 45.388651,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 5.194326
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 15
+            "score": 15,
+            "kod": "netTrend.azaldi",
+            "sayilar": {
+              "pct": -37.279472
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 34463000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 92.704967
+            "score": 92.704967,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.10432
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 90.582696
+            "score": 90.582696,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.940946
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 92.421962
+            "score": 92.421962,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 1.552745,
+              "stok": 13752000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "fcfPos",
             "weight": 0.05,
-            "score": 82
+            "score": 82,
+            "kod": "fcfPos.pozitif",
+            "sayilar": {
+              "tutar": 5762000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 85
+            "score": 85,
+            "kod": "accruals.nakit-destekli",
+            "sayilar": {
+              "ocf": 18685000000,
+              "netKar": 3804000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 40
+            "score": 40,
+            "kod": "roaUp.geriliyor",
+            "sayilar": {
+              "onceki": 4.717385,
+              "simdi": 2.561202
+            }
           },
           {
             "key": "gmUp",
             "weight": 0.04,
-            "score": 82
+            "score": 82,
+            "kod": "gmUp.gucleniyor",
+            "sayilar": {
+              "onceki": 17.479508,
+              "simdi": 18.851755
+            }
           },
           {
             "key": "crUp",
             "weight": 0.03,
-            "score": 45
+            "score": 45,
+            "kod": "crUp.zayifliyor",
+            "sayilar": {
+              "onceki": 2.037223,
+              "simdi": 1.940946
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 10
+            "score": 10,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 354.351852
+            }
           }
         ]
       },
@@ -3216,62 +4700,114 @@
           {
             "key": "netMargin",
             "weight": 0.11,
-            "score": 100
+            "score": 100,
+            "kod": "netMargin.saglikli",
+            "sayilar": {
+              "pct": 35.663508
+            }
           },
           {
             "key": "ocfMargin",
             "weight": 0.08,
-            "score": 18
+            "score": 18,
+            "kod": "ocfMargin.olculdu",
+            "sayilar": {
+              "pct": -89.085597
+            }
           },
           {
             "key": "roe",
             "weight": 0.09,
-            "score": 78.531354
+            "score": 78.531354,
+            "kod": "roe.olculdu",
+            "sayilar": {
+              "pct": 17.36982
+            }
           },
           {
             "key": "roa",
             "weight": 0.05,
-            "score": 29.082009
+            "score": 29.082009,
+            "kod": "roa.olculdu",
+            "sayilar": {
+              "pct": 1.29743
+            }
           },
           {
             "key": "revYoY",
             "weight": 0.07,
-            "score": 40.509248
+            "score": 40.509248,
+            "kod": "revYoY.olculdu",
+            "sayilar": {
+              "pct": 2.754624
+            }
           },
           {
             "key": "revCagr",
             "weight": 0.06,
-            "score": 59.908893
+            "score": 59.908893,
+            "kod": "revCagr.olculdu",
+            "sayilar": {
+              "pct": 12.337568
+            }
           },
           {
             "key": "netTrend",
             "weight": 0.06,
-            "score": 67.095608
+            "score": 67.095608,
+            "kod": "netTrend.artti",
+            "sayilar": {
+              "pct": 15.095608
+            }
           },
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 8864000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 76.059007
+            "score": 76.059007,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.720583
+            }
           },
           {
             "key": "accruals",
             "weight": 0.06,
-            "score": 40
+            "score": 40,
+            "kod": "accruals.donusmuyor",
+            "sayilar": {
+              "ocf": -162534000000,
+              "netKar": 65067000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "roaUp",
             "weight": 0.05,
-            "score": 85
+            "score": 85,
+            "kod": "roaUp.iyilesiyor",
+            "sayilar": {
+              "onceki": 1.241806,
+              "simdi": 1.29743
+            }
           },
           {
             "key": "pe",
             "weight": 0.1,
-            "score": 71.466153
+            "score": 71.466153,
+            "kod": "pe.olculdu",
+            "sayilar": {
+              "kat": 14.266924
+            }
           }
         ]
       },
@@ -3360,22 +4896,40 @@
           {
             "key": "ndEbitda",
             "weight": 0.09,
-            "score": 100
+            "score": 100,
+            "kod": "ndEbitda.net-nakit",
+            "sayilar": {
+              "tutar": 449000000,
+              "birim": "USD"
+            }
           },
           {
             "key": "d2e",
             "weight": 0.06,
-            "score": 94.140034
+            "score": 94.140034,
+            "kod": "d2e.saglikli",
+            "sayilar": {
+              "oran": 0.039089
+            }
           },
           {
             "key": "curRatio",
             "weight": 0.05,
-            "score": 54.427108
+            "score": 54.427108,
+            "kod": "curRatio.olculdu",
+            "sayilar": {
+              "oran": 1.134673
+            }
           },
           {
             "key": "quickRatio",
             "weight": 0.04,
-            "score": 77.386919
+            "score": 77.386919,
+            "kod": "quickRatio.olculdu",
+            "sayilar": {
+              "oran": 1.134673,
+              "birim": "USD"
+            }
           }
         ]
       },
@@ -3662,7 +5216,7 @@
     }
   },
   "_meta": {
-    "olusturuldu": "2026-10-11",
+    "olusturuldu": "2026-11-03",
     "node": "v24.14.1"
   },
   "_okunan": {

@@ -46,18 +46,38 @@ import {
   AZAMI_MADDE,
   AZAMI_OLCUM,
   AZAMI_SEMBOL,
+  DEGISIM_AZAMI_SEMBOL,
+  DEGISIM_DONEMLER,
+  GUNDEM_KAPSAMLAR,
   GUNDEM_YERELLER,
+  HAREKET_AZAMI_SEMBOL,
+  ICERIDEN_PAZARLAR,
+  ICERIDEN_SEMBOL_BICIM,
+  KRIPTO_AZAMI_ID,
+  KUR_AZAMI_KOD,
+  KUR_KOD_BICIM,
+  MALI_PAZARLAR,
+  MALI_SEMBOL_BICIM,
+  KRIPTO_ID_BICIM,
   HABER_PAZARLAR,
+  METAL_AZAMI_LIMIT,
+  METAL_KAPSAMLAR,
+  METAL_MADENLER,
   METAL_OLCUM_ALANLAR,
   METAL_TURLER,
+  KATALIZOR_PAZARLAR,
   NEDEN_KINDLER,
+  NEDEN_PAZARLAR,
+  NEDEN_SEMBOL_BICIM,
   SIRA_KIPLERI,
   TARAMA_PRESETLER,
   WATCHLIST_CODE_BICIM,
   VARSAYILAN_ADIM,
   VARSAYILAN_ARALIK,
+  VARSAYILAN_GUNDEM_KAPSAM,
   VARSAYILAN_GUNDEM_YEREL,
   VARSAYILAN_HABER_PAZAR,
+  VARSAYILAN_METAL_KAPSAM,
   VARSAYILAN_SIRA,
   type Adim,
   type AnalyzeResponse,
@@ -69,11 +89,30 @@ import {
   type ChartResponse,
   type CompareResponse,
   type DegerResponse,
+  type DegisimDonem,
+  type DegisimResponse,
+  type GundemKapsam,
+  type GundemKonseptResponse,
   type GundemResponse,
   type GundemYerel,
+  type HareketResponse,
   type HaberPazar,
+  type HisseHaberleriResponse,
+  type IceridenPazar,
+  type IceridenResponse,
+  type KatalizorPazar,
+  type KatalizorResponse,
+  type NedenPazar,
+  type NedenResponse,
+  type KriptoResponse,
+  type KurResponse,
+  type MaliPazar,
+  type MaliResponse,
   type Market,
+  type MetalKapsam,
+  type MetalMaden,
   type MetalOlcumler,
+  type MetalResponse,
   type MetalTur,
   type NewsResponse,
   type OlcumKayit,
@@ -86,6 +125,7 @@ import {
   type SiraKip,
   type TaramaPreset,
   type TaramaResponse,
+  type ThemeCandidate,
   type ThemeResponse,
   type Vade,
   type WatchlistResponse,
@@ -159,6 +199,54 @@ export const ENDPOINTS = {
   // KALDI (Hobby tavanı). İstemci yeniden-yazımı bilmiyor: yol adı
   // gerçek uç gibi davranıyor.
   takvim: '/api/takvim',
+  // GÜNDEM KONSEPTLERİ (api/_gundem.js `gundemHandler`). AYRI taşıyıcı:
+  // `_kesif.js`e GİRMEDİ çünkü kaynağı yayıncı RSS'leri, motor/tarama
+  // ailesi değil. `vercel.json` → `/api/proxy?__rota=gundem`; yeni Vercel
+  // fonksiyonu AÇILMADI, `api/*.js` sayısı 12'de KALDI (Hobby tavanı).
+  //
+  // `news` ile KARIŞTIRILMASIN: `/api/news?gundem=1` MANŞET döner, bu uç
+  // aynı manşetlerden motorun çıkardığı KONSEPTİ döner.
+  gundem: '/api/gundem',
+  // COK DONEMLI DEGISIM · KRIPTO PAZARI · MADEN HABERI. Ucu de AYNI
+  // yeniden-yazimdan geciyor (`vercel.json` -> `/api/proxy?__rota=X`);
+  // yeni Vercel fonksiyonu ACILMADI, `api/*.js` sayisi 12'de KALDI.
+  //
+  // `metal` ADI YANILTICI: bu uc FIYAT DONMUYOR, uc maden icin HABER
+  // MADDESI donuyor. Altin fiyati `degisim` + `GC=F` ile olculur.
+  degisim: '/api/degisim',
+  kripto: '/api/kripto',
+  metal: '/api/metal',
+  // DOVIZ/GRAM METAL KURU — AYNI yeniden-yazimdan geciyor
+  // (`vercel.json` -> `/api/proxy?__rota=kur`); yeni Vercel fonksiyonu
+  // ACILMADI, `api/*.js` sayisi 12'de KALDI.
+  kur: '/api/kur',
+  // ICERIDEN ISLEMLER (SEC Form 4 / KAP) — AYNI yeniden-yazim
+  // (`vercel.json` -> `/api/proxy?__rota=iceriden`); yeni Vercel
+  // fonksiyonu ACILMADI, `api/*.js` sayisi 12'de KALDI.
+  iceriden: '/api/iceriden',
+  // "NEDEN HAREKET EDIYOR?" — AYNI yeniden-yazim (`vercel.json` ->
+  // `/api/proxy?__rota=neden`); yeni Vercel fonksiyonu ACILMADI,
+  // `api/*.js` sayisi 12'de KALDI. Webde bu kart TARAYICIDA
+  // hesapliyordu; karar uca tasindi.
+  neden: '/api/neden',
+  // KATALIZOR / RISK -> YAKLASAN TEMETTU. AYNI yeniden-yazim
+  // (`vercel.json` -> `/api/proxy?__rota=katalizor`); yeni Vercel
+  // fonksiyonu ACILMADI, `api/*.js` sayisi 12'de KALDI. Gun farki ve
+  // 45 gun esigi webde TARAYICIDAYDI; karar motora, hesap uca tasindi.
+  katalizor: '/api/katalizor',
+  // MALI TABLOLAR (bilanco/gelir tablosu HAM kalemleri: SEC XBRL
+  // companyconcept + Is Yatirim MaliTablo) — AYNI yeniden-yazim
+  // (`vercel.json` -> `/api/proxy?__rota=mali`); yeni Vercel fonksiyonu
+  // ACILMADI, `api/*.js` sayisi 12'de KALDI (Hobby tavani). Webde bu
+  // kalemler TARAYICIDA cekilip orada marj/oran hesaplaniyordu; olcum
+  // uca tasindi, hesap motorda kaldi.
+  mali: '/api/mali',
+  // ANI HAREKET TARAMASI (gun ici mum olcumu: sudden/bigDay/breakout)
+  // — AYNI yeniden-yazim yolu (`vercel.json` -> `/api/proxy?__rota=
+  // hareket`); yeni Vercel fonksiyonu ACILMADI, `api/*.js` sayisi 12'de
+  // KALDI (Hobby tavani). Webde bu tarama TARAYICIDA donuyordu; olcum
+  // uca tasindi, esik motorda kaldi.
+  hareket: '/api/hareket',
 } as const;
 
 /**
@@ -317,6 +405,25 @@ function kodMetni(code: string | undefined, azami?: number, istenen?: number): s
     case 'bad_risk':
     case 'bad_simdi':
       return 'Konjonktür girdisi geçersiz.';
+    // Fiyat-yalanlama girdileri (api/pulse.js). Bu istemci ŞU AN
+    // göndermiyor (satır ölçümü sunucu işi), ama kod eşlemesi ucun
+    // sözleşmesinin PARÇASI — eksik bırakmak 400'ü "bilinmeyen hata"
+    // diye göstermek olurdu.
+    case 'bad_genislikYas':
+    case 'bad_gunDegisimleri':
+      return 'Fiyat gerçekliği girdisi geçersiz.';
+    case 'cok_gunDegisimleri':
+      return azami == null
+        ? 'Gönderilen gün değişimi sayısı ucun sınırını aştı.'
+        : 'En çok ' + azami + ' gün değişimi gönderilebilir.';
+    // Makro ETİKET girdisi (`satirlar`). Bu istemci ŞU AN göndermiyor
+    // — ama kod eşlemesi ucun sözleşmesinin PARÇASI.
+    case 'bad_satirlar':
+      return 'Ani-hareket satırı biçimi geçersiz.';
+    case 'cok_satir':
+      return azami == null
+        ? 'Gönderilen satır sayısı ucun sınırını aştı.'
+        : 'En çok ' + azami + ' satır gönderilebilir.';
     case 'nabiz_hesaplanamadi':
       return 'Nabız hesaplanamadı — ölçüm alınamadı.';
     // --- /api/causal kodları (api/causal.js:144-201). `govde_yok`,
@@ -343,9 +450,17 @@ function kodMetni(code: string | undefined, azami?: number, istenen?: number): s
       return 'Gündem konsepti biçimi geçersiz.';
     case 'neden_hesaplanamadi':
       return 'Nedensellik okuması yapılamadı — ölçüm alınamadı.';
+    case 'katalizor_alinamadi':
+      return 'Temettü takvimi okunamadı — ölçüm alınamadı.';
     case 'motor_kurulamadi':
     case 'skor_hesaplanamadi':
       return 'Motor çalıştırılamadı — ölçüm alınamadı.';
+    // `/api/gundem` kodları. `bad_kapsam` HEM yerel kapıdan HEM 400
+    // gövdesinden gelebilir — aynı cümle, çünkü kullanıcı için aynı olay.
+    case 'bad_kapsam':
+      return 'Geçersiz kapsam istendi.';
+    case 'gundem_alinamadi':
+      return 'Gündem okunamadı — hiçbir yayın beslemesi yanıt vermedi.';
     default:
       return null;
   }
@@ -882,7 +997,46 @@ export type NewsOptions = Omit<RequestOptions, 'query'> & {
   market?: HaberPazar;
   /** 1..AZAMI_MADDE. Verilmezse uç noktanın varsayılanı (10) kullanılır. */
   limit?: number;
+  /**
+   * `/api/theme` adayları. Verilirse cevap `tema` KARDEŞ ALANINI taşır
+   * (hangi aday hangi manşette geçiyor — hesap UÇTAKİ motorda).
+   *
+   * NEDEN YEREL TAVAN KOYMADIM: tavan ucun (api/news.js
+   * `AZAMI_TEMA_ADAY`) ve adaylar `/api/theme`ten geliyor, o da AYNI
+   * sayıyla sınırlı (api/theme.js `AZAMI_ADAY`). Buraya üçüncü bir sayı
+   * yazmak istemciye eşik yazmak olurdu (§5.1); tavan aşılırsa uç 400
+   * `cok_aday` döner ve cümle ucun kodundan gelir.
+   *
+   * YALNIZ SERBEST METİN KİPİNDE: sembol ya da gündem kipiyle birlikte
+   * gönderilirse uç 400 `adaylar_kip` döner.
+   */
+  adaylar?: ThemeCandidate[];
 };
+
+/**
+ * Aday listesini `adaylar=` dizgesine çevir: `SEMBOL|PAZAR|ad` üçlüleri,
+ * `;` ile ayrılır (api/news.js `temaAdaylariAyristir`).
+ *
+ * NEDEN PAZAR GÖNDERİLİYOR: uç adayı `{symbol:'ASELS', market:'BIST'}`
+ * olarak veriyor — sembolde `.IS` YOK. `.IS` ekini burada eklemek
+ * istemciye normalizasyon kuralı yazmak olurdu; onu uçtaki motor yapıyor
+ * (`themeNorm`).
+ *
+ * `;` DEĞİŞTİRİLİYOR: ayırıcı bir DEĞERİN içinde geçemez — şirket adında
+ * noktalı virgül varsa boşluğa çevriliyor. Bu TAŞIMA biçimi, kural değil.
+ * `|` dokunulmuyor: uç ad alanını `join('|')` ile geri birleştiriyor.
+ */
+export function temaAdaylarDizgesi(adaylar: ThemeCandidate[]): string {
+  return adaylar
+    .map((a) => {
+      const sym = String(a.symbol ?? '').trim();
+      const pazar = String(a.market ?? '').trim();
+      const ad = String(a.name ?? '').replace(/;/g, ' ').trim();
+      return sym + '|' + pazar + '|' + ad;
+    })
+    .filter((p) => !p.startsWith('|'))
+    .join(';');
+}
 
 /**
  * `/api/news` — manşet metni. `fetchChart` deseninin BİREBİR aynısı:
@@ -913,7 +1067,10 @@ export async function fetchNews(
   query: string,
   options: NewsOptions = {},
 ): Promise<ApiResult<NewsResponse>> {
-  const { market = VARSAYILAN_HABER_PAZAR, limit, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const {
+    market = VARSAYILAN_HABER_PAZAR, limit, adaylar,
+    timeoutMs = DEFAULT_TIMEOUT_MS, signal,
+  } = options;
   const path = ENDPOINTS.news;
 
   // `q` SERBEST METİN: sembol kapısından (büyük harfe çevirme, biçim
@@ -981,8 +1138,142 @@ export async function fetchNews(
     }
   }
 
+  // Aday YOKSA parametre HİÇ gönderilmiyor: boş `adaylar=` ucu
+  // "sormadım" dalından "ölçemedim" dalına geçirmez, ama gereksiz
+  // parametre önbellek anahtarını bölerdi.
+  const adayDizgesi = adaylar && adaylar.length ? temaAdaylarDizgesi(adaylar) : '';
+
   return apiGet<NewsResponse>(path, {
-    query: { q, market, limit },
+    query: { q, market, limit, ...(adayDizgesi ? { adaylar: adayDizgesi } : {}) },
+    timeoutMs,
+    signal,
+  });
+}
+
+export type HisseHaberleriOptions = Omit<RequestOptions, 'query'> & {
+  /** SEMBOL pazarı (haber yereli DEĞİL). Verilmezse uç 'US' varsayar. */
+  market?: Market;
+  /** SEMBOL BAŞINA madde sınırı, 1..25. */
+  limit?: number;
+};
+
+/**
+ * `/api/news?symbols=A,B` — ÇOKLU SEMBOL HABERİ (kip ②). (2026-11-03)
+ *
+ * NEDEN VAR: webin `📰 Hisse Haberleri` sekmesi (`app.js
+ * loadUnifiedNews`) portföydeki her sembol için AYRI RSS çekip tarayıcıda
+ * birleştiriyor. Native RSS/XML ayrıştırmıyor (kabuk ince kalır), bu
+ * yüzden aynı ekranın karşılığı SUNUCUDAKİ hazır kip: uç sembolleri
+ * paralel çekiyor ve SATIR BAŞINA sayaç döndürüyor.
+ *
+ * ÖLÇÜLMÜŞ SAPMA — KAP YARIM KALIYOR: webin o sekmesi iki kaynağı
+ * birleştiriyor (KAP duyuruları + sembol haberi). Bu uç KAP ÜRETMİYOR
+ * (api/news.js:129 `type = 'NEWS'`); native'de KAP duyurusu AYRI uçtan
+ * geliyor (`/api/takvim` → `fetchTakvim`). İki kaynağı burada
+ * birleştirmek, "haber mi duyuru mu" ayrımını istemcide yeniden
+ * kurmak olurdu; ekran iki ölçümü yan yana gösterir, bu kapı
+ * karıştırmaz.
+ *
+ * NEDEN `sembolUcu` KULLANILMIYOR: o kapı `vade` gönderiyor ve
+ * `SCORE_TIMEOUT_MS` (58 sn) kademesinde; haber ucu `maxDuration: 10`
+ * ile çalışıyor ve `vade` kavramı YOK. Kapının gövdesi aynı olsa
+ * sorgu parametreleri ayrışırdı.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS`: `fetchNews` ile AYNI uç, aynı
+ * `maxDuration`. Sembol başına besleme PARALEL çekiliyor (api/news.js
+ * `Promise.all`), yani 8 sembol süreyi 8'e katlamıyor.
+ *
+ * NEDEN BOŞ LİSTE HATA DEĞİL: `fetchNews` ile aynı gerekçe — uç 200 +
+ * `maddeler: []` + `tam: true` dönebilir ve bu ÖLÇÜLMÜŞ bir cevaptır.
+ *
+ * YEREL KAPILAR (hepsi UCUN KENDİ kodunu taşır, yeni kod uydurulmadı):
+ *   · boş liste               → `symbols_yok`
+ *   · 8'den fazla sembol      → `cok_sembol`
+ *   · ham dizge > 128 karakter→ `too_long`
+ *   · tamsayı olmayan/<1 limit→ `bad_limit`
+ *   · limit > 25              → `limit_buyuk`
+ * Pazar denetimi YEREL DEĞİL: uç sembol kapısının `market` kümesini
+ * `PAZAR_ESLEME` ile ikinci kez denetliyor (api/news.js:603) ve
+ * kapanmayan pazarı `bad_market` + `gecersiz[]` ile bildiriyor —
+ * burada kopyalamak o listeyi ikiye bölerdi.
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchHisseHaberleri(
+  symbols: string[],
+  options: HisseHaberleriOptions = {},
+): Promise<ApiResult<HisseHaberleriResponse>> {
+  const { market, limit, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.news;
+
+  // Uç noktanın ayrıştırmasıyla aynı temizlik: trim + boşları at.
+  const liste = symbols.map((s) => String(s).trim().toUpperCase()).filter(Boolean);
+
+  if (!liste.length) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Sembol verilmedi.',
+        endpoint: path,
+        code: 'symbols_yok',
+      },
+    };
+  }
+  if (liste.length > AZAMI_SEMBOL) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('cok_sembol', AZAMI_SEMBOL, liste.length) ?? 'Çok sembol.',
+        endpoint: path,
+        code: 'cok_sembol',
+      },
+    };
+  }
+
+  // `query` DİZİ KABUL ETMİYOR (RequestOptions): liste virgülle
+  // birleştirilip ucun beklediği HAM dizge olarak gidiyor.
+  const ham = liste.join(',');
+  if (ham.length > AZAMI_SORGU) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: 'Sembol listesi çok uzun.',
+        endpoint: path,
+        code: 'too_long',
+      },
+    };
+  }
+
+  if (limit !== undefined) {
+    if (!Number.isInteger(limit) || limit < 1) {
+      return {
+        ok: false,
+        error: {
+          kind: 'bad-request',
+          message: kodMetni('bad_limit') ?? 'Geçersiz madde sayısı.',
+          endpoint: path,
+          code: 'bad_limit',
+        },
+      };
+    }
+    if (limit > AZAMI_MADDE) {
+      return {
+        ok: false,
+        error: {
+          kind: 'bad-request',
+          message: kodMetni('limit_buyuk', AZAMI_MADDE, limit) ?? 'Çok fazla manşet istendi.',
+          endpoint: path,
+          code: 'limit_buyuk',
+        },
+      };
+    }
+  }
+
+  return apiGet<HisseHaberleriResponse>(path, {
+    query: { symbols: ham, market, limit },
     timeoutMs,
     signal,
   });
@@ -1112,7 +1403,8 @@ export async function fetchPulse(
  *   · konsept sayısı > 60       → `cok_konsept`
  *   · küme dışı `kind`          → `bad_kind`
  *   · sonlu olmayan `pct`       → `bad_pct`
- *   · sonlu/≥0 olmayan `notable`→ `bad_notable`
+ *   · VARSA sonlu/≥0 olmayan `notable` → `bad_notable` (yoksa hata YOK:
+ *     eşiği uç motorun `INDEX_ESIK` tablosundan okuyor)
  *   · boş konsept `key`         → `konsept_key_yok`
  *
  * ÖLÇÜLDÜ — YEREL BAYT KAPISI YOK: ucun 65536 baytlık denetimi YALNIZ
@@ -1160,7 +1452,12 @@ export async function fetchCausal(
     if (!(NEDEN_KINDLER as readonly string[]).includes(h.kind)) return kapi('bad_kind');
     // HAM SAYI: yuvarlama/ölçekleme YOK — yalnız "sonlu mu" sorusu.
     if (!Number.isFinite(h.pct)) return kapi('bad_pct');
-    if (!Number.isFinite(h.notable) || h.notable < 0) return kapi('bad_notable');
+    // `notable` SEÇİMLİK (2026-11-03): yoksa uç motorun `INDEX_ESIK`
+    // tablosundan okuyor. Burada YOKLUK hata DEĞİL; VARSA yine
+    // denetleniyor çünkü ucun kendi kapısı (`bad_notable`) değişmedi.
+    if (h.notable !== undefined && (!Number.isFinite(h.notable) || h.notable < 0)) {
+      return kapi('bad_notable');
+    }
   }
   for (const c of gundem) {
     if (!c || typeof c !== 'object') return kapi('bad_konsept');
@@ -2006,6 +2303,75 @@ export async function fetchGundem(
   });
 }
 
+export type GundemKonseptOptions = Omit<RequestOptions, 'query'> & {
+  /** 'TR' | 'US' | 'HEPSI'. Verilmezse ucun varsayılanı ('HEPSI'). */
+  kapsam?: GundemKapsam;
+};
+
+/**
+ * `/api/gundem` — GÜNDEM KONSEPTLERİ (api/_gundem.js `gundemHandler`).
+ *
+ * NEDEN `fetchGundem`DEN AYRI: ikisi AYNI yayıncı RSS'lerini okuyor ama
+ * FARKLI şeyi döndürüyor. `fetchGundem` (`/api/news?gundem=1`) MANŞETİ
+ * döndürüyor — başlık, bağlantı, yaş. Bu uç aynı manşetlerden MOTORUN
+ * çıkardığı KONSEPTİ döndürüyor (`agendaScore`): hangi sözcük kümesi kaç
+ * başlıkta geçti, hangi sektöre hangi yönde bakıyor, risk-on mu risk-off
+ * mu. Tek bir fonksiyona katlamak, ekranda biri varken ötekinin
+ * ÖLÇÜLMEDİĞİNİ görünmez kılardı.
+ *
+ * İKİNCİ TÜKETİCİ: `fetchCausal`ın `gundem` girdisi. O fonksiyonun
+ * başlığında yazılı olan şey — "gündem ÜRETİMİ SUNUCU İŞİ ve AYRI BİR
+ * ŞERİDE devredilecek" — bu uçtur. Nedensellik ekranı, girdisini
+ * UYDURMAK yerine bu ölçümden alır.
+ *
+ * NEDEN `DEFAULT_TIMEOUT_MS` (12 sn): `fetchGundem` ile AYNI gerekçe —
+ * uç yedi beslemeyi `Promise.allSettled` ile PARALEL çekiyor, seri
+ * değil; skorun 58 sn'si buraya kopyalanmaz.
+ *
+ * DÖRT DÜRÜST HAL (ekran ayırmak zorunda):
+ *   · `konseptler: []` + `bos: true`  → "ölçtüm, konsept çıkmadı"
+ *   · `tam: false`                    → "ölçüm tamamlanmadı" (besleme düştü)
+ *   · `ozet.rotasyon: null`           → rotasyon ÖLÇÜLMEDİ
+ *   · `tone`/`skor` `null`            → o konseptte ölçülemedi (0 DEĞİL)
+ * `ozet.rotasyon.hisseler` HER ZAMAN BOŞ; bunu `hisseKod`
+ * (`'evren_olculmedi'`) söylüyor — hisse eşlemesi sabit bir evren
+ * ölçümü istiyor, o AYRI ŞERİT.
+ *
+ * YEREL KAPI: beyaz liste dışı kapsam → `bad_kapsam` (ucun KENDİ kodu,
+ * api/_gundem.js `kapsamCoz`). Sessizce `HEPSI`ye düşürmüyor: kullanıcı
+ * TR isteyip HEPSI görmesin.
+ *
+ * Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+ */
+export async function fetchGundemKonsept(
+  options: GundemKonseptOptions = {},
+): Promise<ApiResult<GundemKonseptResponse>> {
+  const {
+    kapsam = VARSAYILAN_GUNDEM_KAPSAM,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+  } = options;
+  const path = ENDPOINTS.gundem;
+
+  if (!(GUNDEM_KAPSAMLAR as readonly string[]).includes(kapsam)) {
+    return {
+      ok: false,
+      error: {
+        kind: 'bad-request',
+        message: kodMetni('bad_kapsam') ?? 'Geçersiz kapsam.',
+        endpoint: path,
+        code: 'bad_kapsam',
+      },
+    };
+  }
+
+  return apiGet<GundemKonseptResponse>(path, {
+    query: { kapsam },
+    timeoutMs,
+    signal,
+  });
+}
+
 export type AramaOptions = Omit<RequestOptions, 'query'> & {
   /** 1..ARAMA_AZAMI (25). Verilmezse ucun varsayılanı (10) kullanılır. */
   limit?: number;
@@ -2065,6 +2431,606 @@ export async function fetchArama(
 
   return apiGet<AramaResponse>(path, {
     query: { q, limit },
+    timeoutMs,
+    signal,
+  });
+}
+
+// =====================================================================
+//  /api/degisim · /api/kripto · /api/metal ÇEKİCİLERİ
+//                                                     (FAZ 3 / native)
+// ---------------------------------------------------------------------
+//  ÜÇ UCUN DA NATIVE BAĞLANTISI BUGÜNE KADAR SIFIRDI. Sözleşme tipleri
+//  `types.ts` sonunda; buradaki üç fonksiyon o tiplerin TEK çağrı yolu.
+//
+//  ── NİYE KAPILAR YERELDE DE VAR ────────────────────────────────────
+//  Üç uç da tavan/biçim ihlalini SESSİZCE KIRPMIYOR, 400 basıyor. Aynı
+//  denetimi yerelde yapmak o 400'ü ağa çıkmadan aynı cümleyle veriyor:
+//  kullanıcı uçuşta bekleyip "geçersiz" cevabı almıyor.
+//
+//  ── NİYE `kesifKodMetni` GENİŞLETİLMEDİ ────────────────────────────
+//  ÖLÇÜLDÜ: `cok_sembol` o sözlükte BACKTEST cümlesine ("Bu uç tek
+//  sembol alır"), `bad_limit` ise ARAMA cümlesine ("Geçersiz aday
+//  sayısı") bağlı. Bu üç uç AYNI kodları BAŞKA anlamda kullanıyor.
+//  Sözlüğe ikinci bir dal eklemek, hangi ucun hangi cümleyi alacağını
+//  kod adına bakarak çözülemez hâle getirirdi — bu yüzden cümle
+//  `kesifKapi`nın ÜÇÜNCÜ argümanı olarak AÇIKÇA geçiliyor
+//  (`fetchArama`nın `too_long` dalındaki yerleşik gerekçeyle aynı).
+//
+//  ⚠️ `/api/metal` FİYAT UCU DEĞİL: üç maden için HABER MADDESİ döner.
+//  Çağıran "altın fiyatı" sanıp bu uca gitmesin; fiyat `/api/degisim`
+//  + `GC=F`.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// =====================================================================
+
+export type DegisimOptions = Omit<RequestOptions, 'query'> & {
+  /**
+   * İstenen dönemler. VERİLMEZSE uç HEPSİNİ ölçüyor — bu yüzden
+   * varsayılan burada DOLDURULMUYOR: boş bırakmak "hepsini sor" demek,
+   * istemcinin kendi listesini dayatması değil.
+   */
+  donemler?: DegisimDonem[];
+};
+
+/**
+ * Çok dönemli değişim: GET /api/degisim?semboller=AAPL,XU100&donemler=gunluk,aylik
+ *
+ * ÖLÇÜLDÜ (2026-11-03, `api/_degisim.js` kaynak okuma — CANLI ÇAĞRI
+ * YAPILMADI, yerel DNS kırık): kapılar ucun kendi sırasıyla aynı —
+ * boş liste → `semboller_yok`, tavan aşımı → `cok_sembol`, bilinmeyen
+ * dönem → `bad_donem`.
+ *
+ * Sembol BİÇİM denetimi yerelde YAPILMIYOR: uç her hamı önce endeks
+ * sözlüğünden geçiriyor (`cozEndeks`), `XU100`/`GC=F` gibi biçime
+ * uymayan ama GEÇERLİ semboller oradan çözülüyor. Yerelde biçim
+ * dayatmak o sembolleri haksız yere kesmek olurdu.
+ */
+export async function fetchDegisim(
+  symbols: string[],
+  options: DegisimOptions = {},
+): Promise<ApiResult<DegisimResponse>> {
+  const { donemler, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.degisim;
+
+  // Ucun ayrıştırmasıyla aynı temizlik: trim + boşları at. Büyük harfe
+  // ÇEVİRMİYORUZ — bunu uç kendi sembol kapısında yapıyor.
+  const liste = (symbols ?? []).map((s) => String(s ?? '').trim()).filter(Boolean);
+
+  if (!liste.length) {
+    return kesifKapi<DegisimResponse>(
+      path,
+      'semboller_yok',
+      'Değişim ölçümü için sembol verilmedi.',
+    );
+  }
+  if (liste.length > DEGISIM_AZAMI_SEMBOL) {
+    return kesifKapi<DegisimResponse>(
+      path,
+      'cok_sembol',
+      'Tek çağrıda en çok ' +
+        DEGISIM_AZAMI_SEMBOL +
+        ' sembol sorulabilir (' +
+        liste.length +
+        ' istendi).',
+    );
+  }
+
+  let donemSorgu: string | undefined;
+  if (donemler !== undefined) {
+    const istenen = donemler.map((d) => String(d ?? '').trim().toLowerCase()).filter(Boolean);
+    const kacak = istenen.find((d) => !(DEGISIM_DONEMLER as readonly string[]).includes(d));
+    if (kacak) {
+      return kesifKapi<DegisimResponse>(
+        path,
+        'bad_donem',
+        'Tanınmayan dönem: ' + kacak + ' (izinli: ' + DEGISIM_DONEMLER.join(', ') + ').',
+      );
+    }
+    // Boş dizi İSTENEREK verilmişse uca GÖNDERMİYORUZ: uç boş değeri
+    // "hepsi" sayıyor, biz de aynı yola düşüyoruz (sessiz fark yok).
+    if (istenen.length) donemSorgu = istenen.join(',');
+  }
+
+  return apiGet<DegisimResponse>(path, {
+    query: { semboller: liste.join(','), donemler: donemSorgu },
+    timeoutMs,
+    signal,
+  });
+}
+
+export type KriptoOptions = Omit<RequestOptions, 'query'> & {
+  /** 7 günlük fiyat dizisi istenir mi (gövdeyi büyütür). */
+  sparkline?: boolean;
+  /**
+   * Küresel baskınlık istenir mi. VARSAYILAN AÇIK (uç `?kuresel=0`
+   * denmediyse ölçüyor); `false` vermek gövdedeki `kuresel` alanını
+   * TÜMÜYLE kaldırır — "sormadım" durumu.
+   */
+  kuresel?: boolean;
+};
+
+/**
+ * Kripto pazar satırları: GET /api/kripto?idler=bitcoin,ethereum
+ *
+ * ÖLÇÜLDÜ (2026-11-03, `api/_kripto.js` kaynak okuma — CANLI ÇAĞRI
+ * YAPILMADI): kimlikler CoinGecko KİMLİĞİ, sembol DEĞİL (`bitcoin`,
+ * `avalanche-2`); uç küçük harfe çeviriyor, biçim `ID_BICIM`.
+ *
+ * ⚠️ Tanınmayan kimliği ÜST KAYNAK sessizce düşürüyor ve bu `tam`ı
+ * düşürmüyor: çağıran eksiği `idler.length` ↔ `coinler.length`
+ * farkından görmek zorunda.
+ */
+export async function fetchKripto(
+  idler: string[],
+  options: KriptoOptions = {},
+): Promise<ApiResult<KriptoResponse>> {
+  const { sparkline, kuresel, timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.kripto;
+
+  const liste = (idler ?? []).map((s) => String(s ?? '').trim().toLowerCase()).filter(Boolean);
+
+  if (!liste.length) {
+    return kesifKapi<KriptoResponse>(path, 'kripto_id_yok', 'Kripto kimliği verilmedi.');
+  }
+  if (liste.length > KRIPTO_AZAMI_ID) {
+    return kesifKapi<KriptoResponse>(
+      path,
+      'cok_id',
+      'Tek çağrıda en çok ' +
+        KRIPTO_AZAMI_ID +
+        ' kimlik sorulabilir (' +
+        liste.length +
+        ' istendi).',
+    );
+  }
+  const bozuk = liste.find((id) => !KRIPTO_ID_BICIM.test(id));
+  if (bozuk) {
+    return kesifKapi<KriptoResponse>(
+      path,
+      'bad_id',
+      'Geçersiz kripto kimliği: ' + bozuk + ' (sembol değil, CoinGecko kimliği bekleniyor).',
+    );
+  }
+
+  return apiGet<KriptoResponse>(path, {
+    // Varsayılanlar UCUN varsayılanı: `undefined` bırakılan parametre
+    // sorguya hiç girmiyor, uç kendi varsayılanını uyguluyor.
+    query: {
+      idler: liste.join(','),
+      sparkline: sparkline === true ? '1' : undefined,
+      kuresel: kuresel === false ? '0' : undefined,
+    },
+    timeoutMs,
+    signal,
+  });
+}
+
+export type MetalOptions = Omit<RequestOptions, 'query'> & {
+  /** Verilmezse uç ÜÇÜNÜ birlikte ölçüyor. */
+  madenler?: MetalMaden[];
+  kapsam?: MetalKapsam;
+  /** 1..`METAL_AZAMI_LIMIT`; verilmezse uç `METAL_VARSAYILAN_LIMIT`. */
+  limit?: number;
+};
+
+/**
+ * Maden haberleri: GET /api/metal?madenler=altin&kapsam=tr&limit=10
+ *
+ * ⚠️ BU UÇ FİYAT DÖNDÜRMEZ. Üç maden için TR ve/veya dünya RSS
+ * maddelerini döner (`api/_metal.js`, besleme `api/_haber.js`). Altın
+ * FİYATI isteyen `fetchDegisim(['GC=F'])` çağırır.
+ *
+ * ÖLÇÜLDÜ (2026-11-03, kaynak okuma — CANLI ÇAĞRI YAPILMADI): kapsam
+ * kapalı küme, varsayılan `hepsi`; tavanı aşan limit SESSİZCE
+ * KIRPILMIYOR, 400 `bad_limit` oluyor.
+ */
+export async function fetchMetal(options: MetalOptions = {}): Promise<ApiResult<MetalResponse>> {
+  const {
+    madenler,
+    kapsam = VARSAYILAN_METAL_KAPSAM,
+    limit,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal,
+  } = options;
+  const path = ENDPOINTS.metal;
+
+  let madenSorgu: string | undefined;
+  if (madenler !== undefined) {
+    const istenen = madenler.map((m) => String(m ?? '').trim().toLowerCase()).filter(Boolean);
+    const kacak = istenen.find((m) => !(METAL_MADENLER as readonly string[]).includes(m));
+    if (kacak) {
+      return kesifKapi<MetalResponse>(
+        path,
+        'bad_maden',
+        'Tanınmayan maden: ' + kacak + ' (izinli: ' + METAL_MADENLER.join(', ') + ').',
+      );
+    }
+    // Boş dizi → parametre gönderilmiyor; uç ÜÇÜNÜ ölçüyor.
+    if (istenen.length) madenSorgu = istenen.join(',');
+  }
+
+  if (!(METAL_KAPSAMLAR as readonly string[]).includes(kapsam)) {
+    // Ucun kendi kodu `bad_maden` DEĞİL: kapsam ayrı dalda denetleniyor
+    // ve geçersiz kapsam ucta 400 `bad_kapsam` ediyor.
+    return kesifKapi<MetalResponse>(
+      path,
+      'bad_kapsam',
+      'Geçersiz kapsam (izinli: ' + METAL_KAPSAMLAR.join(', ') + ').',
+    );
+  }
+
+  if (
+    limit !== undefined &&
+    (!Number.isInteger(limit) || limit < 1 || limit > METAL_AZAMI_LIMIT)
+  ) {
+    return kesifKapi<MetalResponse>(
+      path,
+      'bad_limit',
+      'Geçersiz madde sayısı (en az 1, en çok ' + METAL_AZAMI_LIMIT + ').',
+    );
+  }
+
+  return apiGet<MetalResponse>(path, {
+    query: { madenler: madenSorgu, kapsam, limit },
+    timeoutMs,
+    signal,
+  });
+}
+
+// ---------------------------------------------------------------------
+//  /api/kur — DÖVİZ / GRAM METAL KURU
+// ---------------------------------------------------------------------
+
+export type KurOptions = Omit<RequestOptions, 'query'>;
+
+/**
+ * Kur satırları: GET /api/kur?kodlar=USD,EUR,gram-altin
+ *
+ * ÖLÇÜLDÜ (2026-11-05, `api/_kur.js` kaynak okuma — CANLI ÇAĞRI
+ * YAPILMADI): üst kaynak (truncgil today.json) TEK çağrıda tüm tabloyu
+ * dönüyor, yani istek sayısı KOD SAYISINDAN BAĞIMSIZ (`AZAMI_UST_ISTEK`
+ * = 1). Türkçe sayı biçimi (binlik nokta, ondalık virgül) UÇTA
+ * çözülüyor — istemcide ayrıştırma kurmak §5.1'in yasakladığı şey
+ * olurdu.
+ *
+ * ⚠️ KOD KÜÇÜLTÜLMEZ: `KUR_KOD_BICIM` gerekçesi. `usd` isteyen 200 ama
+ * BOŞ `kurlar` alır (üst kaynakta o anahtar yok), 400 almaz.
+ *
+ * ⚠️ Tanınmayan kodu uç sessizce düşürüyor ve bu `tam`ı düşürmüyor:
+ * çağıran eksiği `kodlar.length` ↔ `kurlar.length` farkından görmek
+ * zorunda.
+ */
+export async function fetchKur(
+  kodlar: string[],
+  options: KurOptions = {},
+): Promise<ApiResult<KurResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.kur;
+
+  // `trim` VAR, `toLowerCase` YOK — bilinçli (bkz. KUR_KOD_BICIM).
+  const liste = (kodlar ?? []).map((s) => String(s ?? '').trim()).filter(Boolean);
+
+  if (!liste.length) {
+    return kesifKapi<KurResponse>(path, 'kur_kod_yok', 'Kur kodu verilmedi.');
+  }
+  if (liste.length > KUR_AZAMI_KOD) {
+    return kesifKapi<KurResponse>(
+      path,
+      'cok_kod',
+      'Tek çağrıda en çok ' +
+        KUR_AZAMI_KOD +
+        ' kod sorulabilir (' +
+        liste.length +
+        ' istendi).',
+    );
+  }
+  const bozuk = liste.find((kod) => !KUR_KOD_BICIM.test(kod));
+  if (bozuk) {
+    return kesifKapi<KurResponse>(
+      path,
+      'bad_kod',
+      'Geçersiz kur kodu: ' + bozuk + '.',
+    );
+  }
+
+  return apiGet<KurResponse>(path, {
+    query: { kodlar: liste.join(',') },
+    timeoutMs,
+    signal,
+  });
+}
+
+// ---------------------------------------------------------------------
+//  /api/iceriden — İÇERİDEN İŞLEMLER (SEC Form 4 · KAP bildirimi)
+// ---------------------------------------------------------------------
+
+export type IceridenOptions = Omit<RequestOptions, 'query'>;
+
+/**
+ * İçeriden işlemler: GET /api/iceriden?sembol=AAPL&pazar=US
+ *
+ * TEMEL SKORA DAHİL DEĞİL — web ikizinin başlığı birebir böyle
+ * (`app.js:5127`). Bu sarmal hiçbir skor çağrısına girdi vermiyor.
+ *
+ * ÖLÇÜLDÜ (2026-11-05, `api/_iceriden.js` kaynak okuma — CANLI ÇAĞRI
+ * YAPILMADI): ABD yolunda üst istek tavanı 14 (1 sembol→CIK tablosu +
+ * 1 bildirim özeti + en çok 12 Form 4 belgesi), BIST yolunda en çok 2
+ * (KAP beslemesi + gerekirse haber yedeği). Form 4 XML ayrıştırması ve
+ * KAP süzmesi UÇTA — istemcide kurmak §5.1'in yasakladığı şey olurdu.
+ *
+ * ⚠️ SEMBOL KÜÇÜLTÜLMEZ, uç BÜYÜTÜYOR: iki üst kaynak da büyük harf
+ * anahtar kullanıyor.
+ *
+ * ⚠️ `kayitlar`/`maddeler` BOŞ dizi ile 200 dönmek OLAĞAN: bildirim
+ * okundu ama taşınacak satır çıkmadı. Hangi hâl olduğu `durumKodu`'nda
+ * ADIYLA yazılı; arıza hâli AYRI (502 `iceriden_alinamadi`).
+ */
+export async function fetchIceriden(
+  sembol: string,
+  pazar: IceridenPazar = 'US',
+  options: IceridenOptions = {},
+): Promise<ApiResult<IceridenResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.iceriden;
+
+  const s = String(sembol ?? '').trim();
+  if (!s) {
+    return kesifKapi<IceridenResponse>(
+      path,
+      'sembol_yok',
+      'Sembol verilmedi.',
+    );
+  }
+  if (!ICERIDEN_SEMBOL_BICIM.test(s)) {
+    return kesifKapi<IceridenResponse>(
+      path,
+      'bad_sembol',
+      'Geçersiz sembol: ' + s + '.',
+    );
+  }
+  if (!ICERIDEN_PAZARLAR.includes(pazar)) {
+    return kesifKapi<IceridenResponse>(
+      path,
+      'bad_pazar',
+      'Tanınmayan pazar: ' + String(pazar) + '.',
+    );
+  }
+
+  return apiGet<IceridenResponse>(path, {
+    query: { sembol: s, pazar },
+    timeoutMs,
+    signal,
+  });
+}
+
+// ---------------------------------------------------------------------
+//  "Neden hareket ediyor?"  ·  GET /api/neden
+// ---------------------------------------------------------------------
+//  Uç günlük değişimi haber akışıyla karşılaştırıp KAPALI KOD döndürüyor;
+//  bu sarmalayıcı hesap YAPMAZ, yalnız ön kapı + sorgu kurar. Cümle
+//  `src/lib/sozluk.ts`te seçilir.
+//
+//  SKORA GİRMEZ: dönen kodlar hiçbir skora girdi değildir.
+// ---------------------------------------------------------------------
+
+export type NedenOptions = { timeoutMs?: number; signal?: AbortSignal };
+
+export async function fetchNeden(
+  sembol: string,
+  pazar: NedenPazar = 'US',
+  options: NedenOptions = {},
+): Promise<ApiResult<NedenResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.neden;
+
+  const s = String(sembol ?? '').trim();
+  if (!s) {
+    return kesifKapi<NedenResponse>(path, 'symbol_yok', 'Sembol verilmedi.');
+  }
+  if (!NEDEN_SEMBOL_BICIM.test(s)) {
+    return kesifKapi<NedenResponse>(
+      path,
+      'bad_symbol',
+      'Geçersiz sembol: ' + s + '.',
+    );
+  }
+  if (!NEDEN_PAZARLAR.includes(pazar)) {
+    return kesifKapi<NedenResponse>(
+      path,
+      'bad_market',
+      'Tanınmayan pazar: ' + String(pazar) + '.',
+    );
+  }
+
+  return apiGet<NedenResponse>(path, {
+    query: { sembol: s, pazar },
+    timeoutMs,
+    signal,
+  });
+}
+
+// ---------------------------------------------------------------------
+//  Katalizör / Risk → yaklaşan temettü  ·  GET /api/katalizor
+// ---------------------------------------------------------------------
+//  Uç yaklaşan temettü tarihini ölçüp GÜN FARKI ile KAPALI KOD
+//  döndürüyor; bu sarmalayıcı hesap YAPMAZ, yalnız ön kapı + sorgu
+//  kurar. Cümle `src/lib/sozluk.ts`te seçilir.
+//
+//  45 GÜN EŞİĞİ BU DOSYADA YOK: eşik sunucuda, motorun içinde
+//  (`KAT_TEMETTU_GUN`). Native yalnız `kod`u okur.
+//
+//  OYNAKLIK BACAĞI BURADA DEĞİL: `/api/analyze` satırı `oynaklik` ve
+//  `atrPlan` kodlarını ZATEN getiriyor. İkinci bir çağrı açmak aynı
+//  ATR'yi iki kez ölçmek olurdu.
+//
+//  SKORA GİRMEZ: dönen kodlar hiçbir skora girdi değildir.
+// ---------------------------------------------------------------------
+
+export type KatalizorOptions = { timeoutMs?: number; signal?: AbortSignal };
+
+export async function fetchKatalizor(
+  sembol: string,
+  pazar: KatalizorPazar = 'US',
+  options: KatalizorOptions = {},
+): Promise<ApiResult<KatalizorResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.katalizor;
+
+  const s = String(sembol ?? '').trim();
+  if (!s) {
+    return kesifKapi<KatalizorResponse>(path, 'symbol_yok', 'Sembol verilmedi.');
+  }
+  if (!NEDEN_SEMBOL_BICIM.test(s)) {
+    return kesifKapi<KatalizorResponse>(
+      path,
+      'bad_symbol',
+      'Geçersiz sembol: ' + s + '.',
+    );
+  }
+  if (!KATALIZOR_PAZARLAR.includes(pazar)) {
+    return kesifKapi<KatalizorResponse>(
+      path,
+      'bad_market',
+      'Tanınmayan pazar: ' + String(pazar) + '.',
+    );
+  }
+
+  return apiGet<KatalizorResponse>(path, {
+    query: { sembol: s, pazar },
+    timeoutMs,
+    signal,
+  });
+}
+
+// ---------------------------------------------------------------------
+//  Mali tablolar  ·  GET /api/mali
+// ---------------------------------------------------------------------
+
+export type MaliOptions = Omit<RequestOptions, 'query'>;
+
+/**
+ * Bir sembolün YILLIK mali tablo HAM kalemlerini getirir
+ * (`api/_mali.js`). ABD'de SEC XBRL `companyconcept`, BIST'te İş
+ * Yatırım `MaliTablo` (XI_29) okunuyor.
+ *
+ * ⚠️ BU SARMAL HESAP YAPMIYOR: marj, oran, büyüme, net borç, FAVÖK
+ * YOK. Hepsi TÜRETME ve §5.1 gereği motorun işi; burada yalnız uçtan
+ * gelen kalem taşınıyor. Sonuç hiçbir skor çağrısına girdi vermiyor.
+ *
+ * ÖLÇÜLDÜ (2026-11-06, `api/_mali.js` kaynak okuma — CANLI ÇAĞRI
+ * YAPILMADI, bu makinede yerel DNS bozuk): ABD yolunda üst istek
+ * tavanı `AZAMI_UST_ISTEK` (1 sembol→CIK tablosu + her us-gaap
+ * etiketi için 1 istek, altılı partiler ve SEC'in 10 istek/sn kuralına
+ * uygun aralıkla), BIST yolunda en çok 3 (en güncel tam yıldan geriye
+ * üç yıl deneniyor, ilk DOLU cevap kazanıyor).
+ *
+ * ⚠️ SEMBOL KÜÇÜLTÜLMEZ, uç BÜYÜTÜYOR: iki üst kaynak da büyük harf
+ * anahtar kullanıyor.
+ *
+ * ⚠️ `kalemler`/`donemler` BOŞ dizi ile 200 dönmek OLAĞAN: kaynak
+ * cevap verdi ama taşınacak yıllık dönem/kalem çıkmadı. Hangi hâl
+ * olduğu `durumKodu`'nda ADIYLA yazılı; arıza hâli AYRI (502
+ * `mali_alinamadi`).
+ */
+export async function fetchMali(
+  sembol: string,
+  pazar: MaliPazar = 'US',
+  options: MaliOptions = {},
+): Promise<ApiResult<MaliResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.mali;
+
+  const s = String(sembol ?? '').trim();
+  if (!s) {
+    return kesifKapi<MaliResponse>(path, 'sembol_yok', 'Sembol verilmedi.');
+  }
+  if (!MALI_SEMBOL_BICIM.test(s)) {
+    return kesifKapi<MaliResponse>(
+      path,
+      'bad_sembol',
+      'Geçersiz sembol: ' + s + '.',
+    );
+  }
+  if (!MALI_PAZARLAR.includes(pazar)) {
+    return kesifKapi<MaliResponse>(
+      path,
+      'bad_pazar',
+      'Tanınmayan pazar: ' + String(pazar) + '.',
+    );
+  }
+
+  return apiGet<MaliResponse>(path, {
+    query: { sembol: s, pazar },
+    timeoutMs,
+    signal,
+  });
+}
+
+/** `fetchHareket` seçenekleri — sorgu uç tarafında kuruluyor. */
+export type HareketOptions = Omit<RequestOptions, 'query'>;
+
+/**
+ * Verilen sembollerin GÜN İÇİ ani-hareket ölçümünü getirir
+ * (`/api/hareket` → `api/_hareket.js`).
+ *
+ * UÇ HESABI YAPIYOR, İSTEMCİ YAPMIYOR: eşik/ağırlık/yüzde hesabı
+ * motorda; buradan çıkan `gunYuzde`/`saatYuzde`/`rvol` HAM ve ekrana
+ * olduğu gibi gidiyor. `rvol` için uçta KOD ÜRETİLMİYOR — bu yüzden
+ * istemci de ona hüküm bağlamıyor.
+ *
+ * İKİ YEREL KAPI var, ikisi de ucun 400'lerinin İKİZİ: ağa çıkmadan
+ * aynı cümle kuruluyor.
+ *  · sembol yok      → `semboller_yok`
+ *  · 12'den fazla    → `cok_sembol` (uç SESSİZCE KIRPMIYOR)
+ *
+ * `cok_sembol` cümlesi AÇIKÇA veriliyor: ortak `kesifKodMetni` o kodu
+ * "bu uç tek sembol alır" diye çeviriyor (backtest ucunun anlamı), bu
+ * uçta ise tavan 12 — ortak cümle YANILTICI olurdu.
+ *
+ * ⚠️ SEMBOL BİÇİMİ YEREL OLARAK DENETLENMEDİ: uç `XU100` gibi endeks
+ * adlarını kendi sözlüğünden çözüyor, yerelde bir biçim dayatmak
+ * geçerli sembolü HAKSIZ reddetmek olurdu (`fetchDegisim` ile aynı
+ * gerekçe). Sunucudan gelen 400 `bad_sembol` ortak sözlükte YOK; o hâl
+ * genel 400 cümlesiyle basılıyor, kod `error.code`'da duruyor.
+ *
+ * 502 `motor_yok` / `hareket_alinamadi` de ortak sözlüğe EKLENMEDİ
+ * (`degisim_alinamadi` / `mali_alinamadi` ile aynı tutum): 5xx
+ * `unmeasured` olarak genel "ölçüm alınamadı" cümlesine düşüyor,
+ * makine kodu `error.code`'da korunuyor.
+ */
+export async function fetchHareket(
+  semboller: string[],
+  options: HareketOptions = {},
+): Promise<ApiResult<HareketResponse>> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal } = options;
+  const path = ENDPOINTS.hareket;
+
+  const liste = (semboller ?? [])
+    .map((s) => String(s ?? '').trim())
+    .filter(Boolean);
+
+  if (!liste.length) {
+    return kesifKapi<HareketResponse>(
+      path,
+      'semboller_yok',
+      'Hareket ölçümü için sembol verilmedi.',
+    );
+  }
+  if (liste.length > HAREKET_AZAMI_SEMBOL) {
+    return kesifKapi<HareketResponse>(
+      path,
+      'cok_sembol',
+      'Tek çağrıda en çok ' +
+        HAREKET_AZAMI_SEMBOL +
+        ' sembol sorulabilir (' +
+        liste.length +
+        ' istendi).',
+    );
+  }
+
+  return apiGet<HareketResponse>(path, {
+    query: { semboller: liste.join(',') },
     timeoutMs,
     signal,
   });

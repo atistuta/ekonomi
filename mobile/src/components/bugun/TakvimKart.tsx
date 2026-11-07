@@ -78,7 +78,9 @@ import {
   fetchTakvim,
   haberOlcumEksik,
   useIstek,
+  TAKVIM_AZAMI_TEMETTU,
   TAKVIM_KAPSAMLAR,
+  TAKVIM_VARSAYILAN_TEMETTU,
   VARSAYILAN_TAKVIM_KAPSAM,
   type TakvimKapMadde,
   type TakvimKapsam,
@@ -88,7 +90,9 @@ import {
   Card,
   DISCLAIMER_TEXT,
   Durum,
+  Katlanir,
   OlcemedimKutu,
+  OlcumSatiri,
   Pill,
   VeriYok,
 } from '@/components';
@@ -126,8 +130,55 @@ export function TakvimKart({ kapAdet, temettuAdet }: TakvimKartProps) {
   const { colors } = useTheme();
   const [kapsam, setKapsam] = useState<TakvimKapsam>(VARSAYILAN_TAKVIM_KAPSAM);
 
+  // OLCULMUS TUZAK (sozlesme notu, `api/_takvim.js`): kaynak aylari
+  // OCAK -> ARALIK sirayla basiyor ve uc maddeleri DOKUMAN SIRASINDA
+  // tavana kadar aliyor. Yilin ikinci yarisinda varsayilan tavan
+  // GECMIS satirlarla dolabiliyor ve GELECEK temettu hic gorunmuyor.
+  // Sozlesme bu durumda istemciye "`temettuAdet=400` ile yeniden sor"
+  // diyor.
+  //
+  // NEDEN AYNI `cagri` ICINDE, STATE + EFFECT ILE DEGIL: ikinci turu
+  // bir `useEffect` icinde `setState` ile tetiklemek kademeli render
+  // uretiyor (eslint `react-hooks/set-state-in-effect`). Karar
+  // TAMAMEN ilk turun cevabina bakiyor, o yuzden ayni cagrinin
+  // icinde veriliyor: tek anahtar, tek yenileme dugmesi.
+  //
+  // IKINCI TUR KOSULLU VE EN COK BIR KEZ: gelecek satir SIFIR VE tavan
+  // DOLU ise. Tek basina "gelecek sifir" gercek bir cevap olabilir
+  // (yil sonu) - o halde ikinci tur ACILMIYOR.
+  // Bayrak STATE, ref DEGIL: ref'i render icinde okumak yasak
+  // (eslint `react-hooks/refs`). setState cagrisi await SONRASINDA,
+  // yani render sirasinda ya da bir effect icinde DEGIL; cagri
+  // bagimliliklarinda bu state yok, o yuzden yeni tur tetiklemiyor.
+  const [genisTurOldu, setGenisTurOldu] = useState(false);
+  // Tavan: ne sorduysak o (sormadiysak ucun ILAN ETTIGI varsayilan).
+  const tavan = temettuAdet ?? TAKVIM_VARSAYILAN_TEMETTU;
+
   const cagri = useCallback(
-    (signal: AbortSignal) => fetchTakvim({ kapsam, kapAdet, temettuAdet, signal }),
+    async (signal: AbortSignal) => {
+      setGenisTurOldu(false);
+      const ilk = await fetchTakvim({ kapsam, kapAdet, temettuAdet, signal });
+      if (!ilk.ok) return ilk;
+
+      const yerelTavan = temettuAdet ?? TAKVIM_VARSAYILAN_TEMETTU;
+      const basilan = ilk.data.temettuAdet;
+      // Bu bir KIYAS, hesap degil: "tavan doldu mu" sorusunu sozlesme
+      // istemciye soruyor. Esik/agirlik/formul YOK.
+      const tavanDoldu = typeof basilan === 'number' && basilan >= yerelTavan;
+      const gelecekHicYok = ilk.data.temettuGelecekAdet === 0;
+      if (!gelecekHicYok || !tavanDoldu || yerelTavan >= TAKVIM_AZAMI_TEMETTU) return ilk;
+
+      const genis = await fetchTakvim({
+        kapsam,
+        kapAdet,
+        temettuAdet: TAKVIM_AZAMI_TEMETTU,
+        signal,
+      });
+      // GENIS TUR DUSERSE OLCULMUS ILK TURU KAYBETMIYORUZ.
+      if (!genis.ok) return ilk;
+      setGenisTurOldu(true);
+      return genis;
+    },
     [kapsam, kapAdet, temettuAdet],
   );
   const { durum, veri, hata, yenile } = useIstek(
@@ -148,6 +199,14 @@ export function TakvimKart({ kapAdet, temettuAdet }: TakvimKartProps) {
   // `null` alanları saymak bir ölçüm. Sembol UYDURULMUYOR, yalnız kaç
   // satırda eksik kaldığı yazılıyor.
   const sembolsuz = (kap ?? []).filter((m) => m.symbol == null).length;
+
+  // ADETLER UCTAN. `paid === null` satirlari IKI SAYIMA DA girmiyor
+  // (uc bunu bilerek yapiyor), o yuzden ikisinin toplami basilan satir
+  // sayisindan KUCUK olabilir - ekran bu farki gizlemiyor ve kendisi
+  // yeniden saymiyor.
+  const gecmisAdet = veri?.temettuGecmisAdet;
+  const gelecekAdet = veri?.temettuGelecekAdet;
+  const bugunGun = veri?.temettuBugun;
 
   return (
     <Card
@@ -274,16 +333,64 @@ export function TakvimKart({ kapAdet, temettuAdet }: TakvimKartProps) {
           )}
 
           {temettuSorulmus ? (
-            <Text style={[type.micro, styles.num, { color: colors.textFaint }]}>
+            // TASARIM TURU 1: sayaç künyesi VARSAYILAN KAPALI. Gerekçe:
+            // bu blok takvimin kendisi değil, takvimin NASIL ölçüldüğü —
+            // ekranın birincil bilgisi değil ama silinemez (atlanan satır
+            // sayısı sessiz kalmamalı). Kapalı özet satırı içeride ne
+            // olduğunu söylüyor; beş uzun cümle varsayılan görünümden
+            // çıkıyor. Sayaçlar artık düz metin değil ÖLÇÜM SATIRI:
+            // birim ("adet") bölüm başlığında bir kez.
+            <Katlanir
+              baslik="Temettü ayrıştırıcı künyesi"
+              ozet="basılan · atlanan · tekilleştirilen · kıyas günü"
+              birim="adet">
               {/* ATLANAN/TEKRAR SESSİZ KALMIYOR: ucun ayrıştırıcısının
                   düşürdüğü satır sayısı görünür. */}
-              {'Basılan satır: ' +
-                adetMetni(veri.temettuAdet) +
-                ' · ayrıştırıcının atladığı: ' +
-                adetMetni(veri.temettuAtlanan) +
-                ' · tekilleştirilen: ' +
-                adetMetni(veri.temettuTekrar)}
-            </Text>
+              <OlcumSatiri etiket="Basılan satır" deger={adetMetni(veri.temettuAdet)} />
+              <OlcumSatiri
+                etiket="Ayrıştırıcının atladığı"
+                deger={adetMetni(veri.temettuAtlanan)}
+              />
+              <OlcumSatiri etiket="Tekilleştirilen" deger={adetMetni(veri.temettuTekrar)} />
+
+              {/* ÜÇ DAL: anahtar gövdede YOKSA (eski uç) "sormadım",
+                  `null` ise "ölçemedim", sayı ise basılır. `0` ile
+                  `null` ayrı yazılıyor. */}
+              {gecmisAdet === undefined && gelecekAdet === undefined ? (
+                <Text style={[type.micro, styles.num, { color: colors.textFaint }]}>
+                  Ödeme günü geçti/gelecek ayrımı: uç bu sayıları GÖNDERMEDİ.
+                </Text>
+              ) : (
+                <>
+                  <OlcumSatiri etiket="Ödeme günü GEÇMİŞ satır" deger={adetMetni(gecmisAdet)} />
+                  <OlcumSatiri etiket="Ödeme günü GELECEK satır" deger={adetMetni(gelecekAdet)} />
+                  <Text style={[type.micro, { color: colors.textFaint }]}>
+                    Günü ÖLÇÜLEMEYEN satırlar bu iki sayının HİÇBİRİNE girmiyor, o yüzden
+                    toplamı basılan satır sayısından küçük olabilir.
+                  </Text>
+                </>
+              )}
+
+              <Text style={[type.micro, { color: colors.textFaint }]}>
+                {bugunGun === undefined
+                  ? 'Kıyas günü: uç bu alanı göndermedi — "geçti/gelecek" ayrımı ölçülemez.'
+                  : bugunGun === null
+                    ? 'Kıyas günü ÖLÇÜLEMEDİ: uca bugünün tarihi ulaşmadı, bu yüzden satırlarda "ödeme günü geçti mi" boş kalır.'
+                    : 'Kıyas günü (uçtan): ' + bugunGun}
+              </Text>
+
+              {/* YENİDEN SORMA SESSİZ DEĞİL: kullanıcı neden 400 satır
+                  istendiğini görüyor. */}
+              {genisTurOldu ? (
+                <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
+                  {'Gelecek ödemeli satır bulunamadı ve ' +
+                    String(tavan) +
+                    ' satırlık tavan dolmuştu; takvim ' +
+                    String(TAKVIM_AZAMI_TEMETTU) +
+                    ' satırla YENİDEN soruldu (kaynak ayları Ocak→Aralık sıralı basıyor).'}
+                </Text>
+              ) : null}
+            </Katlanir>
           ) : null}
         </View>
       ) : null}
@@ -346,24 +453,48 @@ function KapSatiri({ madde }: { madde: TakvimKapMadde }) {
  * okunması zor; Türkçeye çevirmek için ay adı tablosu yazmak ucun
  * tablosunun ikizini doğurmak olurdu (`api/_takvim.js` uyarısı). ISO
  * hâli yine de ekranda, parantez içinde: kesinliği kaybetmiyoruz.
+ *
+ * NEDEN BAĞLANTI YOK (ÖLÇÜLDÜ 2026-10-29, `api/_takvim.js:106`):
+ * `TEMETTU_MADDE_ALANLARI` ALTI alan ilan ediyor — `symbol`, `date`,
+ * `dateHam`, `amount`, `yieldPct`, `currency`. `link` BU KÜMEDE YOK
+ * (tipte de yok: `TakvimTemettuMadde`); `link` yalnız KAP maddesinde
+ * (`TakvimKapMadde.link`) ve o satır onu `HaberSatiri` üzerinden
+ * `Linking.openURL` ile AÇIYOR. Buraya sembolden bir KAP/Mynet adresi
+ * kurmak uydurma bağlantı olurdu — uç o adresi ölçmedi.
  */
 function TemettuSatiri({ madde }: { madde: TakvimTemettuMadde }) {
   const { colors } = useTheme();
   const gun = (madde.dateHam ?? '').trim();
   const iso = (madde.date ?? '').trim();
+  // ÜÇ DEĞER, ÜÇ AYRI CÜMLE. `null` "ödenmedi" DEĞİL - uç
+  // ölçemedi demek; onu `false` gibi yazmak uydurma olurdu.
+  const odemeMetni =
+    madde.paid === true
+      ? 'ödeme günü GEÇTİ'
+      : madde.paid === false
+        ? 'ödeme günü GELECEK'
+        : 'ödeme günü geçti mi ÖLÇÜLEMEDİ';
 
   return (
     <View style={styles.temettuSatir}>
       <Pill label={madde.symbol} tone="info" glyph={null} size="sm" />
       <View style={styles.temettuGovde}>
-        <Text style={[type.small, { color: colors.text }]}>
+        {/* TASARIM TURU 1 / HİYERARŞİ: satırın ÖLÇÜLEN DEĞERİ hisse başı
+            tutar ve verim; önce ikisi de `type.micro` + `textDim` ile,
+            yani tarihten DAHA SİLİK basılıyordu. Kademeler yer değiştirdi:
+            tutar birincil (`bodyBold` + gövde rengi), tarih ikincil, ödeme
+            günü durumu üçüncül. Metin ve biçimleyiciler aynı. */}
+        <Text style={[type.small, { color: colors.textDim }]}>
           {(gun || iso || 'tarih gelmedi') + (gun && iso ? ' (' + iso + ')' : '')}
         </Text>
-        <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
+        <Text style={[type.bodyBold, styles.num, { color: colors.text }]}>
           {'Hisse başı ' +
             formatPrice(madde.amount, madde.currency) +
             ' · verim ' +
             formatPercent(madde.yieldPct)}
+        </Text>
+        <Text style={[type.micro, { color: colors.textFaint }]}>
+          {madde.paid === undefined ? 'ödeme günü durumu: uç GÖNDERMEDİ' : odemeMetni}
         </Text>
       </View>
     </View>
@@ -414,7 +545,8 @@ const styles = StyleSheet.create({
   kapSatir: { gap: space.xxs },
   rozetler: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, paddingTop: space.sm },
   temettuSatir: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm },
-  temettuGovde: { flex: 1, gap: 2 },
+  // `gap: 2` jetona çevrildi (TASARIM TURU 1): space.xxs aynı değer.
+  temettuGovde: { flex: 1, gap: space.xxs },
   num: {
     // Tanım TEK YERDE: theme/typography.ts → `numeric`.
     ...numeric,

@@ -119,7 +119,7 @@ import {
 // istek atmıyor (öteki uçlarla aynı: ağ ancak handler bir seri çekerken açılır).
 import grafikHandler, {
   config as grafikConfig, ARALIKLAR, ADIMLAR, VARSAYILAN_ARALIK, VARSAYILAN_ADIM,
-  suzKunye, KUNYE_ALANLARI,
+  suzKunye, KUNYE_ALANLARI, esikKumesiAnahtari,
   AZAMI_SORGU as grafikAzamiSorgu, PAZARLAR as grafikPazarlar,
   temizleSembol as grafikTemizle,
   cozEndeks as grafikCozEndeks, ENDEKS_SOZLUGU as grafikSozluk,
@@ -130,6 +130,7 @@ import nabizHandler, {
   config as nabizConfig, ayristirGovde as nabizAyristir, ayristirListe,
   AZAMI_BASLIK, AZAMI_GOVDE_BAYT as NABIZ_GOVDE_BAYT, PENCERE_GUN, TAZE_GUN,
   istemciVerdi, ayristirSunucuGirdisi, MAKRO_SORGULAR, AZAMI_SEMBOL_HABER,
+  AZAMI_SATIR, AZAMI_MANSET, guvenliBaglanti,
 } from '../api/pulse.js';
 // ⑭ /api/news — haber ucu. Modül düzeyinde motor KURMUYOR ve ağa ÇIKMIYOR
 // (yalnız sabit + saf fonksiyon), bu yüzden içe almak bedava.
@@ -139,6 +140,9 @@ import haberHandler, {
   AZAMI_HABER_SORGU as haberAzamiSorgu, HABER_PAZARLAR as haberPazarlar,
   GUNDEM_YERELLER as ucGundemYereller, GUNDEM_BESLEMELER as ucGundemBeslemeler,
   GUNDEM_BESLEME_MADDE as ucGundemBeslemeMadde, IZINLI_GUNDEM_KONAK as ucIzinliGundemKonak,
+  // ⑭k (Ş8 #8a) tema katmanı — SAF: motoru çağırıyor, ağa çıkmıyor.
+  AZAMI_TEMA_ADAY, temaAdaylariAyristir as ucTemaAyristir,
+  temaKatmani as ucTemaKatmani, motorHazir as ucHaberMotorHazir,
 } from '../api/news.js';
 // ⑭ haberin KENDİ ağ taşıyıcısı — `_ag.js` DEĞİL. `ayristirRSS` /
 // `haberAdresi` / `izinliAdres` SAF: ağa çıkmadan ölçülebiliyorlar.
@@ -164,6 +168,45 @@ import {
 // ama KENDİ ağ taşıyıcısı var (`_haber.js` kalıbı) — ayrıştırıcıların hepsi
 // SAF, yani ağa çıkmadan fikstürle ölçülebiliyorlar.
 import * as TAKVIM from '../api/_takvim.js';
+// ⑰ /api/degisim · /api/gundem · /api/kripto · /api/metal — AYNI `__rota=`
+// çoklayıcısına takılı, ama `_kesif.js`e GİRMEYEN dört taşıyıcı. `TASIYICI_ROTALARI`
+// `api/proxy.js`in KENDİ tablosundan okunuyor: testte elle kopya liste yok.
+// `proxy.js` modül düzeyinde YALNIZ `_yfin.js`i içe alıyor; ikisinde de
+// modül düzeyi istek YOK (ölçüldü: `_yfin.js`te her `fetch` fonksiyon içi).
+import { TASIYICI_ROTALARI } from '../api/proxy.js';
+import * as DEGISIM from '../api/_degisim.js';
+import * as GUNDEM from '../api/_gundem.js';
+import * as KRIPTO from '../api/_kripto.js';
+// `_kur.js` bu tur acildi (truncgil `today.json`): rota kumesi DORTTEN
+// BESE cikti. Liste `proxy.js`in kendi tablosundan okundugu icin kapi
+// ⑰ bu modulu de KENDILIGINDEN dolasiyor; ice aktarma eklenmezse
+// `MOD[r]` tanimsiz kalirdi.
+import * as KUR from '../api/_kur.js';
+// `_iceriden.js` bu tur acildi (SEC Form 4 + KAP): rota kumesi BESTEN
+// ALTIYA cikti. Ayni gerekce: liste `proxy.js`in tablosundan okundugu
+// icin ice aktarma eklenmezse `MOD[r]` tanimsiz kalir ve TAKIM COKER.
+import * as ICERIDEN from '../api/_iceriden.js';
+import * as METAL from '../api/_metal.js';
+// `_neden.js` bu tur acildi ("Neden hareket ediyor?"): rota kumesi ALTIDAN
+// YEDIYE cikti. Ayni gerekce: liste `proxy.js`in tablosundan okundugu icin
+// ice aktarma eklenmezse `MOD[r]` tanimsiz kalir ve TAKIM COKER.
+import * as NEDEN from '../api/_neden.js';
+// `_katalizor.js` bu tur acildi (Katalizor/Risk -> yaklasan temettu):
+// rota kumesi YEDIDEN SEKIZE cikti. Ayni gerekce: liste `proxy.js`in
+// tablosundan okundugu icin ice aktarma eklenmezse `MOD[r]` tanimsiz
+// kalir ve TAKIM COKER.
+import * as KATALIZOR from '../api/_katalizor.js';
+// `_mali.js` bu tur acildi (mali tablolar: SEC XBRL companyconcept +
+// Is Yatirim MaliTablo): rota kumesi SEKIZDEN DOKUZA cikti. Ayni
+// gerekce: liste `proxy.js`in tablosundan okundugu icin ice aktarma
+// eklenmezse `MOD[r]` tanimsiz kalir ve TAKIM COKER.
+import * as MALI from '../api/_mali.js';
+// `_hareket.js` bu tur acildi (⚡ Nabiz gun ici ani-hareket taramasi:
+// Yahoo 5 dakikalik bar -> motorun `analyzeIntraday` + `pulseIsSudden`).
+// Rota kumesi DOKUZDAN ONA cikti. Ayni gerekce: liste `proxy.js`in
+// tablosundan okundugu icin ice aktarma eklenmezse `MOD[r]` tanimsiz
+// kalir ve TAKIM COKER.
+import * as HAREKET from '../api/_hareket.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCORE_PATH = path.join(ROOT, 'api', 'score.js');
@@ -202,7 +245,7 @@ const bitir = () => {
     console.log('\nBilgi amaçlıdır, yatırım tavsiyesi değildir.');
     process.exit(1);
   }
-  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news + /api/tarama + /api/sektor + /api/radar + /api/backtest + /api/deger + /api/arama + /api/takvim kapıları ve doğrulamaları yerinde.`);
+  console.log(`✅ ${gecen} denetim geçti — /api/score + /api/recommend + /api/analyze + /api/theme + /api/compare + /api/causal + /api/chart + /api/pulse + /api/news + /api/tarama + /api/sektor + /api/radar + /api/backtest + /api/deger + /api/arama + /api/takvim + /api/degisim + /api/gundem + /api/hareket + /api/iceriden + /api/kripto + /api/katalizor + /api/kur + /api/mali + /api/metal + /api/neden + /api/yfin kapıları ve doğrulamaları yerinde.`);
   console.log('Bilgi amaçlıdır, yatırım tavsiyesi değildir.');
   process.exit(0);
 };
@@ -649,12 +692,232 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
   // Plan katmanının üç hesabı da MOTORDAN çağrılıyor; akış eşik/çarpan
   // taşımıyor (Commit C/D1 kuralı: sayı motorda, cümle çağrı noktasında).
   ok('⑤d · plan hesapları motordan (`eng.`) çağrılıyor, akışta sabit yok',
-    ['eng.buyZoneProximity(', 'eng.momentumInfo(', 'eng.planRiskReward(']
+    ['eng.buyZoneProximity(', 'eng.momentumInfo(', 'eng.planRiskReward(',
+      'eng.atrVolKod(', 'eng.atrPlanKod(']
       .every((s) => asrc.includes(s)),
-    'buyZoneProximity · momentumInfo · planRiskReward');
+    'buyZoneProximity · momentumInfo · planRiskReward · atrVolKod · atrPlanKod');
 
   // N3b: statik denetimin kendisi çalışıyor mu?
   ok('N3b · statik arama gerçekten çalışıyor', rsrc.includes('export default async function handler'));
+}
+
+// --- ⑤f FIRSAT KATMANI — SAF fikstür, AĞ YOK ---------------------
+// NIYE VAR: `firsat` alanı 2026-10-31'de `recommendOne`'ın kaydına girdi ve
+// kaydın alan kümesini ÇİVİLEYEN hİÇBİR denetim YOKTU — `plan`ın ⑤d'de
+// kapısı varken `firsat` ÖLÇÜLMEDEN içeri girdi. Kaydın alan kümesi istemci
+// sözleşmesidir: native kart `'firsat' in kayit` ile `kayit.firsat === null`
+// arasında ayırım yapıyor (uç göndermedi / ölçülemedi), bu yüzden alanın
+// sessizce doğması da sessizce kaybolması da ölçülmek zorunda.
+// İKİ KATMAN: (a) metin çivilemesi — kaydın alan kümesi AĞA ÇIKMADAN
+// ölçülemez (`kayitHam` SEC/Yahoo istiyor), o yüzden küme iki SÖZDİZİM
+// İFADESİ olarak çivileniyor; (b) FONKSİYONEL koşu — `firsatKatmani` elle
+// kurulmuş bir `r` ile GERÇEKTEN çalıştırılıyor, dış istek SIFIR.
+{
+  const fsrc = readFileSync(AKIS_PATH, 'utf8');
+
+  // (a1) kaydın ÇEKİRDEK alan kümesi — `kayitHam`ın nesne özlüğü.
+  ok('⑤f · kayıt çekirdeği ÇİVİLİ: { sym, market, ta, fa, composite }',
+    /kayit:\s*\{\s*sym,\s*market,\s*ta,\s*fa,\s*composite:\s*composite\(eng,\s*fa\.score,\s*ta\.score\)\s*\}/.test(fsrc),
+    'kayitHam nesne özlüğü yerinde');
+  // (a2) öneri kaydı ÇEKİRDEK + İKİ katman, FAZLASI YOK. Üçüncü bir katman
+  //      eklenirse bu denetim PATLAR — istenen davranış: yeni alan kendi
+  //      kapısını yazarak doğsun, sessizce değil.
+  ok('⑤f · recommendOne kaydı = çekirdek + plan + firsat (ÜÇÜNCÜ katman yok)',
+    /return\s*\{\s*\.\.\.kayit,\s*plan:\s*planKatmani\(eng,\s*r,\s*vade\),\s*firsat:\s*firsatKatmani\(eng,\s*r,\s*vade\)\s*\};/.test(fsrc),
+    'recommendOne dönüşü yerinde');
+
+  // (a3) ⑤d'nin `plan` için kurduğu kuralın AYNISI: hesap MOTORDAN,
+  //      akışta eşik/çarpan/sınır YOK.
+  const fkatman = (fsrc.match(/export function firsatKatmani[\s\S]*?\n\}/) || [''])[0];
+  ok('⑤f · firsatKatmani gövdesi ayrıştırılabildi', fkatman.length > 80, `${fkatman.length} krk`);
+  ok('⑤f · fırsat hesapları motordan (`eng.`) çağrılıyor',
+    ['eng.buyZoneProximity(', 'eng.priceOppAdj(', 'eng.oppCombined(', 'eng.oppTag(', 'eng.momentumInfo(']
+      .every((x) => fkatman.includes(x)),
+    'buyZoneProximity · priceOppAdj · oppCombined · oppTag · momentumInfo');
+  // EŞİK/ÇARPAN avcısı: gövdede HİÇ sayı sabiti olmamalı (motorda 8/6/4/0.4/2/99).
+  ok('⑤f · fırsat katmanında SAYI SABİTİ yok (hepsi motorda)',
+    !/[^\w.](?:\d+\.\d+|[1-9]\d*)[^\w]/.test(fkatman.replace(/\/\/[^\n]*/g, '')),
+    'gövdede çıplak sayı yok');
+  // `oppTag().txt` SERBEST TÜRKÇE + EMOJİ — `anchorSrc` ile aynı muamele:
+  // yalnız `cls` geçiyor. `etiket.txt` yazmak tek kelimelik bir
+  // 'iyileştirme' ve kimse farketmez, o yüzden burada çivili.
+  ok('⑤f · `oppTag().txt` tele ÇIKMIYOR (yalnız `cls`)',
+    /cls:\s*\(etiket\s*&&\s*etiket\.cls\)\s*\|\|\s*null/.test(fkatman) && !/etiket\.txt/.test(fkatman));
+
+  // (b) FONKSİYONEL — motor kurulur, AĞA ÇIKILMAZ (canliAg kurulumu istek
+  //     atmaz; `r` elle kuruluyor, `kayitHam` HİÇ çağrılmıyor).
+  const { firsatKatmani } = await import('../api/_akis.js');
+  const { buildMotor: kurMotor } = await import('../api/_motor.js');
+  const { TA_WEIGHTS: TW, TA_BENCHMARK: TB } = await import('../api/_ayar.js');
+  const { canliAg: kurAg } = await import('../api/_ag.js');
+  const fEng = kurMotor(kurAg({ taWeights: TW, taBenchmark: TB }).H);
+
+  const fr = (score, price, bz, atr, ek = {}) => ({
+    score,
+    adxVal: ek.adx != null ? ek.adx : null,
+    levels: {
+      price, buyZone: bz, atr,
+      sma50: ek.sma50 != null ? ek.sma50 : null,
+      sma200: ek.sma200 != null ? ek.sma200 : null,
+    },
+  });
+
+  const fIcinde = firsatKatmani(fEng, fr(70, 100, [95, 102], 2), 'orta');
+  ok('⑤f · katman yalnız HAM SAYI + SABİT KÜME kodu taşıyor',
+    anahtarlar(fIcinde) === 'bilesik,cls,fiyatPuan', anahtarlar(fIcinde));
+  // d = (100-102)/2 = -1 ≤ 0 → priceOppAdj +8 → 70+8 = 78 → oppTag ≥ 66 'strong'
+  ok('⑤f · bant İÇİNDE: fiyatPuan +8, bileşik 78, cls strong',
+    fIcinde.fiyatPuan === 8 && fIcinde.bilesik === 78 && fIcinde.cls === 'strong',
+    JSON.stringify(fIcinde));
+  // d = (103-102)/2 = 0.5 → 6*(1-0.5) = +3 → 60+3 = 63 → 'good'
+  const fYakin = firsatKatmani(fEng, fr(60, 103, [95, 102], 2), 'orta');
+  ok('⑤f · banda YAKIN: fiyatPuan +3, bileşik 63, cls good',
+    fYakin.fiyatPuan === 3 && fYakin.bilesik === 63 && fYakin.cls === 'good', JSON.stringify(fYakin));
+  // d = (120-102)/2 = 9 → -min(8, 32) = -8 (TAVAN çalışıyor) → 60-8 = 52
+  const fUzak = firsatKatmani(fEng, fr(60, 120, [95, 102], 2), 'orta');
+  ok('⑤f · banda UZAK: ceza TAVANI -8, bileşik 52',
+    fUzak.fiyatPuan === -8 && fUzak.bilesik === 52, JSON.stringify(fUzak));
+  // Aynı uzaklık, momentum AKTİF (adx 30, trend hizalı) → ceza *0.4
+  const fMom = firsatKatmani(fEng, fr(70, 120, [95, 102], 2, { adx: 30, sma50: 100, sma200: 90 }), 'orta');
+  ok('⑤f · momentum AKTİF → uzaklık cezası yumuşuyor (-8 → -3.2)',
+    fMom.fiyatPuan === -3.2 && fMom.bilesik === 66.8, JSON.stringify(fMom));
+  // VADE GERÇEKTEN GEÇİYOR: momentum gap eşiği vadeye göre değişiyor
+  // (kisa %3, uzun %8). p=108 → gap %5,6: kisa'da momentum AKTİF (ceza
+  // -8 → -3,2 → 66,8), uzun'da DEĞİL (-8 → 62). Aynı satır, başka vade.
+  const frMom = fr(70, 108, [95, 102], 2, { adx: 30, sma50: 100, sma200: 90 });
+  const fMomUzun = firsatKatmani(fEng, frMom, 'uzun');
+  const fMomKisa = firsatKatmani(fEng, frMom, 'kisa');
+  ok('⑤f · `vade` gerçekten kullanılıyor (momentum eşiği vadeye göre)',
+    fMomKisa.bilesik !== fMomUzun.bilesik,
+    `kisa ${fMomKisa.bilesik} · uzun ${fMomUzun.bilesik}`);
+  // `levels` yok → prox null → priceOppAdj 0. UYDURMA DEĞİL: fiyat uygunluğu
+  // bilinmiyorsa sembol teknik skoruyla sıralanır (oppCombined'in ilanı).
+  const fSeviyesiz = firsatKatmani(fEng, { score: 55, levels: null }, 'orta');
+  ok('⑤f · `levels` yok → fiyatPuan 0, bileşik = teknik skor',
+    fSeviyesiz.fiyatPuan === 0 && fSeviyesiz.bilesik === 55, JSON.stringify(fSeviyesiz));
+  ok('⑤f · skor yok → katman `null` (uydurma 0 değil)',
+    firsatKatmani(fEng, { score: null, levels: null }, 'orta') === null);
+  ok('⑤f · satır yok → katman `null`',
+    firsatKatmani(fEng, null, 'orta') === null && firsatKatmani(fEng, undefined, 'orta') === null);
+
+  // N3c olumsuz kontrol: motorun kendisi `txt` ÜRETİYOR — yani yukarıdaki
+  // '`txt` tele çıkmıyor' denetimi boş bir iddia değil, gerçekten bir şeyi
+  // düşürüyor.
+  ok('N3c · motorun `oppTag`i `txt` ÜRETİYOR (düşürülen şey var)',
+    typeof fEng.oppTag(78).txt === 'string' && fEng.oppTag(78).txt.length > 0);
+}
+
+// --- ⑤g ATR/FİYAT ORANI — İKİ AYRI SORU, SAF fikstür, AĞ YOK ------------
+// NİYE VAR: `atr / price * 100` app.js'te İKİ YERDE hesaplanıyordu ve İKİ
+// FARKLI soruya cevap veriyordu (ölçüldü 2026-11-03):
+//   (1) ATR (14) · Volatilite kartı — ÜÇ KADEMELİ oynaklık sınıfı
+//       (>=4 yüksek · >=2 orta · altı düşük), sessiz bant YOK;
+//   (2) fillCatalysts katalizör satırı — yalnız UÇLARDA konuşuyor
+//       (>=4 "geniş" · <1.5 "sakin"), ARADA (1.5 <= x < 4) HİÇBİR ŞEY
+//       BASMIYOR.
+// İkisini tek "kazanan"a indirmek webdeki SESSİZ BANDI sessizce silerdi, o
+// yüzden motorda İKİ ayrı makine kodu var. Bu bölüm o iki davranışın AYRI
+// kaldığını ölçüyor — özellikle `kod: null` (ÖLÇTÜM, söylenecek şey yok)
+// ile `null` (ÖLÇEMEDİM) ayrımını, ki ikisini karıştırmak native kartta
+// "ölçemedim" kutusunu sessiz bantta da bastırırdı.
+// İKİ KATMAN: (a) `planKatmani` dönüşünün ALAN KÜMESİ çivili (yeni alan
+// kendi kapısını yazarak doğsun); (b) iki saf işlev GERÇEKTEN koşturuluyor,
+// dış istek SIFIR.
+{
+  const gsrc = readFileSync(AKIS_PATH, 'utf8');
+  const gkatman = (gsrc.match(/export function planKatmani[\s\S]*?\n\}/) || [''])[0];
+  ok('⑤g · planKatmani gövdesi ayrıştırılabildi', gkatman.length > 80, `${gkatman.length} krk`);
+
+  // (a) ALAN KÜMESİ — yorumlar atılıp sıra birebir çivileniyor. Yedinci bir
+  //     alan eklenirse ya da biri düşerse bu denetim PATLAR.
+  const gsade = gkatman.replace(/\/\/[^\n]*/g, '');
+  ok('⑤g · plan katmanı = seviye + yakinlik + momentum + riskOdul + oynaklik + atrPlan',
+    /return\s*\{\s*seviye:[\s\S]*?yakinlik:[\s\S]*?momentum:[\s\S]*?riskOdul:[\s\S]*?oynaklik:\s*hamYuvarla\(eng\.atrVolKod\(r\.levels\.atr,\s*r\.levels\.price\)\),\s*atrPlan:\s*hamYuvarla\(eng\.atrPlanKod\(r\.levels\.atr,\s*r\.levels\.price\)\),\s*\};/.test(gsade),
+    'alan kümesi ve sırası yerinde');
+  // EŞİK avcısı: akışta 1.5 / 2 / 4 gibi sayı sabiti OLMAMALI (hepsi motorda).
+  ok('⑤g · plan katmanında SAYI SABİTİ yok (eşikler motorda)',
+    !/[^\w.](?:\d+\.\d+|[1-9]\d*)[^\w]/.test(gsade), 'gövdede çıplak sayı yok');
+
+  // (b) FONKSİYONEL — motor kurulur, AĞA ÇIKILMAZ.
+  const { buildMotor: gKurMotor } = await import('../api/_motor.js');
+  const { TA_WEIGHTS: GW, TA_BENCHMARK: GB } = await import('../api/_ayar.js');
+  const { canliAg: gKurAg } = await import('../api/_ag.js');
+  const gEng = gKurMotor(gKurAg({ taWeights: GW, taBenchmark: GB }).H);
+
+  // ---- (b1) OYNAKLIK SINIFI: üç kademe, SESSİZ BANT YOK ----
+  const vol = (atr, price) => gEng.atrVolKod(atr, price);
+  ok('⑤g · oynaklık alan kümesi = atr,atrPct,kod,stopKat',
+    anahtarlar(vol(2, 100)) === 'atr,atrPct,kod,stopKat', anahtarlar(vol(2, 100)));
+  // "Stop için ATR'nin 1.5-2 katı" cümlesindeki İKİ SAYI tele SAYI olarak
+  // çıkıyor: istemciye yazılsa istemciye eşik yazmak olurdu (§5.1).
+  ok('⑤g · `stopKat` tele SAYI olarak çıkıyor ([1.5, 2])',
+    JSON.stringify(vol(2, 100).stopKat) === '[1.5,2]', JSON.stringify(vol(2, 100).stopKat));
+  ok('⑤g · ATR yok → katman `null` (uydurma 0 değil)',
+    vol(null, 100) === null && vol(undefined, 100) === null);
+  // ATR VAR, fiyat YOK → oran ÖLÇÜLEMEDİ; web'de `lvl = ''` oluyordu.
+  // `atr` yine taşınıyor: ölçülen şey atılmıyor.
+  const volFiyatsiz = vol(2, 0);
+  ok('⑤g · ATR var, fiyat yok → atrPct null, kod null, atr KORUNUYOR',
+    volFiyatsiz.atrPct === null && volFiyatsiz.kod === null && volFiyatsiz.atr === 2,
+    JSON.stringify(volFiyatsiz));
+  // Sınırlar web ile BİREBİR: >=4 yüksek · >=2 orta · altı düşük.
+  ok('⑤g · oynaklık sınırı 4: 4.0 yüksek, 3.99 orta',
+    vol(4, 100).kod === 'yuksek' && vol(3.99, 100).kod === 'orta',
+    `${vol(4, 100).kod} / ${vol(3.99, 100).kod}`);
+  ok('⑤g · oynaklık sınırı 2: 2.0 orta, 1.99 düşük',
+    vol(2, 100).kod === 'orta' && vol(1.99, 100).kod === 'dusuk',
+    `${vol(2, 100).kod} / ${vol(1.99, 100).kod}`);
+  // atrPct = 0 GEÇERLİ BİR ÖLÇÜM (hiç hareket etmemiş bar) → sınıf çıkar.
+  ok('⑤g · atrPct 0 ölçümdür → `dusuk` (null DEĞİL)',
+    vol(0, 100).kod === 'dusuk' && vol(0, 100).atrPct === 0, JSON.stringify(vol(0, 100)));
+
+  // ---- (b2) PLAN/STOP BANDI: iki kod + SESSİZ ORTA BANT ----
+  const pl = (atr, price) => gEng.atrPlanKod(atr, price);
+  ok('⑤g · plan bandı alan kümesi = atrPct,kod',
+    anahtarlar(pl(2, 100)) === 'atrPct,kod', anahtarlar(pl(2, 100)));
+  ok('⑤g · ATR ya da fiyat yok → katman `null` (ÖLÇEMEDİM)',
+    pl(null, 100) === null && pl(2, 0) === null && pl(2, null) === null);
+  ok('⑤g · plan sınırı 4: 4.0 `genis`, 3.99 SESSİZ',
+    pl(4, 100).kod === 'genis' && pl(3.99, 100).kod === null,
+    `${pl(4, 100).kod} / ${pl(3.99, 100).kod}`);
+  ok('⑤g · plan sınırı 1.5: 1.5 SESSİZ, 1.49 `sakin`',
+    pl(1.5, 100).kod === null && pl(1.49, 100).kod === 'sakin',
+    `${pl(1.5, 100).kod} / ${pl(1.49, 100).kod}`);
+  ok('⑤g · atrPct 0 → `sakin` (web fillCatalysts ile aynı)',
+    pl(0, 100).kod === 'sakin' && pl(0, 100).atrPct === 0, JSON.stringify(pl(0, 100)));
+  // SESSİZ BANT ile ÖLÇEMEDİM AYRI HALLER: biri nesne + `kod: null`,
+  // öbürü nesnenin KENDİSİ null. Native kart ikisini ayrı çiziyor.
+  ok('⑤g · sessiz bant ≠ ölçemedim (nesne var, `kod` null)',
+    pl(2, 100) !== null && pl(2, 100).kod === null && pl(2, 100).atrPct === 2,
+    JSON.stringify(pl(2, 100)));
+
+  // ---- (b3) İKİ SORU GERÇEKTEN AYRI: aynı oran, farklı cevap ----
+  // atrPct 2.0: oynaklık `orta` DER, plan bandı SUSAR. Tek fonksiyona
+  // indirilseydi bu satır patlardı — denetimin varlık sebebi bu.
+  ok('⑤g · aynı oran (%2) iki soruda AYRI cevap: `orta` vs SESSİZ',
+    vol(2, 100).kod === 'orta' && pl(2, 100).kod === null);
+  // atrPct 3.0: oynaklık `orta`, plan hâlâ SESSİZ — üst sınırlar da ayrı.
+  ok('⑤g · %3: oynaklık `orta`, plan SESSİZ',
+    vol(3, 100).kod === 'orta' && pl(3, 100).kod === null);
+  // atrPct 1.2: oynaklık `dusuk`, plan `sakin` — alt uçta İKİSİ de konuşur.
+  ok('⑤g · %1.2: oynaklık `dusuk`, plan `sakin`',
+    vol(1.2, 100).kod === 'dusuk' && pl(1.2, 100).kod === 'sakin');
+
+  // (c) planKatmani gerçekten taşıyor mu — elle kurulmuş `r`, ağ YOK.
+  const { planKatmani: gPlan } = await import('../api/_akis.js');
+  const gp = gPlan(gEng, { levels: { price: 100, atr: 2, buyZone: [95, 102], anchorSrc: 'VP değer tabanı' } }, 'orta');
+  ok('⑤g · planKatmani dönüşü altı alan taşıyor',
+    anahtarlar(gp) === 'atrPlan,momentum,oynaklik,riskOdul,seviye,yakinlik', anahtarlar(gp));
+  ok('⑤g · taşınan değerler motorun ÇIKTISIYLA birebir',
+    gp.oynaklik.kod === 'orta' && gp.atrPlan.kod === null && gp.oynaklik.atrPct === 2,
+    JSON.stringify({ oynaklik: gp.oynaklik, atrPlan: gp.atrPlan }));
+  ok('⑤g · `seviye` yok → katman `null`',
+    gPlan(gEng, { levels: null }, 'orta') === null && gPlan(gEng, null, 'orta') === null);
+
+  // N3g olumsuz kontrol: motorda iki işlev GERÇEKTEN ayrı — aynı nesneyi
+  // döndürseler yukarıdaki "ayrı cevap" denetimleri boş iddia olurdu.
+  ok('N3g · iki işlev ayrı alan kümesi üretiyor (denetim boş iddia değil)',
+    anahtarlar(vol(2, 100)) !== anahtarlar(pl(2, 100)));
 }
 
 // --- ⑤e TAŞIYICI KİMLİK KİLİDİ (eski ÜÇ YÖNLÜ METİN kilidinin yerine) ---
@@ -1699,6 +1962,35 @@ ok('⑩a · sınırlar sayı ve pozitif',
     vars1.ag.items[0].risk === null && vars1.ag.items[0].heat === 'cool',
     JSON.stringify(vars1.ag.items[0]));
   ok('N16 · doğrulama GERÇEKTEN geçiriyor (boş test değil)', !n.hata && n.rows.length === 1);
+
+  // --- ⑩f (2026-11-03): `notable` eşiği MOTOR TABLOSUNDAN -----------
+  // Bu dal önce YOKTU: uç eşiği istemciden zorunlu istiyordu ve native
+  // istemcinin onu ölçen bir kaynağı bulunmuyordu.
+  {
+    const TABLO = { gold: { sharp: 1.5, notable: 0.8 }, equity_tr: { sharp: 2.0, notable: 1.0 } };
+    const t = (b) => ayristirGovde(b, KINDLER, TABLO);
+
+    const bos = t({ hareketler: [{ kind: 'gold', pct: 1 }], gundem: [] });
+    ok('⑩f · notable yoksa tablodan okunuyor (uydurma yok)',
+      !bos.hata && bos.rows[0].cfg.notable === 0.8, JSON.stringify(bos.hata || bos.rows[0]));
+
+    const acik = t({ hareketler: [{ kind: 'gold', pct: 1, notable: 2.5 }], gundem: [] });
+    ok('⑩f · gövdedeki notable tabloyu EZER (web kendi ölçümünü yollayabilir)',
+      !acik.hata && acik.rows[0].cfg.notable === 2.5, JSON.stringify(acik.rows[0]));
+
+    const sifir = t({ hareketler: [{ kind: 'gold', pct: 1, notable: 0 }], gundem: [] });
+    ok('⑩f · gövdedeki 0 tabloya DÜŞMÜYOR (0 geçerli bir eşik)',
+      !sifir.hata && sifir.rows[0].cfg.notable === 0, JSON.stringify(sifir.hata || sifir.rows[0]));
+
+    const yok = t({ hareketler: [{ kind: 'equity_us', pct: 1 }], gundem: [] });
+    ok('⑩f · tabloda olmayan tür için hâlâ bad_notable (varsayılan SEÇİLMİYOR)',
+      yok.hata && yok.hata.govde.error === 'bad_notable', JSON.stringify(yok.hata));
+
+    const bozuk = t({ hareketler: [{ kind: 'gold', pct: 1, notable: 'az' }], gundem: [] });
+    ok('⑩f · gövdede bozuk notable tabloya DÜŞMÜYOR → bad_notable',
+      bozuk.hata && bozuk.hata.govde.error === 'bad_notable', JSON.stringify(bozuk.hata));
+  }
+
 }
 
 // --- ⑩d gerçek cevap — AĞA ÇIKMADIĞI İÇİN ölçülebiliyor ------------------
@@ -1802,6 +2094,12 @@ ok('⑩a · sınırlar sayı ve pozitif',
     && /CAUSAL_INDEX_AFFINITY\s*=/.test(motorSrc));
   ok('⑩e · motor dışa aktarım listesinde üç sembol de var',
     /return \{[^}]*CAUSAL_INDEX_AFFINITY[^}]*causalAlign[^}]*computeCausalLinks[^}]*\}/.test(motorSrc));
+
+  // EŞİK TABLOSU DA MOTORDA (2026-11-03): uç kendi kopyasını tutmuyor.
+  ok('⑩f · `INDEX_ESIK` uçta KOPYALANMAMIŞ, motordan geçiyor',
+    !/INDEX_ESIK\s*=\s*\{/.test(kod) && /ENG\.INDEX_ESIK/.test(kod));
+  ok('⑩f · `INDEX_ESIK` motorda VAR ve dışa veriliyor',
+    /const INDEX_ESIK = \{/.test(motorSrc) && /return \{[^}]*INDEX_ESIK[^}]*\}/.test(motorSrc));
 
   // DOM ve LLM dilimin DIŞINDA kaldı: motora sızmamalı.
   ok('⑩e · motora DOM sızmadı (`renderCausalLinks` yok)',
@@ -2285,10 +2583,16 @@ ok('⑫a · `PAZARLAR` taşıyıcıyla AYNI DİZİ NESNESİ', grafikPazarlar ===
 
     const r = await cagirUc(grafikHandler, 'GET', { symbol: 'AAPL', range: '6mo', interval: '1d' });
     ok('⑫e · geçerli GET → 200', r.kod === 200, `kod ${r.kod}`);
+    // KÜME DONDURULDU: `gunici` + `guniciKod` 2026-11-03'te eklendi
+    // (Ş8 #1/#6). Alan sessizce DÜŞERSE bu satır kırılır.
     ok('⑫e · gövde alanları sabit',
-      anahtarlar(r.govde) === 'adet,interval,kunye,market,mumlar,ms,range,sayac,sym,tam,uyari,surum'
+      anahtarlar(r.govde) === 'adet,interval,kunye,market,mumlar,ms,range,sayac,sym,tam,uyari,surum,gunici,guniciKod'
         .split(',').sort().join(','),
       anahtarlar(r.govde));
+    // `interval=1d` → gün içi ölçümü SORULMADI. Sayı uydurulmuyor.
+    ok('⑫e · günlük adımda gün içi katmanı SUSUYOR (yanlış etiketli sayı yok)',
+      r.govde.gunici === null && r.govde.guniciKod === 'adim_uygun_degil',
+      `${JSON.stringify(r.govde.gunici)} · ${r.govde.guniciKod}`);
     ok('⑫e · uyarı metni gövdede', r.govde.uyari === UYARI);
     ok('⑫e · istenen aralık/adım cevapta GERİ BİLDİRİLİYOR',
       r.govde.range === '6mo' && r.govde.interval === '1d');
@@ -2624,6 +2928,164 @@ ok('⑫a · `PAZARLAR` taşıyıcıyla AYNI DİZİ NESNESİ', grafikPazarlar ===
 }
 
 
+// --- ⑫h ⚡ GÜN İÇİ ÖLÇÜM KATMANI ---------------------------------------
+// BU BLOK NE: `/api/chart` 2026-11-03'e kadar YALNIZ ham `mumlar[]`
+// döndürüyordu. ÖLÇÜLEN SORUN: `analyzeIntraday` app.js 11973'te,
+// poll.js 237'de ve worker/movers.mjs 72'de ÜÇ KEZ yazılıydı, üçünden de
+// UCA çıkan sayı YOKTU — native `dayChg`/`hourChg`/`rvol`/`breakout`
+// göremiyor, "⚡ Nabız"ı hiç kuramıyordu.
+//
+// ÜÇ ŞEY ÖLÇÜLÜYOR:
+//   ① katman YALNIZ `interval=5m` iken doluyor; ötekilerde `null` +
+//      `guniciKod='adim_uygun_degil'`. GEREKÇE: motordaki
+//      `ago = hi - 12` yorumu "~60 dk (12 x 5dk)" diyor; 1d adımında
+//      aynı satır 12 GÜNLÜK değişimi `hourChg` adıyla basardı.
+//   ② mum 3'ten az ise `null` + `guniciKod='mum_az'` — sıfır değil.
+//   ③ eşik kümesi SEMBOLDEN seçiliyor ve cevapta GERİ BİLDİRİLİYOR,
+//      istemci tahmin etmiyor; eşiklerin kendisi MOTORDAN geliyor.
+{
+  ok('⑫h · `esikKumesiAnahtari` dışa aktarılmış (saf, fikstürle ölçülebilir)',
+    typeof esikKumesiAnahtari === 'function', typeof esikKumesiAnahtari);
+  ok('⑫h · `-USD` biten sembol KRİPTO kümesine gidiyor',
+    esikKumesiAnahtari('BTC-USD', 'US') === 'CRYPTO', esikKumesiAnahtari('BTC-USD', 'US'));
+  ok('⑫h · küçük harfli kripto sembolü de yakalanıyor',
+    esikKumesiAnahtari('eth-usd') === 'CRYPTO', esikKumesiAnahtari('eth-usd'));
+  ok('⑫h · Yahoo maden sembolleri METAL kümesinde (GC/SI/PL)',
+    esikKumesiAnahtari('GC=F') === 'METAL' && esikKumesiAnahtari('SI=F') === 'METAL'
+    && esikKumesiAnahtari('PL=F') === 'METAL');
+  ok('⑫h · BIST pazarı BIST kümesine gidiyor',
+    esikKumesiAnahtari('ASELS', 'BIST') === 'BIST', esikKumesiAnahtari('ASELS', 'BIST'));
+  ok('⑫h · tanınmayan hal US kümesine düşüyor (sessiz hata yok)',
+    esikKumesiAnahtari('AAPL', 'US') === 'US' && esikKumesiAnahtari(null) === 'US'
+    && esikKumesiAnahtari(undefined, 'XYZ') === 'US');
+  // Uçta eşik SAYISI yazılmadı: yardımcı yalnız ANAHTAR döndürüyor.
+  ok('⑫h · yardımcı eşik SAYISI döndürmüyor (yalnız küme adı)',
+    ['CRYPTO', 'METAL', 'BIST', 'US'].includes(esikKumesiAnahtari('BTC-USD')));
+
+  const gercekFetch = globalThis.fetch;
+  const ortamUrl = process.env.KV_REST_API_URL;
+  const ortamTok = process.env.KV_REST_API_TOKEN;
+  // Dört SAĞLAM 5 dakikalık mum: kapanış 100 → 106, hacim artıyor.
+  // `chartPreviousClose = 100` → dayChg = +6; son mum önceki en
+  // yükseği (105) aşıyor → `breakout` beklenir.
+  const guniciYanit = (adet, basamak = 2) => {
+    const ts = []; const open = []; const high = []; const low = [];
+    const close = []; const volume = [];
+    for (let i = 0; i < adet; i++) {
+      ts.push(1000 + i * 300);
+      const c = 100 + i * basamak;
+      open.push(c - 1); high.push(c + 1); low.push(c - 2); close.push(c);
+      volume.push(1000 + i * 500);
+    }
+    const txt = JSON.stringify({
+      chart: {
+        result: [{
+          meta: {
+            currency: 'USD', symbol: 'AAPL', exchangeName: 'NMS',
+            regularMarketPrice: close[adet - 1], chartPreviousClose: 100,
+            dataGranularity: '5m', range: '1d',
+          },
+          timestamp: ts,
+          indicators: { quote: [{ open, high, low, close, volume }] },
+        }],
+      },
+    });
+    return { ok: true, status: 200, text: async () => txt, json: async () => JSON.parse(txt) };
+  };
+
+  try {
+    delete process.env.KV_REST_API_URL;
+    delete process.env.KV_REST_API_TOKEN;
+
+    // --- ⑫h① 5m + yeterli mum → katman DOLU -------------------------
+    globalThis.fetch = async () => guniciYanit(4);
+    const r = await cagirUc(grafikHandler, 'GET', { symbol: 'AAPL', range: '1d', interval: '5m' });
+    ok('⑫h① · 5 dakikalık adımda katman DOLU', r.kod === 200 && r.govde.gunici !== null
+      && r.govde.guniciKod === null, `${r.kod} · ${r.govde.guniciKod}`);
+    const g = r.govde.gunici || {};
+    ok('⑫h① · alan kümesi sabit (spark YOK)',
+      anahtarlar(g) === 'bigDay,breakout,dayChg,esik,esikKumesi,hourChg,prevClose,price,rvol,sudden'
+        .split(',').sort().join(','),
+      anahtarlar(g));
+    // `spark` BİLEREK düşürüldü: `mumlar[]` aynı seriyi taşıyor.
+    ok('⑫h① · `spark` TELDE YOK (mumlar[] ile ikiz olurdu)', g.spark === undefined);
+    ok('⑫h① · gün değişimi HAM sayı (biçimlenmiş dize değil)',
+      typeof g.dayChg === 'number' && Math.abs(g.dayChg - 6) < 1e-9, String(g.dayChg));
+    ok('⑫h① · `prevClose` üst kaynak künyesinden geldi (uydurulmadı)',
+      g.prevClose === 100, String(g.prevClose));
+    ok('⑫h① · `price` künyedeki anlık fiyat', g.price === 106, String(g.price));
+    ok('⑫h① · `rvol` HAM oran (son hacim / ortalama)',
+      typeof g.rvol === 'number' && g.rvol > 1, String(g.rvol));
+    ok('⑫h① · `breakout` önceki en yüksek aşıldığı için DOĞRU', g.breakout === true);
+    ok('⑫h① · eşik kümesi cevapta GERİ BİLDİRİLİYOR (istemci tahmin etmiyor)',
+      g.esikKumesi === 'US', String(g.esikKumesi));
+    ok('⑫h① · eşikler MOTORDAN geliyor (uçta sayı yazılmadı)',
+      g.esik && typeof g.esik.day === 'number' && typeof g.esik.hour === 'number'
+      && typeof g.esik.step === 'number', JSON.stringify(g.esik));
+    ok('⑫h① · `sudden`/`bigDay` makine kodu (cümle değil)',
+      typeof g.sudden === 'boolean' && typeof g.bigDay === 'boolean');
+    // ÖLÇÜM: +%6 US eşiğini (day 3.0) GEÇİYOR → ani hareket.
+    ok('⑫h① · ÖLÇÜM · %6 gün değişimi US eşiğini geçiyor → sudden',
+      g.sudden === true && g.bigDay === true);
+
+    // --- ⑫h② kripto sembolü FARKLI eşik kümesi alıyor ----------------
+    // ÖLÇÜM NİYE +%3 İLE: US eşiği day 3.0 / hour 1.8, kripto 6.0 / 3.5.
+    // +%6 İKİ kümede de ani sayılırdı (6 >= 6) ve ayrışma GÖRÜNMEZDİ.
+    // +%3 tam aradaki boşluğa düşüyor: aynı hareket US'te ani, kriptoda
+    // DEĞİL. Eşikleri burası seçmiyor — kümeyi sembol belirliyor.
+    globalThis.fetch = async () => guniciYanit(4, 1);
+    const ru = await cagirUc(grafikHandler, 'GET', { symbol: 'AAPL', range: '1d', interval: '5m' });
+    const rk = await cagirUc(grafikHandler, 'GET', { symbol: 'BTC-USD', range: '1d', interval: '5m' });
+    const gu = ru.govde.gunici || {};
+    const gk = rk.govde.gunici || {};
+    ok('⑫h② · kripto sembolü CRYPTO kümesini alıyor', gk.esikKumesi === 'CRYPTO', String(gk.esikKumesi));
+    ok('⑫h② · kripto eşiği US eşiğinden YÜKSEK (motorun tablosu)',
+      gk.esik && gu.esik && gk.esik.day > gu.esik.day, `${gk.esik && gk.esik.day} > ${gu.esik && gu.esik.day}`);
+    ok('⑫h② · iki istek AYNI hareketi ölçtü (karşılaştırma geçerli)',
+      gu.dayChg === gk.dayChg && Math.abs(gu.dayChg - 3) < 1e-9, `${gu.dayChg} · ${gk.dayChg}`);
+    ok('⑫h② · ÖLÇÜM · aynı hareket US tarafinda ani, kriptoda DEĞİL',
+      gu.sudden === true && gk.sudden === false, `US ${gu.sudden} · CRYPTO ${gk.sudden}`);
+
+    // --- ⑫h③ mum az → `null` + NEDEN ---------------------------------
+    globalThis.fetch = async () => guniciYanit(2);
+    const rz = await cagirUc(grafikHandler, 'GET', { symbol: 'AAPL', range: '1d', interval: '5m' });
+    ok('⑫h③ · mum 3ten az → katman `null`, sayı UYDURULMUYOR',
+      rz.kod === 200 && rz.govde.gunici === null && rz.govde.guniciKod === 'mum_az',
+      `${rz.govde.guniciKod}`);
+    ok('⑫h③ · mumlar yine taşınıyor (grafik çizilebilir)', rz.govde.adet === 2);
+
+    // --- ⑫h④ öteki adımlar SUSUYOR -----------------------------------
+    globalThis.fetch = async () => guniciYanit(20);
+    for (const adim of ['15m', '60m', '1d']) {
+      const ra = await cagirUc(grafikHandler, 'GET', { symbol: 'AAPL', range: '1mo', interval: adim });
+      ok(`⑫h④ · \`${adim}\` adımında katman SUSUYOR (yanlış etiketli saat yok)`,
+        ra.govde.gunici === null && ra.govde.guniciKod === 'adim_uygun_degil',
+        `${adim} → ${ra.govde.guniciKod}`);
+    }
+  } finally {
+    globalThis.fetch = gercekFetch;
+    if (ortamUrl === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = ortamUrl;
+    if (ortamTok === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = ortamTok;
+  }
+
+  // --- ⑫h⑤ HAM SAYI KURALI: uçta eşik/formül yok --------------------
+  {
+    const kod = readFileSync(CHART_PATH, 'utf8').split(/\r?\n/)
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+    ok('⑫h⑤ · uç `analyzeIntraday`ı MOTORDAN çağırıyor (kopya hesap yok)',
+      /ENG\.analyzeIntraday\(/.test(kod) && !/function analyzeIntraday/.test(kod));
+    ok('⑫h⑤ · uç `pulseIsSudden`ı MOTORDAN çağırıyor',
+      /ENG\.pulseIsSudden\(/.test(kod) && !/function pulseIsSudden/.test(kod));
+    ok('⑫h⑤ · uçta PULSE_TH eşik TABLOSU kopyalanmamış',
+      !/PULSE_TH\s*=/.test(kod) && !/\bhour:\s*\d/.test(kod));
+    ok('⑫h⑤ · uçta Türkçe karar cümlesi yok (sözlük native tarafta)',
+      !/ani hareket|yüksek hacim|sert yükseli/i.test(kod));
+  }
+}
+
+
 // =========================================================================
 bolum('⑬ /api/pulse — yedinci uç, piyasa nabzı / konjonktür (POST)');
 // =========================================================================
@@ -2718,7 +3180,51 @@ ok('⑬a · taze sayımı 2 gün (app.js `fresh2d` ile aynı)', TAZE_GUN === 2, 
   ok('⑬c · simdi pozitif olmayan → bad_simdi', hata({ ...BOS, simdi: 0 }) === 'bad_simdi');
   ok('⑬c · isteğe bağlı sayılar yokken hata YOK (eksik ≠ geçersiz)', hata(BOS) === null);
 
-  // Normalleştirme: motorun okumadığı alanlar TAŞINMIYOR.
+  // ANI-HAREKET SATIRLARI (makro etiketi için): sektör SEMBOL ADINDAN
+  // okunuyor, bu yüzden ad isteniyor — ama ZORUNLU DEĞİL.
+  ok('⑬c · satirlar sınırı sayı ve pozitif', AZAMI_SATIR > 0, String(AZAMI_SATIR));
+  ok('⑬c · satirlar hiç verilmemiş → hata YOK', hata(BOS) === null);
+  ok('⑬c · satirlar null → hata YOK (açıkça "yok" demek geçerli)',
+    hata({ ...BOS, satirlar: null }) === null);
+  ok('⑬c · satirlar dizi değil → bad_satirlar',
+    hata({ ...BOS, satirlar: { a: 1 } }) === 'bad_satirlar');
+  ok('⑬c · tavanı aşan satir → cok_satir (SESSİZ KIRPMA YOK)',
+    hata({ ...BOS, satirlar: Array.from({ length: AZAMI_SATIR + 1 }, () => ({ sembol: 'X', yukari: true })) })
+      === 'cok_satir');
+  ok('⑬c · tam tavan hâlâ kabul',
+    hata({ ...BOS, satirlar: Array.from({ length: AZAMI_SATIR }, () => ({ sembol: 'X', yukari: true })) })
+      === null);
+  ok('⑬c · satir nesne değil → bad_satirlar',
+    hata({ ...BOS, satirlar: ['ASELS'] }) === 'bad_satirlar');
+  ok('⑬c · sembol boş → bad_satirlar',
+    hata({ ...BOS, satirlar: [{ sembol: '  ', yukari: true }] }) === 'bad_satirlar');
+  // YON KESİN BOOLEAN: 0/1/'true' kabul edilse yön yanlış okunup etiket
+  // TERS basılabilirdi — "düşüyor"a "rüzgâr" denirdi.
+  ok('⑬c · yukari sayı → bad_satirlar',
+    hata({ ...BOS, satirlar: [{ sembol: 'ASELS', yukari: 1 }] }) === 'bad_satirlar');
+  ok('⑬c · yukari metin → bad_satirlar',
+    hata({ ...BOS, satirlar: [{ sembol: 'ASELS', yukari: 'true' }] }) === 'bad_satirlar');
+  ok('⑬c · yukari eksik → bad_satirlar',
+    hata({ ...BOS, satirlar: [{ sembol: 'ASELS' }] }) === 'bad_satirlar');
+  {
+    const ns = nabizAyristir({ ...BOS, satirlar: [{ sembol: ' asels ', yukari: false }] });
+    ok('⑬c · sembol kırpılıp BÜYÜK harfe çevriliyor',
+      ns.satirlar.length === 1 && ns.satirlar[0].symbol === 'ASELS', JSON.stringify(ns.satirlar));
+    ok('⑬c · satir alanları motorun beklediği adlarda (symbol/up)',
+      anahtarlar(ns.satirlar[0]) === 'symbol,up', anahtarlar(ns.satirlar[0]));
+    ok('⑬c · satirlar verilmezse null (boş dizi DEĞİL — "ölçmedim" ≠ "yok")',
+      nabizAyristir(BOS).satirlar === null, String(nabizAyristir(BOS).satirlar));
+  }
+
+  // Normalleştirme: taşınan alan kümesi.
+  //
+  //  ⚠️ SAV DEĞİŞTİ (Ş20.13): burada ÖNCE "bağlantı/kaynak
+  //  TAŞINMIYOR" yazıyordu ve bu DOĞRUydu — o gün cevabın hiçbir
+  //  alanı manşet metni döndürmüyordu, bu yüzden bağlantıyı
+  //  taşımak ölü yüktü. Cevap şimdi `mansetler` alanını
+  //  döndürüyor (web'in `headlines`ı) ve native o bağlantıyı
+  //  AÇIYOR, dolayısıyla `link` + `source` taşınmak ZORUNDA.
+  //  `emoji` hâlâ atılıyor: hiçbir yere gitmiyor.
   const n = nabizAyristir({
     faizHaberleri: [{
       title: 'Fed raises rates', description: 'inflation', pubDate: 'Mon, 19 Oct 2026 10:00:00 GMT',
@@ -2727,10 +3233,45 @@ ok('⑬a · taze sayımı 2 gün (app.js `fresh2d` ile aynı)', TAZE_GUN === 2, 
     enflasyonHaberleri: [],
     genislik: 55, enflasyonBaskisi: 0.3, risk: 0.1,
   });
-  ok('⑬c · manşetten yalnız motorun OKUDUĞU alanlar geçiyor',
-    anahtarlar(n.faiz[0]) === 'description,pubDate,title', anahtarlar(n.faiz[0]));
-  ok('⑬c · bağlantı/kaynak/emoji taşınmıyor (tele geri dönmeyecekler)',
-    n.faiz[0].link === undefined && n.faiz[0].source === undefined && n.faiz[0].emoji === undefined);
+  ok('⑬c · manşetin taşınan alan kümesi SABİT',
+    anahtarlar(n.faiz[0]) === 'description,link,pubDate,source,title', anahtarlar(n.faiz[0]));
+  ok('⑬c · bağlantı ve kaynak taşınıyor (`mansetler` onları tele geri koyuyor)',
+    n.faiz[0].link === 'http://x' && n.faiz[0].source === 'Reuters',
+    `${n.faiz[0].link} · ${n.faiz[0].source}`);
+  ok('⑬c · emoji hâlâ taşınmıyor (hiçbir yere gitmiyor)',
+    n.faiz[0].emoji === undefined);
+
+  // --- ⚠️ BAĞLANTI ŞEMASI: cihazda `Linking.openURL` ile AÇILIYOR ----
+  //  İstemci gövdesi GÜVENİLMEZ. `javascript:` bir şemanın tele geri
+  //  dönüp cihazda açılması, istemcinin kendi gövdesine koyduğu bir
+  //  dizgiyi çalıştırılabilir kılardı. 400 ATILMIYOR: bağlantı
+  //  ölçümün parçası değil, geçmezse BOŞ kalıyor — native o manşeti
+  //  tıklanabilir GÖSTERMİYOR.
+  ok('⑬c · https geçiyor', guvenliBaglanti('https://a.b/c') === 'https://a.b/c');
+  ok('⑬c · büyük harfli HTTP geçiyor', guvenliBaglanti('HTTP://a.b') === 'HTTP://a.b');
+  ok('⑬c · javascript: şeması DÜŞÜYOR',
+    guvenliBaglanti('javascript:alert(1)') === '', guvenliBaglanti('javascript:alert(1)'));
+  ok('⑬c · data: şeması DÜŞÜYOR', guvenliBaglanti('data:text/html,x') === '');
+  ok('⑬c · file: şeması DÜŞÜYOR', guvenliBaglanti('file:///etc/passwd') === '');
+  ok('⑬c · şemasız yol DÜŞÜYOR (/a/b açılamaz)', guvenliBaglanti('/a/b') === '');
+  ok('⑬c · başındaki boşluk kırpılıp geçiyor',
+    guvenliBaglanti('  https://a.b  ') === 'https://a.b');
+  ok('⑬c · boşluk + javascript: hâlâ DÜŞÜYOR',
+    guvenliBaglanti('  javascript:alert(1)') === '');
+  ok('⑬c · null/undefined → boş (çökmez)',
+    guvenliBaglanti(null) === '' && guvenliBaglanti(undefined) === '');
+  ok('⑬c · çok uzun bağlantı DÜŞÜYOR (500 bayt tavanı)',
+    guvenliBaglanti('https://a.b/' + 'x'.repeat(600)) === '');
+  ok('⑬c · geçersiz şema 400 ATMIYOR, yalnız bağlantıyı boşaltıyor',
+    nabizAyristir({
+      ...BOS,
+      faizHaberleri: [{ title: 'T', description: '', pubDate: 'Mon, 19 Oct 2026 10:00:00 GMT', link: 'javascript:x' }],
+    }).faiz[0].link === '');
+  ok('⑬c · kaynak adı 80 baytta kırpılıyor',
+    nabizAyristir({
+      ...BOS,
+      faizHaberleri: [{ title: 'T', description: '', pubDate: 'Mon, 19 Oct 2026 10:00:00 GMT', source: 'K'.repeat(200) }],
+    }).faiz[0].source.length === 80);
   ok('⑬c · isteğe bağlı sayılar geçiyor',
     n.genislik === 55 && n.enflasyonBaskisi === 0.3 && n.risk === 0.1);
   ok('⑬c · verilmeyen sayı null (0 DEĞİL — "yok" ile "sıfır" ayrı)',
@@ -2767,9 +3308,104 @@ ok('⑬a · taze sayımı 2 gün (app.js `fresh2d` ile aynı)', TAZE_GUN === 2, 
     ok('⑬d · geçerli POST → 200', res.kod === 200, `kod ${res.kod}`);
     ok('⑬d · ÖLÇÜM · uç ağa HİÇ çıkmadı (0 dış istek)', agDenemesi === 0, `${agDenemesi} deneme`);
     ok('⑬d · gövde alanları sabit',
-      anahtarlar(res.govde) === 'degerlendirilen,durus,eksik,haberler,kaynak,konjonktur,ms,pencere,surum,taze,uyari',
+      anahtarlar(res.govde) === 'degerlendirilen,durus,eksik,eksikGerceklik,eksikYorum,etiketler,gerceklik,haberler,kaynak,konjonktur,mansetler,ms,pencere,sonManset,surum,taze,taze2g,uyari,varMi,yorum',
       anahtarlar(res.govde));
     ok('⑬d · uyarı metni gövdede', res.govde.uyari === UYARI);
+    // --- MAKRO YORUM KODLARI (Ş8 #1/#6 üçüncü katman) -----------------
+    //  `yorum` KÖD döndürüyor, CÜMLE DEĞİL; eşik (0,15) motorda kaldı.
+    ok('⑬d · yorum alan kümesi sabit',
+      anahtarlar(res.govde.yorum) === 'inflIsinma,inflSoguma,kod,taze,uyumlu',
+      anahtarlar(res.govde.yorum));
+    ok('⑬d · yorum kodu SABİT KÜMEDEN',
+      ['sakin', 'hawk', 'dove', 'notr'].includes(res.govde.yorum.kod), String(res.govde.yorum.kod));
+    ok('⑬d · manşet VAR → varMi true, yorum sakin-DEGĞİL',
+      res.govde.varMi === true && res.govde.yorum.kod !== 'sakin',
+      `${res.govde.varMi} · ${res.govde.yorum.kod}`);
+    ok('⑬d · şahin gövdede yorum kodu duruş kodunu izliyor',
+      res.govde.yorum.kod === 'hawk', String(res.govde.yorum.kod));
+    ok('⑬d · enflasyon ısınma/soğuma boolean ve aynı anda doğru DEĞİL',
+      typeof res.govde.yorum.inflIsinma === 'boolean'
+      && typeof res.govde.yorum.inflSoguma === 'boolean'
+      && !(res.govde.yorum.inflIsinma && res.govde.yorum.inflSoguma));
+    ok('⑬d · taze2g sayı ve değerlendirileni AŞMIYOR',
+      Number.isFinite(res.govde.taze2g) && res.govde.taze2g >= 0
+      && res.govde.taze2g <= res.govde.degerlendirilen.faiz + res.govde.degerlendirilen.enflasyon,
+      String(res.govde.taze2g));
+    ok('⑬d · sonManset ms epoch (0 DEĞİL, pencere içi en yeni manşet)',
+      res.govde.sonManset === Date.parse(yas(10)), String(res.govde.sonManset));
+    // SATIR GÖNDERİLMEDİ: `etiketler` NULL olmak zorunda. Boş dizi
+    // "ölçtüm, etiket çıkmadı" demek olurdu — HİÇ ÖLÇMEDİK.
+    ok('⑬d · satir yoksa etiketler null (ölçmeden "yok" demiyor)',
+      res.govde.etiketler === null, JSON.stringify(res.govde.etiketler));
+    ok('⑬d · satir yoksa eksikYorum bunu AÇIKÇA söylüyor',
+      JSON.stringify(res.govde.eksikYorum) === '["satirlar"]', JSON.stringify(res.govde.eksikYorum));
+    ok('⑬d · satir yoksa uyumlu BOŞ (uydurulmuyor)',
+      Array.isArray(res.govde.yorum.uyumlu) && res.govde.yorum.uyumlu.length === 0);
+    ok('⑬d · yorum gövdesinde eşik/cümle yok',
+      !/0\.15|ısınma|şahin|güvercin|rüzgâr|baskısı|<b>/.test(JSON.stringify(res.govde.yorum)),
+      JSON.stringify(res.govde.yorum));
+
+    // --- 🗞️ MANŞETLER ----------------------------------------------
+    //  BU GÖVDEDE HİÇ BAĞLANTI YOK. Web de bağlantısız manşeti
+    //  listeye ALMIYOR, bu yüzden doğru cevap BOŞ DİZİ: "ölçtüm,
+    //  gösterilebilir manşet yok". `null` olsaydı "hiç bakmadım"
+    //  demek olurdu — baktık.
+    ok('⑬d · mansetler dizi (null DEĞİL — bakıldı)',
+      Array.isArray(res.govde.mansetler), JSON.stringify(res.govde.mansetler));
+    ok('⑬d · bağlantısız manşet listeye GİRMİYOR (web ile aynı küme)',
+      res.govde.mansetler.length === 0, String(res.govde.mansetler.length));
+    ok('⑬d · manşet tavanı sabiti 3 (web’in `.slice(0, 3)`ü)',
+      AZAMI_MANSET === 3, String(AZAMI_MANSET));
+
+    // BağlantıLI ikinci ölçüm: sıra, tavan, alan kümesi.
+    {
+      const bag = (i, saat) => ({
+        title: 'H' + i, description: '', pubDate: yas(saat),
+        link: 'https://h.example/' + i, source: 'K' + i,
+      });
+      const res2 = sahteRes();
+      await nabizHandler({ method: 'POST', body: {
+        // Pencere içi 5 manşet + PENCERE DIŞI 1 manşet (en yeni görünümlü
+        // olmasın diye en eski). 1 tanesi BAĞLANTISIZ → listeye girmemeli.
+        faizHaberleri: [bag(1, 30), bag(2, 5), bag(3, 80),
+          { title: 'Hbagsiz', description: '', pubDate: yas(1) }],
+        enflasyonHaberleri: [bag(4, 12), bag(5, 200)],
+        simdi: SIMDI,
+      } }, res2);
+      const m = res2.govde.mansetler;
+      ok('⑬d · manşet sayısı tavanı AŞMIYOR', m.length === AZAMI_MANSET, String(m.length));
+      ok('⑬d · manşet alan kümesi sabit (native `HaberMadde`si)',
+        anahtarlar(m[0]) === 'link,pubDate,source,title', anahtarlar(m[0]));
+      ok('⑬d · manşetler EN YENİDEN eskiye sıralı',
+        Date.parse(m[0].pubDate) >= Date.parse(m[1].pubDate)
+        && Date.parse(m[1].pubDate) >= Date.parse(m[2].pubDate),
+        m.map((x) => x.title).join(','));
+      ok('⑬d · en yeni bağlantıLI manşet başta (5 sa önceki)',
+        m[0].title === 'H2', m[0].title);
+      ok('⑬d · bağlantısız manşet listede YOK (daha yeni olsa BİLE)',
+        !m.some((x) => x.title === 'Hbagsiz'), m.map((x) => x.title).join(','));
+      ok('⑬d · pencere DIŞI manşet listede yok',
+        !m.some((x) => x.title === 'H5'), m.map((x) => x.title).join(','));
+      ok('⑬d · bağlantılar http/https',
+        m.every((x) => /^https?:\/\//.test(x.link)), JSON.stringify(m.map((x) => x.link)));
+      ok('⑬d · manşette Türkçe cümle/eşik ÜRETİLMİYOR (ham taşıma)',
+        !/öneri|fırsat|kazan|tavsiye|<b>/.test(JSON.stringify(m)), JSON.stringify(m));
+    }
+    // --- FİYAT YALANLAMA (Ş8 #1/#6 ikinci katman) ----------------------
+    //  Bu gövde `genislikYas` ve `gunDegisimleri` GÖNDERMİYOR. Beklenen
+    //  davranış: uç varsayılan UYDURMUYOR, eksiği AÇIKÇA söylüyor.
+    ok('⑬d · gerceklik alan kümesi sabit',
+      anahtarlar(res.govde.gerceklik) === 'celiski,kaynaklar,want',
+      anahtarlar(res.govde.gerceklik));
+    ok('⑬d · eksik girdi AÇIKÇA bildiriliyor (yaş + satırlar yok)',
+      JSON.stringify(res.govde.eksikGerceklik) === '["genislikYas","gunDegisimleri"]',
+      JSON.stringify(res.govde.eksikGerceklik));
+    ok('⑬d · girdi eksikken KAYNAK ÜRETİLMİYOR (varsayılan 50 konmuyor)',
+      res.govde.gerceklik.kaynaklar.length === 0 && res.govde.gerceklik.celiski.length === 0);
+    // EŞİK VE CÜMLE UCA SIZMIYOR: kaynak nesnesi yalnız `dir` + `kod` +
+    // HAM sayı taşır; 45/55/0.70/1.0 ve Türkçe cümle GÖVDEDE YOK.
+    ok('⑬d · gerceklik gövdesinde eşik/cümle yok',
+      !/pazar|genişliği|izlediğin|0\.70|BREADTH/.test(JSON.stringify(res.govde.gerceklik)));
     // GERİYE DÖNÜK UYUM: istemci manşet verdiğinde yol AÇIKÇA 'istemci'
     // ve sunucu ölçümü NULL — yani "haber taramadım" uydurma sayaçla
     // gizlenmiyor.
@@ -3067,9 +3703,13 @@ ok('⑬a · taze sayımı 2 gün (app.js `fresh2d` ile aynı)', TAZE_GUN === 2, 
       } }, r);
       ok('⑬f · sunucu yolu → 200', r.kod === 200, `kod ${r.kod}`);
       ok('⑬f · gövde alanları İSTEMCİ yolundakiyle AYNI (tek alan eklenmedi/çıkmadı)',
-        anahtarlar(r.govde) === 'degerlendirilen,durus,eksik,haberler,kaynak,konjonktur,ms,pencere,surum,taze,uyari',
+        anahtarlar(r.govde) === 'degerlendirilen,durus,eksik,eksikGerceklik,eksikYorum,etiketler,gerceklik,haberler,kaynak,konjonktur,mansetler,ms,pencere,sonManset,surum,taze,taze2g,uyari,varMi,yorum',
         anahtarlar(r.govde));
       ok('⑬f · yol AÇIKÇA bildiriliyor (kaynak = sunucu)', r.govde.kaynak === 'sunucu', String(r.govde.kaynak));
+      // Sunucu yolunda da eksik girdi aynı dürüstlükle bildiriliyor.
+      ok('⑬f · eksikGerceklik sunucu yolunda da dolu',
+        JSON.stringify(r.govde.eksikGerceklik) === '["genislikYas","gunDegisimleri"]',
+        JSON.stringify(r.govde.eksikGerceklik));
       ok('⑬f · ÖLÇÜM · 2 makro + 1 sorgu = 3 istek (paralel)',
         cagrilar.length === 3, `${cagrilar.length} istek`);
       ok('⑬f · ÖLÇÜM · bütün adresler İZİNLİ konakta', cagrilar.every(izinliAdres),
@@ -3330,7 +3970,8 @@ ok('⑭a · kısa gövde eşiği sayı ve pozitif',
     const r = await cagirUc(haberHandler, 'GET', { q: 'ASELSAN', market: 'TR', limit: '3' });
     ok('⑭e · geçerli GET → 200', r.kod === 200, `kod ${r.kod}`);
     ok('⑭e · gövde alanları sabit',
-      anahtarlar(r.govde) === 'adet,limit,maddeler,market,ms,q,sayac,tam,uyari', anahtarlar(r.govde));
+      anahtarlar(r.govde) === 'adet,duyarlilik,limit,maddeler,market,ms,q,sayac,surum,tam,uyari',
+      anahtarlar(r.govde));
     ok('⑭e · uyarı metni gövdede', r.govde.uyari === UYARI);
     ok('⑭e · istenen q/market/limit cevapta GERİ BİLDİRİLİYOR',
       r.govde.q === 'ASELSAN' && r.govde.market === 'TR' && r.govde.limit === 3);
@@ -3412,11 +4053,33 @@ ok('⑭a · kısa gövde eşiği sayı ve pozitif',
   ok('⑭f · 502 yalnız makine kodu döndürüyor',
     /error:\s*'haber_alinamadi'/.test(kod) && !/\bdetail\s*:/.test(kod));
 
-  // ASIL AYRIM: haber `_ag.js`e GİRMEDİ.
-  ok('⑭f · uç `_ag.js` import ETMİYOR', !/_ag\.js/.test(kod));
+  // ASIL AYRIM: haber KONAĞI `_ag.js`e GİRMEDİ.
+  //
+  // ÖNCUL DEĞİŞTİ (2026-10-31/Ş8-G1): bu bölüm eskiden "uç `_ag.js`
+  // import ETMİYOR" diyordu. Duyarlılık katmanı için motor kuruluyor ve
+  // `buildMotor` bir AĞ tutamacı istiyor — import GİRDİ. Korunan ŞEY
+  // değişmedi ve AŞAĞIDA ÖLÇÜLÜYOR: (i) `_ag.js`in IZINLI listesine haber
+  // konağı eklenmedi, (ii) uçta çıplak `fetch(` yok, (iii) ölçülen dış
+  // istek sayısı hâlâ 1 — yani haber AĞI hâlâ TAŞIYICIDA.
+  ok('⑭f · uç `_ag.js`ten YALNIZ `canliAg` alıyor (ağ yardımcısı almıyor)',
+    /import\s*\{\s*canliAg\s*\}\s*from\s*'\.\/_ag\.js'/.test(kod)
+    && (kod.match(/_ag\.js/g) || []).length === 1,
+    (kod.match(/.*_ag\.js.*/) || [''])[0].trim());
   ok('⑭f · taşıyıcı `_ag.js` import ETMİYOR (kendi zaman aşımı/izin listesi)', !/_ag\.js/.test(habKod));
-  ok('⑭f · uç motor/ayar import ETMİYOR (skor şeridinin İÇİNDE değil)',
-    !/_motor\.js|_ayar\.js/.test(kod));
+  // ÖNCUL DEĞİŞTİ (aynı tur): eskiden "uç motor/ayar import ETMİYOR".
+  // Artık KURUYOR — ve bunun görünür bedeli ŞART: cevap sürüm imzası
+  // taşımak ZORUNDA, yoksa istemci hangi sözlükle puanlandığını bilemez.
+  ok('⑭f · uç motoru KURUYOR ve imzayı cevaba KOYUYOR',
+    /from\s*'\.\/_motor\.js'/.test(kod) && /from\s*'\.\/_ayar\.js'/.test(kod)
+    && /surum:\s*\{\s*motor:\s*IMZA,\s*ayar:\s*IMZA_AYAR\s*\}/.test(kod));
+  ok('⑭f · duyarlılık katmanında EŞİK/AĞIRLIK/SABIT yok (hepsi motorda)',
+    /function duyarlilikKatmani/.test(kod)
+    && !/sentiAggregate\s*=|SENTI_POS\s*=|0\.35|Math\.abs\(/.test(
+      kod.slice(kod.indexOf('function duyarlilikKatmani')),
+    ));
+  ok('⑭f · motor kurulumu PATLARSA uç ölmez (duyarlılık null kalır)',
+    /MOTOR_HATASI = e;/.test(kod)
+    && /if \(!ENG\) return null;/.test(kod));
   ok('⑭f · app.js / config.js import edilmiyor',
     !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(src)
     && !/from\s+['"][^'"]*\.\.\/(app|config)\.js['"]/.test(habSrc));
@@ -3450,6 +4113,120 @@ ok('⑭a · kısa gövde eşiği sayı ve pozitif',
   // Yeni bağımlılık EKLENMEDİ: RSS ayrıştırma elle.
   ok('⑭f · taşıyıcı dış paket import ETMİYOR (yeni bağımlılık yok)',
     !/^\s*import\s/m.test(habKod), 'import yok');
+}
+
+// --- ⑭j DUYARLILIK KATMANI — İŞLEVSEL ÖLÇÜM + KOD SÖZLÜĞÜ KİLİDİ -----
+// NİYE AYRI ALT BÖLÜM: ⑭f bu katmanı YALNIZ METİNDE ölçüyordu (eşik var
+// mı, motor kuruldu mu). Katmanın KENDİSİ hiç ÇALIŞTIRILMAMIŞTI ve
+// döndürdüğü alan kümesi hiçbir yerde ÇİVİLİ DEĞİLDİ — oysa alan kümesi
+// bir İSTEMCİ SÖZLEŞMESİ: native kart `kod`a bakıp cümleyi seçiyor.
+//
+// ÖNCUL DEĞİŞTİ (2026-10-31/Ş8-G1, AYNI TURDA ÖLÇÜLDÜ): katman tele
+// yalnız `cls` koyuyordu ve uç başlığı "cümleyi istemci sözlüğünden
+// seçer" diyordu. ÖLÇÜM bunu çürüttü — motorun BEŞ cümlesi ÜÇ `cls`e
+// düşüyor ('Pozitif haber akışı' ve 'Hafif pozitif' ikisi de 'bull'),
+// yani istemci 0.35 eşiğini BİLMEDEN ayıramaz; eşik istemcide YASAK.
+// Çözüm metni göndermek değil, motorun çıktısını SABİT KÜMELİ `kod`a
+// çevirmek oldu. Bu bölüm o sözlüğün KAPALI kaldığını motoru
+// ÇALIŞTIRARAK ölçüyor: motor yeni bir cümle üretirse kod `null` olur ve
+// BU KAPI düşer.
+//
+// AĞA HİÇ ÇIKMIYOR: katman eldeki manşet listesinden hesaplıyor, `fetch`
+// yok (⑭f bunu ayrıca ölçüyor).
+{
+  const { duyarlilikKatmani: duyKat, duyarlilikKodlari: duyKod } = await import('../api/news.js');
+  const { buildMotor: kurMotor2 } = await import('../api/_motor.js');
+  const { TA_WEIGHTS: TW2, TA_BENCHMARK: TB2 } = await import('../api/_ayar.js');
+  const { canliAg: kurAg2 } = await import('../api/_ag.js');
+  const dEng = kurMotor2(kurAg2({ taWeights: TW2, taBenchmark: TB2 }).H);
+
+  const dsrc = readFileSync(NEWS_PATH, 'utf8');
+  const dkod = dsrc.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+
+  ok('⑭j · kod sözlüğü DONDURULMUŞ (çalışma anında büyümez)',
+    /const DUYARLILIK_KODU = Object\.freeze\(\{/.test(dkod));
+  ok('⑭j · kod sözlüğünde SAYI yok (eşik tablosu değil, cümle→kod)',
+    !/[0-9]/.test((dkod.match(/const DUYARLILIK_KODU = Object\.freeze\(\{[\s\S]*?\}\);/) || [''])[0]));
+  const dgovde = (dkod.match(/export function duyarlilikKatmani[\s\S]*?\n\}/) || [''])[0];
+  ok('⑭j · katman gövdesi ayrıştırılabildi', dgovde.length > 80, `${dgovde.length} krk`);
+  ok('⑭j · `sentiLabel().label` tele ÇIKMIYOR (yalnız `cls` + `kod`)',
+    !/label:/.test(dgovde) && /cls:\s*\(lab && lab\.cls\) \|\| null/.test(dgovde)
+    && /kod:\s*\(lab && DUYARLILIK_KODU\[lab\.label\]\) \|\| null/.test(dgovde));
+
+  // ─── SÖZLÜK KAPALI MI: motorun ÜRETEBİLDİĞİ her cümle listede mi ───
+  // Bantlar motorun eşiklerinden DEĞİL, ikisinin de ötesinden seçildi
+  // (±1 / ±0.2 / 0) — eşiği teste kopyalamadan her dalı geçiyor.
+  const dbantlar = [[1, 1], [0.2, 1], [0, 1], [-0.2, 1], [-1, 1], [0, 0]];
+  const duretilen = dbantlar.map(([p, h]) => dEng.sentiLabel(p, h).label);
+  const dsozluk = duyKod();
+  ok('⑭j · motorun ÜRETTİĞİ her cümlenin bir kodu var (sözlük kapalı)',
+    duretilen.every((l) => dsozluk.includes(l)),
+    duretilen.filter((l) => !dsozluk.includes(l)).join(' · ') || 'eksik yok');
+  ok('⑭j · sözlükte ÖLÜ anahtar yok (motor üretmediği cümle listede değil)',
+    dsozluk.every((l) => duretilen.includes(l)),
+    dsozluk.filter((l) => !duretilen.includes(l)).join(' · ') || 'ölü yok');
+  ok('⑭j · motorun BEŞ cümlesi ÜÇ `cls`e düşüyor — `kod` BU YÜZDEN var',
+    new Set(dbantlar.map(([p, h]) => dEng.sentiLabel(p, h).cls)).size === 3
+    && new Set(duretilen).size === 6,
+    `${new Set(duretilen).size} cümle · ${new Set(dbantlar.map(([p, h]) => dEng.sentiLabel(p, h).cls)).size} cls`);
+
+  // ─── İŞLEVSEL: katman gerçekten koşuyor, AĞ İSTEĞİ YOK ───
+  const dBos = duyKat([]);
+  ok('⑭j · katman alan kümesi ÇİVİLİ (istemci sözleşmesi)',
+    anahtarlar(dBos) === 'adet,alan,basliklar,cls,ham,kod,puan,sinyal',
+    anahtarlar(dBos));
+  ok('⑭j · `alan` NEYİN ölçüldüğünü bildiriyor (açıklama yok, yalnız başlık)',
+    Array.isArray(dBos.alan) && dBos.alan.length === 1 && dBos.alan[0] === 'title');
+
+  // Manşet puanları motordan ÖLÇÜLDÜ, teste sözlük kopyalanmadı.
+  const dPozB = 'Sirket rekor kar acikladi, hisse ralli yapti';
+  const dNegB = 'Sirket zarar acikladi, hisse cokertildi';
+  const dNotrB = 'Toplanti yarin yapilacak';
+  ok('⑭j · ÖNCÜL · seçilen manşetler motorda GERÇEKTEN sinyal veriyor',
+    dEng.scoreHeadline(dPozB).hits > 0 && dEng.scoreHeadline(dPozB).s > 0
+    && dEng.scoreHeadline(dNegB).hits > 0 && dEng.scoreHeadline(dNegB).s < 0
+    && dEng.scoreHeadline(dNotrB).hits === 0,
+    `poz ${dEng.scoreHeadline(dPozB).s} · neg ${dEng.scoreHeadline(dNegB).s}`);
+
+  const dPoz = duyKat([{ title: dPozB }]);
+  ok('⑭j · POZİTİF manşet → cls bull, kod sözlükten',
+    dPoz.cls === 'bull' && typeof dPoz.kod === 'string' && dPoz.kod.startsWith('pos_'),
+    JSON.stringify({ puan: dPoz.puan, cls: dPoz.cls, kod: dPoz.kod }));
+  const dNeg = duyKat([{ title: dNegB }]);
+  ok('⑭j · NEGATİF manşet → cls bear, kod sözlükten',
+    dNeg.cls === 'bear' && typeof dNeg.kod === 'string' && dNeg.kod.startsWith('neg_'),
+    JSON.stringify({ puan: dNeg.puan, cls: dNeg.cls, kod: dNeg.kod }));
+
+  // ASIL KAZANÇ: `cls` tek başına ayıramadığı İKİ DURUM artık ayrı.
+  // İkisi de cls 'neutral' — biri "hiç sinyal yok", biri "sinyaller
+  // birbirini götürdü". Kart bunları aynı cümleyle basarsa YALAN söyler.
+  const dKarsit = duyKat([{ title: dPozB }, { title: dNegB }, { title: dNotrB }]);
+  ok('⑭j · sinyalsiz ile DENGELENMİŞ ayrı: aynı `cls`, AYRI `kod`',
+    dBos.cls === 'neutral' && dKarsit.cls === 'neutral'
+    && dBos.kod === 'yok' && dKarsit.kod === 'notr',
+    `bos ${dBos.kod} · karsit ${dKarsit.kod}`);
+  ok('⑭j · `sinyal` ham sayı olarak geliyor (istemci saymıyor)',
+    dBos.sinyal === 0 && dKarsit.sinyal === 2 && dKarsit.adet === 3,
+    `sinyal ${dKarsit.sinyal} · adet ${dKarsit.adet}`);
+  ok('⑭j · `basliklar` YALNIZ sinyal veren maddeyi taşıyor (sıra korunuyor)',
+    dKarsit.basliklar.length === 2
+    && dKarsit.basliklar[0].sira === 0 && dKarsit.basliklar[0].pol > 0
+    && dKarsit.basliklar[1].sira === 1 && dKarsit.basliklar[1].pol < 0,
+    JSON.stringify(dKarsit.basliklar));
+  ok('⑭j · madde nesnesine puan YAZILMADI (taşıyıcı sözleşmesi büyümedi)',
+    anahtarlar(dKarsit.basliklar[0]) === 'pol,sira', anahtarlar(dKarsit.basliklar[0]));
+
+  // `maddeler` HİÇ gelmediğinde çökmüyor — ama 0 da UYDURMUYOR: adet 0.
+  const dNull = duyKat(null);
+  ok('⑭j · `maddeler` yok → çökme yok, `adet` 0, `kod` "yok"',
+    dNull && dNull.adet === 0 && dNull.sinyal === 0 && dNull.kod === 'yok',
+    JSON.stringify({ adet: dNull && dNull.adet, kod: dNull && dNull.kod }));
+
+  // NEGATİF DENETİM: düşürülen şey GERÇEKTEN var — yoksa "metin tele
+  // çıkmıyor" iddiası boş bir cümle olurdu (⑤f N3c ile aynı gerekçe).
+  ok('N3d · motorun `sentiLabel`i `label` ÜRETİYOR (düşürülen şey var)',
+    typeof dEng.sentiLabel(1, 1).label === 'string' && dEng.sentiLabel(1, 1).label.length > 0,
+    dEng.sentiLabel(1, 1).label);
 }
 
 // --- ⑭g GÜNDEM KİPİ — sabitler, KONAK BİREBİRLİĞİ ve saf yardımcılar ---
@@ -3790,6 +4567,228 @@ ok('⑭a · kısa gövde eşiği sayı ve pozitif',
   ok('⑭i · besleme `durum` alanı MAKİNE KODU (Türkçe etiket uçta değil)',
     habSrc2.includes("durum: n > 0 ? 'ok' : 'bos'"));
 }
+
+// --- ⑭j ÇOKLU SEMBOL KİPİ (②) — uç sözleşmesi + pazar eşlemesi --------
+// NİYE VAR: kip ② ÜRETİMDE canlıydı ama onu ölçen HİÇBİR denetim yoktu
+// (ölçüldü 2026-11-03: suite yalnız ① arama ve ③ gündem kipini
+// kapsıyordu). Native `fetchHisseHaberleri` artık bu kipe bağlı
+// (`mobile/src/components/bugun/HisseHaberleriKarti.tsx`), yani kipin
+// kapıları SESSİZCE değişirse istemci yanlış gövde okur.
+//
+// Buradaki kapıların HEPSİ ağdan ÖNCE dönüyor, bu yüzden `fetch` YASAK:
+// biri sızarsa ölçüm "AĞ YASAĞI" ile patlar, sessiz geçmez.
+{
+  const gercekFetch = globalThis.fetch;
+  let agDenemesi2 = 0;
+  globalThis.fetch = (...a) => { agDenemesi2++; throw new Error('⑭j AĞ YASAĞI: ' + String(a[0])); };
+  try {
+    const e2 = async (query) => (await cagirUc(haberHandler, 'GET', query)).govde.error;
+
+    // Doğrulama ORTAK kapıda (`_girdi.js ayristir`) ve hata gövdesi
+    // OLDUĞU GİBİ geçiyor: kodu `news.js` yeniden YAZMIYOR. Kod burada
+    // dondurulmuş, çünkü istemci (`client.ts fetchHisseHaberleri`) AYNI
+    // kodları yerel kapılarında kullanıyor.
+    const cokSembol = Array.from({ length: AZAMI_SEMBOL + 1 }, (_, i) => 'AA' + i).join(',');
+    ok('⑭j · 8`den fazla sembol → cok_sembol (ortak kapının kodu)',
+      (await e2({ symbols: cokSembol })) === 'cok_sembol');
+    const cs = await cagirUc(haberHandler, 'GET', { symbols: cokSembol });
+    ok('⑭j · cok_sembol gövdesi azami/istenen SAYILARINI bildiriyor (istemci tahmin etmiyor)',
+      cs.govde.azami === AZAMI_SEMBOL && cs.govde.istenen === AZAMI_SEMBOL + 1,
+      `${cs.govde.azami} / ${cs.govde.istenen}`);
+    ok('⑭j · cok_sembol gövdesinde uyarı metni + kısa önbellek',
+      cs.govde.uyari === UYARI && cs.basliklar['cache-control'] === 'public, max-age=30');
+
+    ok('⑭j · biçime uymayan sembol → bad_symbol', (await e2({ symbols: '!!!' })) === 'bad_symbol');
+    const bs = await cagirUc(haberHandler, 'GET', { symbols: '!!!' });
+    ok('⑭j · bad_symbol gövdesi HANGİ sembolün reddedildiğini bildiriyor',
+      Array.isArray(bs.govde.gecersiz) && bs.govde.gecersiz.length === 1,
+      JSON.stringify(bs.govde.gecersiz));
+
+    // Pazar kümesi ORTAK kapıdan (`PAZARLAR`) geliyor; gündem kipinin
+    // `GUNDEM_YERELLER` kümesi DEĞİL. İkisi ayrı ölçüm.
+    ok('⑭j · bilinmeyen pazar → bad_market', (await e2({ symbols: 'AAPL', market: 'TOKYO' })) === 'bad_market');
+    const bm2 = await cagirUc(haberHandler, 'GET', { symbols: 'AAPL', market: 'TOKYO' });
+    ok('⑭j · bad_market gövdesi PAZARLAR kümesini bildiriyor (GUNDEM_YERELLER değil)',
+      Array.isArray(bm2.govde.izinli) && bm2.govde.izinli.join(',') === girdiPazarlar.join(','),
+      JSON.stringify(bm2.govde.izinli));
+
+    // Limit kapıları kipten BAĞIMSIZ: çoklu kipte de aynı tavan.
+    ok('⑭j · çoklu kipte limit tavanı geçerli → limit_buyuk',
+      (await e2({ symbols: 'AAPL', limit: String(haberAzamiMadde + 1) })) === 'limit_buyuk');
+    ok('⑭j · çoklu kipte limit 0 → bad_limit',
+      (await e2({ symbols: 'AAPL', limit: '0' })) === 'bad_limit');
+
+    ok('⑭j · ÖLÇÜM · çoklu kip kapılarının hiçbiri ağa ÇIKMADI', agDenemesi2 === 0, `${agDenemesi2} deneme`);
+  } finally {
+    globalThis.fetch = gercekFetch;
+  }
+}
+
+// --- ⑭j② PAZAR SEMBOL BAŞINA ÇÖZÜLÜYOR — karışık liste TEK istek ------
+// NİYE ÖNEMLİ: native takip listesi İKİ PAZARDAN KARIŞIK
+// (`mobile/src/api/liste.ts BASLANGIC_LISTE`) ve ham sembolü sonekiyle
+// tutuyor. Uç tek bir `market` alıyor ama `temizleSembol` pazarı SEMBOL
+// BAŞINA çözüyor; bu ölçüm doğru olduğu için kart tek istek atıyor,
+// pazar seçtiren düğme KURMUYOR. Bu davranış sessizce değişirse
+// `HisseHaberleriKarti` yanlış pazardan besleme okur.
+{
+  const { PAZAR_ESLEME: ucPazarEsleme, eslemeTam: ucEslemeTam } = await import('../api/news.js');
+
+  const aapl = girdiTemizle('AAPL', 'US');
+  const thyao = girdiTemizle('THYAO.IS', 'US');
+  ok('⑭j② · sonek YOKSA genel `market` varsayılanı geçerli (AAPL → US)',
+    aapl && aapl.market === 'US' && aapl.sym === 'AAPL', JSON.stringify(aapl));
+  ok('⑭j② · `.IS` eki sembolü BIST`e yükseltiyor — genel market US olsa DA',
+    thyao && thyao.market === 'BIST', JSON.stringify(thyao));
+  // ÖLÇÜLMÜŞ SAPMA, istemci bunu bilmek ZORUNDA: dönen kod ÇIPLAK
+  // (`THYAO`), gönderilen dizgenin aynısı DEĞİL (`THYAO.IS`).
+  ok('⑭j② · dönen kod ÇIPLAK (`.IS` eki DÜŞÜYOR) — satır etiketi gönderilenle birebir DEĞİL',
+    thyao && thyao.sym === 'THYAO', String(thyao && thyao.sym));
+  ok('⑭j② · `SEMBOL:PAZAR` biçimi de çözülüyor',
+    (girdiTemizle('THYAO:BIST', 'US') || {}).market === 'BIST');
+  ok('⑭j② · bilinmeyen pazar soneki SESSİZ VARSAYILANA düşmüyor (null)',
+    girdiTemizle('X:TOKYO', 'US') === null);
+
+  // Sözlük İKİ kümeyi de kapatıyor: kapamazsa çoklu kip o sembolü
+  // `bad_market` ile REDDEDER (news.js `kapanmayan`). Bugün kapatıyor,
+  // yani o dal ÖLÜ — ölü olduğunu ÖLÇÜYORUZ, varsaymıyoruz.
+  ok('⑭j② · PAZAR_ESLEME ortak pazar kümesinin TAMAMINI kapatıyor',
+    girdiPazarlar.every((p) => ucEslemeTam(p)),
+    girdiPazarlar.map((p) => `${p}→${ucPazarEsleme[p]}`).join(' '));
+  ok('⑭j② · sözlükte olmayan pazar `eslemeTam` ile REDDEDİLİYOR (sessiz TR`ye düşme yok)',
+    ucEslemeTam('TOKYO') === false);
+}
+
+// --- ⑭j③ ÇOKLU KİP — statik denetimler (satır başına dürüstlük) -------
+{
+  const src3 = readFileSync(NEWS_PATH, 'utf8');
+  ok('⑭j③ · ② çoklu sembol kipi uç sözleşmesinde YAZILI',
+    src3.includes('② ÇOKLU SEMBOL'));
+  // SATIR BAŞINA sayaç: satırın `tam`ı KENDİ sayacından okunuyor, gövde
+  // kökündeki birleşik sayaçtan DEĞİL. Karışırsa tek düşen besleme
+  // bütün satırları "ölçemedim" gösterirdi.
+  ok('⑭j③ · satırın `tam`ı KENDİ sayacından (`haberTam(it.satirSayac)`)',
+    src3.includes('tam: haberTam(it.satirSayac)'));
+  ok('⑭j③ · "0 madde + tam" ile "ölçemedim" ayrımının GEREKÇESİ kodda yazılı',
+    src3.includes('bu hissede haber') && src3.includes('karıştırılmıyor'));
+  // `q: null` kipin İKİNCİ okuma yolu — istemci `symbols`in varlığına
+  // bakmadan da kipi ayırt edebiliyor.
+  ok('⑭j③ · çoklu kip gövdesinde `q: null` (kipi okumanın ikinci yolu)',
+    src3.includes('q: null'));
+  // Satırın duyarlılığı KENDİ manşetlerinden; birleşik puan gövde
+  // kökünde AYRICA duruyor.
+  ok('⑭j③ · satır duyarlılığı KENDİ maddelerinden (`duyarlilikKatmani(it.maddeler)`)',
+    src3.includes('duyarlilikKatmani(it.maddeler)'));
+}
+{
+  // -----------------------------------------------------------------------
+  // ⑭k · TEMA KATMANI (Ş8 #8a) — hisse ↔ manşet ilişkisi
+  // -----------------------------------------------------------------------
+  // NİYE VAR: `/api/theme` cevabı yalnız `{symbol, market, name, reason}`
+  // taşıyor; hangi adayın hangi manşette geçtiği UÇTAN GELMİYORDU ve web
+  // bunu TARAYICIDA kuruyordu (eşik + durak sözcük listesi + sembol
+  // kelime-sınırı regex'i orada). Native'de tema haberi HİÇ YOKTU. Yeni uç
+  // açılamadı (Vercel Hobby tavanı 12 fonksiyon, DOLU), bu yüzden kip (1)
+  // genişletildi. Bu bölüm hesabın MOTORDA kaldığını ve sözleşmenin
+  // büyümediğini ölçüyor.
+  //
+  // AĞA HİÇ ÇIKMIYOR: katman eldeki manşet listesinden hesaplıyor.
+  const ksrc = readFileSync(NEWS_PATH, 'utf8');
+  const kkod = ksrc.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  const kgovde = (kkod.match(/export function temaKatmani[\s\S]*?\n\}/) || [''])[0];
+  const kayr = (kkod.match(/export function temaAdaylariAyristir[\s\S]*?\n\}/) || [''])[0];
+
+  // --- tavan: theme.js ile AYNI sayı (kopya bilerek, import pahalı) ---
+  ok('⑭k · aday tavanı /api/theme ile EŞİT (kopya kaymadı)',
+    AZAMI_TEMA_ADAY === AZAMI_ADAY, `${AZAMI_TEMA_ADAY} ↔ ${AZAMI_ADAY}`);
+  ok('⑭k · kopya olduğu DOSYADA yazılı (niyet kaybolmasın)',
+    ksrc.includes("AZAMI_ADAY'IN AYNISI") && ksrc.includes('IMPORT EDILMEDI'));
+
+  // --- girdi ayrıştırma ---
+  const kA = ucTemaAyristir('ASELS|BIST|Aselsan Elektronik;NVDA|US|NVIDIA Corporation');
+  ok('⑭k · `SEMBOL|PAZAR|ad` üçlüsü ayrışıyor', kA.hata === null && kA.adaylar.length === 2);
+  ok('⑭k · ham sembol/pazar/ad ayrı alanlar (istemciye `.IS` ektirilmiyor)',
+    kA.adaylar[0].ham === 'ASELS' && kA.adaylar[0].pazar === 'BIST'
+    && kA.adaylar[0].ad === 'Aselsan Elektronik');
+  ok('⑭k · küçük harf sembol büyütülüyor', ucTemaAyristir('asels|bist|x').adaylar[0].ham === 'ASELS');
+  ok('⑭k · pazar boşsa alan `null` (0/uydurma DEĞİL)',
+    ucTemaAyristir('ASELS||Aselsan').adaylar[0].pazar === null);
+  ok('⑭k · ad boşsa alan `null`', ucTemaAyristir('ASELS|BIST|').adaylar[0].ad === null);
+  ok('⑭k · ad 80 karakterde kırpılıyor (gövde şişmesin)',
+    ucTemaAyristir(`ASELS|BIST|${'a'.repeat(200)}`).adaylar[0].ad.length === 80);
+  ok('⑭k · boş dizge: hata YOK, aday YOK ("sormadım")',
+    JSON.stringify(ucTemaAyristir('')) === '{"adaylar":[],"hata":null}');
+  ok('⑭k · tavan aşımı → `cok_aday`',
+    ucTemaAyristir(Array(AZAMI_TEMA_ADAY + 1).fill('A|US|x').join(';')).hata === 'cok_aday');
+  ok('⑭k · tavan TAM dolu geçiyor (kapı bir eksik kapanmıyor)',
+    ucTemaAyristir(Array(AZAMI_TEMA_ADAY).fill('A|US|x').join(';')).hata === null);
+  ok('⑭k · bozuk sembol → `bad_aday`', ucTemaAyristir('A B C|US|x').hata === 'bad_aday');
+  ok('⑭k · bilinmeyen pazar → `bad_aday_pazar`', ucTemaAyristir('ASELS|XX|x').hata === 'bad_aday_pazar');
+  ok('⑭k · hata hâlinde aday listesi BOŞ (yarı ayrışmış gövde sızmıyor)',
+    ucTemaAyristir('ASELS|BIST|x;A B C|US|y').adaylar.length === 0);
+  ok('⑭k · ayrıştırıcıda eşik/ağırlık YOK (yalnız biçim denetimi)',
+    !/\b(0\.\d|[2-9]\d*\.\d)/.test(kayr));
+
+  // --- katman: hesabın MOTORDA kaldığı ---
+  ok('⑭k · motor kuruldu (katmanın öncül koşulu)', ucHaberMotorHazir() === true);
+  ok('⑭k · katman DÖRT motor işlevini çağırıyor (kural kopyası yok)',
+    kgovde.includes('ENG.temaSorguSozcukleri') && kgovde.includes('ENG.temaBaslikIlgili')
+    && kgovde.includes('ENG.themeNorm') && kgovde.includes('ENG.themeNewsHits'));
+  ok('⑭k · katman gövdesinde SAYI YOK (eşik/tavan motorda)', !/[0-9]/.test(kgovde));
+  ok('⑭k · katman gövdesinde `Math.`/regex/`toLowerCase` YOK (eşleşme kuralı kopyalanmadı)',
+    !kgovde.includes('Math.') && !/\/[a-z^\\[]/.test(kgovde) && !kgovde.includes('toLowerCase'));
+  ok('⑭k · katman gövdesinde Türkçe cümle YOK (HAM METİN kuralı §5.1)',
+    !/[çğıöşüÇĞİÖŞÜ]/.test(kgovde));
+  ok('⑭k · motor yoksa `null` ("ölçemedim", `{}` değil)',
+    kgovde.includes('if (!ENG) return null;'));
+
+  // --- ölçüm: elde kurulmuş manşet listesiyle ---
+  const kmad = [
+    { title: 'Aselsan yeni savunma ihracatı imzaladı' },          // 0 · ad eşleşmesi
+    { title: 'Borsa günü yükselişle kapattı' },                   // 1 · ilgisiz
+    { title: 'NVDA hisseleri savunma teknolojisiyle yükseldi' },  // 2 · sembol eşleşmesi
+    { title: 'Savunma sanayinde yeni dönem' },                    // 3 · ilgili, adayı yok
+  ];
+  const kkunye0 = JSON.stringify(kmad[0]);
+  const kT = ucTemaKatmani('savunma sanayi teması', kmad, kA.adaylar);
+  ok('⑭k · sorgu sözcükleri motordan (taşıyıcı sözcükler atıldı)',
+    JSON.stringify(kT.sozcukler) === '["savunma","sanayi"]');
+  ok('⑭k · ilgisiz manşetin SIRASI bildiriliyor', JSON.stringify(kT.ilgisiz) === '[1]');
+  ok('⑭k · ad sözcüğü eşleşmesi (ASELS → 0)', JSON.stringify(kT.adaylar.ASELS) === '[0]');
+  ok('⑭k · sembol eşleşmesi (NVDA → 2)', JSON.stringify(kT.adaylar.NVDA) === '[2]');
+  ok('⑭k · adayı olmayan ilgili manşet kimseye bağlanmadı',
+    !JSON.stringify(kT.adaylar).includes('3'));
+  ok('⑭k · anahtar İSTEMCİNİN HAM sembolü (`.IS` ya da yahoo biçimi değil)',
+    Object.keys(kT.adaylar).join(',') === 'ASELS,NVDA');
+  ok('⑭k · değer SIRA DİZİSİ (madde nesnesi değil, gövde ikiye katlanmıyor)',
+    Object.values(kT.adaylar).every((v) => Array.isArray(v) && v.every((n) => Number.isInteger(n))));
+  ok('⑭k · `maddeler` SÜZÜLMEDİ (sözleşme büyümedi/küçülmedi)', kmad.length === 4);
+  ok('⑭k · girdi maddeleri DEĞİŞTİRİLMEDİ (`_i` künyeye yazılmadı)',
+    JSON.stringify(kmad[0]) === kkunye0 && !('_i' in kmad[0]));
+  ok('⑭k · aday yoksa `adaylar: {}` ("ölçtüm, aday yoktu")',
+    JSON.stringify(ucTemaKatmani('savunma', kmad, []).adaylar) === '{}');
+  // ÖLÇEMEDİĞİMİZDE SÜZMÜYORUZ: sorgu yalnız taşıyıcı sözcüklerden
+  // oluşuyorsa ilgi ölçülemez — hiçbir manşet ilgisiz İLAN EDİLMEZ.
+  const kOlcusuz = ucTemaKatmani('tema hisse', kmad, kA.adaylar);
+  ok('⑭k · ölçülemeyen sorguda sözcük listesi boş', kOlcusuz.sozcukler.length === 0);
+  ok('⑭k · ölçülemeyen sorguda HİÇBİR manşet ilgisiz sayılmıyor', kOlcusuz.ilgisiz.length === 0);
+
+  // --- cevap sözleşmesi ---
+  ok('⑭k · `tema` alanı YALNIZ `adaylar=` sorulunca konuyor (kip ②/③ taşımıyor)',
+    kkod.includes('...(hamAdaylar ? { tema: temaKatmani(q, maddeler, temaAdaylar) } : {})'));
+  ok('⑭k · gövdede `tema:` TEK yerde (ikinci bir dal sızmadı)',
+    (kkod.match(/\btema:/g) || []).length === 1);
+  ok('⑭k · kip çakışması 400 `adaylar_kip` (sessizce yoksayma yok)',
+    /if \(gundem \|\| hamSembol\)[\s\S]{0,160}adaylar_kip/.test(kkod));
+  ok('⑭k · ayrıştırma hatası 400 + `azami` bildiriyor',
+    /error: ayAday\.hata, azami: AZAMI_TEMA_ADAY/.test(kkod));
+  ok('⑭k · sözleşme belgesi `adaylar=` kipini yazıyor',
+    ksrc.includes('&adaylar=SEMBOL|PAZAR|ad') && ksrc.includes('maddeler` SUZULMEZ'));
+  // Taşıyıcı sözleşmesi: madde alanları BÜYÜMEDİ — tema katmanı maddelere
+  // alan EKLEMİYOR, ayrı KARDEŞ ALAN olarak taşınıyor.
+  ok('⑭k · `MADDE_ALANLARI` büyümedi (altı alan, `tema` madde içine girmedi)',
+    MADDE_ALANLARI.length === 6 && !MADDE_ALANLARI.includes('tema'));
+}
 // =========================================================================
 bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deger · /api/arama · /api/takvim — keşif rotaları (api/_kesif.js)');
 // =========================================================================
@@ -3898,15 +4897,19 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
     // tutuyor: rota adı bir yerde sessizce değişirse (örn. `/api/aramaa`)
     // eşleşme kopar ve BURADA kırmızı yanar — canlıda 404 beklemeden.
     {
-      const izinliRota = new Set(['yfin', ...KESIF.ROTALAR]);
+      // ⑰ EKİ: degisim/kripto/metal de AYNI çoklayıcıya bindi, ama ayrı
+      // taşıyıcıda (`_kesif.js` DEĞİL). Liste yine ELLE yazılmıyor:
+      // `proxy.js`in kendi `TASIYICI_ROTALARI` tablosundan geliyor.
+      const izinliRota = new Set(['yfin', ...KESIF.ROTALAR, ...TASIYICI_ROTALARI]);
       const kacak = rew.filter((x) => {
         const m = /^\/api\/([a-z]+)$/.exec(String(x.source));
         return !m || !izinliRota.has(m[1]) || x.destination !== `/api/proxy?__rota=${m[1]}`;
       });
-      ok('⑮b · KİLİT · ROTALAR ∪ {yfin} D I Ş I N D A rewrite YOK (ters yön)',
+      ok('⑮b · KİLİT · ROTALAR ∪ {yfin} ∪ TAŞIYICILAR D I Ş I N D A rewrite YOK (ters yön)',
         kacak.length === 0, kacak.map((x) => `${x.source}→${x.destination}`).join(' | ') || 'temiz');
-      ok('⑮b · KİLİT · rewrite sayısı = ROTALAR + yfin (fazla/eksik yol yok)',
-        rew.length === KESIF.ROTALAR.length + 1, `${rew.length} rewrite`);
+      ok('⑮b · KİLİT · rewrite sayısı = ROTALAR + yfin + TAŞIYICILAR (fazla/eksik yol yok)',
+        rew.length === KESIF.ROTALAR.length + 1 + TASIYICI_ROTALARI.length,
+        `${rew.length} rewrite · 7+1+${TASIYICI_ROTALARI.length} bekleniyor`);
     }
     ok('⑮b · yfin rewrite\'ı BOZULMADI (taklit edilen kalıp yerinde)',
       rew.some((x) => x.source === '/api/yfin' && x.destination === '/api/proxy?__rota=yfin'));
@@ -4164,7 +5167,7 @@ bolum('⑮ /api/tarama · /api/sektor · /api/radar · /api/backtest · /api/deg
         anahtarlar(s.govde.gruplar[0]));
       ok('⑮d · grup hissesi alanları SABİT',
         anahtarlar(s.govde.gruplar[0].hisseler[0])
-          === 'basis,forwardPE,market,peg,profitMargin,revenueGrowth,sym,trailingPE',
+          === 'basis,bizSummary,bizSummaryKirpik,forwardPE,industry,market,name,peg,profitMargin,revenueGrowth,sym,trailingPE',
         anahtarlar(s.govde.gruplar[0].hisseler[0]));
       ok('⑮d · sınıflama kademesi (`basis`) DÜRÜSTÇE bildiriliyor',
         s.govde.gruplar.every((g) => g.hisseler.every((h) => h.basis === null || typeof h.basis === 'string')),
@@ -4790,7 +5793,7 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
     ['title', 'link', 'pubDate', 'symbol', 'type'].every((a) => TAKVIM.KAP_MADDE_ALANLARI.includes(a)),
     TAKVIM.KAP_MADDE_ALANLARI.join(','));
   ok('⑯a · temettü madde alan kümesi yazılı',
-    TAKVIM.TEMETTU_MADDE_ALANLARI.join(',') === 'symbol,date,dateHam,amount,yieldPct,currency',
+    TAKVIM.TEMETTU_MADDE_ALANLARI.join(',') === 'symbol,date,dateHam,amount,yieldPct,currency,paid',
     TAKVIM.TEMETTU_MADDE_ALANLARI.join(','));
   ok('⑯a · ay tabloları DONDURULMUŞ (çalışma anında değişmez)',
     Object.isFrozen(TAKVIM.TR_AY_KISA) && Object.isFrozen(TAKVIM.TR_AY_TAM));
@@ -4851,14 +5854,20 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
   // --- ⑯d `kapSemboller` ----------------------------------------------
   ok('⑯d · tek kod: `***IZFAS***` → [IZFAS]',
     TAKVIM.kapSemboller('***IZFAS*** Pay Alım Satım').join(',') === 'IZFAS');
-  // ÖLÇÜLEN DAVRANIŞ · İKİZLİK: webin regexi (`[^*]+`) İÇİNDE
-  // yıldız GEÇEN bloğu EŞLEYEMİYOR, oysa app.js:255in KENDİ yorumu çoklu
-  // bildirimi (`***OMP ** ODP***`) desteklediğini SÖYLÜYOR. Regex BİREBİR
-  // korundu (ikiz kuralı: webin bastığı ile ucun bastığı AYRILMAZ); bu
-  // denetim ölçülen davranışı KİLİTLİYOR ki düzeltme İKİ YERDE aynı
-  // anda yapılsın. Rapora yazıldı.
-  ok('⑯d · ÖLÇÜM · webin regexi yıldızlı çoklu bloğu EŞLEMİYOR → `[]`',
-    TAKVIM.kapSemboller('***OMP ** ODP*** Birleşme').length === 0,
+  // ÖLÇÜLEN DAVRANIŞ · İKİZLİK · ONARILDI (Şerit 6, DEVAM.md §15.1): eski
+  // regex (`[^*]+`) blok İÇİNDE yıldız geçen başlığı EŞLEYEMİYORDU, oysa
+  // app.js:255in KENDİ yorumu çoklu bildirimi (`***OMP ** ODP***`)
+  // desteklediğini SÖYLÜYORDU. Düzeltme İKİ YERDE AYNI ANDA yapıldı
+  // (`[^*]+` → tembel `[\s\S]+?`): `app.js:264` ve `api/_takvim.js:243`,
+  // yani ikiz kuralı KORUNDU. Canlı 30 KAP maddesinde null kalan 16'sının
+  // 16'sı DA bu biçimdi; düzeltmeden sonra 16 çözüldü, 0 null kaldı ve
+  // önceden ayrışan 14 maddenin HİÇBİRİ değişmedi (DEVAM.md §15.1).
+  // Bu denetim artık ONARILMIŞ davranışı kilitliyor: kapanış HÂLÂ ÜÇ
+  // yıldız arıyor ve tembel olduğu için `***A*** metin ***B***` iki bloğu
+  // BİRLEŞTİRMİYOR (o biçim canlı veride HİÇ görülmedi — ⑯d'nin son
+  // maddesi onu ölçmüyor, sınır rapora yazıldı).
+  ok('⑯d · ÖLÇÜM · yıldızlı çoklu blok ARTIK ÇÖZÜLÜYOR → `OMP,ODP`',
+    TAKVIM.kapSemboller('***OMP ** ODP*** Birleşme').join(',') === 'OMP,ODP',
     TAKVIM.kapSemboller('***OMP ** ODP*** Birleşme').join(','));
   ok('⑯d · tek blokta birden çok kod (yıldızsız ayraç) ÇÖZÜLÜYOR',
     TAKVIM.kapSemboller('***OMP, ODP*** Birleşme').join(',') === 'OMP,ODP',
@@ -5073,6 +6082,3079 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
     ok(`⑯k · KİLİT · api/${ad}.js \`_takvim.js\`i TANIMIYOR`,
       !/_takvim/.test(readFileSync(yol, 'utf8')));
   }
+}
+
+
+// =========================================================================
+bolum('⑰ /api/degisim · gundem · iceriden · kripto · kur · metal · neden — ayrı taşıyıcı rotaları');
+// =========================================================================
+// ⑮ ile AYNI 13. FONKSİYON TUZAĞI, FARKLI taşıyıcı: bu dördü `_kesif.js`e
+// GİRMEDİ (o dosya motor/tarama ailesinin gövdesi), kendi `_` önekli
+// modüllerinde duruyor ve `api/proxy.js`in `TASIYICILAR` tablosundan
+// çağrılıyor. Aşağıda rota adının ÜÇ yerde (vercel.json ↔ proxy.js ↔
+// modülün kendi `ROTA`sı) aynı olduğu ve `api/*.js` sayısının ARTMADIĞI
+// kilitleniyor.
+//
+// AĞ YASAĞI ⑰'de de geçerli — hatta daha katı: bu dört handler geçerli bir
+// girdide ya KV'ye ya ağa çıkıyor. Bu yüzden handler YALNIZ (a) OPTIONS,
+// (b) GET-dışı yöntem, (c) doğrulamadan DÖNEN sorgularla çağrılıyor;
+// dördünde de `oku()`/`fetch` satırına VARILMIYOR (ölçüldü: doğrulama
+// blokları önbellek anahtarından ÖNCE `return` ediyor). Geçerli girdiler
+// yalnız SAF dışa aktarımlarla sınanıyor.
+{
+  const DEGISIM_PATH = path.join(ROOT, 'api', '_degisim.js');
+  const GUNDEM_PATH = path.join(ROOT, 'api', '_gundem.js');
+  const KRIPTO_PATH = path.join(ROOT, 'api', '_kripto.js');
+  const KUR_PATH = path.join(ROOT, 'api', '_kur.js');
+  const ICERIDEN_PATH = path.join(ROOT, 'api', '_iceriden.js');
+  const METAL_PATH = path.join(ROOT, 'api', '_metal.js');
+  const NEDEN_PATH = path.join(ROOT, 'api', '_neden.js');
+  const KATALIZOR_PATH = path.join(ROOT, 'api', '_katalizor.js');
+  const MALI_PATH = path.join(ROOT, 'api', '_mali.js');
+  const HAREKET_PATH = path.join(ROOT, 'api', '_hareket.js');
+  const kaynaklar = {
+    degisim: readFileSync(DEGISIM_PATH, 'utf8'),
+    gundem: readFileSync(GUNDEM_PATH, 'utf8'),
+    kripto: readFileSync(KRIPTO_PATH, 'utf8'),
+    kur: readFileSync(KUR_PATH, 'utf8'),
+    iceriden: readFileSync(ICERIDEN_PATH, 'utf8'),
+    metal: readFileSync(METAL_PATH, 'utf8'),
+    neden: readFileSync(NEDEN_PATH, 'utf8'),
+    katalizor: readFileSync(KATALIZOR_PATH, 'utf8'),
+    mali: readFileSync(MALI_PATH, 'utf8'),
+    hareket: readFileSync(HAREKET_PATH, 'utf8'),
+  };
+  // Yorumları SÜZ: aşağıdaki sızıntı kapıları GÖVDEYE bakıyor, nota değil
+  // (⑯k ile aynı kalıp — iki ayrı süzgeç biçimi uydurulmadı).
+  const kodlar = {};
+  for (const [ad, s] of Object.entries(kaynaklar)) {
+    kodlar[ad] = s.split(/\r?\n/).filter((x) => !/^\s*(\/\/|\*|\/\*)/.test(x)).join('\n');
+  }
+  const proxyS17 = readFileSync(PROXY_PATH, 'utf8');
+  const vercel17 = JSON.parse(readFileSync(VERCEL_PATH, 'utf8'));
+  const MOD = {
+    degisim: DEGISIM, gundem: GUNDEM, iceriden: ICERIDEN,
+    kripto: KRIPTO, kur: KUR, metal: METAL, neden: NEDEN,
+    katalizor: KATALIZOR, mali: MALI, hareket: HAREKET,
+  };
+  const YOL = {
+    degisim: DEGISIM_PATH, gundem: GUNDEM_PATH, iceriden: ICERIDEN_PATH,
+    kripto: KRIPTO_PATH, kur: KUR_PATH, metal: METAL_PATH,
+    neden: NEDEN_PATH, katalizor: KATALIZOR_PATH, mali: MALI_PATH,
+    hareket: HAREKET_PATH,
+  };
+
+  // --- ⑰a yüzey --------------------------------------------------------
+  ok('⑰a · TASIYICI_ROTALARI on rota ilan ediyor (proxy.js tablosundan)',
+    TASIYICI_ROTALARI.join(',') === 'degisim,gundem,hareket,iceriden,katalizor,kripto,kur,mali,metal,neden',
+    TASIYICI_ROTALARI.join(','));
+  ok('⑰a · TASIYICI_ROTALARI dondurulmuş (tablo çalışma anında değişmez)',
+    Object.isFrozen(TASIYICI_ROTALARI));
+  for (const r of TASIYICI_ROTALARI) {
+    ok(`⑰a · \`_${r}.js\` kendi \`ROTA\`sını \`${r}\` ilan ediyor`,
+      MOD[r].ROTA === r, String(MOD[r].ROTA));
+    ok(`⑰a · \`_${r}.js\` HANDLERLAR tablosu TEK anahtar: \`${r}\``,
+      anahtarlar(MOD[r].HANDLERLAR) === r, anahtarlar(MOD[r].HANDLERLAR));
+    ok(`⑰a · \`_${r}.js\` HANDLERLAR dondurulmuş`, Object.isFrozen(MOD[r].HANDLERLAR));
+    ok(`⑰a · \`${r}\` handler'ı fonksiyon`, typeof MOD[r].HANDLERLAR[r] === 'function');
+  }
+  // İKİ TAŞIYICI AYRIK olmalı: aynı rota adı iki tabloda olursa `proxy.js`
+  // `_kesif.js`i ÖNCE deniyor ve bu dört uç sessizce gölgelenir.
+  ok('⑰a · KİLİT · TAŞIYICI rotaları `_kesif.js` ROTALARI ile AYRIK',
+    !TASIYICI_ROTALARI.some((r) => KESIF.ROTALAR.includes(r)),
+    TASIYICI_ROTALARI.join(',') + ' vs ' + KESIF.ROTALAR.join(','));
+
+  // --- ⑰b 13. FONKSİYON KİLİDİ ----------------------------------------
+  {
+    const dosyalar17 = readdirSync(path.join(ROOT, 'api'))
+      .filter((f) => f.endsWith('.js') && !f.startsWith('_'));
+    ok('⑰b · KİLİT · `api/*.js` uç dosyası sayısı hâlâ 12 (Hobby tavanı)',
+      dosyalar17.length === 12, `${dosyalar17.length}: ${dosyalar17.join(',')}`);
+    ok('⑰b · ON uç için YENİ uç dosyası YOK (hepsi `_` önekli MODÜL)',
+      !dosyalar17.some((f) => /degisim|gundem|hareket|iceriden|katalizor|kripto|kur|mali|metal|neden/.test(f)),
+      dosyalar17.join(','));
+    for (const r of TASIYICI_ROTALARI) {
+      ok(`⑰b · \`api/_${r}.js\` gerçekten \`_\` önekli`,
+        existsSync(YOL[r]) && path.basename(YOL[r]).startsWith('_'));
+      const k = (vercel17.rewrites || []).find((x) => x.source === `/api/${r}`);
+      ok(`⑰b · vercel.json \`/api/${r}\` rewrite'ı var`, !!k, k && k.destination);
+      ok(`⑰b · \`/api/${r}\` proxy'ye \`__rota=${r}\` ile gidiyor`,
+        !!k && k.destination === `/api/proxy?__rota=${r}`, k && k.destination);
+      // BELİRTEÇ LİTERAL OLMAK ZORUNDA: `import(degisken)` Vercel'in paket
+      // izleyicisi tarafından İZLENMEZ, dosya bundle'a girmez, uç canlıda
+      // 404 verir. Bu kapı o sessiz arızanın kalıcı bekçisi.
+      ok(`⑰b · proxy.js \`./_${r}.js\`i LİTERAL belirteçle import ediyor`,
+        proxyS17.includes(`import('./_${r}.js')`), 'literal');
+    }
+    ok('⑰b · proxy.js rota adını ELLE `if` olarak yazmıyor (tablo tek kaynak)',
+      !/=== 'degisim'|=== 'gundem'|=== 'hareket'|=== 'iceriden'|=== 'katalizor'|=== 'kripto'|=== 'kur'|=== 'mali'|=== 'metal'|=== 'neden'/
+        .test(proxyS17), 'temiz');
+    ok('⑰b · `functions` bloğuna YENİ kalem girmedi (onu proxy bütçesinde)',
+      !Object.keys(vercel17.functions || {})
+        .some((k) => /degisim|gundem|hareket|iceriden|katalizor|kripto|kur|mali|metal|neden/.test(k)),
+      Object.keys(vercel17.functions || {}).join(','));
+  }
+
+  // --- ⑰c konak izin listesi İKİZLİĞİ ---------------------------------
+  // Modülün kendi `IZINLI_KONAK`ı ile `proxy.js`in `IZINLI_KONAKLAR`ı
+  // ayrışırsa uç çalışır ama DÜZ proxy yolu aynı konağı 403'ler — iki
+  // yüzeyde iki farklı politika. Burası o ayrışmanın kapısı.
+  for (const r of ['degisim', 'kripto', 'iceriden', 'mali', 'hareket']) {
+    for (const h of MOD[r].IZINLI_KONAK) {
+      ok(`⑰c · \`${h}\` proxy.js IZINLI_KONAKLAR listesinde de var`,
+        proxyS17.includes(`'${h}'`), h);
+    }
+  }
+  ok('⑰c · degisim iki Yahoo konağını sırayla deniyor (aynı konağa 2. vuruş yok)',
+    DEGISIM.KONAK_DENEME === DEGISIM.IZINLI_KONAK.length && DEGISIM.KONAK_DENEME === 2,
+    String(DEGISIM.KONAK_DENEME));
+  ok('⑰c · degisim `izinliAdres` http REDDEDİYOR',
+    DEGISIM.izinliAdres('http://query1.finance.yahoo.com/x') === false);
+  ok('⑰c · degisim `izinliAdres` yabancı konağı REDDEDİYOR',
+    DEGISIM.izinliAdres('https://evil.example.com/x') === false);
+  ok('⑰c · kripto `izinliAdres` yabancı konağı REDDEDİYOR',
+    KRIPTO.izinliAdres('https://evil.example.com/x') === false);
+  ok('⑰c · kripto `izinliAdres` kendi konağını KABUL ediyor',
+    KRIPTO.izinliAdres(KRIPTO.globalAdresi()) === true);
+  // metal'in KENDİ ağ taşıyıcısı YOK: `_haber.js`in `haberCek`ini
+  // kullanıyor, yani ikinci bir RSS ayrıştırıcısı/izin listesi doğmadı.
+  ok('⑰c · `_metal.js`te `fetch(` HİÇ yok (ağ `_haber.js`in kapısında)',
+    kodlar.metal.split('fetch(').length - 1 === 0,
+    String(kodlar.metal.split('fetch(').length - 1));
+  ok('⑰c · `_metal.js` `_haber.js`ten `haberCek` içe alıyor (kopya ayrıştırıcı yok)',
+    /from '\.\/_haber\.js'/.test(kodlar.metal) && /haberCek/.test(kodlar.metal));
+  // gundem de AYNI kalipta: kendi RSS tasiyicisi YOK.
+  ok('⑰c · `_gundem.js`te `fetch(` HİÇ yok (ağ `_haber.js`in kapısında)',
+    kodlar.gundem.split('fetch(').length - 1 === 0,
+    String(kodlar.gundem.split('fetch(').length - 1));
+  ok('⑰c · `_gundem.js` `_haber.js`ten `beslemeCek` içe alıyor (kopya ayrıştırıcı yok)',
+    /from '\.\/_haber\.js'/.test(kodlar.gundem) && /beslemeCek/.test(kodlar.gundem));
+  // Konsept ÜRETİMİ de kopyalanmadı: sözlük/puanlama motorda.
+  ok('⑰c · `_gundem.js` konsepti MOTORDAN alıyor (`agendaScore`), kendi sözlüğü yok',
+    /agendaScore/.test(kodlar.gundem) && !/AGENDA_LEXICON\s*=/.test(kodlar.gundem));
+  for (const r of ['degisim', 'kripto', 'iceriden', 'mali', 'hareket']) {
+    ok(`⑰c · \`_${r}.js\`te ağ çıkışı TEK \`fetch(\` (tek kapı)`,
+      kodlar[r].split('fetch(').length - 1 === 1,
+      String(kodlar[r].split('fetch(').length - 1));
+    ok(`⑰c · \`_${r}.js\` zaman aşımını AbortController ile kuruyor`,
+      /new AbortController\(\)/.test(kodlar[r]) && /\.abort\(\)/.test(kodlar[r]));
+  }
+
+  // --- ⑰d yöntem kapısı + 400 gövdeleri (AĞSIZ) -----------------------
+  {
+    const H = {
+      degisim: MOD.degisim.HANDLERLAR.degisim,
+      gundem: MOD.gundem.HANDLERLAR.gundem,
+      kripto: MOD.kripto.HANDLERLAR.kripto,
+      kur: MOD.kur.HANDLERLAR.kur,
+      iceriden: MOD.iceriden.HANDLERLAR.iceriden,
+      metal: MOD.metal.HANDLERLAR.metal,
+      neden: MOD.neden.HANDLERLAR.neden,
+      katalizor: MOD.katalizor.HANDLERLAR.katalizor,
+      mali: MOD.mali.HANDLERLAR.mali,
+      hareket: MOD.hareket.HANDLERLAR.hareket,
+    };
+    const govdeler17 = [];
+    const al = async (r, method, query) => {
+      const res = await cagirUc(H[r], method, query);
+      if (res.govde) govdeler17.push(res.govde);
+      return res;
+    };
+    for (const r of TASIYICI_ROTALARI) {
+      const o = await al(r, 'OPTIONS', {});
+      ok(`⑰d · ${r} · OPTIONS 204 + gövdesiz`, o.kod === 204 && o.bitti === true, String(o.kod));
+      ok(`⑰d · ${r} · OPTIONS CORS başlıkları tam`,
+        o.basliklar['access-control-allow-origin'] === '*'
+        && o.basliklar['access-control-allow-methods'] === 'GET, OPTIONS'
+        && o.basliklar['access-control-max-age'] === '86400',
+        o.basliklar['access-control-allow-methods']);
+      const p = await al(r, 'POST', {});
+      ok(`⑰d · ${r} · POST 405 + \`method_not_allowed\``,
+        p.kod === 405 && p.govde && p.govde.error === 'method_not_allowed',
+        `${p.kod} ${p.govde && p.govde.error}`);
+      ok(`⑰d · ${r} · 405 \`Allow\` başlığı yazılı (sessiz ret yok)`,
+        p.basliklar.allow === 'GET, OPTIONS', p.basliklar.allow);
+      ok(`⑰d · ${r} · 405 cevabı KISA önbellekli (hatalı cevap uzun yaşamıyor)`,
+        p.basliklar['cache-control'] === 'public, max-age=30',
+        p.basliklar['cache-control']);
+    }
+    // degisim 400'leri — dördü de ağ/KV satırına VARMADAN dönüyor.
+    {
+      const a = await al('degisim', 'GET', {});
+      ok('⑰d · degisim · sembolsüz istek 400 `semboller_yok`',
+        a.kod === 400 && a.govde.error === 'semboller_yok', `${a.kod} ${a.govde.error}`);
+      ok('⑰d · degisim · `semboller_yok` gövdesi tavanı SÖYLÜYOR',
+        a.govde.azami === DEGISIM.AZAMI_SEMBOL, String(a.govde.azami));
+      const cok = Array.from({ length: DEGISIM.AZAMI_SEMBOL + 1 }, (_, i) => `S${i}`).join(',');
+      const b = await al('degisim', 'GET', { semboller: cok });
+      ok('⑰d · degisim · tavanı aşan istek 400 `cok_sembol` (SESSİZ KIRPMA YOK)',
+        b.kod === 400 && b.govde.error === 'cok_sembol'
+        && b.govde.gelen === DEGISIM.AZAMI_SEMBOL + 1,
+        `${b.govde.error} gelen=${b.govde.gelen}`);
+      const c = await al('degisim', 'GET', { semboller: '!!!' });
+      ok('⑰d · degisim · bozuk sembol 400 `bad_sembol` (`gelen` ile)',
+        c.kod === 400 && c.govde.error === 'bad_sembol' && c.govde.gelen === '!!!',
+        `${c.govde.error} ${c.govde.gelen}`);
+      const d = await al('degisim', 'GET', { semboller: 'AAPL', donemler: 'yillarca' });
+      ok('⑰d · degisim · beyaz liste dışı dönem 400 `bad_donem` (sessiz `hepsi` yok)',
+        d.kod === 400 && d.govde.error === 'bad_donem'
+        && d.govde.izinli.join(',') === DEGISIM.DONEM_ANAHTARLARI.join(','),
+        `${d.govde.error} ${d.govde.izinli && d.govde.izinli.join(',')}`);
+      const e = await al('degisim', 'GET', { symbols: '!!!' });
+      ok('⑰d · degisim · `symbols` eş adı da tanınıyor (web ikizi aynı sorguyu atıyor)',
+        e.kod === 400 && e.govde.error === 'bad_sembol', String(e.govde.error));
+    }
+    // kripto 400'leri
+    {
+      const a = await al('kripto', 'GET', {});
+      ok('⑰d · kripto · kimliksiz istek 400 `kripto_id_yok`',
+        a.kod === 400 && a.govde.error === 'kripto_id_yok', `${a.kod} ${a.govde.error}`);
+      const cok = Array.from({ length: KRIPTO.AZAMI_ID + 1 }, (_, i) => `coin${i}`).join(',');
+      const b = await al('kripto', 'GET', { idler: cok });
+      ok('⑰d · kripto · tavanı aşan istek 400 `cok_id`',
+        b.kod === 400 && b.govde.error === 'cok_id' && b.govde.gelen === KRIPTO.AZAMI_ID + 1,
+        `${b.govde.error} gelen=${b.govde.gelen}`);
+      const c = await al('kripto', 'GET', { ids: 'BTC!' });
+      ok('⑰d · kripto · bozuk kimlik 400 `bad_id` + BİÇİMİ söylüyor',
+        c.kod === 400 && c.govde.error === 'bad_id' && c.govde.bicim === String(KRIPTO.ID_BICIM),
+        `${c.govde.error} ${c.govde.bicim}`);
+    }
+    // kur 400'leri — AGA VARMADAN: dogrulama onbellek anahtarindan ONCE.
+    {
+      const a = await al('kur', 'GET', {});
+      ok('⑰d · kur · kodsuz istek 400 `kur_kod_yok`',
+        a.kod === 400 && a.govde.error === 'kur_kod_yok', `${a.kod} ${a.govde.error}`);
+      ok('⑰d · kur · `kur_kod_yok` gövdesi tavanı SÖYLÜYOR',
+        a.govde.azami === KUR.AZAMI_KOD, String(a.govde.azami));
+      const cok = Array.from({ length: KUR.AZAMI_KOD + 1 }, (_, i) => `k${i}`).join(',');
+      const b = await al('kur', 'GET', { kodlar: cok });
+      ok('⑰d · kur · tavanı aşan istek 400 `cok_kod` (SESSİZ KIRPMA YOK)',
+        b.kod === 400 && b.govde.error === 'cok_kod' && b.govde.gelen === KUR.AZAMI_KOD + 1,
+        `${b.govde.error} gelen=${b.govde.gelen}`);
+      const c = await al('kur', 'GET', { kod: 'USD!' });
+      ok('⑰d · kur · bozuk kod 400 `bad_kod` + BİÇİMİ söylüyor',
+        c.kod === 400 && c.govde.error === 'bad_kod' && c.govde.bicim === String(KUR.KOD_BICIM),
+        `${c.govde.error} ${c.govde.bicim}`);
+    }
+    // metal 400'leri — üç kapı, SIRA: madenler → kapsam → limit.
+    {
+      const a = await al('metal', 'GET', { madenler: 'bakir' });
+      ok('⑰d · metal · sözlük dışı maden 400 `bad_maden` (KAPALI küme)',
+        a.kod === 400 && a.govde.error === 'bad_maden'
+        && a.govde.izinli.join(',') === METAL.METAL_ANAHTARLARI.join(','),
+        `${a.govde.error} ${a.govde.izinli && a.govde.izinli.join(',')}`);
+      const b = await al('metal', 'GET', { kapsam: 'mars' });
+      ok('⑰d · metal · beyaz liste dışı kapsam 400 `bad_kapsam`',
+        b.kod === 400 && b.govde.error === 'bad_kapsam'
+        && b.govde.izinli.join(',') === METAL.KAPSAMLAR.join(','),
+        `${b.govde.error} ${b.govde.izinli && b.govde.izinli.join(',')}`);
+      const c = await al('metal', 'GET', { limit: String(haberAzamiMadde + 1) });
+      ok('⑰d · metal · tavanı aşan limit 400 `bad_limit` (SESSİZ KIRPMA YOK)',
+        c.kod === 400 && c.govde.error === 'bad_limit' && c.govde.azami === haberAzamiMadde,
+        `${c.govde.error} azami=${c.govde.azami}`);
+    }
+    // iceriden 400'leri — AGA VARMADAN: dogrulama onbellek anahtarindan
+    // ONCE donuyor (uc `oku()` satirina VARMIYOR).
+    {
+      const a = await al('iceriden', 'GET', {});
+      ok('⑰d · iceriden · sembolsüz istek 400 `sembol_yok`',
+        a.kod === 400 && a.govde.error === 'sembol_yok', `${a.kod} ${a.govde.error}`);
+      const b = await al('iceriden', 'GET', { sembol: 'AAPL!' });
+      ok('⑰d · iceriden · bozuk sembol 400 `bad_sembol` + BİÇİMİ söylüyor',
+        b.kod === 400 && b.govde.error === 'bad_sembol'
+        && b.govde.bicim === String(ICERIDEN.SEMBOL_BICIM),
+        `${b.govde.error} ${b.govde.bicim}`);
+      const c = await al('iceriden', 'GET', { sembol: 'AAPL', pazar: 'MARS' });
+      ok('⑰d · iceriden · beyaz liste dışı pazar 400 `bad_pazar` (sessiz `US` yok)',
+        c.kod === 400 && c.govde.error === 'bad_pazar'
+        && c.govde.pazarlar.join(',') === ICERIDEN.PAZARLAR.join(','),
+        `${c.govde.error} ${c.govde.pazarlar && c.govde.pazarlar.join(',')}`);
+    }
+    // mali 400'leri — AGA VARMADAN: dogrulama onbellek anahtarindan ONCE
+    // donuyor (uc `oku()` satirina VARMIYOR).
+    {
+      const a = await al('mali', 'GET', {});
+      ok('⑰d · mali · sembolsüz istek 400 `sembol_yok`',
+        a.kod === 400 && a.govde.error === 'sembol_yok', `${a.kod} ${a.govde.error}`);
+      const b = await al('mali', 'GET', { sembol: 'AAPL!' });
+      ok('⑰d · mali · bozuk sembol 400 `bad_sembol` + BİÇİMİ söylüyor',
+        b.kod === 400 && b.govde.error === 'bad_sembol'
+        && b.govde.bicim === String(MALI.SEMBOL_BICIM),
+        `${b.govde.error} ${b.govde.bicim}`);
+      const c = await al('mali', 'GET', { sembol: 'AAPL', pazar: 'MARS' });
+      ok('⑰d · mali · beyaz liste dışı pazar 400 `bad_pazar` (sessiz `US` yok)',
+        c.kod === 400 && c.govde.error === 'bad_pazar'
+        && c.govde.pazarlar.join(',') === MALI.PAZARLAR.join(','),
+        `${c.govde.error} ${c.govde.pazarlar && c.govde.pazarlar.join(',')}`);
+    }
+    // gundem 400'ü — TEK kapı: kapsam. Önbellek anahtarından ÖNCE dönüyor.
+    {
+      const a = await al('gundem', 'GET', { kapsam: 'mars' });
+      ok('⑰d · gundem · beyaz liste dışı kapsam 400 `bad_kapsam` (sessiz `HEPSI` yok)',
+        a.kod === 400 && a.govde.error === 'bad_kapsam'
+        && a.govde.izinli.join(',') === GUNDEM.KAPSAMLAR.join(','),
+        `${a.govde.error} ${a.govde.izinli && a.govde.izinli.join(',')}`);
+    }
+    // TOPLU SÜZGEÇ: ⑰'nin gövdede dolaştırdığı HER cevap aynı kapıdan geçer.
+    ok('⑰d · her hata gövdesi UYARI taşıyor (politika yüzeyde)',
+      govdeler17.length > 0 && govdeler17.every((g) => g.uyari === UYARI),
+      `${govdeler17.length} gövde`);
+    ok('⑰d · hiçbir hata gövdesinde HTML/yığın izi YOK',
+      !govdeler17.some((g) => /<[a-z]|at Object\.|\.js:\d+/i.test(JSON.stringify(g))), 'temiz');
+    ok('⑰d · hata gövdeleri MAKİNE KODU taşıyor (Türkçe cümle değil)',
+      govdeler17.filter((g) => g.error).every((g) => /^[a-z_]+$/.test(g.error)),
+      govdeler17.filter((g) => g.error).map((g) => g.error).join(','));
+  }
+
+  // --- ⑰e degisim SAF ayrıştırıcıları ---------------------------------
+  ok('⑰e · SATIR_ALANLARI kümesi SABİT (sözleşme kilidi)',
+    DEGISIM.SATIR_ALANLARI.join(',') === 'symbol,market,ysym,ok,price,prevClose,currency,marketTs,gecikmeli',
+    DEGISIM.SATIR_ALANLARI.join(','));
+  ok('⑰e · DONEM_ANAHTARLARI altı dönem ilan ediyor',
+    DEGISIM.DONEM_ANAHTARLARI.join(',') === 'saatlik,gunluk,haftalik,aylik,alti,yillik',
+    DEGISIM.DONEM_ANAHTARLARI.join(','));
+  ok('⑰e · dönem alan adları BİRİMİ taşıyor (`...Pct` = yüzde puanı)',
+    DEGISIM.DONEMLER.every((d) => /Pct$/.test(d.alan)),
+    DEGISIM.DONEMLER.map((d) => d.alan).join(','));
+  ok('⑰e · DONEMLER dondurulmuş (dönem tablosu çalışma anında değişmez)',
+    Object.isFrozen(DEGISIM.DONEMLER) && DEGISIM.DONEMLER.every((d) => Object.isFrozen(d)));
+  ok('⑰e · `yahooSembol` YALNIZ BIST\'e `.IS` ekliyor (motor kuralıyla birebir)',
+    DEGISIM.yahooSembol('AKBNK', 'BIST') === 'AKBNK.IS'
+    && DEGISIM.yahooSembol('AAPL', 'US') === 'AAPL',
+    DEGISIM.yahooSembol('AKBNK', 'BIST'));
+  ok('⑰e · `chartAdresi` `^` karakterini KAÇIRIYOR (app.js:556 ile aynı)',
+    String(DEGISIM.chartAdresi('^GSPC', '1d', '1d')).includes('%5EGSPC'),
+    DEGISIM.chartAdresi('^GSPC', '1d', '1d'));
+  ok('⑰e · `chartAdresi` izinsiz konakta `null` (adres kurulmuyor bile)',
+    DEGISIM.chartAdresi('AAPL', '1d', '1d', 'evil.example.com') === null);
+  ok('⑰e · `yuzde` web ikiziyle aynı sayıyı veriyor',
+    DEGISIM.yuzde(110, 100) === 10 && DEGISIM.yuzde(90, 100) === -10,
+    String(DEGISIM.yuzde(110, 100)));
+  ok('⑰e · KURAL · `yuzde` ölçülemezse `null` — ASLA 0',
+    DEGISIM.yuzde(100, 0) === null && DEGISIM.yuzde(NaN, 100) === null
+    && DEGISIM.yuzde(100, null) === null,
+    String(DEGISIM.yuzde(100, 0)));
+  ok('⑰e · `ayristirKota` bozuk gövdede İSTİSNA ATMIYOR, dört alan `null`',
+    anahtarlar(DEGISIM.ayristirKota({})) === 'currency,marketTs,prevClose,price'
+    && Object.values(DEGISIM.ayristirKota(null)).every((v) => v === null),
+    anahtarlar(DEGISIM.ayristirKota({})));
+  {
+    const kotaJson = { chart: { result: [{ meta: { regularMarketPrice: 101.5, chartPreviousClose: 100, currency: 'USD', regularMarketTime: 1700000000 } }] } };
+    const k = DEGISIM.ayristirKota(kotaJson);
+    ok('⑰e · `ayristirKota` fiyat/önceki kapanış/döviz HAM geçiyor',
+      k.price === 101.5 && k.prevClose === 100 && k.currency === 'USD',
+      `${k.price} ${k.prevClose} ${k.currency}`);
+    ok('⑰e · `marketTs` SANİYE değil MİLİSANİYE (birim sözleşmesi)',
+      k.marketTs === 1700000000 * 1000, String(k.marketTs));
+  }
+  {
+    // Üç bar: biri `low` eksik -> DÜŞER (web süzgeciyle birebir).
+    const seriJson = {
+      chart: { result: [{
+        timestamp: [1000, 2000, 3000],
+        indicators: { quote: [{ open: [1, 2, 3], high: [1, 2, 3], low: [1, null, 3], close: [10, 20, 30] }] },
+      }] },
+    };
+    const s = DEGISIM.ayristirSeri(seriJson);
+    ok('⑰e · `ayristirSeri` eksik barı DÜŞÜRÜYOR (3 bar -> 2)',
+      s.length === 2 && s[0].close === 10 && s[1].close === 30, String(s.length));
+    ok('⑰e · `ayristirSeri` yalnız `time`/`close` taşıyor (fazla alan yok)',
+      s.every((c) => anahtarlar(c) === 'close,time'), anahtarlar(s[0]));
+    ok('⑰e · `ayristirSeri` bozuk gövdede BOŞ dizi (istisna atmıyor)',
+      DEGISIM.ayristirSeri(null).length === 0 && DEGISIM.ayristirSeri({}).length === 0);
+  }
+  {
+    // Saat DIŞARIDAN veriliyor: `donemRef` saf, test sabit zamanla ölçüyor.
+    const GUN = DEGISIM.GUN_SN;
+    const simdi = 10 * GUN;
+    const seri = [
+      { time: 1 * GUN, close: 100 },
+      { time: 8 * GUN, close: 200 },
+      { time: 10 * GUN, close: 300 },
+    ];
+    ok('⑰e · `donemRef` kesme noktasına EŞİT ya da ONDAN ESKİ ilk mumu alıyor',
+      DEGISIM.donemRef(seri, 7, simdi) === 100, String(DEGISIM.donemRef(seri, 7, simdi)));
+    ok('⑰e · `donemRef` kesme serinin DIŞINDAYSA en eski muma düşüyor',
+      DEGISIM.donemRef(seri, 365, simdi) === 100, String(DEGISIM.donemRef(seri, 365, simdi)));
+    ok('⑰e · `donemRef` yakın kesmede DAHA YENİ mumu alıyor',
+      DEGISIM.donemRef(seri, 2, simdi) === 200, String(DEGISIM.donemRef(seri, 2, simdi)));
+    ok('⑰e · KURAL · `donemRef` boş seride `null` — ASLA 0',
+      DEGISIM.donemRef([], 7, simdi) === null && DEGISIM.donemRef(null, 7, simdi) === null);
+    ok('⑰e · `saatlikRef` SONDAN İKİNCİ barın kapanışı (web ikizi)',
+      DEGISIM.saatlikRef(seri) === 200, String(DEGISIM.saatlikRef(seri)));
+    ok('⑰e · KURAL · `saatlikRef` iki bardan azsa `null` — ASLA 0',
+      DEGISIM.saatlikRef([{ time: 1, close: 5 }]) === null && DEGISIM.saatlikRef([]) === null);
+  }
+  ok('⑰e · eşzamanlılık ve tavan ÖLÇÜLMÜŞ sayılar (api/_yfin.js 12 ile aynı)',
+    DEGISIM.AZAMI_SEMBOL === 12 && DEGISIM.ESZAMANLI === 4,
+    `azami ${DEGISIM.AZAMI_SEMBOL} · eşzamanlı ${DEGISIM.ESZAMANLI}`);
+  ok('⑰e · `GUN_SN` 86400 (web `p.days * 86400` ile birebir)',
+    DEGISIM.GUN_SN === 86400, String(DEGISIM.GUN_SN));
+
+  // --- ⑰f kripto SAF ayrıştırıcıları ----------------------------------
+  {
+    const i1 = KRIPTO.ayristirIdler('bitcoin, BITCOIN ,ethereum');
+    ok('⑰f · `ayristirIdler` küçük harfe indiriyor ve TEKİLLEŞTİRİYOR',
+      i1.idler.join(',') === 'bitcoin,ethereum', i1.idler.join(','));
+    ok('⑰f · `ayristirIdler` boş girdide `kripto_id_yok`',
+      KRIPTO.ayristirIdler('').idler === null
+      && KRIPTO.ayristirIdler('').hata === 'kripto_id_yok');
+    ok('⑰f · `ayristirIdler` biçim dışı kimliği REDDEDİYOR',
+      KRIPTO.ayristirIdler('BTC!').hata === 'bad_id');
+    ok('⑰f · `marketsAdresi` boş listede `null` (istek kurulmuyor)',
+      KRIPTO.marketsAdresi([]) === null && KRIPTO.marketsAdresi(null) === null);
+    const u = KRIPTO.marketsAdresi(['bitcoin', 'ethereum']);
+    ok('⑰f · `marketsAdresi` TEK istekte iki kimliği birlikte soruyor',
+      u.includes('ids=bitcoin%2Cethereum') && u.includes('vs_currency=usd'), u);
+    ok('⑰f · `sparkline` İSTENMEZSE adreste YOK (gereksiz gövde çekilmiyor)',
+      !u.includes('sparkline')
+      && KRIPTO.marketsAdresi(['bitcoin'], { sparkline: true }).includes('sparkline=true'));
+    ok('⑰f · yapısal istek tavanı 2 (kimlik sayısından BAĞIMSIZ)',
+      KRIPTO.AZAMI_UST_ISTEK === 2, String(KRIPTO.AZAMI_UST_ISTEK));
+  }
+  {
+    ok('⑰f · `ayristirCoin` bozuk girdide `null` (istisna atmıyor)',
+      KRIPTO.ayristirCoin(null) === null && KRIPTO.ayristirCoin({}) === null
+      && KRIPTO.ayristirCoin({ id: 7 }) === null);
+    const c = KRIPTO.ayristirCoin({
+      id: 'bitcoin', symbol: 'btc', name: 'Bitcoin', current_price: 60000,
+      market_cap_rank: 1, market_cap: 1.2e12, price_change_percentage_24h: -1.5,
+      total_volume: 3e10, circulating_supply: 19.7e6, max_supply: 21e6,
+      ath: 69000, ath_change_percentage: -13.2, ath_date: '2021-11-10T14:24:11.849Z',
+    });
+    ok('⑰f · coin kaydı ALAN KÜMESİ SABİT (sözleşme kilidi)',
+      anahtarlar(c) === 'athChangePct,athTs,athUsd,circulatingSupplyAdet,id,marketCapRank,marketCapUsd,maxSupplyAdet,name,priceChange24hPct,priceUsd,symbol,totalVolumeUsd',
+      anahtarlar(c));
+    ok('⑰f · sembol BÜYÜK harfe çıkıyor, sayılar HAM geçiyor (biçimleme yok)',
+      c.symbol === 'BTC' && c.priceUsd === 60000 && c.priceChange24hPct === -1.5,
+      `${c.symbol} ${c.priceUsd}`);
+    ok('⑰f · `athTs` MİLİSANİYE epoch (ham tarih metni değil)',
+      c.athTs === Date.parse('2021-11-10T14:24:11.849Z'), String(c.athTs));
+    ok('⑰f · ÜÇÜNCÜ DURUM · `sparkline` istenmedi -> alan GÖVDEDE YOK',
+      !Object.prototype.hasOwnProperty.call(c, 'sparkline7dUsd'));
+    const c2 = KRIPTO.ayristirCoin({ id: 'bitcoin', sparkline_in_7d: { price: [1, null, 3] } });
+    ok('⑰f · `sparkline` istendiğinde sayısal olmayan nokta DÜŞÜYOR',
+      c2.sparkline7dUsd.join(',') === '1,3', c2.sparkline7dUsd.join(','));
+    ok('⑰f · ölçülemeyen alan `null` — ASLA 0',
+      c2.priceUsd === null && c2.marketCapUsd === null && c2.athTs === null,
+      String(c2.priceUsd));
+  }
+  {
+    const g = KRIPTO.ayristirKuresel({ data: { market_cap_percentage: { BTC: 54.2, eth: 17.1, bad: 'x' } } });
+    ok('⑰f · `ayristirKuresel` anahtarları küçük harfe indiriyor (web ikizi)',
+      g.btc === 54.2 && g.eth === 17.1, anahtarlar(g));
+    ok('⑰f · `ayristirKuresel` sayısal olmayan payı DÜŞÜRÜYOR',
+      !Object.prototype.hasOwnProperty.call(g, 'bad'), anahtarlar(g));
+    ok('⑰f · `ayristirKuresel` bozuk gövdede `null`',
+      KRIPTO.ayristirKuresel({}) === null && KRIPTO.ayristirKuresel(null) === null
+      && KRIPTO.ayristirKuresel({ data: { market_cap_percentage: {} } }) === null);
+  }
+
+  // --- ⑰g metal SAF ayrıştırıcıları + İKİZLİK -------------------------
+  ok('⑰g · METAL_ANAHTARLARI üç kalem (KAPALI küme)',
+    METAL.METAL_ANAHTARLARI.join(',') === 'altin,gumus,platin',
+    METAL.METAL_ANAHTARLARI.join(','));
+  ok('⑰g · METALLER ve her kalemi dondurulmuş',
+    Object.isFrozen(METAL.METALLER)
+    && METAL.METAL_ANAHTARLARI.every((k) => Object.isFrozen(METAL.METALLER[k])));
+  ok('⑰g · maden kaydı EKRAN METNİ taşımıyor (ad/etiket alanı yok)',
+    METAL.METAL_ANAHTARLARI.every((k) => anahtarlar(METAL.METALLER[k]) === 'anahtar,dunyaSorgu,trSorgu,ysym'),
+    anahtarlar(METAL.METALLER.altin));
+  // İKİZLİK: sorgu dizgeleri config.js:37-52 ile BİREBİR olmalı. Ayrışırsa
+  // web ve native AYNI metal için FARKLI haber kümesi gösterir.
+  {
+    const cfg = readFileSync(path.join(ROOT, 'config.js'), 'utf8');
+    const kacak = METAL.METAL_ANAHTARLARI.filter((k) => {
+      const m = METAL.METALLER[k];
+      return !cfg.includes(`'${m.trSorgu}'`) || !cfg.includes(`'${m.dunyaSorgu}'`);
+    });
+    ok('⑰g · İKİZLİK · üç metalin TR/dünya sorgusu config.js ile BİREBİR',
+      kacak.length === 0, kacak.join(',') || 'temiz');
+  }
+  ok('⑰g · `ayristirMadenler` boş girdide ÜÇÜNÜ birlikte veriyor (web ikizi)',
+    METAL.ayristirMadenler('').madenler.length === 3
+    && METAL.ayristirMadenler(undefined).madenler.length === 3);
+  ok('⑰g · `ayristirMadenler` tekrarları TEKİLLEŞTİRİYOR',
+    METAL.ayristirMadenler('altin,ALTIN').madenler.length === 1);
+  ok('⑰g · `ayristirMadenler` sözlük dışı anahtarı REDDEDİYOR',
+    METAL.ayristirMadenler('bakir').madenler === null
+    && METAL.ayristirMadenler('bakir').hata === 'bad_maden');
+  // `hasOwnProperty.call`: miras anahtar sözlüğe GİRMEZ (_girdi.js:144 kapısı).
+  ok('⑰g · KURAL · `__proto__`/`toString` sözlüğe SIZMIYOR',
+    METAL.ayristirMadenler('__proto__').madenler === null
+    && METAL.ayristirMadenler('toString').madenler === null);
+  ok('⑰g · `kapsamYerelleri` üç kapsamı doğru açıyor',
+    METAL.kapsamYerelleri('tr').join(',') === 'tr'
+    && METAL.kapsamYerelleri('dunya').join(',') === 'dunya'
+    && METAL.kapsamYerelleri('hepsi').join(',') === 'tr,dunya',
+    METAL.kapsamYerelleri('hepsi').join(','));
+  ok('⑰g · KAPSAM_PAZAR `_haber.js` pazar adlarıyla eşleniyor (3. sözlük yok)',
+    Object.values(METAL.KAPSAM_PAZAR).every((p) => Object.prototype.hasOwnProperty.call(PAZAR_YERELI, p)),
+    Object.values(METAL.KAPSAM_PAZAR).join(','));
+  ok('⑰g · `ayristirLimit` verilmezse `_haber.js` varsayılanına düşüyor',
+    METAL.ayristirLimit(undefined).limit === haberVarsayilanMadde
+    && METAL.ayristirLimit('').limit === haberVarsayilanMadde,
+    String(METAL.ayristirLimit(undefined).limit));
+  ok('⑰g · `ayristirLimit` 1..AZAMI arası tam sayıyı KABUL ediyor',
+    METAL.ayristirLimit('5').limit === 5 && METAL.ayristirLimit(1).limit === 1);
+  ok('⑰g · `ayristirLimit` sınır dışını SESSİZCE KIRPMIYOR (`bad_limit`)',
+    METAL.ayristirLimit('0').limit === null
+    && METAL.ayristirLimit(String(haberAzamiMadde + 1)).limit === null
+    && METAL.ayristirLimit('2.5').limit === null
+    && METAL.ayristirLimit('x').hata === 'bad_limit');
+  ok('⑰g · yapısal istek tavanı = maden sayısı × 2 yerel',
+    METAL.AZAMI_UST_ISTEK === METAL.METAL_ANAHTARLARI.length * 2
+    && METAL.AZAMI_UST_ISTEK === 6, String(METAL.AZAMI_UST_ISTEK));
+  // ÖLÇÜLEN ARIZA (düzeltildi): sayım eskiden `beslemeCek`in `tam` alanını
+  // okuyordu; `tam` PAYLAŞILAN sayaçtan üretiliyor (`_haber.js:330`), yani
+  // 6 paralel beslemeden BİRİ düştüğü an sonraki her çağrı `tam:false`
+  // dönüyor ve 5 besleme okunmuşken uç 502 basıyordu. Sayım artık
+  // `_haber.js:521` `gundemCek`in ÖLÇÜLMÜŞ kalıbıyla aynı: madde sayısı.
+  ok('⑰g · ÖLÇÜM · besleme sayımı MADDE SAYISINA bakıyor (paylaşılan `tam`e DEĞİL)',
+    /if \(maddeler\.length > 0\) okunan\+\+;/.test(kodlar.metal)
+    && !/s\.value\.tam\) okunan/.test(kodlar.metal), 'maddeler.length');
+  ok('⑰g · madde biçimi `_haber.js` MADDE_ALANLARI ile BİREBİR (HaberSatiri yeniden kullanılabilir)',
+    /MADDE_ALANLARI/.test(kodlar.metal), MADDE_ALANLARI.join(','));
+
+  // --- ⑰h HAM SAYI + sızıntı kapıları (üç dosya birden) ---------------
+  for (const [ad, kod] of Object.entries(kodlar)) {
+    const src = kaynaklar[ad];
+    ok(`⑰h · \`_${ad}.js\`te \`Intl\` YOK (biçimleme istemcide)`, !/\bIntl\b/.test(kod));
+    ok(`⑰h · \`_${ad}.js\`te \`toFixed(\`/\`toLocaleString(\` YOK`,
+      !/toFixed\(|toLocaleString\(/.test(kod));
+    ok(`⑰h · \`_${ad}.js\` gövdeye \`detail:\`/yığın izi sızdırmıyor`, !/detail:/.test(kod));
+    ok(`⑰h · \`_${ad}.js\` dosya sistemine YAZMIYOR`,
+      !/writeFileSync|appendFileSync/.test(kod));
+    ok(`⑰h · \`_${ad}.js\` kaynağında e-posta/anahtar YOK`,
+      !/@gmail|ANTHROPIC|apiKey/.test(src), 'temiz');
+    ok(`⑰h · \`_${ad}.js\` UYARI dizgesini öteki uçlarla AYNI yazıyor`,
+      src.includes(`'${UYARI}'`), 'birebir');
+  }
+  // Bu İKİ KAPI üç taşıyıcıya özgü: onların kaynağı (Yahoo/CoinGecko/RSS)
+  // motora DİÇ dokunmuyor. `_gundem.js` BİLEREK dışarda: o zaten motorun
+  // gündem dilimlerini (`agendaScore`) ÇAĞIRMAK için var — kuru-
+  // lumunu `api/pulse.js` ile birebir yapıyor. Onun HAM SAYI kapısı
+  // "motoru çağırmaz" değil, "KENDİ eşiğini/sözlüğünü kurmaz" — aşağıda
+  // ⑰i'de ayrıca ölçülüyor.
+  for (const ad of ['degisim', 'kripto', 'metal']) {
+    const kod = kodlar[ad];
+    ok(`⑰h · \`_${ad}.js\`te eşik/ağırlık/skor sözcüğü YOK (mantık motorda)`,
+      !/\bscore\b|\bWEIGHT\b|\bthreshold\b|\bESIK\b/i.test(kod), 'temiz');
+    ok(`⑰h · \`_${ad}.js\` motoru/ayarı/\`_ag.js\`i İÇE ALMIYOR`,
+      !/_motor\.js|_ayar\.js|_ag\.js/.test(kod), 'temiz');
+  }
+  for (const ad of ['degisim', 'kripto']) {
+    ok(`⑰h · \`_${ad}.js\` kimlik dizgesi SADE ve kişisel veri taşımıyor`,
+      /day-starter\/1\.0 \(/.test(kaynaklar[ad])
+      && !/@/.test((kaynaklar[ad].match(/'User-Agent':[^\n]*/) || [''])[0]));
+  }
+  // SKOR YOLU KİLİDİ: dört uç mevcut motor uçlarının hiçbirine girmedi.
+  for (const [ad, yol] of [['score', SCORE_PATH], ['recommend', RECOMMEND_PATH], ['analyze', ANALYZE_PATH]]) {
+    const s = readFileSync(yol, 'utf8');
+    ok(`⑰h · KİLİT · api/${ad}.js dört taşıyıcıdan HİÇBİRİNİ tanımıyor`,
+      !/_degisim|_gundem|_kripto|_metal/.test(s));
+  }
+
+  // --- ⑰i /api/gundem SAF dışa aktarımları ------------------------------
+  // Bu uç ötekilerden AYRI bir iş yapıyor: manşeti DEĞİL, manşetlerden
+  // çıkan KONSEPTİ taşıyor (`/api/news?gundem=1` zaten manşeti veriyor ve
+  // native `PiyasaGundemiKarti` onu basıyor). Üretim motorun `agendaScore`
+  // diliminde; burada ölçülen şey TELE İNDİRME katmanı: hangi alan geçiyor,
+  // hangi Türkçe cümle DÜŞÜYOR, ölçülmeyen sayı `null` mı kalıyor.
+  ok('⑰i · KAPSAMLAR üç kapsam ilan ediyor ve dondurulmuş',
+    GUNDEM.KAPSAMLAR.join(',') === 'TR,US,HEPSI' && Object.isFrozen(GUNDEM.KAPSAMLAR),
+    GUNDEM.KAPSAMLAR.join(','));
+  ok('⑰i · `kapsamCoz` boş/eksik girdide `HEPSI`',
+    GUNDEM.kapsamCoz('') === 'HEPSI' && GUNDEM.kapsamCoz(null) === 'HEPSI'
+    && GUNDEM.kapsamCoz(undefined) === 'HEPSI', String(GUNDEM.kapsamCoz('')));
+  ok('⑰i · `kapsamCoz` küçük harfi kabul ediyor (büyüteç)',
+    GUNDEM.kapsamCoz('tr') === 'TR' && GUNDEM.kapsamCoz('us') === 'US',
+    GUNDEM.kapsamCoz('tr'));
+  ok('⑰i · KURAL · `kapsamCoz` küme dışında `null` — SESSİZCE `HEPSI`ye düşmüyor',
+    GUNDEM.kapsamCoz('mars') === null && GUNDEM.kapsamCoz('EU') === null,
+    String(GUNDEM.kapsamCoz('mars')));
+  ok('⑰i · `kapsamYerelleri` tek kapsamda TEK yerel, `HEPSI`de İKİSİ',
+    GUNDEM.kapsamYerelleri('TR').join(',') === 'TR'
+    && GUNDEM.kapsamYerelleri('HEPSI').length === 2
+    && GUNDEM.kapsamYerelleri('HEPSI').includes('TR')
+    && GUNDEM.kapsamYerelleri('HEPSI').includes('US'),
+    GUNDEM.kapsamYerelleri('HEPSI').join(','));
+  ok('⑰i · `kapsamYerelleri` KOPYA döndürüyor (çağıran `GUNDEM_YERELLER`i bozamaz)',
+    GUNDEM.kapsamYerelleri('HEPSI') !== GUNDEM.kapsamYerelleri('HEPSI'));
+  ok('⑰i · `yerelDili` motora GİDEN dil etiketini veriyor (tr/en)',
+    GUNDEM.yerelDili('TR') === 'tr' && GUNDEM.yerelDili('US') === 'en',
+    GUNDEM.yerelDili('TR') + '/' + GUNDEM.yerelDili('US'));
+  // Bağlantı: cihazda `Linking.openURL`e gidiyor. api/pulse.js'teki şema
+  // kapısının AYNISI — iki uç ayrı davranmasın.
+  ok('⑰i · `gundemBaglanti` http/httpsı GEÇİRİYOR',
+    GUNDEM.gundemBaglanti('https://x.example.com/a') === 'https://x.example.com/a'
+    && GUNDEM.gundemBaglanti('http://x.example.com/a') === 'http://x.example.com/a',
+    GUNDEM.gundemBaglanti('https://x.example.com/a'));
+  ok('⑰i · GÜVENLİK · `gundemBaglanti` javascript:/data:/file:/şemasızı BOŞA düşürüyor',
+    GUNDEM.gundemBaglanti('javascript:alert(1)') === ''
+    && GUNDEM.gundemBaglanti('data:text/html,x') === ''
+    && GUNDEM.gundemBaglanti('file:///etc/passwd') === ''
+    && GUNDEM.gundemBaglanti('example.com/a') === '', 'bos');
+  ok('⑰i · `gundemBaglanti` boşluk kırpıyor, tavanı aşanı BOŞA düşürüyor',
+    GUNDEM.gundemBaglanti('  https://x.example.com/a  ') === 'https://x.example.com/a'
+    && GUNDEM.gundemBaglanti('https://x.example.com/' + 'a'.repeat(500)) === ''
+    && GUNDEM.gundemBaglanti(null) === '' && GUNDEM.gundemBaglanti(undefined) === '',
+    'kirpik');
+  {
+    const b = GUNDEM.basligaIndir({
+      title: 'TCMB faizi sabit tuttu', link: 'https://x.example.com/1',
+      pubDate: 'Mon, 03 Nov 2025 08:00:00 GMT', ageH: 3.5, weight: 2.5, low: 'tcmb faizi',
+    });
+    ok('⑰i · `basligaIndir` DÖRT alan taşıyor (motorun ağırlık/küçük gövdesi DÜŞTÜ)',
+      anahtarlar(b) === 'ageH,link,pubDate,title', anahtarlar(b));
+    ok('⑰i · `basligaIndir` `ageH`i HAM geçiriyor (yuvarlama ekran işi)',
+      b.ageH === 3.5, String(b.ageH));
+    ok('⑰i · KURAL · `ageH` ölçülemezse `null` — ASLA 0',
+      GUNDEM.basligaIndir({}).ageH === null
+      && GUNDEM.basligaIndir({ ageH: 'yok' }).ageH === null,
+      String(GUNDEM.basligaIndir({}).ageH));
+    ok('⑰i · `basligaIndir` GÜVENSİZ bağlantıyı boş bırakıyor ama BAŞLIĞI taşıyor',
+      GUNDEM.basligaIndir({ title: 'T', link: 'javascript:1' }).link === ''
+      && GUNDEM.basligaIndir({ title: 'T', link: 'javascript:1' }).title === 'T', 'bos link');
+    ok('⑰i · `basligaIndir` bozuk girdide İSTİSNA ATMIYOR',
+      GUNDEM.basligaIndir(null).title === '' && GUNDEM.basligaIndir(undefined).title === '');
+  }
+  {
+    const k = GUNDEM.konseptiIndir({
+      key: 'faiz-indirimi', emoji: '\u2702\ufe0f', label: 'Faiz indirimi beklentisi',
+      note: 'Tahvil faizleri geriledi', risk: 'on', heat: 'hot', tone: 0.42,
+      score: 7.5, n: 6, emerging: false,
+      toneLabel: { cls: 'pos', label: 'Olumlu' },
+      sectors: [['banka', 1.2], ['holding', -0.8], ['bozuk']],
+      heads: [{ title: 'x', link: 'https://x.example.com/1', pubDate: 'd', ageH: 1 }],
+    });
+    ok('⑰i · `konseptiIndir` alan kümesi SABİT (sözleşme kilidi)',
+      anahtarlar(k) === 'heads,heat,key,n,risk,sectors,skor,sozcuk,tone,toneKod,yeni',
+      anahtarlar(k));
+    ok('⑰i · KURAL · Türkçe cümle alanları (`label`/`note`/`emoji`) TELE GİRMİYOR',
+      !('label' in k) && !('note' in k) && !('emoji' in k)
+      && !('toneLabel' in k) && !('emerging' in k), anahtarlar(k));
+    ok('⑰i · `toneKod` ETİKET değil KOD taşıyor (sözlük seçimi istemcide)',
+      k.toneKod === 'pos', String(k.toneKod));
+    ok('⑰i · `tone`/`skor`/`n` HAM sayı (yuvarlanmıyor)',
+      k.tone === 0.42 && k.skor === 7.5 && k.n === 6, `${k.tone} ${k.skor} ${k.n}`);
+    ok('⑰i · `sectors` İKİLİ olmayan kalemi DÜŞÜRÜYOR',
+      k.sectors.length === 2 && k.sectors[0][0] === 'banka' && k.sectors[0][1] === '1.2',
+      JSON.stringify(k.sectors));
+    ok('⑰i · tanımlı konseptte `sozcuk` `null` (sözlük `key`den seçiyor)',
+      k.sozcuk === null && k.yeni === false, String(k.sozcuk));
+    ok('⑰i · `heads` aynı başlık biçimine iniyor (HaberSatiri yeniden kullanılabilir)',
+      k.heads.length === 1 && anahtarlar(k.heads[0]) === 'ageH,link,pubDate,title',
+      anahtarlar(k.heads[0]));
+  }
+  {
+    const y = GUNDEM.konseptiIndir({ key: 'emg-deprem', emerging: true, n: 3 });
+    ok('⑰i · keşifle gelen konseptte `sozcuk` SÖZCÜĞÜ taşıyor (`emg-` öneki düşüyor)',
+      y.yeni === true && y.sozcuk === 'deprem', `${y.yeni} ${y.sozcuk}`);
+    ok('⑰i · KURAL · eksik ölçüm `null` (tone/skor), sayaç `0`',
+      y.tone === null && y.skor === null && y.n === 3 && y.risk === null,
+      `${y.tone} ${y.skor} ${y.n}`);
+    ok('⑰i · `heat` beyaz liste dışında `cool` (uydurma ısı yok)',
+      y.heat === 'cool' && GUNDEM.konseptiIndir({ key: 'k', heat: 'volkan' }).heat === 'cool',
+      y.heat);
+  }
+  {
+    const o = GUNDEM.ozetiIndir({
+      mood: 'Risk iştahı açık', moodCls: 'bull', riskOn: 4, riskOff: 1,
+      upSectors: ['banka'], downSectors: ['perakende'], poolN: 37,
+      rotation: { heat: 'hot', n: 5, stocks: ['AKBNK'] },
+    });
+    ok('⑰i · `ozetiIndir` alan kümesi SABİT',
+      anahtarlar(o) === 'downSectors,moodKod,poolN,riskOff,riskOn,rotasyon,upSectors',
+      anahtarlar(o));
+    ok('⑰i · KURAL · `mood` (Türkçe cümle) DÜŞTÜ, yerine `moodKod` gidiyor',
+      !('mood' in o) && o.moodKod === 'bull', anahtarlar(o));
+    ok('⑰i · `moodKod` beyaz liste dışında `neutral`',
+      GUNDEM.ozetiIndir({ moodCls: 'volkan' }).moodKod === 'neutral'
+      && GUNDEM.ozetiIndir({}).moodKod === 'neutral',
+      GUNDEM.ozetiIndir({}).moodKod);
+    // ÖLÇÜLMEDİ — ÖDEME DEĞİL: rotasyon hisseleri KULLANICI EVRENİNE
+    // bakıyor (app.js:`agendaScore` → radarUniverse → localStorage), yani
+    // sunucuda SAF değil. Boş dizi + KOD, uydurma liste basmaktan doğru.
+    ok('⑰i · DÜRÜSTLÜK · `rotasyon.hisseler` BOŞ ve bunu BİR KOD söylüyor',
+      o.rotasyon.hisseler.length === 0 && o.rotasyon.hisseKod === 'evren_olculmedi',
+      o.rotasyon.hisseKod);
+    ok('⑰i · `rotasyon` ölçülmediyse `null` (boş nesne değil)',
+      GUNDEM.ozetiIndir({}).rotasyon === null);
+    ok('⑰i · `ozetiIndir` bozuk girdide İSTİSNA ATMIYOR',
+      GUNDEM.ozetiIndir(null).poolN === 0 && GUNDEM.ozetiIndir(undefined).riskOn === 0);
+  }
+  // HAM SAYI'nin gundem sürümü: motoru ÇAĞIRIYOR (işi bu) ama KENDİ
+  // eşiğini/sözlüğünü/ağırlığını kurmuyor.
+  ok('⑰i · `_gundem.js` motoru `api/pulse.js` ile BİREBİR kuruyor (ikinci kalıp yok)',
+    /canliAg\(\{ taWeights: TA_WEIGHTS, taBenchmark: TA_BENCHMARK \}\)/.test(kodlar.gundem)
+    && /buildMotor\(AG\.H\)/.test(kodlar.gundem), 'birebir');
+  ok('⑰i · `_gundem.js` motorun `score`unu YALNIZ OKUYOR (kendi hesabı yok)',
+    /it\.score/.test(kodlar.gundem) && !/Math\./.test(kodlar.gundem), 'okuyor');
+  ok('⑰i · `_gundem.js` besleme ağırlığı UYDURMUYOR (hepsi `w: 1`)',
+    (kodlar.gundem.match(/w: 1,/g) || []).length === 1
+    && !/w: 0\.|w: 1\./.test(kodlar.gundem), 'w: 1');
+}
+
+// =========================================================================
+bolum('⑱ /api/yfin — kunye tasiyicisi + KIYAS EKSTREMI + BILANCO SENARYOSU');
+// =========================================================================
+// NIYE YENI BOLUM: `/api/yfin` bu dosyada bugune kadar YALNIZ dolayli
+// gecti (rewrite kilidi, tavan atiflari) — kendi davranisi hic
+// olculmemisti. S8 #10a ile tasiyici artik bir KATMAN uretiyor
+// (`ekstrem`), yani bir istemci sozlesmesi dogdu: native kiyas karti
+// satir basina "en iyi/en kotu" imini BU alandan okuyor.
+//
+// AGA HIC CIKMIYOR: katman eldeki kunye dizisinden hesapliyor.
+{
+  const YFIN_PATH = path.join(ROOT, 'api', '_yfin.js');
+  const yfinSrc = readFileSync(YFIN_PATH, 'utf8');
+  const yfinKod = yfinSrc.split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  const Y = await import('../api/_yfin.js');
+
+  // --- SOGUK BASLANGIC BEDELI: kurulum TEMBEL kalmali ---
+  // proxy.js bu dosyayi STATIK ice aliyor (proxy.js:47) ve _kesif.js'i
+  // BILEREK dinamik tutuyor ki duz `?url=` trafigi motor kurulumunu
+  // ODEMESIN (proxy.js:42-46). Modul duzeyi bir `buildMotor` o bedeli
+  // geri getirir ve BU KAPI duser.
+  ok('⑱a · `_motor.js`/`_ayar.js`/`_ag.js` YALNIZ dinamik `import()` ile geliyor',
+    !/^import[^\n]*_(motor|ayar|ag)\.js/m.test(yfinKod)
+    && /await Promise\.all\(\[\s*import\('\.\/_motor\.js'\)/.test(yfinKod));
+  ok('⑱a · modul duzeyinde `buildMotor(` cagrisi YOK (tembel kurulum)',
+    (yfinKod.match(/buildMotor\(/g) || []).length === 1
+    && /async function motorKur\(\)[\s\S]*?buildMotor\(AG\.H\)/.test(yfinKod));
+  ok('⑱a · motor kurulabiliyor (katmanin oncul kosulu)', (await Y.motorHazir()) === true);
+
+  // --- SATIR TARIFI: makine sozlugu, esik tablosu DEGIL ---
+  ok('⑱b · satir tarifi DONDURULMUS (calisma aninda buyumez)',
+    Object.isFrozen(Y.KIYAS_SATIRLARI) && Y.KIYAS_SATIRLARI.every((r) => Object.isFrozen(r)));
+  // Rakam denetimi tip ADLARINI saymiyor: 'ratio2'/'d2e' birer TIP
+  // etiketi, esik degil. Bu yuzden tirnakli metinler bosaltilip SAYI
+  // SABITI araniyor — tabloya bir gun 0.35 gibi bir esik sizarsa duser.
+  ok('⑱b · tarifte SAYI SABITI yok (yon sozlugu, esik/agirlik tablosu degil)',
+    !/[0-9]/.test((yfinKod.match(/KIYAS_SATIRLARI = Object\.freeze\(\[[\s\S]*?\]\);/) || [''])[0].replace(/'[^']*'/g, "''")));
+  ok('⑱b · her satir YALNIZ key/type/dir tasiyor (Turkce etiket/`xf` tele cikmiyor)',
+    Y.KIYAS_SATIRLARI.every((r) => anahtarlar(r) === 'dir,key,type'),
+    anahtarlar(Y.KIYAS_SATIRLARI[0]));
+
+  // --- PARITE: ekranin COMPARE_ROWS'u ile BIREBIR yon/tip ---
+  // KOPYA DEGIL DAR IZDUSUM iddiasi burada olculuyor: yonu OLAN her web
+  // satiri tarifte, tarifte web'de olmayan satir YOK, tipler AYNI.
+  // Tip onemli cunku motor negatif degeri YALNIZ ratio/ratio2'de atiyor.
+  {
+    const appSrc = readFileSync(path.join(ROOT, 'app.js'), 'utf8');
+    const crBlok = (appSrc.match(/const COMPARE_ROWS = \[[\s\S]*?\n {2}\];/) || [''])[0];
+    ok('⑱c · ONCUL · app.js COMPARE_ROWS ayristirilabildi', crBlok.length > 400, `${crBlok.length} krk`);
+    const web = [...crBlok.matchAll(/\{\s*key:\s*'([A-Za-z]+)'[^\n]*?type:\s*'([A-Za-z0-9]+)'[^\n]*?dir:\s*'(low|high)'/g)]
+      .map((m) => `${m[1]}:${m[2]}:${m[3]}`).sort();
+    const uc = Y.KIYAS_SATIRLARI.map((r) => `${r.key}:${r.type}:${r.dir}`).sort();
+    ok('⑱c · ONCUL · web tarafinda yonu olan satir sayisi olculdu', web.length === 11, `${web.length} satir`);
+    ok('⑱c · KILIT · tarif ile COMPARE_ROWS yon/tip BIREBIR',
+      uc.join('|') === web.join('|'),
+      uc.filter((x) => !web.includes(x)).concat(web.filter((x) => !uc.includes(x))).join(' · ') || 'fark yok');
+  }
+
+  // --- ISLEVSEL: katman gercekten kosuyor ---
+  const kunyeler = [
+    { symbol: 'A', ok: true, trailingPE: 10, profitMargin: 0.2, debtToEquity: 50, peg: -1 },
+    { symbol: 'B', ok: true, trailingPE: -5, profitMargin: 0.1, debtToEquity: 120, peg: 2 },
+    { symbol: 'C', ok: true, trailingPE: 30, profitMargin: 0.3, debtToEquity: 80, peg: 1 },
+    { symbol: 'D', ok: false },
+  ];
+  const ek = await Y.ekstremKatmani(kunyeler);
+  ok('⑱d · im SEMBOL adiyla geliyor (indeks DEGIL — istemci kunyeleri suzuyor)',
+    anahtarlar(ek.trailingPE) === 'eniyi,enkotu,yon'
+    && ek.trailingPE.eniyi === 'A' && ek.trailingPE.enkotu === 'C' && ek.trailingPE.yon === 'low',
+    JSON.stringify(ek.trailingPE));
+  ok('⑱d · NEGATIF degerleme satirda SAYILMIYOR (F/K -5 en iyi degil)',
+    ek.trailingPE.eniyi !== 'B' && ek.trailingPE.enkotu !== 'B'
+    && ek.peg.eniyi === 'C' && ek.peg.enkotu === 'B',
+    `peg ${JSON.stringify(ek.peg)}`);
+  ok('⑱d · `pct` satirinda isaret suzgeci YOK (yuzde negatif olabilir)',
+    ek.profitMargin.eniyi === 'C' && ek.profitMargin.enkotu === 'B');
+  ok('⑱d · `high` yonu ters cevrilmemis (yuksek marj = en iyi)',
+    ek.profitMargin.yon === 'high' && ek.debtToEquity.yon === 'low');
+  ok('⑱d · OLCULEMEYEN kunye (ok:false) ime GIRMIYOR',
+    !Object.values(ek).some((v) => v.eniyi === 'D' || v.enkotu === 'D'));
+  ok('⑱d · degeri OLMAYAN satirin anahtari HIC KONULMUYOR (0 uydurulmuyor)',
+    !('forwardPE' in ek) && !('dividendYield' in ek), anahtarlar(ek));
+
+  // TEK sembol / ESIT deger: ikisinde de ekstrem YOK — ama katman
+  // `null` DONMUYOR, cunku olcum YAPILDI. "olcemedim" ayri bir dal.
+  ok('⑱e · tek sembol -> bos nesne (olctum, ekstrem yok), `null` DEGIL',
+    JSON.stringify(await Y.ekstremKatmani([kunyeler[0]])) === '{}');
+  ok('⑱e · ILAN EDILEN SAPMA · esit degerlerde anahtar atiliyor (hem en iyi hem en kotu olmaz)',
+    JSON.stringify(await Y.ekstremKatmani([{ symbol: 'A', trailingPE: 9 }, { symbol: 'B', trailingPE: 9 }])) === '{}');
+  ok('⑱e · girdi yok -> cokme yok, bos nesne',
+    JSON.stringify(await Y.ekstremKatmani(null)) === '{}');
+
+  // --- TASIYICI SOZLESMESI BUYUMEDI ---
+  ok('⑱f · im kunye nesnesinin ICINE yazilmadi (results sozlesmesi aynen)',
+    kunyeler.every((k) => !('ekstrem' in k) && !('im' in k) && !('best' in k)));
+  // OLCULDU 2026-10-31: S8 #11 ile cevap COK SATIRLI oldu, tek satirlik
+  // eski kalip dustu. Kalip gevsetilmedi — iki alan AYRI AYRI araniyor.
+  ok('⑱f · cevap `ekstrem`i AYRI ust duzey alan olarak tasiyor',
+    /results: out,/.test(yfinKod) && /ekstrem: await ekstremKatmani\(out\),/.test(yfinKod));
+  ok('⑱f · katmanda Turkce cumle/etiket YOK (im istemcide secilir)',
+    !/label|txt:/.test((yfinKod.match(/export async function ekstremKatmani[\s\S]*?\n\}/) || [''])[0]));
+  ok('⑱f · arama kipi BOZULMADI (ekstrem yalniz `?symbols=` dalinda)',
+    /json\(\{ query: searchQ, quotes: out \}\)/.test(yfinKod));
+
+  // --- ⑱g: BILANCO SENARYOSU (S8 #11) ---
+  // NIYE KAPI: envanter (api/_kesif.js:1061) "senaryo matematigi
+  // BICIMLEME, uca girmez" diyordu; OLCULDU, yanlis — app.js:9535-9549
+  // icinde K=2.0 tepki katsayisi ve CAP=0.40 tavani var. Hesap motora
+  // tasindi; bu kapi bir gun katsayinin UCA ya da istemciye geri
+  // sizmasini engelliyor.
+  const senKod = (yfinKod.match(/export async function senaryoKatmani[\s\S]*?\n\}/) || [''])[0];
+  ok('⑱g · ONCUL · katman ayristirilabildi', senKod.length > 100, `${senKod.length} krk`);
+  ok('⑱g · katmanda SAYI SABITI yok (K=2.0 / CAP=0.40 motorda kaldi)',
+    !/[0-9]/.test(senKod.replace(/'[^']*'/g, "''")), senKod.match(/[0-9][^\n]*/) || 'yok');
+  ok('⑱g · katmanda Turkce cumle/etiket YOK (cumle istemcide secilir)',
+    !/label|txt:|'[A-Za-zÇĞİÖŞÜçğıöşü ]{6,}'/.test(senKod));
+  ok('⑱g · hesap MOTORDAN cagriliyor (yerel formul yok)',
+    /eng\.earnScenario\(/.test(senKod) && !/Math\.(min|max|abs)/.test(senKod));
+
+  // UC DONUS BICIMI — motorun kendisi uretiyor, katman TASIYOR.
+  const senK = [
+    // dagilim VAR: uc kutu ham sayi
+    { symbol: 'A', ok: true, price: 100, earnings: { epsAvg: 2, epsHigh: 3, epsLow: 1 } },
+    // dagilim SIFIR (analistler tek noktada): makine kodu `tight`
+    { symbol: 'B', ok: true, price: 50, earnings: { epsAvg: 2, epsHigh: 2, epsLow: 2, revAvg: 10, revHigh: 10, revLow: 10 } },
+    // fiyat YOK: senaryo olmaz
+    { symbol: 'C', ok: true, price: null, earnings: { epsAvg: 2, epsHigh: 3, epsLow: 1 } },
+    // olculemeyen kunye
+    { symbol: 'D', ok: false, price: 10, earnings: { epsAvg: 2, epsHigh: 3, epsLow: 1 } },
+    // `deep` yok — earnings hic gelmemis
+    { symbol: 'E', ok: true, price: 10 },
+  ];
+  const sen = await Y.senaryoKatmani(senK);
+  ok('⑱g · anahtar SEMBOL (indeks DEGIL — kart kunyeleri suzuyor)',
+    anahtarlar(sen) === 'A,B', anahtarlar(sen));
+  ok('⑱g · uc kutu HAM SAYI tasiyor (yuzde/metin bicimleme YOK)',
+    anahtarlar(sen.A) === 'base,bear,bull'
+    && anahtarlar(sen.A.bull) === 'px,ret'
+    && typeof sen.A.bull.px === 'number' && typeof sen.A.bull.ret === 'number',
+    JSON.stringify(sen.A.bull));
+  ok('⑱g · BAZ kutusu %0 (konsensus tutarsa piyasa fiyatladi)',
+    sen.A.base.ret === 0 && sen.A.base.px === 100);
+  ok('⑱g · tavan UCTA degil motorda isliyor (ret CAP ile sinirli)',
+    sen.A.bull.ret === 0.4 && sen.A.bear.ret === -0.4, `${sen.A.bull.ret} / ${sen.A.bear.ret}`);
+  ok('⑱g · dagilim sifirsa MAKINE KODU doner, uc ozdes %0 kutusu DEGIL',
+    JSON.stringify(sen.B) === '{"tight":true}', JSON.stringify(sen.B));
+  ok('⑱g · senaryo uretilemeyen sembolun anahtari HIC KONULMUYOR (0 uydurulmuyor)',
+    !('C' in sen) && !('E' in sen));
+  ok('⑱g · OLCULEMEYEN kunye (ok:false) senaryoya GIRMIYOR', !('D' in sen));
+  ok('⑱g · girdi yok -> cokme yok, bos nesne',
+    JSON.stringify(await Y.senaryoKatmani(null)) === '{}'
+    && JSON.stringify(await Y.senaryoKatmani([])) === '{}');
+  ok('⑱g · senaryo kunye nesnesinin ICINE yazilmadi (results sozlesmesi aynen)',
+    senK.every((k) => !('senaryo' in k) && !('bull' in k) && !('scenario' in k)));
+
+  // YALNIZ `deep=1`: `earnings` MODULES_DEEP ile geliyor. Sig kipte
+  // alan HIC KONULMUYOR — bos nesne "olctum, cikmadi" demek olurdu.
+  ok('⑱g · cevapta senaryo YALNIZ `deep` dalinda',
+    /\.\.\.\(deep \? \{ senaryo: await senaryoKatmani\(out\) \} : \{\}\),/.test(yfinKod));
+  ok('⑱g · arama kipi senaryo TASIMIYOR',
+    !/quotes: out,[\s\S]{0,80}senaryo/.test(yfinKod));
+}
+
+// ---------------------------------------------------------------------
+//  FA kriter kodu: MOTOR ile NATIVE SOZLUK arasinda surukleme bekcisi.
+//
+//  NIYE BU TESTTE: kriterin Turkce cumlesi artik telde TASINMIYOR; uc
+//  yalniz makine kodu (`c.kod`) ve ham sayilari (`c.sayilar`) gonderiyor,
+//  cumleyi `mobile/src/lib/sozluk.ts` kuruyor. Iki taraf ayri dosyada
+//  oldugu icin motora yeni bir dal eklendiginde ekran sessizce hicbir
+//  cumle basmaz -- gorunurde hata yok, bilgi kayboluyor. Bu bolum iki
+//  tarafin kod KUMESINI birebir esitliyor; eksik de fazla da kirmizi.
+//
+//  BU BOLUM `mobile/src`'i OKUYAN ILK uc testi. Bilincli: motorun urettigi
+//  kod ile ekranin tanidigi kod ayni gercegin iki yarisi.
+// ---------------------------------------------------------------------
+bolum('⑲ FA kriter kodu <-> native sozluk + cevrimdisi BIST fiksturu');
+{
+  const MOTOR_FA_PATH = path.join(ROOT, 'api', '_motor.js');
+  const SOZLUK_PATH = path.join(ROOT, 'mobile', 'src', 'lib', 'sozluk.ts');
+  const motorFaSrc = readFileSync(MOTOR_FA_PATH, 'utf8');
+  const sozlukSrc = readFileSync(SOZLUK_PATH, 'utf8');
+
+  // Yalniz `faKriterKod` govdesi: motorun BASKA yerindeki noktali dize
+  // sabitleri (ornegin modul yollari) kumeye karismasin.
+  const faKodBlok = (() => {
+    const a = motorFaSrc.indexOf('function faKriterKod(');
+    const b = motorFaSrc.indexOf('function faKriterIsaretle(');
+    return a >= 0 && b > a ? motorFaSrc.slice(a, b) : '';
+  })();
+  ok('⑲a · ONCUL · motorda `faKriterKod` govdesi ayristirilabildi',
+    faKodBlok.length > 1500, `${faKodBlok.length} krk`);
+
+  const sozlukBlok = (() => {
+    const a = sozlukSrc.indexOf('export const FA_KRITER_SOZLUK');
+    if (a < 0) return '';
+    const b = sozlukSrc.indexOf('\n};', a);
+    return b > a ? sozlukSrc.slice(a, b) : '';
+  })();
+  ok('⑲a · ONCUL · native `FA_KRITER_SOZLUK` blogu ayristirilabildi',
+    sozlukBlok.length > 1000, `${sozlukBlok.length} krk`);
+
+  const motorKodlari = new Set(
+    (faKodBlok.match(/'[A-Za-z0-9]+\.[a-z-]+'/g) || []).map((s) => s.slice(1, -1)));
+  const sozlukKodlari = new Set(
+    (sozlukBlok.match(/'[A-Za-z0-9]+\.[a-z-]+':/g) || []).map((s) => s.slice(1, -2)));
+  ok('⑲a · iki kume de bos degil', motorKodlari.size > 25 && sozlukKodlari.size > 25,
+    `motor ${motorKodlari.size} · sozluk ${sozlukKodlari.size}`);
+
+  const sozluktekiEksik = [...motorKodlari].filter((k) => !sozlukKodlari.has(k));
+  ok('⑲b · motorun URETEBILDIGI her kodun native cumlesi VAR',
+    sozluktekiEksik.length === 0, sozluktekiEksik.slice(0, 8).join(', '));
+
+  const motordakiEksik = [...sozlukKodlari].filter((k) => !motorKodlari.has(k));
+  ok('⑲b · native sozlukte OLU kod yok (motor artik uretmiyor)',
+    motordakiEksik.length === 0, motordakiEksik.slice(0, 8).join(', '));
+
+  // Cumlede SAYI olmayacak: esik motorda duruyor. Sozluge "cift haneli"
+  // yerine rakam girse bile bu kapi onu yakalamaz; rakam ise yakalar ve
+  // esigin ikinci kopyasi dogmasini engeller.
+  const rakamliCumle = (sozlukBlok.match(/':\s*'[^']*[0-9][^']*'/g) || []);
+  ok('⑲b · sozluk cumlelerinde RAKAM yok (esik ikinci kez yazilmamis)',
+    rakamliCumle.length === 0, rakamliCumle.slice(0, 3).join(' | '));
+
+  // -------------------------------------------------------------------
+  //  CEVRIMDISI FIKSTUR: BIST temel modelinin kriterleri gercekten kod ve
+  //  ham sayi tasiyor mu. Ag YOK -- `bistFundamentalModel(mali, null)`
+  //  fiyatsiz calisiyor (meta null ise fiyat null kaliyor). Bu ayni anda
+  //  projenin ILK BIST temel-model kapisi.
+  // -------------------------------------------------------------------
+  const { buildEngine, loadMali } = await import('./score.mjs');
+  const engFa = buildEngine();
+  const FA_SEMBOL = ['ASELS', 'BIMAS', 'EREGL', 'FROTO', 'KCHOL', 'SAHOL', 'SISE', 'TCELL', 'THYAO', 'TUPRS'];
+  let faKriterSayisi = 0;
+  const faKodsuz = [];
+  const faSayisiz = [];
+  const faGorulenKod = new Set();
+  for (const sym of FA_SEMBOL) {
+    const maliRaw = loadMali(sym);
+    if (!maliRaw) { faKodsuz.push(`${sym}:fikstur-yok`); continue; }
+    const mali = engFa.parseIsMali(maliRaw);
+    const model = engFa.bistFundamentalModel(mali, null);
+    const C = (model && Array.isArray(model.criteria)) ? model.criteria : [];
+    if (!C.length) { faKodsuz.push(`${sym}:kriter-yok`); continue; }
+    for (const c of C) {
+      faKriterSayisi++;
+      if (typeof c.kod === 'string' && c.kod) faGorulenKod.add(c.kod);
+      else faKodsuz.push(`${sym}/${c.key}`);
+      const s = c.sayilar;
+      const sayiVar = s && typeof s === 'object'
+        && Object.keys(s).some((k) => typeof s[k] === 'number' && Number.isFinite(s[k]));
+      if (!sayiVar) faSayisiz.push(`${sym}/${c.key}`);
+    }
+  }
+  ok('⑲c · fikstur uzerinde kriter uretildi', faKriterSayisi >= 100, `${faKriterSayisi} kriter`);
+  ok('⑲c · her kriter MAKINE KODU tasiyor', faKodsuz.length === 0, faKodsuz.slice(0, 6).join(', '));
+  ok('⑲c · her kriterin en az bir SONLU ham sayisi var',
+    faSayisiz.length === 0, faSayisiz.slice(0, 6).join(', '));
+  const fiksturdeTanimsiz = [...faGorulenKod].filter((k) => !sozlukKodlari.has(k));
+  ok('⑲c · fiksturde gorulen her kodun cumlesi sozlukte',
+    fiksturdeTanimsiz.length === 0, fiksturdeTanimsiz.slice(0, 8).join(', '));
+  // Fikstur TUM dallari gezmiyor (ornegin zarar eden donem yok): bu bir
+  // olcum, kapi degil -- sayiyi yaziyoruz, esik koymuyoruz.
+  ok('⑲c · fiksturde gezilen dal sayisi olculdu', faGorulenKod.size > 0,
+    `${faGorulenKod.size}/${sozlukKodlari.size} dal`);
+}
+
+// =====================================================================
+//  ⑳ NATIVE MOMENTUM KARTI <-> MOTORUN momentumInfo UZVU
+// ---------------------------------------------------------------------
+//  NIYE VAR: webin `⚡ Momentum girisi` sekmesi evreni TARAYICIDA
+//  tariyor (`app.js scanMomentumUniverse` -> `computeVadeScore` +
+//  `momentumInfo`). Native'de gosterge matematigi YOK; ayni karar
+//  sunucuda `plan.momentum` olarak zaten uretiliyor. Bu bolum UC ILE
+//  EKRANIN ayni alani okudugunu ve kartin o alani ikinci bir kez
+//  HESAPLAMADIGINI olcuyor.
+//
+//  Statik denetim: cizim yok, ag yok. Kart cihazda HENUZ cizilmedi --
+//  bu kapilar "kod dogru yeri okuyor" der, "ekranda guzel duruyor"
+//  DEMEZ.
+// ---------------------------------------------------------------------
+bolum('⑳ native momentum karti <-> motorun momentumInfo uzvu');
+{
+  const AKIS_PATH = path.join(ROOT, 'api', '_akis.js');
+  const MOM_PATH = path.join(ROOT, 'mobile', 'src', 'components', 'kesfet', 'MomentumKart.tsx');
+  const RISK_PATH = path.join(ROOT, 'mobile', 'src', 'components', 'detay', 'RiskOdulKart.tsx');
+  const KESFET_PATH = path.join(ROOT, 'mobile', 'src', 'app', '(tabs)', 'kesfet.tsx');
+  const IDX_PATH = path.join(ROOT, 'mobile', 'src', 'components', 'kesfet', 'index.ts');
+  const akisSrc = readFileSync(AKIS_PATH, 'utf8');
+  const momSrc = readFileSync(MOM_PATH, 'utf8');
+  const riskSrc = readFileSync(RISK_PATH, 'utf8');
+  const kesfetSrc = readFileSync(KESFET_PATH, 'utf8');
+  const idxSrc = readFileSync(IDX_PATH, 'utf8');
+
+  // Bu bolumun kapilari KODU olcuyor, GEREKCEYI degil: dosya basliklari
+  // webin `Math.round(gapPct*100)` satirini ALINTILIYOR ve `fetchRecommend`
+  // adini anlatiyor. Yorumlari ayiklamazsak kapi kendi belgesini yakalar.
+  const yorumsuz = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const momKod = yorumsuz(momSrc);
+  const kesfetKod = yorumsuz(kesfetSrc);
+
+  // ONCUL: kart uydurma bir alan okumuyor -- uc o uzvu GERCEKTEN
+  // gonderiyor. Bu satir duserse kart sessizce bos cizer.
+  ok('⑳a · ONCUL · plan katmani `momentumInfo` uzvunu TELE koyuyor',
+    akisSrc.includes('momentum: hamYuvarla(eng.momentumInfo(r, vade))'));
+
+  // Kart KENDI istegini ATMIYOR: tur sahibi ekran tek `recommend`
+  // cagiriyor, iki kart ayni cevabi okuyor. `fetch` sizarsa ekran bir
+  // turu IKI KEZ oder.
+  ok('⑳a · kartin icinde `fetch` YOK (prop ile besleniyor)',
+    !/\bfetch\s*\(/.test(momSrc));
+  ok('⑳a · ekran momentum icin IKINCI istek atmiyor (tek `fetchRecommend` CAGRISI)',
+    (kesfetKod.match(/fetchRecommend\(/g) || []).length === 1,
+    String((kesfetKod.match(/fetchRecommend\(/g) || []).length));
+
+  // SUZGEC MOTORUN: kart `active` bayragina bakiyor, esigi yeniden
+  // yazmiyor. Motorun esikleri (`_motor.js:981`: ADX 22, skor 56)
+  // native'de GECMEYECEK.
+  ok('⑳b · suzgec motorun bayragi (`active === true`)',
+    momSrc.includes(".active === true"));
+  const esikIzi = /\b(adx|score|gapPct)\s*(>=|<=|>|<)\s*[0-9]/.test(momKod)
+    || /\b(22|56|0\.05)\b/.test(momKod);
+  ok('⑳b · kartta MOTORUN esigi YOK (ADX/skor/bosluk esigi yazili degil)',
+    esikIzi === false);
+
+  // OLCEK: `gapPct` KESIR (`_motor.js:988` `(p - bzTop) / p`).
+  // RiskOdulKart onu `formatOran(..., 4)` ile basiyor ve 100'e
+  // CARPMIYOR; iki ekran AYNI alani iki ayri olcekte gosterirse
+  // kullanici hangisine inanacagini bilemez.
+  ok('⑳c · ONCUL · RiskOdulKart `gapPct`i formatOran(...,4) ile basiyor',
+    riskSrc.includes('formatOran(mom.gapPct, 4)'));
+  ok('⑳c · momentum karti AYNI olcekte (formatOran, 4 hane)',
+    momSrc.includes('formatOran(bosluk, 4)'));
+  ok('⑳c · kartta `formatPercent` YOK (yuzde puanina cevirme girisimi)',
+    !momSrc.includes('formatPercent'));
+  ok('⑳c · kartta 100 ile CARPMA yok',
+    !/\*\s*100\b/.test(momKod));
+
+  // SIRALAMA: gelen dizi YERINDE sıralanmiyor. Ayni diziyi Firsatlar
+  // kartı da okuyor; `sort` yerinde calisirsa oteki kartin sirasi
+  // sessizce degisir.
+  ok('⑳d · siralama kopya uzerinde (`.slice().sort(`)',
+    momSrc.includes('.slice().sort('));
+
+  // UC AYRI BOSLUK TEK CUMLEYE SIKISTIRILMADI: "hic olculmedi" ile
+  // "olculdu, hicbiri acik degil" ayri dallar. Webin tek cumlesi
+  // ("uygun hisse yok") bu ikisini ayirmiyordu.
+  ok('⑳e · "HIC olculmedi" dali var',
+    momSrc.includes('HİÇ ölçülmedi'));
+  ok('⑳e · "olculdu ama acik degil" dali AYRI ve bunun bir OLCUM oldugunu soyluyor',
+    momSrc.includes('hiçbirinde açık değil') && momSrc.includes('eksik veri değil'));
+  ok('⑳e · kismen olculememis satirlar AYRI cumlede sayiliyor',
+    momSrc.includes('ÖLÇÜLEMEDİ'));
+
+  // Kart gercekten BAGLI: export + mount. Ikisi olmazsa dosya olu kod.
+  ok('⑳f · kart `components/kesfet` barelinden export ediliyor',
+    idxSrc.includes("export { MomentumKart, type MomentumKartProps } from './MomentumKart';"));
+  ok('⑳f · kart Kesfet ekraninda MONTE (import + kullanim)',
+    kesfetSrc.includes('  MomentumKart,') && kesfetSrc.includes('<MomentumKart'));
+  // Firsatlar ile AYNI dalda: ikisi de ekranin turuna bagli.
+  ok('⑳f · momentum karti `durum === \'veri\' && satirlar.length` dalinda',
+    (kesfetSrc.match(/durum === 'veri' && satirlar\.length \? \(/g) || []).length === 2,
+    String((kesfetSrc.match(/durum === 'veri' && satirlar\.length \? \(/g) || []).length));
+}
+
+// =====================================================================
+//  21 NATIVE TEZ DEFTERI <-> WEBIN #tab-tez SEKMESI
+// ---------------------------------------------------------------------
+//  NIYE VAR: tez defteri kullanicinin KENDI notlari ve CIHAZDA duruyor
+//  (web de `localStorage`, `TEZ_LS_KEY = 'sb:theses'`). Yeni uc YOK,
+//  yeni Vercel yuvasi YOK -- bu yuzden burada AG kapisi da yok.
+//
+//  Bu bolumun asil isi UC AYRI SESSIZ ARIZAYI kapatmak:
+//   (1) native defterin webinkiyle AYNI anahtari okumasi -- ayri anahtar
+//       olsa kullanicinin web'de yazdigi tez app'te YOK gorunurdu;
+//   (2) webin ISTEMCIDE yaptigi gosterge aritmetiginin (
+//       `(price - stop) / (target - stop)` ve `(target - price) / price
+//       * 100`) native'e SIZMAMASI -- §5.1 ham sayi kurali;
+//   (3) kartin yaziciyi YENIDEN YAZMAMASI: depoya yalniz `depo.ts`
+//       yazar, kart yaziciyi cagirir. Iki yazici olsa biri digerinin
+//       `updated` alanini sessizce bozardi.
+//
+//  Statik denetim: cizim yok, ag yok. Kart cihazda HENUZ cizilmedi --
+//  bu kapilar "kod dogru yeri okuyor" der, "ekranda guzel duruyor"
+//  DEMEZ.
+// ---------------------------------------------------------------------
+bolum('21 native tez defteri <-> webin #tab-tez sekmesi');
+{
+  const APPJS_PATH = path.join(ROOT, 'app.js');
+  const DEPO_PATH = path.join(ROOT, 'mobile', 'src', 'api', 'depo.ts');
+  const API_IDX_PATH = path.join(ROOT, 'mobile', 'src', 'api', 'index.ts');
+  const TEZ_PATH = path.join(ROOT, 'mobile', 'src', 'components', 'analiz', 'TezDefteriKart.tsx');
+  const AN_IDX_PATH = path.join(ROOT, 'mobile', 'src', 'components', 'analiz', 'index.ts');
+  const ANALIZ_PATH = path.join(ROOT, 'mobile', 'src', 'app', '(tabs)', 'analiz.tsx');
+  const appSrc = readFileSync(APPJS_PATH, 'utf8');
+  const depoSrc = readFileSync(DEPO_PATH, 'utf8');
+  const apiIdxSrc = readFileSync(API_IDX_PATH, 'utf8');
+  const tezSrc = readFileSync(TEZ_PATH, 'utf8');
+  const anIdxSrc = readFileSync(AN_IDX_PATH, 'utf8');
+  const analizSrc = readFileSync(ANALIZ_PATH, 'utf8');
+
+  // Kapilar KODU olcuyor, GEREKCEYI degil: dosya basliklari webin
+  // `(price - stop) / (target - stop)` satirini ALINTILIYOR. Yorumlari
+  // ayiklamazsak kapi kendi belgesini yakalar.
+  const yorumsuz = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const tezKod = yorumsuz(tezSrc);
+  const depoKod = yorumsuz(depoSrc);
+
+  // --- (1) AYNI ANAHTAR -------------------------------------------------
+  ok('21a · ONCUL · web tezleri `sb:theses` anahtarinda tutuyor',
+    appSrc.includes("TEZ_LS_KEY = 'sb:theses'"));
+  ok('21a · native depo AYNI anahtari kullaniyor',
+    depoSrc.includes("tezler: 'sb:theses'"));
+
+  // --- (2) ISTEMCIDE HESAP YOK -----------------------------------------
+  ok('21b · ONCUL · webde gosterge aritmetigi ISTEMCIDE var (bu yuzden kapi gerekli)',
+    appSrc.includes('(price - stop) / (target - stop)'));
+  ok('21b · kartta webin gosterge formulu YOK',
+    !tezKod.includes('(price - stop)') && !tezKod.includes('(target - stop)'));
+  ok('21b · kartta "hedefe % kac kaldi" hesabi YOK',
+    !tezKod.includes('(target - price)'));
+  ok('21b · kartta 100 ile CARPMA yok',
+    !/\*\s*100\b/.test(tezKod));
+  ok('21b · kartta `formatPercent` YOK (yuzde uretme girisimi)',
+    !tezKod.includes('formatPercent'));
+  // Yazici katmaninda da yok: hesap oraya kacirilmadi.
+  ok('21b · yazicilarda da gosterge aritmetigi YOK',
+    !depoKod.includes('(target - stop)') && !depoKod.includes('(target - price)'));
+
+  // --- (3) TEK YAZICI ---------------------------------------------------
+  const yazicilar = [
+    'tezEkle', 'tezGuncelle', 'tezSil',
+    'tezDayanakDongu', 'tezGunlukEkle', 'tezGunlukSil',
+  ];
+  for (const ad of yazicilar) {
+    ok('21c · yazici `' + ad + '` depo.ts`de var',
+      depoSrc.includes('export async function ' + ad + '('));
+    ok('21c · yazici `' + ad + '` `@/api` barelinden cikiyor',
+      new RegExp('^\\s*' + ad + ',\\s*$', 'm').test(apiIdxSrc));
+  }
+  ok('21c · kart depoya KENDI yazmiyor (`tezlerDepo.yaz` kartta yok)',
+    !tezKod.includes('tezlerDepo'));
+  ok('21c · kart anahtari KENDI bilmiyor (`sb:theses` kartta yok)',
+    !tezKod.includes('sb:theses'));
+  ok('21c · kart yazicilari CAGIRIYOR (tezEkle + tezGuncelle + tezSil)',
+    tezKod.includes('tezEkle(') && tezKod.includes('tezGuncelle(') && tezKod.includes('tezSil('));
+  ok('21c · kart okumayi `useTezler()` ile yapiyor',
+    tezKod.includes('useTezler()'));
+
+  // --- AG YOK: defter CIHAZDA. Tek bir `fetch` yeni Vercel yuvasi demek
+  // olurdu ve Hobby tavani (12 fonksiyon) ZATEN dolu.
+  ok('21d · kartta `fetch` YOK (defter cihazda, yeni uc yok)',
+    !/\bfetch\s*\(/.test(tezSrc));
+
+  // --- TARIH: YEREL takvim gunu. `toISOString()` UTC`ye kayar ve gece
+  // yarisi bir gun sasirtir; web `tzToday()` kullaniyor.
+  ok('21e · ONCUL · web yerel takvim gunu uretiyor (`tzToday`)',
+    appSrc.includes('const tzToday = () =>'));
+  const bugunBas = depoSrc.indexOf('export function bugunYMD(');
+  const bugunGovde = bugunBas < 0 ? '' : depoSrc.slice(bugunBas, depoSrc.indexOf('\n}', bugunBas));
+  ok('21e · `bugunYMD` yerel takvim alanlarini okuyor',
+    bugunGovde.includes('getFullYear()') && bugunGovde.includes('getMonth()')
+      && bugunGovde.includes('getDate()'));
+  ok('21e · `bugunYMD` `toISOString` KULLANMIYOR (UTC kaymasi yok)',
+    bugunGovde.length > 0 && !bugunGovde.includes('toISOString'));
+
+  // --- OLCULMEYEN SAYI BASILMAZ: hedef/cikis yazilmadiysa `0` DEGIL
+  // "yazilmadi". `0` gecerli bir fiyat olabilir.
+  ok('21f · hedef yazilmadiysa `0` degil "yazilmadi" basiliyor',
+    tezSrc.includes("tez.target == null ? 'yazılmadı'"));
+  ok('21f · cikis yazilmadiysa `0` degil "yazilmadi" basiliyor',
+    tezSrc.includes("tez.stop == null ? 'yazılmadı'"));
+  ok('21f · ayristirici gecersiz girdide `null` donuyor, `0` DEGIL',
+    depoSrc.includes('return Number.isFinite(n) ? n : null;'));
+
+  // --- SILME ONAYI: `mobile/src` icinde `Alert` YOK; kalip iki dokunus.
+  ok('21g · silme iki dokunusla onaylaniyor (`silSoruldu`)',
+    tezKod.includes('silSoruldu'));
+  ok('21g · kartta `Alert` YOK',
+    !/\bAlert\b/.test(tezKod));
+
+  // --- DAYANAK DURUMU: dongu sirasi webinkiyle AYNI ve durum METINLE de
+  // yazili (renk tek ayirt edici degil).
+  ok('21h · dongu sirasi web ile AYNI (ok -> watch -> bad)',
+    depoSrc.includes("['ok', 'watch', 'bad']"));
+  ok('21h · durum duz dille de yazili (salt renk degil)',
+    tezSrc.includes("soz: 'sağlam'") && tezSrc.includes("soz: 'izlemede'")
+      && tezSrc.includes("soz: 'bozuldu'"));
+
+  // --- DIL: vaat kelimesi yok, "senin notun" ibaresi var.
+  const yasakli = ['kazandırır', 'garanti', 'al/sat sinyali', 'kesin kar'];
+  for (const kelime of yasakli) {
+    ok('21i · kartta yasak vaat yok: "' + kelime + '"',
+      !tezSrc.includes(kelime));
+  }
+  ok('21i · kart "uygulamanin onerisi degil" diyor',
+    tezSrc.includes('uygulamanın önerisi değil'));
+  ok('21i · kart verinin CIHAZDA durdugunu soyluyor',
+    tezSrc.includes('Bu cihazda saklanır'));
+
+  // --- BAGLI MI: export + mount. Ikisi olmazsa dosya olu kod.
+  ok('21j · kart `components/analiz` barelinden export ediliyor',
+    anIdxSrc.includes("export { TezDefteriKart, type TezDefteriKartProps } from './TezDefteriKart';"));
+  ok('21j · kart Analiz ekraninda MONTE (import + kullanim)',
+    analizSrc.includes('  TezDefteriKart,') && analizSrc.includes('<TezDefteriKart'));
+  // Piyasa seridinin USTUNDE: serit secilen sembolden bagimsiz sabit
+  // evrenler, tez defteri ise secilen sembolle ilgili.
+  ok('21j · kart "Piyasa seridi" basligindan ONCE cizilyor',
+    analizSrc.indexOf('<TezDefteriKart') < analizSrc.indexOf('baslik="Piyasa şeridi"'));
+}
+
+// =====================================================================
+//  22 LISTE BILDIRIM BAYRAGI <-> WEBIN BILDIRIM DUGMESI
+// ---------------------------------------------------------------------
+//  NIYE VAR: web'de bir listenin IKI ayri bayragi var ve iki ayri sey
+//  anlatiyorlar: `inUniverse` ANALIZ evrenini kuruyor (hangi hisseler
+//  olculsun), `notify` ise PUSH evrenini (`collectWatchlistPayload`
+//  app.js:2244 `if (l.notify === false) return`). Native tarafta bayrak
+//  OKUNUYORDU (`depo.ts` alani + goc) ama YAZILAMIYORDU: kullanici
+//  web'de kapattigi bildirimi app'te geri acamiyor, app'te hic
+//  kapatamiyordu. Sessiz ariza: dugme yok oldugu icin kimse fark
+//  etmiyor, telefon titremeye devam ediyor.
+//
+//  Bu bolumun kapattigi uc ariza:
+//   (1) TEK BAYRAK sanmak: yazici `notify` yazarken `inUniverse`a
+//       dokunmamali, yoksa bildirimi kapatan kullanicinin listesi
+//       SESSIZCE analiz evreninden de dusardi;
+//   (2) GERIYE DONUK VARSAYILAN: alan YOKSA bildirim ACIK sayilmali
+//       (web `l.notify !== false`, app.js:8286). `false` varsayilani
+//       eski cihazlardaki bildirimleri sessizce kesmek olurdu;
+//   (3) ANAHTAR AG ISTEGI DOGURMAMALI: bayrak CIHAZDA duruyor; push
+//       evrenine donusu `/api/watchlist` turunda olur ve o tur bu
+//       ekrandan ATILMAZ. Anahtari senkrona baglamak kullanicinin
+//       bilmedigi bir ag istegi uretirdi.
+//
+//  Statik denetim: cizim yok, ag yok. Anahtar cihazda HENUZ cevrilmedi.
+// ---------------------------------------------------------------------
+bolum('22 liste bildirim bayragi <-> webin bildirim dugmesi');
+{
+  const APPJS_PATH = path.join(ROOT, 'app.js');
+  const DEPO_PATH = path.join(ROOT, 'mobile', 'src', 'api', 'depo.ts');
+  const LISTE_PATH = path.join(ROOT, 'mobile', 'src', 'api', 'liste.ts');
+  const BLOK_PATH = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'ListeBlogu.tsx');
+  const appSrc = readFileSync(APPJS_PATH, 'utf8');
+  const depoSrc = readFileSync(DEPO_PATH, 'utf8');
+  const listeSrc = readFileSync(LISTE_PATH, 'utf8');
+  const blokSrc = readFileSync(BLOK_PATH, 'utf8');
+
+  // Kapilar KODU olcuyor, GEREKCEYI degil: hem yazicinin hem kartin
+  // basligi webin satirlarini ALINTILIYOR.
+  const yorumsuzB = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const blokKod = yorumsuzB(blokSrc);
+  const depoKodB = yorumsuzB(depoSrc);
+
+  // --- (0) ONCULLER: web'de iki AYRI yazici ve bayragin TUKETICISI ----
+  ok('22a · ONCUL · webde `setListUniverse` var',
+    appSrc.includes('function setListUniverse(id, v)'));
+  ok('22a · ONCUL · webde `setListNotify` AYRI yazici olarak var',
+    appSrc.includes('function setListNotify(id, v)'));
+  ok('22a · ONCUL · bayragin tuketicisi push evreni (`l.notify === false`)',
+    appSrc.includes('if (l.notify === false) return'));
+  ok('22a · ONCUL · webde eski listeler icin varsayilan ACIK',
+    appSrc.includes('l.notify !== false'));
+
+  // --- (1) NATIVE YAZICI VAR ve IKI BAYRAK AYRI ------------------------
+  ok('22b · native depoda `listeBildirimAyarla` yazicisi var',
+    depoSrc.includes('export async function listeBildirimAyarla(id: string, acik: boolean)'));
+  ok('22b · yazici `notify` alanini yaziyor',
+    depoKodB.includes('{ ...l, notify: acik }'));
+  // Yazici YALNIZ notify'a dokunuyor: `inUniverse` yazan tek yer hala
+  // `listeEvreneAl`. Ikisini tek yazicida birlestirmek, bildirimi
+  // kapatani analiz evreninden de dusurmek olurdu.
+  const bildBlok = (depoKodB.match(/export async function listeBildirimAyarla[\s\S]*?\n\}/) || [''])[0];
+  ok('22b · yazici `inUniverse` alanina DOKUNMUYOR',
+    bildBlok.length > 0 && !bildBlok.includes('inUniverse'));
+  const evrenBlok = (depoKodB.match(/export async function listeEvreneAl[\s\S]*?\n\}/) || [''])[0];
+  ok('22b · `listeEvreneAl` de `notify` alanina DOKUNMUYOR',
+    evrenBlok.length > 0 && !evrenBlok.includes('notify'));
+  // Liste bulunamazsa SESSIZ degil: sebep donuyor (web'de `if (!l) return`).
+  ok('22b · olmayan liste SESSIZCE gecmiyor, sebep donuyor',
+    bildBlok.includes("sebep: 'yok'"));
+
+  // --- (2) SARMALAYICI + KART BAGLI -------------------------------------
+  ok('22c · `api/liste.ts` yaziciyi sarmaliyor',
+    listeSrc.includes('export async function listeBildirimAyarla(id: string, acik: boolean)')
+      && listeSrc.includes('depoListeBildirimAyarla(id, acik)'));
+  ok('22c · ListeBlogu yaziciyi `@/api/liste`den aliyor',
+    blokSrc.includes('  listeBildirimAyarla,'));
+  ok('22c · ListeBlogu anahtari CIZIYOR',
+    blokKod.includes('value={bildirimAcik}')
+      && blokKod.includes('onValueChange={(v) => yaz(listeBildirimAyarla(kayit.id, v))}'));
+  ok('22c · anahtarin erisilebilirlik etiketi var',
+    blokKod.includes("accessibilityLabel={'Bildirim: '"));
+
+  // --- (3) GERIYE DONUK VARSAYILAN ACIK --------------------------------
+  ok('22d · native de eski listeler icin ACIK varsayiyor (`!== false`)',
+    blokKod.includes('kayit.notify !== false'));
+  ok('22d · native varsayilani `=== true` DEGIL (alan yoksa kapatmiyor)',
+    !blokKod.includes('kayit.notify === true'));
+  ok('22d · yeni liste `notify: true` ile dogmaya devam ediyor',
+    depoKodB.includes('inUniverse: true, notify: true'));
+
+  // --- (4) ANAHTAR AG ISTEGI DOGURMUYOR --------------------------------
+  // Dosyada `fetchRecommend` VAR (liste satirlarinin fiyati) ama bu
+  // anahtar onu tetiklemiyor; senkron/watchlist cagrisi hic yok.
+  ok('22e · kartta `/api/watchlist` cagrisi YOK',
+    !blokKod.includes('watchlist') && !blokKod.includes('senkronYaz'));
+  ok('22e · yazici AG kodu icermiyor',
+    !bildBlok.includes('fetch') && !bildBlok.includes('istek('));
+  // Depoya yalniz `depo.ts` yazar: kart `listelerDepo.yaz` cagirmiyor.
+  ok('22e · kart depoyu KENDI yazmiyor (tek yazici kurali)',
+    !blokKod.includes('listelerDepo.yaz'));
+
+  // --- (5) DURUM DUZ DILLE DE YAZILI ------------------------------------
+  // Renk tek ayirt edici degil: anahtarin yanindaki metin durumu soyluyor.
+  ok('22f · anahtarin durumu METINLE de yazili',
+    blokSrc.includes('bu listenin sembolleri bildirim evrenine dahil')
+      && blokSrc.includes('bu listeden bildirim istenmiyor'));
+  // Bildirim bir VAAT degil: kart "bildirim gelecek" demiyor.
+  ok('22f · kart bildirimi vaat ETMIYOR',
+    !blokSrc.includes('bildirim gelecek'));
+
+  // --- (6) ISTEMCIDE HESAP YOK -----------------------------------------
+  ok('22g · bayrak kodu sayi uretmiyor (100 ile carpma yok)',
+    !/bildirimAcik[^\n]*\*\s*100/.test(blokKod));
+}
+// =====================================================================
+//  24 LISTE SATIRI DONEM YUZDESI <-> WEBIN `.list-periods` SERIDI
+// ---------------------------------------------------------------------
+//  NIYE VAR: web liste satirinin yuzde degisimini ISTEMCIDE hesapliyor
+//  (`changeFor`, app.js:2037; cagri app.js:8330). Bu depoda istemci
+//  matematigi YASAK, bu yuzden native ayni sayiyi HAM olarak uctan
+//  aliyor: `/api/degisim` (`api/_degisim.js`). Listeler sekmesindeki en
+//  buyuk gorsel bosluk buydu: fiyat vardi, degisim YOKTU.
+//
+//  Bu bolumun kapattigi dort ariza:
+//   (1) ISTEMCI MATEMATIGI: native yuzdeyi KENDI hesaplamamali
+//       (`(a-b)/b`, `* 100` yok). `…Pct` alanlari UCTA yuzde puanina
+//       cevriliyor, `formatPercent` dogrudan basiyor;
+//   (2) ALTI DONEMIN HEPSINI SORMAK: uc `?donemler=` verilmezse altisini
+//       olcuyor = sembol basina alti ust-kaynak adresi, bes olcum cope;
+//   (3) TEK ISTEGE SIKISTIRMAK: fiyat `/api/recommend`ten, yuzde
+//       `/api/degisim`den geliyor. Birlestirilse her donem tiklamasi
+//       motoru bastan kosturdu;
+//   (4) DORT HAL KARISMASI: sorulmadi / cevapta yok / alan govdede yok
+//       / alan `null` dordu AYRI cumle. Olculmeyen sayi BASILMAZ.
+//
+//  Statik denetim: cizim yok, ag yok. Satir cihazda HENUZ cizilmedi.
+// ---------------------------------------------------------------------
+bolum('24 liste satiri donem yuzdesi <-> webin donem seridi');
+{
+  const APPJS_PATH_24 = path.join(ROOT, 'app.js');
+  const UC_PATH_24 = path.join(ROOT, 'api', '_degisim.js');
+  const TIP_PATH_24 = path.join(ROOT, 'mobile', 'src', 'api', 'types.ts');
+  const BLOK_PATH_24 = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'ListeBlogu.tsx');
+  const appSrc24 = readFileSync(APPJS_PATH_24, 'utf8');
+  const ucSrc24 = readFileSync(UC_PATH_24, 'utf8');
+  const tipSrc24 = readFileSync(TIP_PATH_24, 'utf8');
+  const blokSrc24 = readFileSync(BLOK_PATH_24, 'utf8');
+
+  // Kapilar KODU olcuyor, GEREKCEYI degil: dosyanin basligi webin
+  // satirlarini ALINTILIYOR, grep yorum metnine takilmamali.
+  const yorumsuz24 = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const blokKod24 = yorumsuz24(blokSrc24);
+
+  // --- (0) ONCULLER: webde ne vardi ------------------------------------
+  ok('24a · ONCUL · webde donem listesi var (`CHANGE_PERIODS`)',
+    appSrc24.includes('const CHANGE_PERIODS = ['));
+  ok('24a · ONCUL · webde donem liste basina ve YALNIZ BELLEKTE',
+    appSrc24.includes('const listActivePeriods = {}'));
+  ok('24a · ONCUL · webin varsayilan donemi `gunluk`',
+    appSrc24.includes("listActivePeriods[lid] || 'gunluk'"));
+  ok('24a · ONCUL · webin yuzdesi ISTEMCIDE hesaplaniyor (`changeFor`)',
+    appSrc24.includes('async function changeFor(symbol, market, periodKey)'));
+
+  // --- (1) HAM YUZDE UCU VE TIPLERI YERINDE ----------------------------
+  ok('24b · ham yuzde ucu var ve yuzde puani donduruyor',
+    ucSrc24.includes('* 100'));
+  ok('24b · istemci tipleri donem listesini ve alan eslemesini tasiyor',
+    tipSrc24.includes('export const DEGISIM_DONEMLER = [')
+      && tipSrc24.includes('export const DEGISIM_DONEM_ALANLARI: Readonly<'));
+
+  // --- (2) KART UCU KULLANIYOR, KENDI HESAPLAMIYOR ---------------------
+  ok('24c · kart `fetchDegisim` cagiriyor',
+    blokKod24.includes('fetchDegisim('));
+  ok('24c · kart yuzdeyi `formatPercent` ile basiyor',
+    blokKod24.includes('formatPercent(pct)'));
+  // ISTEMCI MATEMATIGI YOK: carpma/bolme/yuzde formulu aranmiyor.
+  ok('24c · kartta `* 100` YOK',
+    !/\*\s*100/.test(blokKod24));
+  ok('24c · kartta yuzde formulu YOK ((a-b)/b kalibi)',
+    !/\)\s*\/\s*ref/.test(blokKod24) && !/changeFor/.test(blokKod24));
+  ok('24c · kart esik/agirlik tablosu tasimiyor (donem adi SOZLUK)',
+    blokKod24.includes('const DONEM_ADI: Readonly<Record<DegisimDonem, string>>'));
+
+  // --- (3) TEK DONEM SORULUYOR -----------------------------------------
+  ok('24d · istek YALNIZ secili donemi soruyor',
+    blokKod24.includes('donemler: [donem]'));
+  ok('24d · altisini birden isteyen cagri YOK',
+    !blokKod24.includes('donemler: [...DEGISIM_DONEMLER]')
+      && !blokKod24.includes('donemler: DEGISIM_DONEMLER'));
+  // `DEGISIM_DONEMLER` kartta YALNIZ dugmeleri cizmek icin gezilir.
+  ok('24d · donem listesi yalniz dugme cizmekte kullaniliyor',
+    blokKod24.includes('DEGISIM_DONEMLER.map((d) => ('));
+  ok('24d · donem CIHAZDA kalici DEGIL (depoya yazilmiyor)',
+    blokKod24.includes("useState<DegisimDonem>('gunluk')")
+      && !blokKod24.includes('donemDepo'));
+
+  // --- (4) IKINCI ISTEK AYRI ANAHTARDA --------------------------------
+  // Donem tiklamasi fiyat turunu yeniden kurmamali: iki `useIstek` ayri
+  // anahtarda, yuzde anahtari donemi ICERIYOR.
+  ok('24e · yuzde turu kendi `useIstek`inde',
+    blokKod24.includes("useIstek(degisimCagri, degisimListe + '|' + donem"));
+  ok('24e · fiyat turunun anahtari donemi ICERMIYOR',
+    blokKod24.includes('useIstek(cagri, anahtar, {')
+      && !blokKod24.includes("useIstek(cagri, anahtar + '|' + donem"));
+  ok('24e · yuzde hatasi fiyat hatasini BASTIRMIYOR (ayri satir)',
+    blokKod24.includes("dDurum === 'hata'") && blokKod24.includes('dHata?.message'));
+  ok('24e · yuzde turu yalniz liste ACIKKEN atiliyor',
+    blokKod24.includes('etkin: acik && degisimListe.length > 0'));
+
+  // --- (5) SEMBOL VE PAZAR ESLESMESI -----------------------------------
+  // Uc kodu SONEK SILEREK donduruyor ve ayni kod iki pazarda olabilir:
+  // yalniz sembole bakan eslesme yanlis satiri gosterirdi.
+  ok('24f · uca `KOD:PAZAR` gonderiliyor',
+    blokKod24.includes("ucSembolu(oge.symbol) + ':' + (oge.market === 'BIST' ? 'BIST' : 'US')"));
+  ok('24f · eslesme sembol VE pazar uzerinden',
+    blokKod24.includes("s.symbol === hedef && s.market === pazar"));
+
+  // --- (6) DORT DURUST HAL ---------------------------------------------
+  ok('24g · "sorulmadi" hali ayri cumle',
+    blokSrc24.includes("' % sorulmadı'"));
+  ok('24g · "cevapta yok" hali ayri cumle',
+    blokSrc24.includes("' % cevapta yok'"));
+  ok('24g · alan govdede yoksa HICBIR SEY cizilmiyor',
+    blokKod24.includes('if (!Object.prototype.hasOwnProperty.call(satir, alan)) return null;'));
+  ok('24g · alan `null` ise "olculemedi" yaziliyor',
+    blokSrc24.includes("' % ölçülemedi'"));
+  ok('24g · olculmeyen sayi 0 olarak BASILMIYOR',
+    !/pct\s*\?\?\s*0/.test(blokKod24));
+
+  // --- (7) YON RENKLE TEK BASINA TASINMIYOR ----------------------------
+  ok('24h · yon isaretle de yazili (▲ ▼ •)',
+    blokSrc24.includes("'▲ '") && blokSrc24.includes("'▼ '") && blokSrc24.includes("'• '"));
+  ok('24h · gecikme METINLE yazili, uc bayragindan',
+    blokKod24.includes("satir.gecikmeli ? ' · gecikmeli' : ''"));
+  ok('24h · secili donem RENKLE DEGIL dolu dugme bicimiyle ayrisiyor',
+    blokKod24.includes("variant={d === donem ? 'solid' : 'outline'}"));
+
+  // --- (8) GEZINME VE CIZIM KURALLARI BOZULMADI ------------------------
+  ok('24i · kart hala tek gezinme kalibini kullaniyor',
+    blokKod24.includes('hisseAc(') && !blokKod24.includes("from 'expo-router'"));
+  ok('24i · kart vaat cumlesi uretmiyor',
+    !blokSrc24.includes('kazandırır') && !blokSrc24.includes('al/sat sinyali'));
+}
+// =====================================================================
+//  25 · HISSE DETAYINDA "GELISMELER" (tek sembolun manşetleri)
+// ---------------------------------------------------------------------
+//  NEDEN: webdeki hisse sayfasinin `fillSpNews` bolumu (app.js:7923,
+//  baslik "📰 Gelişmeler") native detay ekraninda KARSILIKSIZDI. Haber
+//  native'de yalnizca Bugun sekmesinde, TAKIP LISTESI uzerinden vardi;
+//  listede olmayan bir sembole (Arama sonucu) gidildiginde kullanici o
+//  hissede ne oldugunu HIC goremiyordu.
+//
+//  Bu bolumun kilitledigi bes karar:
+//   (1) `HisseHaberleriKarti` YENIDEN KULLANILMIYOR: o kart `useListe()`
+//       okuyor = kullanicinin listesini soruyor. Detay semboluyle ayni
+//       soru degil; yeni kart liste deposuna HIC dokunmamali;
+//   (2) AYNI UC, AYNI KIP: `/api/news` coklu-sembol kipi TEK sembolle.
+//       Yeni uc YOK (Hobby 12 fonksiyon tavani - §21 M3);
+//   (3) PAZAR CIKARIMI YOK: `market` cagirandan (`satir.market`) geliyor
+//       - onaylanmis karar: istemci pazari bildirir, uc cikarmaz;
+//   (4) DORT DURUST HAL: "olcemedim" (satir.tam false) / "olculdu,
+//       mansset cikmadi" (adet 0) / "ucta satir yok" / dolu olcum; dordu
+//       AYRI cumle ve hepsi UCUN kendi sayaclarindan;
+//   (5) ISTEMCI MATEMATIGI YOK: duyarlilik ucun katmani, esik/agirlik
+//       motorda. Yarim taramada duyarlilik HIC basilmiyor.
+//
+//  Statik denetim: cizim yok, ag yok. Kart cihazda HENUZ cizilmedi ve
+//  `/api/news` kip ② detay ekranindan CANLI cagrilmadi (yerel DNS, §12).
+// ---------------------------------------------------------------------
+bolum('25 hisse detayinda Gelismeler <-> webin fillSpNews bolumu');
+{
+  const APPJS_PATH_25 = path.join(ROOT, 'app.js');
+  const UC_PATH_25 = path.join(ROOT, 'api', 'news.js');
+  const KART_PATH_25 = path.join(ROOT, 'mobile', 'src', 'components', 'detay', 'HaberKart.tsx');
+  const GIRIS_PATH_25 = path.join(ROOT, 'mobile', 'src', 'components', 'detay', 'index.ts');
+  const EKRAN_PATH_25 = path.join(ROOT, 'mobile', 'src', 'app', 'hisse', '[sembol].tsx');
+  const BUGUN_PATH_25 = path.join(ROOT, 'mobile', 'src', 'components', 'bugun', 'HisseHaberleriKarti.tsx');
+  const appSrc25 = readFileSync(APPJS_PATH_25, 'utf8');
+  const ucSrc25 = readFileSync(UC_PATH_25, 'utf8');
+  const kartSrc25 = readFileSync(KART_PATH_25, 'utf8');
+  const girisSrc25 = readFileSync(GIRIS_PATH_25, 'utf8');
+  const ekranSrc25 = readFileSync(EKRAN_PATH_25, 'utf8');
+  const bugunSrc25 = readFileSync(BUGUN_PATH_25, 'utf8');
+
+  // Kapilar KODU olcuyor, GEREKCEYI degil: kartin basligi webin
+  // satirlarini ALINTILIYOR, grep yorum metnine takilmamali.
+  const yorumsuz25 = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const kartKod25 = yorumsuz25(kartSrc25);
+  const ekranKod25 = yorumsuz25(ekranSrc25);
+
+  // --- (0) ONCULLER: webde ne vardi ------------------------------------
+  ok('25a · ONCUL · webde hisse sayfasinin haber bolumu var (`fillSpNews`)',
+    appSrc25.includes('async function fillSpNews('));
+  ok('25a · ONCUL · webin bolum basligi "📰 Gelişmeler"',
+    appSrc25.includes('📰 Gelişmeler'));
+  ok('25a · ONCUL · uc coklu-sembol kipini tasiyor (`symbols`)',
+    ucSrc25.includes('symbols'));
+
+  // --- (1) KART VAR VE GIRISTEN DISA ACIK ------------------------------
+  ok('25b · kart dosyasi var ve `HaberKart` disa aciliyor',
+    kartKod25.includes('export function HaberKart('));
+  ok('25b · detay girisi karti ad ad disa aciyor',
+    girisSrc25.includes("export { HaberKart, type HaberKartProps } from './HaberKart';"));
+  ok('25b · ekran karti basiyor ve pazari SATIRDAN geciriyor',
+    ekranKod25.includes('<HaberKart sembol={sembol} market={satir.market} />'));
+  ok('25b · ekran karti detay girisinden aliyor',
+    ekranKod25.includes('HaberKart,') && ekranKod25.includes("from '@/components/detay'"));
+
+  // --- (2) AYNI UC, TEK SEMBOL, YENI UC YOK ----------------------------
+  ok('25c · kart `/api/news` coklu-sembol kipini TEK sembolle cagiriyor',
+    kartKod25.includes('fetchHisseHaberleri([sembol], { market, limit, signal })'));
+  ok('25c · kart kendi `fetch`ini kurmuyor (istemci sozlesmesi uzerinden)',
+    !/\bfetch\s*\(/.test(kartKod25.replace(/fetchHisseHaberleri/g, '')));
+  ok('25c · kart yeni bir uc adresi yazmiyor',
+    !kartKod25.includes('/api/'));
+
+  // --- (3) LISTE DEPOSUNA DOKUNULMUYOR ---------------------------------
+  // Gerekce: ayni soru degil. Bugun sekmesindeki kart LISTEYI soruyor.
+  ok('25d · ONCUL · Bugun kartı gerçekten listeyi soruyor (`useListe`)',
+    yorumsuz25(bugunSrc25).includes('useListe('));
+  ok('25d · detay karti `useListe` OKUMUYOR',
+    !kartKod25.includes('useListe'));
+  ok('25d · detay karti depo anahtari okumuyor',
+    !kartKod25.includes('sb:lists') && !kartKod25.includes('depo'));
+
+  // --- (4) PAZAR CIKARIMI YOK ------------------------------------------
+  ok('25e · `market` props olarak geliyor',
+    kartKod25.includes('market: Market;'));
+  ok('25e · kart pazari KENDI cikarmiyor (`.IS` / BIST tahmini yok)',
+    !/endsWith\(\s*'\.IS'\s*\)/.test(kartKod25) && !/market\s*=\s*['"]/.test(kartKod25));
+  ok('25e · onbellek anahtari pazari TASIYOR (pazar degisirse tur yeniden)',
+    kartKod25.includes("'detay-haber:' + sembol + '|' + market"));
+
+  // --- (5) DORT DURUST HAL --------------------------------------------
+  ok('25f · "olcemedim" hali UCUN `tam` bayragindan',
+    kartKod25.includes('satir && !satir.tam'));
+  ok('25f · "olcemedim" cumlesi "haber yok" DEMIYOR',
+    kartSrc25.includes('“haber yok” DENMİYOR'));
+  ok('25f · "olculdu, mansset cikmadi" hali ayri cumle',
+    kartKod25.includes('satir.tam && satir.adet === 0')
+    && kartSrc25.includes('Ölçüldü, manşet çıkmadı'));
+  ok('25f · "ucta satir yok" hali ayri cumle',
+    kartKod25.includes('veri && !satir')
+    && kartSrc25.includes('Uç bu sembol için satır döndürmedi.'));
+  ok('25f · eksik tarama rozeti MANSETLERIN USTUNDE',
+    kartKod25.indexOf('<HaberOlcumEksikRozet') < kartKod25.indexOf('<HaberSatiri'));
+  ok('25f · olculmeyen sayi 0 olarak BASILMIYOR',
+    !/adet\s*\?\?\s*0/.test(kartKod25) && !/\bms\s*\?\?\s*0/.test(kartKod25));
+
+  // --- (6) ISTEMCI MATEMATIGI YOK --------------------------------------
+  ok('25g · kartta yuzde/puan hesabi yok',
+    !/\*\s*100/.test(kartKod25) && !/\)\s*\/\s*\(/.test(kartKod25));
+  ok('25g · duyarlilik YARIM taramada basilmiyor',
+    kartKod25.includes('satir.tam && !eksik'));
+  ok('25g · duyarlilik ucun katmanindan, kart puan uretmiyor',
+    kartKod25.includes('duyarlilik={satir.duyarlilik}'));
+
+  // --- (7) KAP AYRIMI VE YASAL CERCEVE ---------------------------------
+  // Uc `type: 'NEWS'` donduruyor; KAP `/api/takvim`den geliyor. Kart
+  // bunu EKRANDA yaziyor, yoksa kullanici "KAP yok" sanirdi.
+  ok('25h · ONCUL · haber ucu KAP uretmiyor (`type: \'NEWS\'`)',
+    ucSrc25.includes("'NEWS'"));
+  ok('25h · kart KAP ayrimini EKRANDA yaziyor',
+    kartSrc25.includes('KAP duyuruları bu uçtan GELMİYOR'));
+  ok('25h · kart vaat cumlesi uretmiyor',
+    !kartSrc25.includes('kazandırır') && !kartSrc25.includes('al/sat sinyali')
+    && !kartSrc25.includes('garanti'));
+  ok('25h · yasal uyariyi kart TEKRARLAMIYOR (ekran kabugu basiyor)',
+    !kartKod25.includes('DISCLAIMER_TEXT') && ekranKod25.includes('ScreenShell'));
+}
+// =====================================================================
+//  26 · HISSE DETAYINDA YAZMA EYLEMLERI (listeye + kiyasa ekle)
+// ---------------------------------------------------------------------
+//  NEDEN: webde hisse sayfasinin ust seridinde iki yazma eylemi var
+//  (`addToList` ve `sb:compare` seti, app.js:12238). Native'de listeye
+//  ekleme YALNIZ Arama sekmesindeydi; kiyas setine ekleme ise HIC
+//  YOKTU: `kiyasaEkle` depo katmaninda duruyordu ama HICBIR ekran
+//  cagirmiyordu, yani kullanici kalici kiyas kumesini native'de hic
+//  KURAMIYORDU. Analiz sekmesi yalniz 🏭 Sektor koprusunden gelen
+//  `?kiyas=` parametresiyle doluyordu.
+//
+//  Bu bolumun kilitledigi dort karar:
+//   (1) SINIR DEPODA: slot sayisi `AZAMI_KIYAS`ten okunuyor, kartta
+//       yeniden yazilmiyor (esik tekrari = §5.1 ihlali);
+//   (2) BASARISIZLIK SESSIZ KALMIYOR: depo `ok:false` + `mesaj`
+//       donduruyor, o mesaj OLDUGU GIBI basiliyor; "eklendi" cumlesi
+//       yalniz gercekten yazildiginda cikiyor;
+//   (3) PAZAR CIKARIMI YOK: `market` cagirandan (`satir.market`);
+//   (4) KIYAS KAYNAK SIRASI EKRANDA YAZILI: ① `?kiyas=` koprusu
+//       ② kalici set (`sb:compare`) ③ takip listesi — ve cumle HANGI
+//       kaynaktan kostugunu soyluyor.
+//
+//  Statik denetim: cizim yok, ag yok. Dugmelere CIHAZDA HIC basilmadi,
+//  `sb:compare` gidis-donusu gorulmedi, `/api/compare` kalici setle
+//  CANLI cagrilmadi (yerel DNS, §12).
+// ---------------------------------------------------------------------
+bolum('26 hisse detayinda yazma eylemleri <-> webin ust serit dugmeleri');
+{
+  const APPJS_PATH_26 = path.join(ROOT, 'app.js');
+  const KART_PATH_26 = path.join(ROOT, 'mobile', 'src', 'components', 'detay', 'DetayEylemler.tsx');
+  const GIRIS_PATH_26 = path.join(ROOT, 'mobile', 'src', 'components', 'detay', 'index.ts');
+  const API_PATH_26 = path.join(ROOT, 'mobile', 'src', 'api', 'index.ts');
+  const DEPO_PATH_26 = path.join(ROOT, 'mobile', 'src', 'api', 'depo.ts');
+  const EKRAN_PATH_26 = path.join(ROOT, 'mobile', 'src', 'app', 'hisse', '[sembol].tsx');
+  const ANALIZ_PATH_26 = path.join(ROOT, 'mobile', 'src', 'app', '(tabs)', 'analiz.tsx');
+  const appSrc26 = readFileSync(APPJS_PATH_26, 'utf8');
+  const kartSrc26 = readFileSync(KART_PATH_26, 'utf8');
+  const girisSrc26 = readFileSync(GIRIS_PATH_26, 'utf8');
+  const apiSrc26 = readFileSync(API_PATH_26, 'utf8');
+  const depoSrc26 = readFileSync(DEPO_PATH_26, 'utf8');
+  const ekranSrc26 = readFileSync(EKRAN_PATH_26, 'utf8');
+  const analizSrc26 = readFileSync(ANALIZ_PATH_26, 'utf8');
+
+  // Grepler KODU olcuyor, gerekce metnini DEGIL: kart basligi webin
+  // satirlarini alintiliyor, yorumlar siyrilmadan kapi yanilirdi.
+  const yorumsuz26 = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const kartKod26 = yorumsuz26(kartSrc26);
+  const ekranKod26 = yorumsuz26(ekranSrc26);
+  const analizKod26 = yorumsuz26(analizSrc26);
+
+  // --- (0) ONCULLER: webde ne vardi, native'de ne eksikti --------------
+  ok('26a · ONCUL · webde listeye ekleme var (`listAddSymbol` + hisse sayfasi dugmesi)',
+    appSrc26.includes('function listAddSymbol(') && appSrc26.includes('＋ Listeye ekle'));
+  ok('26a · ONCUL · webde kalici kiyas seti var (`sb:compare`)',
+    appSrc26.includes('sb:compare'));
+  ok('26a · ONCUL · depo yazicisi zaten vardi (`kiyasaEkle`)',
+    yorumsuz26(depoSrc26).includes('export async function kiyasaEkle('));
+
+  // --- (1) KART VAR, GIRISTEN DISA ACIK, EKRANDA BASILI ---------------
+  ok('26b · kart dosyasi var ve `DetayEylemler` disa aciliyor',
+    kartKod26.includes('export function DetayEylemler('));
+  ok('26b · detay girisi karti ad ad disa aciyor',
+    girisSrc26.includes("export { DetayEylemler, type DetayEylemlerProps } from './DetayEylemler';"));
+  ok('26b · ekran karti basiyor ve pazari SATIRDAN geciriyor',
+    ekranKod26.includes('<DetayEylemler sembol={sembol} market={satir.market} />'));
+  ok('26b · ekran karti detay girisinden aliyor',
+    ekranKod26.includes('DetayEylemler,') && ekranKod26.includes("from '@/components/detay'"));
+  ok('26b · kart basligin ALTINDA (eylemler kunyeden once gelmiyor)',
+    ekranKod26.indexOf('<DetayBasligi') < ekranKod26.indexOf('<DetayEylemler'));
+
+  // --- (2) IKI YAZICI GERCEKTEN CAGRILIYOR ----------------------------
+  ok('26c · api girisi `kiyasaEkle`yi disa aciyor (once acilmiyordu)',
+    apiSrc26.includes('kiyasaEkle,'));
+  ok('26c · kart liste yazicisini cagiriyor (`ekle(`)',
+    /\bekle\(sembol\)/.test(kartKod26));
+  ok('26c · kart kiyas yazicisini PAZARLA cagiriyor',
+    kartKod26.includes('kiyasaEkle(sembol, market)'));
+  ok('26c · kart kendi depo anahtarini yazmiyor',
+    !kartKod26.includes('sb:lists') && !kartKod26.includes('sb:compare')
+    && !kartKod26.includes('AsyncStorage'));
+  ok('26c · kart kendi `fetch`ini kurmuyor (yazma yerel, uc yok)',
+    !/\bfetch\s*\(/.test(kartKod26) && !kartKod26.includes('/api/'));
+
+  // --- (3) SINIR DEPODAN, KARTTA ESIK YOK -----------------------------
+  ok('26d · ONCUL · slot sinirini depo tanimliyor (`AZAMI_KIYAS`)',
+    yorumsuz26(depoSrc26).includes('AZAMI_KIYAS'));
+  ok('26d · kart sinirı depodan okuyor',
+    kartKod26.includes('AZAMI_KIYAS'));
+  ok('26d · kart sinirı SAYI olarak yeniden yazmiyor',
+    !/>=\s*8\b/.test(kartKod26) && !/AZAMI_KIYAS\s*=/.test(kartKod26));
+  ok('26d · dolu kume dugmeyi kapatiyor',
+    kartKod26.includes('kiyas.length >= AZAMI_KIYAS')
+    && kartKod26.includes('disabled={kiyasta || kiyasDolu}'));
+  ok('26d · slot sayisi EKRANDA yazili (dugme neden kapali gorunsun)',
+    kartSrc26.includes('Karşılaştırma seti: '));
+
+  // --- (4) BASARISIZLIK SESSIZ KALMIYOR -------------------------------
+  ok('26e · liste sonucu depo mesajini basiyor',
+    kartKod26.includes("s.ok ? sembol + ' listeye eklendi.' : s.mesaj"));
+  ok('26e · kiyas sonucu depo mesajini basiyor',
+    kartKod26.includes("s.ok ? sembol + ' karşılaştırma setine eklendi.' : s.mesaj"));
+  ok('26e · kiyas yazicisi `async`: sonuc gelmeden cumle basilmiyor',
+    kartKod26.includes('kiyasaEkle(sembol, market).then('));
+  ok('26e · kart kendi hata cumlesini UYDURMUYOR',
+    !kartSrc26.includes('bir hata oluştu') && !kartSrc26.includes('Bilinmeyen hata'));
+  ok('26e · bildirim satiri kosullu (bos mesaj basilmiyor)',
+    kartKod26.includes('{bildirim ? ('));
+
+  // --- (5) PAZAR CIKARIMI YOK -----------------------------------------
+  ok('26f · `market` props olarak geliyor',
+    kartKod26.includes('market: Market;'));
+  ok('26f · kart pazari KENDI cikarmiyor',
+    !/endsWith\(\s*'\.IS'\s*\)/.test(kartKod26) && !/market\s*=\s*['"]/.test(kartKod26));
+  ok('26f · "zaten var" denetimi pazari da kiyasliyor (ayni kod iki pazarda)',
+    kartKod26.includes('k.symbol === sembol && k.market === market'));
+
+  // --- (6) ANALIZ: KAYNAK SIRASI VE EKRANDAKI CUMLE -------------------
+  ok('26g · analiz kalici kiyas setini okuyor (`useKiyas`)',
+    analizKod26.includes('useKiyas()'));
+  ok('26g · oncelik: kopru > kalici set > takip listesi',
+    analizKod26.includes('if (gelenKiyas.length) return gelenKiyas.slice(0, AZAMI_SEMBOL);')
+    && analizKod26.includes('if (depoKiyas.length) return depoKiyas.slice(0, AZAMI_SEMBOL);')
+    && analizKod26.includes('return liste;'));
+  ok('26g · kaynak adi ekrandaki cumleyi suruyor',
+    analizKod26.includes("const kiyasKaynak: 'kopru' | 'set' | 'liste'")
+    && analizKod26.includes("kiyasKaynak !== 'liste' ?")
+    && analizKod26.includes("kiyasKaynak === 'kopru'"));
+  ok('26g · kalici setten kostugu EKRANDA yazili',
+    analizSrc26.includes('hisse sayfalarından kurduğun karşılaştırma setindeki'));
+  ok('26g · kirpilan sembol HANGI kaynakta olursa olsun sayiliyor',
+    analizKod26.includes("const kiyasHam = kiyasKaynak === 'kopru' ? gelenKiyas.length : depoKiyas.length;")
+    && analizKod26.includes('kiyasHam > AZAMI_SEMBOL ? kiyasHam - AZAMI_SEMBOL : 0'));
+  ok('26g · analiz uc sinirini kendi yazmiyor (AZAMI_SEMBOL sozlesmeden)',
+    !/AZAMI_SEMBOL\s*=\s*\d/.test(analizKod26));
+
+  // --- (7) YASAL CERCEVE ----------------------------------------------
+  ok('26h · kart vaat cumlesi uretmiyor',
+    !kartSrc26.includes('kazandırır') && !kartSrc26.includes('al/sat sinyali')
+    && !kartSrc26.includes('garanti') && !kartSrc26.includes('fırsat'));
+  ok('26h · kartta hesap yok (yuzde/puan uretmiyor)',
+    !/\*\s*100/.test(kartKod26) && !/\)\s*\/\s*\(/.test(kartKod26));
+  ok('26h · yasal uyariyi kart TEKRARLAMIYOR (ekran kabugu basiyor)',
+    !kartKod26.includes('DISCLAIMER_TEXT') && ekranKod26.includes('ScreenShell'));
+}
+
+// =====================================================================
+//  27 · SIRKET PROFILI KARTI (webin "Sirket ne yapiyor?" bolumu)
+// ---------------------------------------------------------------------
+//  NEDEN: webde hisse sayfasinda `fillSpBiz` (app.js, kutu `id="spBiz"`)
+//  sektor ETIKETININ otesinde sirketin ne is yaptigini yazan bir bolum
+//  var. Native detay ekraninda bunun KARSILIGI YOKTU: skor, teknik,
+//  temel, haber vardi ama "bu sirket ne yapiyor?" sorusunun cevabi
+//  yoktu — arama sonucundan gelen kullanici TANIMADIGI bir sembolde
+//  skoru okuyordu.
+//
+//  Bu bolumun kilitledigi bes karar:
+//   (1) YENI UC YOK: var olan `/api/yfin` kunye turu kullaniliyor
+//       (`bizSummary`/`sector`/`industry`/`website`), Hobby
+//       12-fonksiyon tavani (§21 M3) DEGISMEDI;
+//   (2) `deep` KAPALI: profil `assetProfile`te, takvim modulleri
+//       istenmiyor;
+//   (3) TERS PIYASA DENEMESI YOK: web profil bos gelirse sembolu
+//       DIGER pazarda tekrar deniyor (`otherMarket(market)`), native
+//       bunu YAPMIYOR — pazar cikarimi yok (onaylanmis karar);
+//   (4) UC DURUST HAL AYRI CUMLE: metin var / yalniz etiket var /
+//       ikisi de yok — ucu de OLCULMUS cevap, "olculemedi" degil
+//       (o hali `ok:false` dali soyluyor);
+//   (5) HESAP YOK, PUAN YOK: metin oldugu gibi tasiniyor, profil
+//       hicbir skora girdi degil ve bu EKRANDA yazili.
+//
+//  Statik denetim: cizim yok, ag yok. Kart CIHAZDA HIC cizilmedi,
+//  `/api/yfin` detay ekranindan CANLI hic cagrilmadi (yerel DNS, §12),
+//  `bizSummary` dolu HIC gorulmedi.
+// ---------------------------------------------------------------------
+bolum('27 sirket profili karti <-> webin "Sirket ne yapiyor?" bolumu');
+{
+  const APPJS_PATH_27 = path.join(ROOT, 'app.js');
+  const YFIN_UC_PATH_27 = path.join(ROOT, 'api', '_yfin.js');
+  const YFIN_TIP_PATH_27 = path.join(ROOT, 'mobile', 'src', 'api', 'yfin.ts');
+  const KART_PATH_27 = path.join(ROOT, 'mobile', 'src', 'components', 'detay', 'SirketKart.tsx');
+  const GIRIS_PATH_27 = path.join(ROOT, 'mobile', 'src', 'components', 'detay', 'index.ts');
+  const EKRAN_PATH_27 = path.join(ROOT, 'mobile', 'src', 'app', 'hisse', '[sembol].tsx');
+  const appSrc27 = readFileSync(APPJS_PATH_27, 'utf8');
+  const ucSrc27 = readFileSync(YFIN_UC_PATH_27, 'utf8');
+  const tipSrc27 = readFileSync(YFIN_TIP_PATH_27, 'utf8');
+  const kartSrc27 = readFileSync(KART_PATH_27, 'utf8');
+  const girisSrc27 = readFileSync(GIRIS_PATH_27, 'utf8');
+  const ekranSrc27 = readFileSync(EKRAN_PATH_27, 'utf8');
+
+  // Grepler KODU olcuyor, gerekce metnini DEGIL: kart basliginda webin
+  // satirlari ve `otherMarket` adi ALINTILI — yorumlar siyrilmadan
+  // "ters pazar denemesi yok" kapisi kendi gerekcesine takilirdi.
+  const yorumsuz27 = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const kartKod27 = yorumsuz27(kartSrc27);
+  const ekranKod27 = yorumsuz27(ekranSrc27);
+
+  // --- (0) ONCULLER: webde ne var, ucta ne var -------------------------
+  ok('27a · ONCUL · webde profil bolumu var (`fillSpBiz`)',
+    appSrc27.includes('async function fillSpBiz(') && appSrc27.includes('id="spBiz"'));
+  ok('27a · ONCUL · web ters pazarda tekrar deniyor (native denemeyecek)',
+    appSrc27.includes('const om = otherMarket(market);'));
+  ok('27a · ONCUL · kunye ucu profil metnini donduruyor (`bizSummary`)',
+    ucSrc27.includes('bizSummary') && ucSrc27.includes('longBusinessSummary'));
+  ok('27a · ONCUL · kunye ucu site adresini donduruyor (`website`)',
+    ucSrc27.includes('website:'));
+  ok('27a · ONCUL · native tip dort alani ZATEN tutuyor (tip degisikligi yok)',
+    ['bizSummary?', 'sector?', 'industry?', 'website?'].every((a) => tipSrc27.includes(a)));
+
+  // --- (1) KART VAR, GIRISTEN DISA ACIK, EKRANDA BASILI ---------------
+  ok('27b · kart dosyasi var ve `SirketKart` disa aciliyor',
+    kartKod27.includes('export function SirketKart('));
+  ok('27b · detay girisi karti ad ad disa aciyor',
+    girisSrc27.includes("export { SirketKart, type SirketKartProps } from './SirketKart';"));
+  ok('27b · ekran karti basiyor',
+    ekranKod27.includes('<SirketKart sembol={sembol} />'));
+  ok('27b · ekran karti detay girisinden aliyor',
+    ekranKod27.includes('SirketKart,') && ekranKod27.includes("from '@/components/detay'"));
+  ok('27b · kart TEKNIK karttan ONCE (webde de bolum ust tarafta)',
+    ekranKod27.indexOf('<SirketKart') < ekranKod27.indexOf('<TeknikKart'));
+
+  // --- (2) UC: VAR OLAN KUNYE TURU, YENI UC YOK -----------------------
+  ok('27c · kart var olan kunye turunu cagiriyor (`fetchYfin`)',
+    kartKod27.includes('fetchYfin([sembol]'));
+  ok('27c · `deep` KAPALI (profil icin takvim modulleri gereksiz)',
+    kartKod27.includes('deep: false'));
+  ok('27c · kart kendi `fetch`ini kurmuyor, kendi yolunu yazmiyor',
+    !/\bfetch\s*\(/.test(kartKod27.replace(/fetchYfin/g, '')) && !kartKod27.includes('/api/'));
+  ok('27c · tur `useIstek`ten geciyor (iptal + onbellek sozlesmesi)',
+    kartKod27.includes('useIstek(cagri,') && kartKod27.includes('signal'));
+  ok('27c · onbellek anahtari DIZGI ve temettu turuyla CAKISMIYOR',
+    kartKod27.includes("sembol + '|sirket'"));
+  ok('27c · bos sembolde tur ATILMIYOR',
+    kartKod27.includes('etkin: Boolean(sembol)'));
+
+  // --- (3) TERS PIYASA DENEMESI YOK (onaylanmis karar) ----------------
+  ok('27d · kart `otherMarket` benzeri bir ikinci tur KURMUYOR',
+    !kartKod27.includes('otherMarket')
+    && (kartKod27.match(/fetchYfin\s*\(/g) || []).length === 1);
+  ok('27d · kart pazar props\'u bile ALMIYOR (cikarim imkansiz)',
+    !kartKod27.includes('market') && !/endsWith\(\s*'\.IS'\s*\)/.test(kartKod27));
+  ok('27d · ekran karta pazar GECIRMIYOR',
+    !/<SirketKart[^>]*market=/.test(ekranKod27));
+
+  // --- (4) DORT DURUST HAL, DORDU AYRI CUMLE --------------------------
+  ok('27e · tur kosup kayit getirmediginde ayri cumle',
+    kartSrc27.includes("' için künye ucu kayıt döndürmedi.'"));
+  ok('27e · `ok:false` OLCULEMEDI diye soyluyor (veri yok DEMIYOR)',
+    kartKod27.includes('!kunye.ok ?') && kartSrc27.includes('künyesi ölçülemedi'));
+  ok('27e · metin yok ama etiket varsa bunu ACIKCA yaziyor',
+    kartSrc27.includes('profil metni) bu künyede YOK'));
+  ok('27e · ikisi de bos hali ayri cumle',
+    kartSrc27.includes('şirket profili ve sektör etiketi boş.'));
+  ok('27e · yukleniyor/hata/bos tek `Durum` govdesinden',
+    kartKod27.includes('<Durum') && kartKod27.includes('kartsiz')
+    && kartKod27.includes('yenile={yenile}'));
+
+  // --- (5) METIN SESSIZCE KIRPILMIYOR --------------------------------
+  ok('27f · ilk cumle AYRILIYOR, kalan ATILMIYOR',
+    kartKod27.includes('const kalan = metin.length > bir.length'));
+  ok('27f · kalan metin katlanir bolumde (webin `<details>` karsiligi)',
+    kartKod27.includes('<Katlanir') && kartSrc27.includes('Tam profili oku'));
+  ok('27f · cumle bulunamazsa TUM metin basiliyor (… ile kesilmiyor)',
+    kartKod27.includes('return m ? m[0].trim() : metin.trim();')
+    && !kartSrc27.includes("'…'"));
+  ok('27f · etiket iki alandan kuruluyor, bos olan SESSIZ atlanıyor',
+    kartKod27.includes("[sektor, sanayi].filter(Boolean).join(' · ')"));
+
+  // --- (6) HESAP YOK, SKORA GIRMIYOR, CERCEVE EKRANDA ----------------
+  ok('27g · kartta hesap yok (yuzde/puan uretmiyor)',
+    !/\*\s*100/.test(kartKod27) && !/\)\s*\/\s*\(/.test(kartKod27)
+    && !/toFixed\(/.test(kartKod27));
+  ok('27g · kart esik/agirlik tanimlamiyor',
+    !/const\s+[A-Z_]{3,}\s*=\s*-?\d/.test(kartKod27));
+  ok('27g · "skora girmez" EKRANDA yazili',
+    kartSrc27.includes('skora girmez') && kartSrc27.includes('skora GİRMEZ'));
+  ok('27g · kaynak ve DIL ekranda yazili (ceviri yapilmiyor denmis)',
+    kartSrc27.includes('Yahoo Finance şirket profili') && kartSrc27.includes('çevrilmez'));
+
+  // --- (7) YASAL CERCEVE ----------------------------------------------
+  ok('27h · kart vaat cumlesi uretmiyor',
+    !kartSrc27.includes('kazandırır') && !kartSrc27.includes('al/sat sinyali')
+    && !kartSrc27.includes('garanti') && !kartSrc27.includes('fırsat'));
+  ok('27h · yasal uyariyi kart TEKRARLAMIYOR (ekran kabugu basiyor)',
+    !kartKod27.includes('DISCLAIMER_TEXT') && ekranKod27.includes('ScreenShell'));
+  ok('27h · dis bag kullanicinin tarayicisina gidiyor, sessiz dusuyor',
+    kartKod27.includes('void Linking.openURL(site).catch(() => {});'));
+}
+
+
+// =====================================================================
+//  28 · BILDIRIM SENKRONU (webin `/api/watchlist` yazmasinin yuzeyi)
+// ---------------------------------------------------------------------
+//  NEDEN: her listenin "bildirim" anahtari native'de ZATEN cevriliyordu
+//  (`ListeBlogu`), ama deger CIHAZDAN CIKMIYORDU: `/api/watchlist` ne
+//  okunuyor ne yaziliyordu, `fetchWatchlist`/`pushWatchlist` sarmallari
+//  CAGRISIZ duruyordu. Bildirimi atan isci (`worker/poll.mjs` ->
+//  `worker/watchlist.mjs`) ayni kodun altindaki KV kaydini okudugu icin
+//  app'te yapilan hicbir degisiklik telefona ulasmiyordu — anahtar sustu.
+//
+//  Bu bolumun kilitledigi bes karar:
+//   (1) KOD KAYNAGA GOMULMUYOR: web kodu gomuyor (`SYNC_CODE`,
+//       app.js:2235). Ucta KIMLIK DOGRULAMA YOK ve kod PAYLASILAN BIR
+//       SIR — gomulu kod her kuruluma ayni kisinin listesini okutup
+//       uzerine yazdirirdi. Native kodu KULLANICIDAN aliyor, varsayilan
+//       BOS ve bos = senkron KAPALI (istek atilmiyor);
+//   (2) UZAKTAN GELEN DURUM BENIMSENMIYOR: web `adoptRemoteState`
+//       (app.js:2285) ile uzaktan geleni localStorage'a yaziyor; native
+//       okumayi SALT GOSTERIM tutuyor — `ui` sekli hic olculmedi;
+//   (3) YENI UC YOK: var olan `/api/watchlist` (api/watchlist.js),
+//       Hobby 12-fonksiyon tavani (§21 M3) DEGISMEDI;
+//   (4) SESSIZ KIRPMA YOK: gonderilmeyen her kayit (kapali liste,
+//       tekrar, pazarsiz) EKRANDA sayiyla yazili;
+//   (5) KOD GERI BASILMIYOR: kayitli kod ne ekranda ne hata cumlesinde.
+//
+//  Statik denetim: cizim yok, ag yok. Karta CIHAZDA HIC basilmadi,
+//  `/api/watchlist` native'den CANLI hic cagrilmadi (yerel DNS, §12).
+// ---------------------------------------------------------------------
+bolum('28 bildirim senkronu <-> webin /api/watchlist yazmasi');
+{
+  const APPJS_PATH_28 = path.join(ROOT, 'app.js');
+  const UC_PATH_28 = path.join(ROOT, 'api', 'watchlist.js');
+  const ISCI_PATH_28 = path.join(ROOT, 'worker', 'watchlist.mjs');
+  const DEPO_PATH_28 = path.join(ROOT, 'mobile', 'src', 'api', 'depo.ts');
+  const SENKRON_PATH_28 = path.join(ROOT, 'mobile', 'src', 'api', 'senkron.ts');
+  const API_PATH_28 = path.join(ROOT, 'mobile', 'src', 'api', 'index.ts');
+  const KART_PATH_28 = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'SenkronKart.tsx');
+  const GIRIS_PATH_28 = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'index.ts');
+  const EKRAN_PATH_28 = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'ListelerKart.tsx');
+  const appSrc28 = readFileSync(APPJS_PATH_28, 'utf8');
+  const ucSrc28 = readFileSync(UC_PATH_28, 'utf8');
+  const isciSrc28 = readFileSync(ISCI_PATH_28, 'utf8');
+  const depoSrc28 = readFileSync(DEPO_PATH_28, 'utf8');
+  const senkronSrc28 = readFileSync(SENKRON_PATH_28, 'utf8');
+  const apiSrc28 = readFileSync(API_PATH_28, 'utf8');
+  const kartSrc28 = readFileSync(KART_PATH_28, 'utf8');
+  const girisSrc28 = readFileSync(GIRIS_PATH_28, 'utf8');
+  const ekranSrc28 = readFileSync(EKRAN_PATH_28, 'utf8');
+
+  // Grepler KODU olcuyor, gerekce metnini DEGIL: hem kart hem `senkron.ts`
+  // basliklari `SYNC_CODE` ve `adoptRemoteState` adlarini ALINTILIYOR —
+  // siyrilmasa "gomulu kod yok" kapisi kendi gerekcesine takilirdi.
+  const yorumsuz28 = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const depoKod28 = yorumsuz28(depoSrc28);
+  const senkronKod28 = yorumsuz28(senkronSrc28);
+  const kartKod28 = yorumsuz28(kartSrc28);
+  const ekranKod28 = yorumsuz28(ekranSrc28);
+
+  // --- (0) ONCULLER: webde ne var, ucta ne var, isci neyi okuyor -------
+  ok('28a · ONCUL · web kodu KAYNAGA GOMUYOR (`SYNC_CODE`)',
+    appSrc28.includes("const SYNC_CODE = 'atahan-bulten-9f3c';"));
+  ok('28a · ONCUL · web evreni bildirim anahtarindan kuruyor',
+    appSrc28.includes('function collectWatchlistPayload()')
+    && appSrc28.includes('function pushWatchlistSync()'));
+  ok('28a · ONCUL · web uzaktan geleni BENIMSIYOR (native benimsemeyecek)',
+    appSrc28.includes('function adoptRemoteState(ui, updatedAt)'));
+  ok('28a · ONCUL · uc KIMLIK DOGRULAMA ISTEMIYOR (kod tek sir)',
+    !/\bauthorization\b/i.test(ucSrc28) && ucSrc28.includes('count: clean.length'));
+  ok('28a · ONCUL · uc yazma aninda `updatedAt` donduruyor (MILISANIYE)',
+    ucSrc28.includes('updatedAt: Date.now()'));
+  ok('28a · ONCUL · bildirim iscisi AYNI uctan okuyor',
+    isciSrc28.includes('/api/watchlist?code=')
+    && isciSrc28.includes('export async function getWatchlist()'));
+
+  // --- (1) DEPO: NATIVE'E OZEL ANAHTAR, WEB TURLERINE KARISMIYOR ------
+  ok('28b · native-ozel anahtar var (`sb:senkron`)',
+    depoKod28.includes("export const SENKRON_ANAHTAR = 'sb:senkron';"));
+  ok('28b · anahtar `ANAHTARLAR` kumesine GIRMEDI (o kume web ile birebir)',
+    !/ANAHTARLAR[\s\S]{0,600}sb:senkron/.test(depoKod28));
+  ok('28b · tur `TUMU`ya GIRMEDI (`depoBaslat` bunu okumuyor)',
+    !/TUMU[\s\S]{0,400}senkronDepo/.test(depoKod28));
+  ok('28b · kayit kendi yukleyicisiyle okunuyor',
+    depoKod28.includes('export function senkronYukle()'));
+  ok('28b · kod BICIMI sozlesmeden geliyor, depoda yeniden yazilmiyor',
+    depoKod28.includes('WATCHLIST_CODE_BICIM.test(')
+    && !/WATCHLIST_CODE_BICIM\s*=/.test(depoKod28));
+  ok('28b · gecersiz kod SESSIZ kabul edilmiyor (sebep + mesaj)',
+    depoKod28.includes('export async function senkronKodYaz(')
+    && kartKod28.includes('setBildirim(s.mesaj)'));
+  ok('28b · "hic yazilmadi" `null`, `0` DEGIL',
+    depoKod28.includes('sonYazma: null') && !/sonYazma:\s*0\b/.test(depoKod28));
+
+  // --- (2) EVREN: ATLANAN HER KAYIT SAYILIYOR -------------------------
+  ok('28c · evren kurucusu var (`bildirimEvreni`)',
+    depoKod28.includes('export function bildirimEvreni()'));
+  ok('28c · bildirimi KAPALI liste atlaniyor ve SAYILIYOR',
+    /if \(kayit\.notify === false\) \{\s*kapali \+= 1;/.test(depoKod28));
+  ok('28c · tekrar eden sembol+pazar bir kez gidiyor ve SAYILIYOR',
+    /if \(gorulen\.has\(anahtar\)\) \{\s*tekrar \+= 1;/.test(depoKod28));
+  ok('28c · BIST/US disi pazar atlaniyor ve SAYILIYOR',
+    depoKod28.includes('pazarsiz += 1'));
+  ok('28c · ucu de EKRANDA yazili (sessiz kirpma yok)',
+    kartSrc28.includes('bildirimi kapalı') && kartSrc28.includes('bir kez gidiyor')
+    && kartSrc28.includes('BIST/US dışında'));
+
+  // --- (3) AG KATMANI: VAR OLAN UC, YENI UC YOK -----------------------
+  ok('28d · besteci var olan sarmallari cagiriyor',
+    senkronKod28.includes('fetchWatchlist(kod,') && senkronKod28.includes('pushWatchlist(kod,'));
+  ok('28d · besteci kendi `fetch`ini kurmuyor, kendi yolunu yazmiyor',
+    !/\bfetch\s*\(/.test(senkronKod28.replace(/fetchWatchlist/g, 'X'))
+    && !senkronKod28.includes('/api/'));
+  ok('28d · kart AGA KENDI CIKMIYOR (besteciden geciyor)',
+    !kartKod28.includes('fetchWatchlist') && !kartKod28.includes('pushWatchlist')
+    && !/\bfetch\s*\(/.test(kartKod28));
+  ok('28d · api girisi besteciyi disa aciyor',
+    apiSrc28.includes('senkronGonder,') && apiSrc28.includes("from './senkron';"));
+  ok('28d · ucun donusu cihaza saklaniyor (`updatedAt`)',
+    senkronKod28.includes('senkronZamanYaz(sonuc.data.updatedAt)'));
+
+  // --- (4) GOMULU KOD YOK, SIR EKRANDA GERI BASILMIYOR ----------------
+  ok('28e · native webin kisisel kodunu GOMMUYOR',
+    !kartKod28.includes('atahan-bulten-9f3c') && !senkronKod28.includes('atahan-bulten-9f3c')
+    && !depoKod28.includes('atahan-bulten-9f3c'));
+  ok('28e · kod BOSKEN istek ATILMIYOR (senkron kapali)',
+    senkronKod28.includes("if (!kod) return { ok: false, sebep: 'kapali'"));
+  ok('28e · "kapali" ile "hata" AYRI sebep',
+    senkronKod28.includes("sebep: 'kapali' | 'hata'"));
+  ok('28e · kayitli kod ekranda GERI BASILMIYOR',
+    !kartKod28.includes('value={ayar.kod}')
+    && !/\{ayar\.kod\}/.test(kartKod28));
+  ok('28e · kart kendi hata cumlesini UYDURMUYOR',
+    !kartSrc28.includes('bir hata oluştu') && !kartSrc28.includes('Bilinmeyen hata'));
+
+  // --- (5) OKUMA SALT GOSTERIM (web `adoptRemoteState` yok) -----------
+  ok('28f · native uzaktan gelen durumu BENIMSEMIYOR',
+    !senkronKod28.includes('adoptRemoteState') && !senkronKod28.includes('veri.ui')
+    && !kartKod28.includes('.ui'));
+  ok('28f · besteci `ui` GONDERMIYOR da (govde yalniz list/portfolio)',
+    senkronKod28.includes('{ list: evren.kayitlar, portfolio: [] }')
+    && !/\bui:/.test(senkronKod28));
+  ok('28f · bulut ozeti SALT GOSTERIM oldugu EKRANDA yazili',
+    kartSrc28.includes('cihazdaki listelere uygulanmıyor'));
+  ok('28f · okuma cihazdaki listelere YAZMIYOR',
+    !kartKod28.includes('listeOlustur') && !kartKod28.includes('AsyncStorage')
+    && !kartKod28.includes('kiyasaEkle'));
+
+  // --- (6) KART VAR, GIRISTEN DISA ACIK, EKRANDA BASILI ---------------
+  ok('28g · kart dosyasi var ve `SenkronKart` disa aciliyor',
+    kartKod28.includes('export function SenkronKart('));
+  ok('28g · liste girisi karti ad ad disa aciyor',
+    girisSrc28.includes("export { SenkronKart, type SenkronKartProps } from './SenkronKart';"));
+  ok('28g · Listeler sekmesi karti basiyor',
+    ekranKod28.includes('<SenkronKart />'));
+  ok('28g · kart kaydi kendisi okutuyor (tur `TUMU`da degil)',
+    kartKod28.includes('void senkronYukle();'));
+  ok('28g · depo okunmadan sayi BASILMIYOR',
+    kartKod28.includes('if (!senkronHazir || !listeHazir)'));
+
+  // --- (7) HESAP YOK + YASAL CERCEVE ----------------------------------
+  ok('28h · kartta hesap yok (yuzde/puan uretmiyor)',
+    !/\*\s*100/.test(kartKod28) && !/toFixed\(/.test(kartKod28));
+  ok('28h · kart esik/agirlik tanimlamiyor',
+    !/const\s+[A-Z_]{3,}\s*=\s*-?\d/.test(kartKod28));
+  ok('28h · milisaniye->saniye cevrimi TEK yerde, yorumlu',
+    kartKod28.includes('Math.floor(ms / 1000)')
+    && kartSrc28.includes('birim çevrimi, hesap değil'));
+  ok('28h · kart vaat cumlesi uretmiyor',
+    !kartSrc28.includes('kazandırır') && !kartSrc28.includes('al/sat sinyali')
+    && !kartSrc28.includes('garanti') && !kartSrc28.includes('fırsat'));
+  ok('28h · yasal uyariyi kart TEKRARLAMIYOR (ekran kabugu basiyor)',
+    !kartKod28.includes('DISCLAIMER_TEXT'));
+  ok('28h · kodun PAYLASILAN SIR oldugu EKRANDA yazili',
+    kartSrc28.includes('Uçta kimlik doğrulama yok'));
+}
+
+// =====================================================================
+//  30. SEPET KARTI — CIHAZDAKI ADET/MALIYET + ULASILABILEN FIYAT
+// ---------------------------------------------------------------------
+//  Webin sepeti `sb:basket` kaydini okuyup `basketPrice` ile fiyatliyor.
+//  Native tarafta fiyatin UCU OLMAYAN uc sinifi (metal/doviz/fon) var;
+//  kapi bunlarin SESSIZ dusurulmedigini, gerekcenin EKRANDA yazili
+//  oldugunu ve tek hesap yerinin korundugunu olcuyor.
+// =====================================================================
+{
+  const APPJS_PATH_30 = path.join(ROOT, 'app.js');
+  const SEPET_PATH_30 = path.join(ROOT, 'mobile', 'src', 'api', 'sepet.ts');
+  const DEPO_PATH_30 = path.join(ROOT, 'mobile', 'src', 'api', 'depo.ts');
+  const API_PATH_30 = path.join(ROOT, 'mobile', 'src', 'api', 'index.ts');
+  const KART_PATH_30 = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'SepetKart.tsx');
+  const GIRIS_PATH_30 = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'index.ts');
+  const EKRAN_PATH_30 = path.join(ROOT, 'mobile', 'src', 'components', 'liste', 'ListelerKart.tsx');
+  const appSrc30 = readFileSync(APPJS_PATH_30, 'utf8');
+  const sepetSrc30 = readFileSync(SEPET_PATH_30, 'utf8');
+  const depoSrc30 = readFileSync(DEPO_PATH_30, 'utf8');
+  const apiSrc30 = readFileSync(API_PATH_30, 'utf8');
+  const kartSrc30 = readFileSync(KART_PATH_30, 'utf8');
+  const girisSrc30 = readFileSync(GIRIS_PATH_30, 'utf8');
+  const ekranSrc30 = readFileSync(EKRAN_PATH_30, 'utf8');
+
+  // Hem `sepet.ts` hem kart basliklari `basketPrice`, `BASKET_WINDOWS`,
+  // `toFixed` gibi adlari GEREKCE olarak ALINTILIYOR; siyrilmasa "yok"
+  // kapilari kendi aciklamalarina takilirdi.
+  const yorumsuz30 = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const sepetKod30 = yorumsuz30(sepetSrc30);
+  const kartKod30 = yorumsuz30(kartSrc30);
+
+  // --- (0) ONCULLER: webde ne var -------------------------------------
+  ok('30a · ONCUL · web sepeti ayni anahtari kullaniyor (`sb:basket`)',
+    appSrc30.includes("'sb:basket'"));
+  ok('30a · ONCUL · webin fiyatlayicisi var (`basketPrice`)',
+    appSrc30.includes('function basketPrice('));
+  ok('30a · ONCUL · ERTELENEN makine webde DURUYOR (port edilmedi)',
+    appSrc30.includes('BASKET_WINDOWS') && appSrc30.includes('basketWindowFlow'));
+  ok('30a · ONCUL · erteleme gerekcesi kart basliginda YAZILI',
+    kartSrc30.includes('BASKET_WINDOWS') && kartSrc30.includes('motor işi'));
+
+  // --- (1) VAR VE BAGLI -----------------------------------------------
+  ok('30b · fiyat katmani var (`sepetFiyatlari`)',
+    sepetKod30.includes('export async function sepetFiyatlari('));
+  ok('30b · kart var ve adiyla disa aciliyor',
+    kartKod30.includes('export function SepetKart()')
+    && girisSrc30.includes("export { SepetKart, type SepetKartProps } from './SepetKart';"));
+  ok('30b · kart EKRANA TAKILI (Listeler sekmesi)',
+    ekranSrc30.includes("import { SepetKart } from './SepetKart';")
+    && ekranSrc30.includes('<SepetKart />'));
+  ok('30b · api girisi fiyat turlerini disa aciyor',
+    apiSrc30.includes('type SepetFiyat,') && apiSrc30.includes('type SepetKaynaksiz,'));
+
+  // --- (2) DEPO: KAYIT KENDI YUKLEYICISINI KURMUYOR -------------------
+  ok('30c · sepet turu `TUMU` kumesinde (acilista okunuyor)',
+    /TUMU[\s\S]{0,400}sepetDepo/.test(depoSrc30));
+  ok('30c · fiyat katmani kayitlari KENDI okuyor (kart tasimiyor)',
+    sepetKod30.includes('sepetDepo.al()') && !kartKod30.includes('sepetDepo.al()'));
+
+  // --- (3) MALIYET KARARI: EN UCUZ ISTEK, TAVANLAR SOZLESMEDEN --------
+  ok('30d · tek donem isteniyor (`donemler: [gunluk]`) — ucun 6 donemi DEGIL',
+    sepetKod30.includes("donemler: ['gunluk']"));
+  ok('30d · dilim tavanlari SOZLESMEDEN geliyor, ciplak sayi DEGIL',
+    sepetKod30.includes('dilimle(degisimIstek, DEGISIM_AZAMI_SEMBOL)')
+    && sepetKod30.includes('dilimle(kriptoIstek, KRIPTO_AZAMI_ID)')
+    && sepetKod30.includes('dilimle(kurIstek, KUR_AZAMI_KOD)'));
+  ok('30d · tavan degerleri burada YENIDEN TANIMLANMIYOR',
+    !/DEGISIM_AZAMI_SEMBOL\s*=/.test(sepetKod30)
+    && !/KRIPTO_AZAMI_ID\s*=/.test(sepetKod30)
+    && !/KUR_AZAMI_KOD\s*=/.test(sepetKod30)
+    && !/KUR_KOD_BICIM\s*=/.test(sepetKod30));
+  ok('30d · YENI UC YOK: kendi yolunu yazmiyor, kendi `fetch`ini kurmuyor',
+    !sepetKod30.includes('/api/')
+    && !sepetKod30.replace(/fetchDegisim/g, 'X').replace(/fetchKripto/g, 'Y')
+      .replace(/fetchKur/g, 'Z').includes('fetch('));
+  ok('30d · var olan UC sarmali cagiriyor (metal/doviz artik /api/kur ile)',
+    sepetKod30.includes('fetchDegisim(dilim,') && sepetKod30.includes('fetchKripto(dilim,')
+    && sepetKod30.includes('fetchKur(dilim,'));
+  ok('30d · kart AGA KENDI CIKMIYOR (fiyat katmanindan geciyor)',
+    kartKod30.includes('sepetFiyatlari()')
+    && !kartKod30.includes('fetchDegisim') && !kartKod30.includes('fetchKripto'));
+  ok('30d · YENI BAGIMLILIK YOK (yalniz yerel ice almalar)',
+    !/from '(?!\.)/.test(sepetKod30.replace(/from '@\//g, "from './")));
+
+  // --- (4) HAM SAYI KURALI: TEK HESAP YERI ----------------------------
+  ok('30e · fiyat katmaninda CARPMA/TOPLAMA YOK (uctan geleni tasiyor)',
+    !sepetKod30.includes(' * ') && !sepetKod30.includes(' / '));
+  ok('30e · hesap TEK YERDE (`muhasebe`) ve kartin icinde',
+    kartKod30.includes('function muhasebe(')
+    && kartKod30.split('function muhasebe(').length === 2
+    && !sepetKod30.includes('muhasebe'));
+  ok('30e · esik/agirlik/bicimleme sabiti YOK (`toFixed` yok)',
+    !sepetKod30.includes('toFixed') && !kartKod30.includes('toFixed'));
+  ok('30e · olculmeyen deger `null`, `0` DEGIL',
+    kartKod30.includes('{ deger: null, fark: null }')
+    && !/deger:\s*0\b/.test(kartKod30));
+  ok('30e · fark YALNIZ para birimi AYNIYSA cikariliyor (kur cevrimi yok)',
+    kartKod30.includes('fark: birimAyni ? deger - (kalem.cost as number) : null'));
+
+  // --- (5) SESSIZ KIRPMA YOK: HER DUSEN KAYIT EKRANDA SAYILI ----------
+  ok('30f · kaynaksiz gerekceleri KALEM KALEM yazili',
+    sepetKod30.includes('const SEBEP_METAL') && sepetKod30.includes('const SEBEP_FX')
+    && sepetKod30.includes('const SEBEP_FON') && sepetKod30.includes('const SEBEP_CGID')
+    && sepetKod30.includes('const SEBEP_SEMBOLSUZ'));
+  ok('30f · metal ve doviz AYNI uca soruluyor (web `basketPrice` gibi)',
+    sepetKod30.includes("if (k.cls === 'metal') {")
+    && sepetKod30.includes('kuraSor(k, SEBEP_METAL)')
+    && sepetKod30.includes("if (k.cls === 'fx') {")
+    && sepetKod30.includes('kuraSor(k, SEBEP_FX)'));
+  ok('30f · kur anahtari KAYDIN SEMBOLU ve KUCULTULMUYOR (web ile ayni)',
+    sepetKod30.includes("const kod = (k.symbol || '').trim();")
+    && !/anahtar: kod\.toLowerCase\(\)/.test(sepetKod30));
+  ok('30f · bozuk kod UCA CIKMADAN ayiklaniyor (400 dilimi yakmasin)',
+    sepetKod30.includes('!KUR_KOD_BICIM.test(kod)')
+    && sepetKod30.includes('kaynaksiz.push({ id: k.id, sebep })'));
+  ok('30f · kaynaksiz kalan tek sinif FON (uydurma fiyat yok)',
+    sepetKod30.includes('kaynaksiz.push({ id: k.id, sebep: SEBEP_FON })'));
+  ok('30f · kur fiyati OLDUGU GIBI tasiniyor, birimi TRY (web ile ayni)',
+    sepetKod30.includes('bulunan[satir.kod] = satir.fiyatTry;')
+    && sepetKod30.includes("birim: 'TRY', kaynak: 'kur'"));
+  ok('30f · yeni kaynagin ADI EKRANDA yazili',
+    kartSrc30.includes("kur: 'ölçülen fiyat'"));
+  ok('30f · "soruldu ama olculemedi" AYRI sayilyor',
+    sepetKod30.includes('olculemedi.push(e.id)'));
+  ok('30f · EKRANDA olculemeyen SAYISI basiliyor',
+    kartSrc30.includes('sonuc.olculemedi.length +')
+    && kartSrc30.includes('SORULDU ama ölçülemedi (uç fiyat döndürmedi).'));
+  ok('30f · EKRANDA kaynaksiz gerekce + SAYISI basiliyor (tekilleme sessiz degil)',
+    kartKod30.includes('sebepSayisi[sebep] +')
+    && kartKod30.includes("' kayıt: ' + sebep"));
+  ok('30f · ucun kendi `uyari` metni OLDUGU GIBI tasiniyor',
+    sepetKod30.includes('uyarilar.push(sonuc.data.uyari)'));
+
+  // --- (6) TOPLAM BASILMIYOR + FIYATIN KAYNAGI EKRANDA ----------------
+  ok('30g · tek bir "sepet toplami" HESAPLANMIYOR',
+    !kartKod30.includes('reduce(') && !/const\s+toplam\b/.test(kartKod30));
+  ok('30g · fiyatin NEREDEN geldigi ekranda yazili',
+    kartKod30.includes('const KAYNAK_ADI')
+    && kartKod30.includes("elle: 'elle girilen fiyat'")
+    && kartKod30.includes("nakit: 'tanım gereği 1'"));
+  ok('30g · sepet BULUTA GITMIYOR: ne fiyat katmani ne kart senkronu CAGIRIYOR',
+    !sepetKod30.includes("from './senkron'") && !kartKod30.includes("from './senkron'")
+    && !sepetKod30.includes('senkronGonder') && !kartKod30.includes('senkronGonder'));
+  ok('30g · sepetin buluta gitmedigi EKRANDA yazili (sessiz degil)',
+    kartSrc30.includes('Sepet kaydı buluta GÖNDERİLMİYOR'));
+  ok('30g · kart skora GIRMEDIGINI yaziyor',
+    kartSrc30.includes('temel skora GİRMEZ.'));
+}
+
+// =====================================================================
+//  (31) UST FIYAT SERIDI — yerlesik 6 + cihazdaki ozel gostergeler
+// ---------------------------------------------------------------------
+//  NE OLCULUYOR: webin sayfa basindaki fiyat seridinin
+//  (`TICKER_BUILTIN_META`, app.js:2528) native yuzeyi EKRANDA MI, ucu
+//  BAGLI MI, ve kalemler SESSIZ DUSURULMUYOR MU.
+//
+//  Bu tur ayrica `/api/kur` ucu acildi: truncgil `today.json` Turkce
+//  sayi bicimini UC cozuyor, istemci degil (HAM SAYI KURALI §5.1).
+//  Kapi, ucun 12 yol dosyasi tavanini ASMADIGINI da olcuyor.
+// =====================================================================
+{
+  const APPJS_PATH_31 = path.join(ROOT, 'app.js');
+  const KUR_PATH_31 = path.join(ROOT, 'api', '_kur.js');
+  const PROXY_PATH_31 = path.join(ROOT, 'api', 'proxy.js');
+  const VERCEL_PATH_31 = path.join(ROOT, 'vercel.json');
+  const TIP_PATH_31 = path.join(ROOT, 'mobile', 'src', 'api', 'types.ts');
+  const ISTEMCI_PATH_31 = path.join(ROOT, 'mobile', 'src', 'api', 'client.ts');
+  const SERIT_PATH_31 = path.join(ROOT, 'mobile', 'src', 'api', 'serit.ts');
+  const API_PATH_31 = path.join(ROOT, 'mobile', 'src', 'api', 'index.ts');
+  const KART_PATH_31 = path.join(ROOT, 'mobile', 'src', 'components', 'bugun', 'SeritKart.tsx');
+  const GIRIS_PATH_31 = path.join(ROOT, 'mobile', 'src', 'components', 'bugun', 'index.ts');
+  const EKRAN_PATH_31 = path.join(ROOT, 'mobile', 'src', 'app', '(tabs)', 'bugun.tsx');
+  const appSrc31 = readFileSync(APPJS_PATH_31, 'utf8');
+  const kurSrc31 = readFileSync(KUR_PATH_31, 'utf8');
+  const proxySrc31 = readFileSync(PROXY_PATH_31, 'utf8');
+  const vercelSrc31 = readFileSync(VERCEL_PATH_31, 'utf8');
+  const tipSrc31 = readFileSync(TIP_PATH_31, 'utf8');
+  const istemciSrc31 = readFileSync(ISTEMCI_PATH_31, 'utf8');
+  const seritSrc31 = readFileSync(SERIT_PATH_31, 'utf8');
+  const apiSrc31 = readFileSync(API_PATH_31, 'utf8');
+  const kartSrc31 = readFileSync(KART_PATH_31, 'utf8');
+  const girisSrc31 = readFileSync(GIRIS_PATH_31, 'utf8');
+  const ekranSrc31 = readFileSync(EKRAN_PATH_31, 'utf8');
+
+  // `serit.ts` ve kart basliklari `truncgilGet`, `toFixed`, `basketPrice`
+  // gibi adlari GEREKCE olarak ALINTILIYOR; siyrilmasa "yok" kapilari
+  // kendi aciklamalarina takilirdi (§30 ile ayni gerekce).
+  const yorumsuz31 = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const seritKod31 = yorumsuz31(seritSrc31);
+  const kartKod31 = yorumsuz31(kartSrc31);
+
+  // --- (0) ONCULLER: webde ne var -------------------------------------
+  ok('31a · ONCUL · web seridi ayni kumeyi basiyor (`TICKER_BUILTIN_META`)',
+    appSrc31.includes('const TICKER_BUILTIN_META = {')
+    && appSrc31.includes("gram: 'Gram Altın'") && appSrc31.includes("eth: 'ETH/USD'"));
+  ok('31a · ONCUL · web ozel gosterge tavani 4 (`tickerCustomMax`)',
+    appSrc31.includes('const tickerCustomMax = ()'));
+  ok('31a · ONCUL · webin gram altin DUSUSU: `gram-altin` yoksa `GRA`',
+    appSrc31.includes("truncgilGet(data, 'gram-altin') || truncgilGet(data, 'GRA')"));
+  ok('31a · ONCUL · webde ozel metal/doviz anahtari KAYDIN SEMBOLU',
+    appSrc31.includes('truncgilGet(truncgilCache, h.symbol)'));
+  ok('31a · ONCUL · web seridi SAYFA ACILISINDA yukluyor',
+    appSrc31.includes("const TICKER_LS = 'sb:tickers'"));
+
+  // --- (1) UC: /api/kur acildi, 12 dosya tavani ASILMADI --------------
+  ok('31b · uc dosyasi `_` onekli (yol dosyasi DEGIL)',
+    /export default async function|export async function kurHandler|HANDLERLAR/.test(kurSrc31));
+  ok('31b · uc KOD SAYISINDAN BAGIMSIZ tek ust istek yapiyor',
+    kurSrc31.includes('AZAMI_UST_ISTEK = 1'));
+  ok('31b · uc kendi kod tavanini ilan ediyor (40)',
+    kurSrc31.includes('AZAMI_KOD = 40'));
+  ok('31b · tasiyici tablosunda LITERAL dinamik ice aktarma var',
+    proxySrc31.includes("kur:     () => import('./_kur.js')"));
+  ok('31b · `vercel.json` yeniden-yazimi bagli',
+    vercelSrc31.includes('"/api/kur"') && vercelSrc31.includes('__rota=kur'));
+  {
+    // Hobby tavani: `api/*.js` yol dosyasi sayisi 12'yi ASAMAZ.
+    const yolDosya31 = readdirSync(path.join(ROOT, 'api'))
+      .filter((d) => d.endsWith('.js') && !d.startsWith('_'));
+    ok('31b · yol dosyasi sayisi 12 tavaninda (' + yolDosya31.length + ')',
+      yolDosya31.length <= 12);
+  }
+
+  // --- (2) ISTEMCI: adres + sarmalayici + tavan sozlesmede ------------
+  ok('31c · istemci adresi tanimli (`ENDPOINTS.kur`)',
+    istemciSrc31.includes("kur: '/api/kur'"));
+  ok('31c · sarmalayici var (`fetchKur`)',
+    istemciSrc31.includes('export async function fetchKur('));
+  ok('31c · kod tavani SOZLESMEDEN okunuyor, elle yazilmiyor',
+    tipSrc31.includes('export const KUR_AZAMI_KOD = 40')
+    && istemciSrc31.includes('KUR_AZAMI_KOD'));
+
+  // --- (3) VAR VE BAGLI -----------------------------------------------
+  ok('31d · fiyat katmani var (`seritFiyatlari`)',
+    seritKod31.includes('export async function seritFiyatlari('));
+  ok('31d · kart var ve adiyla disa aciliyor',
+    kartKod31.includes('export function SeritKart()')
+    && girisSrc31.includes("export { SeritKart, type SeritKartProps } from './SeritKart';"));
+  ok('31d · kart EKRANA TAKILI (Bugun sekmesi)',
+    ekranSrc31.includes('SeritKart,') && ekranSrc31.includes('<SeritKart />'));
+  ok('31d · api girisi serit turlerini disa aciyor',
+    apiSrc31.includes('seritFiyatlari,') && apiSrc31.includes('type SeritKalem,')
+    && apiSrc31.includes('type SeritSonuc,'));
+
+  // --- (4) YERLESIK KUME WEB ILE AYNI ---------------------------------
+  ok('31e · alti yerlesik kimlik webdeki kume ile birebir',
+    ["'gram'", "'usd'", "'eur'", "'gbp'", "'btc'", "'eth'"]
+      .every((k) => seritKod31.includes('id: ' + k)));
+  ok('31e · gram altin YEDEK kodu da ayni cagrida soruluyor',
+    seritKod31.includes("yedekKod: 'GRA'") && seritKod31.includes('y.yedekKod'));
+  ok('31e · ozel metal/doviz anahtari KAYDIN SEMBOLU (web ile ayni)',
+    /cls === 'metal' \|\| g\.cls === 'fx'/.test(seritKod31));
+  ok('31e · nakit TANIM GEREGI 1 (olcum degil, isaretli)',
+    seritKod31.includes("uc: 'nakit'") && seritKod31.includes('fiyat: 1,'));
+
+  // --- (5) DEPO: KAYIT KENDI YUKLEYICISINI KURMUYOR -------------------
+  ok('31f · fiyat katmani kayitlari KENDI okuyor (kart tasimiyor)',
+    seritKod31.includes('gostergelerDepo.al()') && !kartKod31.includes('gostergelerDepo.al()'));
+  ok('31f · gizleme kaydi OKUNUYOR (webdeki igneden cikarma)',
+    seritKod31.includes('gizliGostergelerDepo.al()'));
+
+  // --- (6) ISTEK SAYISI: dilimleme SOZLESMEDEN ------------------------
+  ok('31g · uc tavan da sozlesmeden ice aktariliyor, elle yazilmiyor',
+    seritKod31.includes('DEGISIM_AZAMI_SEMBOL') && seritKod31.includes('KRIPTO_AZAMI_ID')
+    && seritKod31.includes('KUR_AZAMI_KOD'));
+  ok('31g · degisim ucundan YALNIZ gunluk donem isteniyor (maliyet)',
+    seritKod31.includes("donemler: ['gunluk']"));
+
+  // --- (7) HAM SAYI KURALI --------------------------------------------
+  ok('31h · fiyat katmaninda `toFixed` YOK',
+    !seritKod31.includes('toFixed'));
+  ok('31h · fiyat katmaninda esik/agirlik/formul adi YOK',
+    !/\besik|\bagirlik/i.test(seritKod31));
+  ok('31h · kartin KENDI `fetch`i YOK',
+    !kartKod31.includes('fetch('));
+
+  // --- (8) SESSIZ KIRPMA YOK ------------------------------------------
+  ok('31i · cozulemeyen kalem listede KALIYOR (`fiyat: null` + sebep)',
+    seritKod31.includes('sebep: fiyat == null ? SEBEP_UC_SUSTU : null')
+    && seritKod31.includes('SEBEP_FON') && seritKod31.includes('SEBEP_SEMBOLSUZ')
+    && seritKod31.includes('SEBEP_CGID'));
+  ok('31i · gerekce EKRANDA ve SAYISIYLA yazili',
+    kartKod31.includes('sebepSayisi') && kartKod31.includes("' kalem: '"));
+  ok('31i · olculen / toplam sayaci ekranda',
+    kartKod31.includes("olculen + '/'"));
+  ok('31i · uclarin kendi uyarilari ekranda',
+    kartKod31.includes('Uçların uyarıları'));
+  ok('31i · olculmeyen DURUM olculen gibi basilmiyor (bos hal ayri)',
+    kartKod31.includes('sonuc == null') && kartKod31.includes('kalemler.length === 0'));
+
+  // --- (9) EKRAN DAVRANISI --------------------------------------------
+  ok('31j · acilis istegi IPTAL EDILEBILIR (`AbortController`)',
+    kartKod31.includes('new AbortController()') && kartKod31.includes('kesici.abort()'));
+  ok('31j · mesgul hali TURETILMIS, etkide `setState` yok',
+    kartKod31.includes('const mesgul = sonuc === null;'));
+  ok('31j · TOPLAM alinmiyor ve gerekcesi ekranda yazili',
+    kartKod31.includes('Toplam ALINMIYOR'));
+  ok('31j · yasal uyari kartta yazili',
+    kartKod31.includes('yatırım tavsiyesi değildir'));
+}
+
+// =====================================================================
+//  (32) ICERIDEN ISLEMLER KARTI — webin bilgi paneli native detayda
+// ---------------------------------------------------------------------
+//  NE OLCULUYOR: webin "Iceriden islemler" panelinin (app.js:5127)
+//  native karsiligi EKRANDA MI, ucu BAGLI MI, ve webin tasidigi
+//  INVARYANT korunuyor mu: TEMEL SKORA DAHIL DEGIL (kullanici tercihi
+//  2026-08-15, app.js:5131).
+//
+//  Uc tarafi kapi 17'de olculuyor (rota, 400'ler, 12 dosya tavani).
+//  BURADA yalniz EKRAN tarafi var: sozlugun anahtar kumesi ucun KAPALI
+//  kod kumeleriyle birebir mi, kart kendi Turkce cumlesini uyduruyor
+//  mu, pazari KENDI mi cikariyor, dusen kayit sessiz mi kayboluyor.
+// =====================================================================
+{
+  const APPJS_PATH_32 = path.join(ROOT, 'app.js');
+  const UC_PATH_32 = path.join(ROOT, 'api', '_iceriden.js');
+  const TIP_PATH_32 = path.join(ROOT, 'mobile', 'src', 'api', 'types.ts');
+  const ISTEMCI_PATH_32 = path.join(ROOT, 'mobile', 'src', 'api', 'client.ts');
+  const SOZLUK_PATH_32 = path.join(ROOT, 'mobile', 'src', 'lib', 'sozluk.ts');
+  const KART_PATH_32 = path.join(
+    ROOT, 'mobile', 'src', 'components', 'detay', 'IceridenKart.tsx');
+  const GIRIS_PATH_32 = path.join(
+    ROOT, 'mobile', 'src', 'components', 'detay', 'index.ts');
+  const EKRAN_PATH_32 = path.join(
+    ROOT, 'mobile', 'src', 'app', 'hisse', '[sembol].tsx');
+  const appSrc32 = readFileSync(APPJS_PATH_32, 'utf8');
+  const ucSrc32 = readFileSync(UC_PATH_32, 'utf8');
+  const tipSrc32 = readFileSync(TIP_PATH_32, 'utf8');
+  const istemciSrc32 = readFileSync(ISTEMCI_PATH_32, 'utf8');
+  const sozlukSrc32 = readFileSync(SOZLUK_PATH_32, 'utf8');
+  const kartSrc32 = readFileSync(KART_PATH_32, 'utf8');
+  const girisSrc32 = readFileSync(GIRIS_PATH_32, 'utf8');
+  const ekranSrc32 = readFileSync(EKRAN_PATH_32, 'utf8');
+
+  // Kart basliklari `fetch(`, `esik`, `toFixed` gibi adlari GEREKCE
+  // olarak ALINTILIYOR; siyrilmasa "yok" kapilari kendi aciklamalarina
+  // takilirdi (§30/§31 ile ayni gerekce).
+  const yorumsuz32 = (s) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  const kartKod32 = yorumsuz32(kartSrc32);
+
+  // --- (0) ONCULLER: webde ne var -------------------------------------
+  ok('32a · ONCUL · web paneli var ve TEMEL SKORA DAHIL DEGIL diyor',
+    appSrc32.includes('İçeriden işlemler (bilgi paneli — TEMEL SKORA DAHİL DEĞİL)')
+    && appSrc32.includes('Kullanıcı tercihi (2026-08-15): yalnız bilgi, skoru etkilemez.'));
+  ok('32a · ONCUL · web pazari ARGUMAN olarak aliyor (cikarim yok)',
+    appSrc32.includes('async function fillInsider(symbol, market, req)')
+    && appSrc32.includes("market === 'US' ? insiderUS(symbol) : insiderBIST(symbol)"));
+  ok('32a · ONCUL · webde US ve BIST ayaklari AYRI govde',
+    appSrc32.includes("const H = 'İçeriden işlemler (SEC Form 4)'")
+    && appSrc32.includes("const H = 'İçeriden işlemler (KAP)'"));
+
+  // --- (1) SOZLUK ANAHTARLARI UCUN KAPALI KUMESIYLE BIREBIR -----------
+  //  Kod -> Turkce cevrimi TEK YERDE (`sozluk.ts`, HAM SAYI KURALI
+  //  §5.1). Anahtar kumesi kayarsa ekranda `undefined` basilir; bu
+  //  yuzden kume SOZLESMEDEN (types.ts birlesimi) okunup karsilastiriliyor.
+  const kumeTip32 = (ad) => {
+    const m = new RegExp('export type ' + ad + ' =([\\s\\S]*?);').exec(tipSrc32);
+    if (!m) return null;
+    return (m[1].match(/'([a-z0-9_]+)'/g) || []).map((x) => x.slice(1, -1)).sort();
+  };
+  const kumeSozluk32 = (ad) => {
+    const m = new RegExp('export const ' + ad + '[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};').exec(sozlukSrc32);
+    if (!m) return null;
+    return (m[1].match(/^\s*([a-z0-9_]+):/gm) || [])
+      .map((x) => x.trim().replace(':', '')).sort();
+  };
+  const esit32 = (a, b) => Array.isArray(a) && Array.isArray(b)
+    && a.length === b.length && a.join(',') === b.join(',');
+
+  ok('32b · durum sozlugu anahtarlari `IceridenDurumKodu` ile birebir',
+    esit32(kumeSozluk32('ICERIDEN_DURUM_SOZLUK'), kumeTip32('IceridenDurumKodu')),
+    String(kumeSozluk32('ICERIDEN_DURUM_SOZLUK')) + ' / ' + String(kumeTip32('IceridenDurumKodu')));
+  ok('32b · yon sozlugu ve rozeti `IceridenYonKodu` ile birebir',
+    esit32(kumeSozluk32('ICERIDEN_YON_SOZLUK'), kumeTip32('IceridenYonKodu'))
+    && esit32(kumeSozluk32('ICERIDEN_YON_ROZET'), kumeTip32('IceridenYonKodu')),
+    String(kumeSozluk32('ICERIDEN_YON_SOZLUK')));
+  ok('32b · iliski sozlugu `IceridenIliskiKodu` ile birebir',
+    esit32(kumeSozluk32('ICERIDEN_ILISKI_SOZLUK'), kumeTip32('IceridenIliskiKodu')),
+    String(kumeSozluk32('ICERIDEN_ILISKI_SOZLUK')));
+  ok('32b · kaynak sozlugu `IceridenKaynakKodu` ile birebir',
+    esit32(kumeSozluk32('ICERIDEN_KAYNAK_SOZLUK'), kumeTip32('IceridenKaynakKodu')),
+    String(kumeSozluk32('ICERIDEN_KAYNAK_SOZLUK')));
+
+  // Sozlesme ile UCUN GERCEKTEN BASTIGI kodlar da ayni olmak zorunda:
+  // types.ts elle yazilmis bir belge, uc ise kodu URETEN yer.
+  ok('32b · ucun bastigi DURUM kodlari sozlesmede tanimli',
+    ["durumKodu: 'kayit_yok'", "durumKodu: 'bildirim_yok'",
+      "? 'bildirim_yok'", ": (yonKod ? 'ok' : 'acik_piyasa_yok')",
+      "durumKodu: sirali.length ? 'ok' : 'bildirim_yok'"]
+      .every((p) => ucSrc32.includes(p))
+    && esit32(kumeTip32('IceridenDurumKodu'),
+      ['acik_piyasa_yok', 'bildirim_yok', 'kayit_yok', 'ok']));
+  ok('32b · ucun bastigi YON kodlari sozlesmede tanimli (esik YOK)',
+    ucSrc32.includes("return 'alim';") && ucSrc32.includes("return 'satim';")
+    && ucSrc32.includes("return 'alim_agirlikli';")
+    && ucSrc32.includes("return 'satim_agirlikli';")
+    && ucSrc32.includes("return 'dengeli';")
+    && esit32(kumeTip32('IceridenYonKodu'),
+      ['alim', 'alim_agirlikli', 'dengeli', 'satim', 'satim_agirlikli']));
+  ok('32b · ucun bastigi ILISKI kodlari sozlesmede tanimli',
+    ucSrc32.includes("iliskiKodlari.push('yk')")
+    && ucSrc32.includes("iliskiKodlari.push('yonetici')")
+    && ucSrc32.includes("iliskiKodlari.push('ortak10')")
+    && esit32(kumeTip32('IceridenIliskiKodu'), ['ortak10', 'yk', 'yonetici']));
+  ok('32b · ucun bastigi KAYNAK kodlari sozlesmede tanimli',
+    ucSrc32.includes("let kaynakKodu = 'kap';")
+    && ucSrc32.includes("kaynakKodu = 'haber';")
+    && ucSrc32.includes("kaynakKodu = 'kap_haber';")
+    && esit32(kumeTip32('IceridenKaynakKodu'), ['haber', 'kap', 'kap_haber']));
+  ok('32b · ucta Turkce CUMLE yok (cevrim yalniz sozlukte)',
+    !/Pencerede|agirlikli olarak|yonetim kurulu uyesi/.test(ucSrc32));
+
+  // --- (2) VAR, DISA ACIK VE EKRANA TAKILI ----------------------------
+  ok('32c · kart var ve adiyla disa aciliyor',
+    kartKod32.includes('export function IceridenKart({ sembol, pazar }: IceridenKartProps)')
+    && girisSrc32.includes("export { IceridenKart, type IceridenKartProps } from './IceridenKart';"));
+  ok('32c · kart HISSE DETAY ekranina TAKILI',
+    ekranSrc32.includes('IceridenKart,')
+    && ekranSrc32.includes('<IceridenKart sembol={sembol} pazar={satir.market} />'));
+  ok('32c · istemci sarmalayicisi var ve adresi tanimli',
+    istemciSrc32.includes('export async function fetchIceriden(')
+    && istemciSrc32.includes("iceriden: '/api/iceriden',"));
+
+  // --- (3) PAZAR CIKARIMI YOK: cagirandan geliyor ---------------------
+  ok('32d · kart pazari PROP olarak aliyor',
+    kartSrc32.includes('export type IceridenKartProps = {')
+    && /pazar:\s*IceridenPazar;/.test(kartKod32)
+    && kartSrc32.includes('Pazar ÇAĞIRANDAN gelir; istemci pazar ÇIKARIMI yapmaz.'));
+  ok('32d · kart pazari KENDI CIKARMIYOR (`.IS` / uzanti tahmini yok)',
+    !/\.IS|endsWith\(|BIST_SEMBOL|pazarCikar/.test(kartKod32));
+  ok('32d · pazari UCUN DONDURDUGU govde ayiriyor (prop ile ayrim degil)',
+    kartKod32.includes("govde.pazar === 'US' ? ("));
+
+  // --- (4) HAM SAYI KURALI: hesap/esik/uydurma cumle YOK --------------
+  ok('32e · kartin KENDI `fetch`i YOK (api katmanindan cagiriyor)',
+    !kartKod32.includes('fetch(') && kartKod32.includes('fetchIceriden(sembol, pazar'));
+  ok('32e · kartta esik/agirlik/formul adi YOK',
+    !/\besik|\bagirlik|ESIK_|AGIRLIK_/i.test(kartKod32));
+  ok('32e · kartta `toFixed` YOK (sayi bicimi tek yerde, `sayiMetni`)',
+    !kartKod32.includes('toFixed')
+    && kartKod32.includes('function sayiMetni(n: number | null | undefined): string'));
+  ok('32e · olculmeyen sayi `EMPTY`, `0` DEGIL',
+    kartKod32.includes("if (typeof n !== 'number' || !Number.isFinite(n)) return EMPTY;")
+    && !/deger:\s*0\b/.test(kartKod32));
+  ok('32e · net tutar UCTA hesaplaniyor, kartta DEGIL',
+    ucSrc32.includes('t.netTutar = t.alisTutar - t.satisTutar')
+    && !/alisTutar\s*-\s*/.test(kartKod32));
+  ok('32e · Turkce cumle SOZLUKTEN geliyor (kart uydurmuyor)',
+    kartKod32.includes('ICERIDEN_DURUM_SOZLUK[g.durumKodu]')
+    && kartKod32.includes('ICERIDEN_YON_SOZLUK[g.yonKod]')
+    && kartKod32.includes('ICERIDEN_KAYNAK_SOZLUK[g.kaynakKodu]'));
+
+  // --- (5) SKORA GIRMEZ INVARYANTI EKRANDA ----------------------------
+  ok('32f · kart motoru/skoru HIC CAGIRMIYOR',
+    !/buildMotor|fetchScore|fetchAnalyze|skorGirdisi/.test(kartKod32));
+  ok('32f · "skora girmez" rozeti EKRANDA',
+    kartSrc32.includes('<Pill label="skora girmez" tone="info" glyph={null} size="sm" />'));
+  ok('32f · cerceve satiri skora GIRMEDIGINI yaziyor',
+    kartSrc32.includes("' — yalnız bilgi: teknik ya da temel skora GİRMEZ.'"));
+  ok('32f · yasal uyari kartta yazili',
+    kartSrc32.includes('yatırım tavsiyesi değildir'));
+
+  // --- (6) SESSIZ KIRPMA YOK: iki sayac da ekranda --------------------
+  ok('32g · US · secilen bildirim ve okunan kayit AYRI AYRI basiliyor',
+    kartKod32.includes('sayiMetni(g.bildirimSayisi)')
+    && kartKod32.includes("' bildirim seçildi · '")
+    && kartKod32.includes('sayiMetni(g.okunan)')
+    && kartKod32.includes("' kayıt okundu'"));
+  ok('32g · BIST · suzgecten gecen ve ekrana basilan AYRI AYRI basiliyor',
+    kartKod32.includes('sayiMetni(g.bulunan)')
+    && kartKod32.includes('sayiMetni(g.maddeSayisi)')
+    && kartKod32.includes("' tanesi ekranda'"));
+  ok('32g · pencere uzunlugu SAYAC satirinda UCTAN okunuyor',
+    kartKod32.includes("g.pencereGun +")
+    && kartKod32.includes("' günlük pencere · '")
+    && ucSrc32.includes('export const PENCERE_GUN = 90;'));
+  ok('32g · acik piyasa DISI adet AYRI satir (alim-satim sayilmiyor)',
+    kartSrc32.includes('Hibe, opsiyon kullanımı vb. — alım-satım değil, tutarı yok.'));
+  ok('32g · ucun kendi `uyari` metni OLDUGU GIBI tasiniyor',
+    kartKod32.includes('uyari ? <Text style={[type.micro, { color: colors.textDim }]}>{uyari}</Text> : null'));
+
+  // --- (7) BIST AYAGI: YAPISAL SAYI YOK, GEREKCESI EKRANDA -----------
+  {
+    const bist32 = kartKod32.slice(kartKod32.indexOf('function BistGovde('));
+    ok('32h · BIST govdesinde adet/tutar alani HIC OKUNMUYOR',
+      !/alisAdet|satisAdet|alisTutar|satisTutar|netTutar|digerAdet/.test(bist32));
+    ok('32h · BIST govdesinde `yonKod` da OKUNMUYOR (uc da basmiyor)',
+      !bist32.includes('yonKod'));
+    ok('32h · sayinin NEDEN olmadigi EKRANDA yazili (bos alan basilmiyor)',
+      kartSrc32.includes('KAP bildirimi adet ve tutarı YAPISAL olarak vermiyor'));
+    ok('32h · bildirim basligi YOKSA bos hal AYRI basiliyor',
+      kartSrc32.includes('Pencerede bu sembol için bildirim başlığı yok.'));
+  }
+
+  // --- (8) EKRAN DAVRANISI --------------------------------------------
+  ok('32i · istek anahtari SEMBOL + PAZAR (iki tur birbirine karismaz)',
+    kartKod32.includes("sembol + '|iceriden|' + pazar"));
+  ok('32i · uc ariza / bos / olculdu halleri AYRI (`Durum` + sart)',
+    /<Durum[\s\S]{0,200}durum=\{durum\}[\s\S]{0,200}hata=\{hata\}/.test(kartKod32)
+    && kartKod32.includes('yenile={yenile}')
+    && kartKod32.includes("durum === 'veri' && govde"));
+  ok('32i · dis baglanti acilisi SESSIZ COKMUYOR',
+    kartKod32.includes('void Linking.openURL(m.adres).catch(() => {})'));
+}
+
+// =====================================================================
+//  (33) "NEDEN HAREKET EDIYOR?" — webin TARAYICI hesabi uca tasindi
+// ---------------------------------------------------------------------
+//  NE OLCULUYOR: webin "Neden hareket ediyor?" bolumu (`fillSpWhy`)
+//  esikleri ve karar agacini TARAYICIDA tutuyordu; native istemci hesap
+//  YAPMAZ, bu yuzden karar MOTORA (`why*`), hesap `/api/neden` ucuna
+//  tasindi. Bu kapi tasimanin GERI KAYMADIGINI olcuyor:
+//    - esik kopyasi webde KALMADI, motor fonksiyonlari CAGRILIYOR,
+//    - uc kendi esigini UYDURMUYOR, kodlari motordan okuyor,
+//    - sozluk anahtarlari ucun KAPALI kumeleriyle birebir,
+//    - kart hesap/esik/Turkce hukum URETMIYOR,
+//    - dusen manset SESSIZ kaybolmuyor, olculmeyen sayi `0` basilmiyor,
+//    - ve NEDENSELLIK IDDIASI yok.
+//
+//  Ucun rota/400/12-dosya olcumu kapi 17'de; burada ZINCIR var:
+//  web -> motor -> uc -> tip -> sozluk -> kart -> ekran.
+// =====================================================================
+{
+  const APPJS_PATH_33 = path.join(ROOT, 'app.js');
+  const MOTOR_PATH_33 = path.join(ROOT, 'api', '_motor.js');
+  const UC_PATH_33 = path.join(ROOT, 'api', '_neden.js');
+  const TIP_PATH_33 = path.join(ROOT, 'mobile', 'src', 'api', 'types.ts');
+  const ISTEMCI_PATH_33 = path.join(ROOT, 'mobile', 'src', 'api', 'client.ts');
+  const SOZLUK_PATH_33 = path.join(ROOT, 'mobile', 'src', 'lib', 'sozluk.ts');
+  const KART_PATH_33 = path.join(
+    ROOT, 'mobile', 'src', 'components', 'detay', 'HareketKart.tsx');
+  const GIRIS_PATH_33 = path.join(
+    ROOT, 'mobile', 'src', 'components', 'detay', 'index.ts');
+  const EKRAN_PATH_33 = path.join(
+    ROOT, 'mobile', 'src', 'app', 'hisse', '[sembol].tsx');
+  const appSrc33 = readFileSync(APPJS_PATH_33, 'utf8');
+  const motorSrc33 = readFileSync(MOTOR_PATH_33, 'utf8');
+  const ucSrc33 = readFileSync(UC_PATH_33, 'utf8');
+  const tipSrc33 = readFileSync(TIP_PATH_33, 'utf8');
+  const istemciSrc33 = readFileSync(ISTEMCI_PATH_33, 'utf8');
+  const sozlukSrc33 = readFileSync(SOZLUK_PATH_33, 'utf8');
+  const kartSrc33 = readFileSync(KART_PATH_33, 'utf8');
+  const girisSrc33 = readFileSync(GIRIS_PATH_33, 'utf8');
+  const ekranSrc33 = readFileSync(EKRAN_PATH_33, 'utf8');
+
+  // Basliklar `fetch(`, `esik`, `3.0` gibi adlari GEREKCE olarak
+  // ALINTILIYOR; siyrilmasa "yok" kapilari kendi aciklamalarina
+  // takilirdi (kapi 30/31/32 ile ayni gerekce).
+  const yorumsuz33 = (s) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  const kartKod33 = yorumsuz33(kartSrc33);
+  const ucKod33 = yorumsuz33(ucSrc33);
+
+  // --- (0) WEB TARAFI: esik kopyasi KALKTI ----------------------------
+  ok('33a - ONCUL - webde esik kopyasi KALMADI (satir ici BIG/MOD yok)',
+    !appSrc33.includes('const BIG = 3.0, MOD = 1.2'));
+  ok('33a - ONCUL - web ekrani ARTIK motor fonksiyonunu cagiriyor',
+    appSrc33.includes('const pct = whyGunlukYuzde(price, prev);')
+    && appSrc33.includes('const hareketKod = whyHareketKod(pct);')
+    && appSrc33.includes('const uzlasma = whyUzlasmaKod(pct, sScore, sHits);'));
+  ok('33a - ONCUL - webin karar dallari KODA bakiyor (sayiya degil)',
+    appSrc33.includes("if (uzlasma === 'olcum_yok')")
+    && appSrc33.includes("else if (uzlasma === 'sakin')")
+    && appSrc33.includes("else if (uzlasma === 'haber_uyumlu')")
+    && appSrc33.includes("else if (uzlasma === 'celiski')"));
+
+  // --- (1) ESIK TEK YERDE: MOTORDA ------------------------------------
+  ok('33b - esikler MOTOR diliminde, ADLANDIRILMIS sabit olarak',
+    appSrc33.includes('const WHY_SERT = 3.0;')
+    && appSrc33.includes('const WHY_BELIRGIN = 1.2;'));
+  ok('33b - URETILMIS motorda da ayni esik ve why* kumesi var',
+    motorSrc33.includes('const WHY_SERT = 3.0;')
+    && motorSrc33.includes('whyUzlasmaKod')
+    && motorSrc33.includes('WHY_UZLASMA_KODLARI'));
+  ok('33b - UCTA esik SAYISI YOK (karari motordan aliyor)',
+    !/[^0-9.]3\.0[^0-9]|[^0-9.]1\.2[^0-9]|0\.12/.test(ucKod33)
+    && ucKod33.includes('ENG.whyHareketKod(yuzde)')
+    && ucKod33.includes('ENG.whyUzlasmaKod(yuzde, duy.puan, duy.sinyal)'));
+  ok('33b - uc kod KUMELERINI de motordan basiyor (ikinci liste yok)',
+    ucKod33.includes('ENG.WHY_HAREKET_KODLARI')
+    && ucKod33.includes('ENG.WHY_UZLASMA_KODLARI')
+    && ucKod33.includes('ENG.WHY_KUTUP_KODLARI'));
+
+  // --- (2) KOD KUMELERI: motor = sozlesme = sozluk --------------------
+  const kumeTip33 = (ad) => {
+    const m = new RegExp('export type ' + ad + ' =([\\s\\S]*?);').exec(tipSrc33);
+    if (!m) return null;
+    return (m[1].match(/'([a-z0-9_]+)'/g) || [])
+      .map((x) => x.slice(1, -1)).sort();
+  };
+  const kumeSozluk33 = (ad) => {
+    const m = new RegExp('export const ' + ad + '[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};')
+      .exec(sozlukSrc33);
+    if (!m) return null;
+    return (m[1].match(/^\s*([a-z0-9_]+):/gm) || [])
+      .map((x) => x.trim().replace(':', '')).sort();
+  };
+  const kumeMotor33 = (ad) => {
+    const m = new RegExp('const ' + ad + ' = \\[([^\\]]*)\\]').exec(motorSrc33);
+    if (!m) return null;
+    return (m[1].match(/'([a-z0-9_]+)'/g) || [])
+      .map((x) => x.slice(1, -1)).sort();
+  };
+  const esit33 = (a, b) => Array.isArray(a) && Array.isArray(b)
+    && a.length === b.length && a.join(',') === b.join(',');
+
+  const ESLEME_33 = [
+    ['WHY_HAREKET_KODLARI', 'NedenHareketKodu', 'NEDEN_HAREKET_SOZLUK'],
+    ['WHY_YON_KODLARI', 'NedenYonKodu', 'NEDEN_YON_SOZLUK'],
+    ['WHY_HABER_YON_KODLARI', 'NedenHaberYonKodu', 'NEDEN_HABER_YON_SOZLUK'],
+    ['WHY_UZLASMA_KODLARI', 'NedenUzlasmaKodu', 'NEDEN_UZLASMA_SOZLUK'],
+    ['WHY_KUTUP_KODLARI', 'NedenKutupKodu', 'NEDEN_KUTUP_SOZLUK'],
+  ];
+  for (const [motorAd, tipAd, sozlukAd] of ESLEME_33) {
+    const mk = kumeMotor33(motorAd);
+    const tk = kumeTip33(tipAd);
+    const sk = kumeSozluk33(sozlukAd);
+    ok('33c - ' + motorAd + ' = ' + tipAd + ' = ' + sozlukAd + ' (birebir)',
+      Array.isArray(mk) && mk.length > 0 && esit33(mk, tk) && esit33(tk, sk),
+      String(mk) + ' | ' + String(tk) + ' | ' + String(sk));
+  }
+
+  // --- (3) VAR, DISA ACIK, EKRANA TAKILI ------------------------------
+  ok('33d - kart var ve adiyla disa aciliyor',
+    kartKod33.includes('export function HareketKart(')
+    && girisSrc33.includes("export { HareketKart, type HareketKartProps } from './HareketKart';"));
+  ok('33d - kart HISSE DETAY ekranina TAKILI',
+    ekranSrc33.includes('HareketKart,')
+    && ekranSrc33.includes('<HareketKart sembol={sembol} pazar={satir.market} />'));
+  ok('33d - istemci sarmalayicisi var ve adresi tanimli',
+    istemciSrc33.includes('export async function fetchNeden(')
+    && istemciSrc33.includes("neden: '/api/neden',"));
+  ok('33d - ad CAKISMASI yok: kesfet/NedenKart BASKA ozellik',
+    !kartKod33.includes('NedenKart'));
+
+  // --- (4) HAM SAYI KURALI: kartta hesap/esik/uydurma cumle YOK -------
+  ok('33e - kartin KENDI fetchi YOK (api katmanindan cagiriyor)',
+    !kartKod33.includes('fetch(')
+    && kartKod33.includes('fetchNeden(sembol, pazar'));
+  ok('33e - kartta esik/agirlik adi YOK',
+    !/\besik|\bagirlik|ESIK_|AGIRLIK_/i.test(kartKod33));
+  ok('33e - kartta YUZDE HESABI yok (uc yuzde alanini veriyor)',
+    !/prevClose|oncekiKapanis\s*\)\s*\*/.test(kartKod33)
+    && kartKod33.includes('yuzdeMetni(g.yuzde)'));
+  ok('33e - toFixed YALNIZ sunum yardimcisinda (tek yerde)',
+    (kartKod33.match(/toFixed/g) || []).length === 1
+    && /function yuzdeMetni[\s\S]{0,400}toFixed/.test(kartKod33));
+  ok('33e - kart KENDI esik karsilastirmasini YAPMIYOR',
+    !/Math\.abs|>=\s*[0-9]|<=\s*-?[0-9]/.test(kartKod33));
+  ok('33e - Turkce cumle SOZLUKTEN geliyor (kart uydurmuyor)',
+    kartKod33.includes('NEDEN_UZLASMA_SOZLUK[g.uzlasmaKod]')
+    && kartKod33.includes('NEDEN_HAREKET_SOZLUK[g.hareketKod]')
+    && kartKod33.includes('NEDEN_YON_SOZLUK[g.yonKod]')
+    && kartKod33.includes('NEDEN_HABER_YON_SOZLUK[g.haberYonKod]')
+    && kartKod33.includes('NEDEN_KUTUP_SOZLUK[b.kutupKod]'));
+
+  // --- (5) OLCULMEYEN SAYI BASILMAZ -----------------------------------
+  ok('33f - olculmeyen deger EMPTY, 0 DEGIL',
+    kartKod33.includes('return EMPTY;')
+    && kartKod33.includes('Number.isFinite(v)')
+    && kartKod33.includes('Number.isFinite(n)'));
+  ok('33f - duyarlilik OLCULEMEDIYSE sifir puan basilmiyor, soyleniyor',
+    kartSrc33.includes('ÖLÇÜLEMEDİ'));
+  ok('33f - uc olcum YOKSA uydurma kod basmiyor (ariza kodu var)',
+    ucKod33.includes("'motor_yok'") && ucKod33.includes("'neden_alinamadi'"));
+  ok('33f - uc duyarlilik yoksa haberYonKod null ve uzlasmaKod olcum_yok',
+    ucKod33.includes('duy ? ENG.whyHaberYonKod(duy.puan, duy.sinyal) : null')
+    && ucKod33.includes("'olcum_yok'"));
+  ok('33f - EKSIK olcum (tam: false) EKRANDA soyleniyor',
+    kartKod33.includes('!g.tam')
+    && kartSrc33.includes('bu ölçüm EKSİK'));
+
+  // --- (6) SESSIZ KIRPMA YOK ------------------------------------------
+  ok('33g - listeye girmeyen manset sayisi (atilan) EKRANDA',
+    kartKod33.includes('sayiMetni(g.atilan)'));
+  ok('33g - IKI kaynak sayaci da (fiyat + haber) EKRANDA',
+    kartKod33.includes('sayiMetni(g.sayac.fiyat.basari)')
+    && kartKod33.includes('sayiMetni(g.sayac.fiyat.istek)')
+    && kartKod33.includes('sayiMetni(g.sayac.haber.basari)')
+    && kartKod33.includes('sayiMetni(g.sayac.haber.istek)'));
+  ok('33g - uc atilani GERCEKTEN olcuyor (kirpma sayiliyor)',
+    ucKod33.includes('atilan'));
+  ok('33g - PUANLANAN ALAN sapmasi EKRANDA yazili (web ile fark)',
+    kartSrc33.includes('web sürümünden sapabilir'));
+  ok('33g - uc uyarisi kartta OLDUGU GIBI geciyor',
+    kartKod33.includes('g.uyari'));
+
+  // --- (7) SKORA GIRMEZ + NEDENSELLIK IDDIASI YOK ---------------------
+  ok('33h - kart motoru/skoru HIC CAGIRMIYOR',
+    !/buildMotor|fetchScore|fetchAnalyze/.test(kartKod33));
+  ok('33h - "skora girmez" rozeti EKRANDA',
+    kartSrc33.includes('label="skora girmez"'));
+  ok('33h - cerceve satiri skora GIRMEDIGINI yaziyor',
+    kartSrc33.includes('skora GİRMEZ'));
+  ok('33h - NEDENSELLIK IDDIASI acikca REDDEDILIYOR',
+    kartSrc33.includes('anlamına GELMEZ'));
+  ok('33h - sozlukte de nedensellik dili YOK',
+    !/yüzünden|sebebiyle|nedeniyle/.test(sozlukSrc33.slice(
+      sozlukSrc33.indexOf('export const NEDEN_UZLASMA_SOZLUK'),
+      sozlukSrc33.indexOf('export const NEDEN_KUTUP_SOZLUK'))));
+  ok('33h - yasal uyari kartta yazili',
+    kartSrc33.includes('yatırım tavsiyesi değildir'));
+
+  // --- (8) EKRAN DAVRANISI --------------------------------------------
+  ok('33i - kart pazari PROP olarak aliyor, KENDI CIKARMIYOR',
+    /pazar:\s*NedenPazar/.test(kartKod33)
+    && !/\.IS'|endsWith\(|pazarCikar/.test(kartKod33));
+  ok('33i - istek anahtari SEMBOL + PAZAR (iki tur karismaz)',
+    kartKod33.includes("sembol + '|neden|' + pazar"));
+  ok('33i - ariza / bos / olculdu halleri AYRI (Durum + sart)',
+    kartKod33.includes('durum={durum}')
+    && kartKod33.includes('hata={hata}')
+    && kartKod33.includes('yenile={yenile}')
+    && kartKod33.includes("durum === 'veri'"));
+  ok('33i - dis baglanti acilisi SESSIZ COKMUYOR',
+    kartKod33.includes('Linking.openURL(b.adres).catch(() => {})'));
+}
+
+// =====================================================================
+//  (34) KATALIZOR / RISK -> YAKLASAN TEMETTU: web hesabi uca tasindi
+// ---------------------------------------------------------------------
+//  NE OLCULUYOR: webin "Katalizor / Risk" satiri (`fillCatalysts`) gun
+//  farkini ve `days <= 45` esigini TARAYICIDA tutuyordu; native istemci
+//  hesap YAPMAZ, esik TASIMAZ -> karar MOTORA (`katGunFarki` /
+//  `katTemettuKod` / `KAT_TEMETTU_GUN`), hesap `/api/katalizor` ucuna
+//  tasindi. Bu kapi tasimanin GERI KAYMADIGINI olcuyor.
+//
+//  WEBDEKI SATIR UC BACAKLI; KART YALNIZ BIRINI BASIYOR, BILINCLI:
+//    (1) OYNAKLIK  -> `/api/analyze` + `RiskOdulKart`ta ZATEN olculuyor
+//        (ayni ATR'yi iki kez olcmemek icin burada YOK),
+//    (2) YAKLASAN TEMETTU -> `KatalizorKart` (bu kapinin konusu),
+//    (3) HABER UYARISI -> OLCUM DEGIL, sabit cumle; `lib/sozluk.ts`
+//        icinde (`KATALIZOR_HABER_UYARISI`), uctan TASINMIYOR.
+//  Kapi bu ucunu de AYRI AYRI dogruluyor; yoksa "eksik port" ile
+//  "bilincli bolunme" ayirt edilemez.
+//
+//  Ucun rota / 400 / 12-dosya olcumu kapi 17'de; burada ZINCIR var:
+//  web -> motor -> uc -> tip -> sozluk -> kart -> ekran.
+// =====================================================================
+{
+  const APPJS_PATH_34 = path.join(ROOT, 'app.js');
+  const MOTOR_PATH_34 = path.join(ROOT, 'api', '_motor.js');
+  const UC_PATH_34 = path.join(ROOT, 'api', '_katalizor.js');
+  const TIP_PATH_34 = path.join(ROOT, 'mobile', 'src', 'api', 'types.ts');
+  const ISTEMCI_PATH_34 = path.join(ROOT, 'mobile', 'src', 'api', 'client.ts');
+  const SOZLUK_PATH_34 = path.join(ROOT, 'mobile', 'src', 'lib', 'sozluk.ts');
+  const KART_PATH_34 = path.join(
+    ROOT, 'mobile', 'src', 'components', 'detay', 'KatalizorKart.tsx');
+  const GIRIS_PATH_34 = path.join(
+    ROOT, 'mobile', 'src', 'components', 'detay', 'index.ts');
+  const EKRAN_PATH_34 = path.join(
+    ROOT, 'mobile', 'src', 'app', 'hisse', '[sembol].tsx');
+  const RISK_PATH_34 = path.join(
+    ROOT, 'mobile', 'src', 'components', 'detay', 'RiskOdulKart.tsx');
+  const TEMETTU_PATH_34 = path.join(
+    ROOT, 'mobile', 'src', 'components', 'detay', 'TemettuKart.tsx');
+  const appSrc34 = readFileSync(APPJS_PATH_34, 'utf8');
+  const motorSrc34 = readFileSync(MOTOR_PATH_34, 'utf8');
+  const ucSrc34 = readFileSync(UC_PATH_34, 'utf8');
+  const tipSrc34 = readFileSync(TIP_PATH_34, 'utf8');
+  const istemciSrc34 = readFileSync(ISTEMCI_PATH_34, 'utf8');
+  const sozlukSrc34 = readFileSync(SOZLUK_PATH_34, 'utf8');
+  const kartSrc34 = readFileSync(KART_PATH_34, 'utf8');
+  const girisSrc34 = readFileSync(GIRIS_PATH_34, 'utf8');
+  const ekranSrc34 = readFileSync(EKRAN_PATH_34, 'utf8');
+  const riskSrc34 = readFileSync(RISK_PATH_34, 'utf8');
+  const temettuSrc34 = readFileSync(TEMETTU_PATH_34, 'utf8');
+
+  // Basliklar `45`, `esik`, `fetch(` gibi adlari GEREKCE olarak
+  // ALINTILIYOR; siyrilmasa "yok" kapilari kendi aciklamalarina
+  // takilirdi (kapi 30-33 ile ayni gerekce).
+  const yorumsuz34 = (s) => s
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .replace(/\/\/[^\n]*/g, '');
+  const kartKod34 = yorumsuz34(kartSrc34);
+  const ucKod34 = yorumsuz34(ucSrc34);
+  const tipKod34 = yorumsuz34(tipSrc34);
+
+  // --- (0) WEB TARAFI: esik kopyasi KALKTI ----------------------------
+  const webKod34 = yorumsuz34(appSrc34);
+  // SADECE `fillCatalysts` GOVDESI olculuyor: `days = Math.ceil(...)`
+  // app.js'de BASKA ozelliklerde (kazanc takvimi, grafik ekseni) de
+  // gecerli olarak duruyor; tum dosyayi taramak YANLIS kirmizi verirdi.
+  const katGovde34 = (() => {
+    const bas = webKod34.indexOf('async function fillCatalysts(');
+    if (bas < 0) return null;
+    const son = webKod34.indexOf('\n  function initFundamental(', bas);
+    return son > bas ? webKod34.slice(bas, son) : webKod34.slice(bas);
+  })();
+  ok('34a - ONCUL - `fillCatalysts` govdesi BULUNDU (dilim olculuyor)',
+    typeof katGovde34 === 'string' && katGovde34.length > 400,
+    String(katGovde34 && katGovde34.length));
+  ok('34a - ONCUL - webde satir ici gun farki hesabi KALMADI',
+    !/days\s*=\s*Math\.(round|floor|ceil)/.test(katGovde34 || '')
+    && !/upcoming\.date\s*-\s*today/.test(katGovde34 || ''));
+  ok('34a - ONCUL - webde `days <= 45` esik KARSILASTIRMASI KALMADI',
+    !/days\s*<=\s*45/.test(katGovde34 || ''));
+  ok('34a - ONCUL - web ekrani ARTIK motor fonksiyonlarini cagiriyor',
+    appSrc34.includes('const days = katGunFarki(upcoming.date, today);')
+    && appSrc34.includes("if (katTemettuKod(days) === 'yakin')"));
+  ok('34a - ONCUL - webin karar dali KODA bakiyor (sayiya degil)',
+    !/katTemettuKod\(days\)\s*[<>=]=?\s*[0-9]/.test(webKod34));
+
+  // --- (1) ESIK TEK YERDE: MOTORDA ------------------------------------
+  ok('34b - esik MOTOR diliminde, ADLANDIRILMIS sabit olarak',
+    appSrc34.includes('const KAT_TEMETTU_GUN = 45;')
+    && appSrc34.includes("const KAT_TEMETTU_KODLARI = ['yakin', 'uzak', 'gecti'];"));
+  ok('34b - URETILMIS motorda da ayni esik ve kat* kumesi var',
+    motorSrc34.includes('const KAT_TEMETTU_GUN = 45;')
+    && motorSrc34.includes('katGunFarki')
+    && motorSrc34.includes('katTemettuKod')
+    && motorSrc34.includes('KAT_TEMETTU_KODLARI'));
+  ok('34b - UCTA esik SAYISI YOK (karari motordan aliyor)',
+    !/[^0-9.]45[^0-9]/.test(ucKod34)
+    && ucKod34.includes('ENG.katGunFarki(')
+    && ucKod34.includes('ENG.katTemettuKod('));
+  ok('34b - uc kod KUMESINI de motordan basiyor (ikinci liste yok)',
+    ucKod34.includes('ENG.KAT_TEMETTU_KODLARI'));
+  ok('34b - TIP dosyasinda da esik SAYISI YOK (native esik tasimiyor)',
+    !/[^0-9.]45[^0-9]/.test(tipKod34.slice(
+      tipKod34.indexOf('KATALIZOR_PAZARLAR'))));
+
+  // --- (2) KOD KUMELERI: motor = sozlesme = sozluk --------------------
+  // Karakter sinifi BUYUK HARF de iceriyor: `PAZARLAR` degerleri
+  // 'US' / 'BIST'. Yalniz kucuk harf arayan surum iki kumeyi de BOS
+  // dondurup kapiyi SESSIZ yanlis kirmiziya dusuruyordu.
+  const kumeMotor34 = (ad) => {
+    const m = new RegExp('const ' + ad + ' = \\[([^\\]]*)\\]').exec(motorSrc34);
+    if (!m) return null;
+    return (m[1].match(/'([A-Za-z0-9_]+)'/g) || [])
+      .map((x) => x.slice(1, -1)).sort();
+  };
+  // Tip tarafi `as const` DIZISINDEN turuyor (`(typeof X)[number]`), bu
+  // yuzden kume DIZIDEN okunuyor; `export type` satirinda literal YOK.
+  const kumeTip34 = (ad) => {
+    const m = new RegExp('export const ' + ad + ' = \\[([^\\]]*)\\]')
+      .exec(tipSrc34);
+    if (!m) return null;
+    return (m[1].match(/'([A-Za-z0-9_]+)'/g) || [])
+      .map((x) => x.slice(1, -1)).sort();
+  };
+  const kumeSozluk34 = (ad) => {
+    const m = new RegExp('export const ' + ad + '[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};')
+      .exec(sozlukSrc34);
+    if (!m) return null;
+    return (m[1].match(/^\s*([a-z0-9_]+):/gm) || [])
+      .map((x) => x.trim().replace(':', '')).sort();
+  };
+  const kumeUc34 = (ad) => {
+    const m = new RegExp('export const ' + ad + ' = \\[([^\\]]*)\\]').exec(ucSrc34);
+    if (!m) return null;
+    return (m[1].match(/'([A-Za-z0-9_]+)'/g) || [])
+      .map((x) => x.slice(1, -1)).sort();
+  };
+  const esit34 = (a, b) => Array.isArray(a) && Array.isArray(b)
+    && a.length === b.length && a.join(',') === b.join(',');
+
+  {
+    const mk = kumeMotor34('KAT_TEMETTU_KODLARI');
+    const tk = kumeTip34('KATALIZOR_TEMETTU_KODLARI');
+    const sk = kumeSozluk34('KATALIZOR_TEMETTU_SOZLUK');
+    ok('34c - KAT_TEMETTU_KODLARI = tip dizisi = sozluk (birebir)',
+      Array.isArray(mk) && mk.length === 3 && esit34(mk, tk) && esit34(tk, sk),
+      String(mk) + ' | ' + String(tk) + ' | ' + String(sk));
+  }
+  {
+    // `tarihTuru` kumesinin MOTORDA karsiligi YOK (karar degil, KAYNAK
+    // kunyesi): uc kendi listesini basiyor, tip ve sozluk ona uyacak.
+    const uk = kumeUc34('TARIH_TURLERI');
+    const tk = kumeTip34('KATALIZOR_TARIH_TURLERI');
+    const sk = kumeSozluk34('KATALIZOR_TARIH_TURU_SOZLUK');
+    ok('34c - TARIH_TURLERI (uc) = tip dizisi = sozluk (birebir)',
+      Array.isArray(uk) && uk.length === 2 && esit34(uk, tk) && esit34(tk, sk),
+      String(uk) + ' | ' + String(tk) + ' | ' + String(sk));
+  }
+  {
+    const uk = kumeUc34('PAZARLAR');
+    const tk = kumeTip34('KATALIZOR_PAZARLAR');
+    ok('34c - PAZARLAR (uc) = KATALIZOR_PAZARLAR (tip) birebir',
+      Array.isArray(uk) && uk.length === 2
+      && uk.join(',') === 'BIST,US' && esit34(uk, tk),
+      String(uk) + ' | ' + String(tk));
+    ok('34c - istemci pazari TIP DIZISINDEN dogruluyor (ikinci liste yok)',
+      istemciSrc34.includes('KATALIZOR_PAZARLAR.includes(pazar)'));
+  }
+  ok('34c - uc kod kumelerini CEVAPTA da basiyor (istemci uydurmuyor)',
+    ucKod34.includes('temettu: ENG.KAT_TEMETTU_KODLARI')
+    && ucKod34.includes('tarihTuru: TARIH_TURLERI'));
+
+  // --- (3) VAR, DISA ACIK, EKRANA TAKILI ------------------------------
+  ok('34d - kart var ve adiyla disa aciliyor',
+    kartKod34.includes('export function KatalizorKart(')
+    && girisSrc34.includes(
+      "export { KatalizorKart, type KatalizorKartProps } from './KatalizorKart';"));
+  ok('34d - kart HISSE DETAY ekranina TAKILI',
+    ekranSrc34.includes('KatalizorKart,')
+    && ekranSrc34.includes('<KatalizorKart sembol={sembol} pazar={satir.market} />'));
+  ok('34d - istemci sarmalayicisi var ve adresi tanimli',
+    istemciSrc34.includes('export async function fetchKatalizor(')
+    && istemciSrc34.includes("katalizor: '/api/katalizor',"));
+  ok('34d - ariza cumlesi istemcide KARSILIGI olan kodla eslesiyor',
+    istemciSrc34.includes("case 'katalizor_alinamadi':")
+    && tipSrc34.includes("| 'katalizor_alinamadi'"));
+
+  // --- (4) HAM SAYI KURALI: kartta hesap/esik/uydurma cumle YOK -------
+  ok('34e - kartin KENDI fetchi YOK (api katmanindan cagiriyor)',
+    !kartKod34.includes('fetch(')
+    && kartKod34.includes('fetchKatalizor(sembol, pazar'));
+  ok('34e - kartta esik SAYISI ve esik ADI YOK',
+    !/[^0-9.]45[^0-9]/.test(kartKod34)
+    && !/KAT_TEMETTU_GUN|\besik|\bagirlik|ESIK_|AGIRLIK_/i.test(kartKod34));
+  ok('34e - kartta GUN FARKI hesabi YOK (uc `gun` alanini veriyor)',
+    !/Date\.now\(\)|new Date\(|tarihMs\s*-/.test(kartKod34)
+    && kartKod34.includes('gunMetni(t.gun)'));
+  ok('34e - kartta ORAN/YUZDE donusumu YOK (uc yuzde PUANI veriyor)',
+    !/\*\s*100|\/\s*100/.test(kartKod34)
+    && kartKod34.includes("sayiMetni(t.verimYuzde) + '%'"));
+  ok('34e - kart KENDI bant kararini VERMIYOR, yalniz `kod` okuyor',
+    kartKod34.includes('KATALIZOR_TEMETTU_SOZLUK')
+    && kartKod34.includes('sozluktenSec(KATALIZOR_TEMETTU_SOZLUK, t?.kod)'));
+  ok('34e - Turkce cumle SOZLUKTEN geliyor (kart uydurmuyor)',
+    kartKod34.includes('KATALIZOR_TARIH_TURU_SOZLUK')
+    && kartKod34.includes('KATALIZOR_HABER_UYARISI'));
+  // `uyari` ZATEN izinli TEK Turkce alan (HAM SAYI KURALI). Dolayisiyla
+  // iddia "hic Turkce yok" DEGIL: Turkce gecen TEK satir YASAL UYARI
+  // sabiti olmali. Baska bir satir Turkce kazanirsa kapi kirilir.
+  const turkceSatir34 = yorumsuz34(ucSrc34).split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /[çğıöşüÇĞİÖŞÜ]/.test(l));
+  ok('34e - UCTAN serbest Turkce METIN GELMIYOR (`uyari` disinda)',
+    turkceSatir34.length === 1
+    && turkceSatir34[0].startsWith('const UYARI ='),
+    turkceSatir34.join(' || '));
+  ok('34e - kart motoru/skoru HIC CAGIRMIYOR',
+    !/buildMotor|fetchScore|fetchAnalyze|katTemettuKod|katGunFarki/
+      .test(kartKod34));
+
+  // --- (5) OLCULMEYEN SAYI BASILMAZ -----------------------------------
+  ok('34f - olculmeyen deger EMPTY, 0 DEGIL',
+    kartKod34.includes('return EMPTY;')
+    && (kartKod34.match(/Number\.isFinite/g) || []).length === 2);
+  ok('34f - `0 gun` GECERLI olcum: bugun olarak basiliyor, bos degil',
+    kartKod34.includes("if (gun === 0) return 'bugün';"));
+  ok('34f - olculmeyen TUTAR/VERIM/ODEME satiri HIC CIKMIYOR (0 yok)',
+    kartKod34.includes('t.tutar !== null ?')
+    && kartKod34.includes('t.verimYuzde !== null ?')
+    && kartKod34.includes('t.odendi !== null ?'));
+  ok('34f - yaklasan tarih YOKSA ayri bos hal basiliyor (uydurma yok)',
+    kartKod34.includes('t === null ?')
+    && kartSrc34.includes('ölçülen yaklaşan temettü tarihi yok'));
+  ok('34f - tarih OKUNDU ama bant yoksa cumle UYDURULMUYOR',
+    kartKod34.includes('t.kod ?')
+    && kartSrc34.includes('bandı belirlenemedi'));
+  ok('34f - uc olcum YOKSA uydurma kod basmiyor (ariza kodu var)',
+    ucKod34.includes("'motor_yok'") && ucKod34.includes("'katalizor_alinamadi'"));
+  ok('34f - EKSIK olcum (tam: false) EKRANDA soyleniyor',
+    kartKod34.includes('!g.tam')
+    && kartSrc34.includes('ölçüm eksik olabilir'));
+
+  // --- (6) SESSIZ KIRPMA YOK ------------------------------------------
+  ok('34g - listeye girmeyen ileri tarih sayisi (atilan) EKRANDA',
+    kartKod34.includes('sayiMetni(g.atilan)'));
+  ok('34g - tarihi OKUNAMAYAN madde sayisi da EKRANDA',
+    kartKod34.includes('sayiMetni(g.tarihiOkunamayan)'));
+  ok('34g - uc ikisini de GERCEKTEN olcuyor (kirpma sayiliyor)',
+    ucKod34.includes('atilan:') && ucKod34.includes('tarihiOkunamayan:'));
+  ok('34g - uc uyarisi kartta OLDUGU GIBI geciyor',
+    kartKod34.includes('g.uyari'));
+
+  // --- (7) UC BACAK AYRI: CAKISMA YOK, YERI EKRANDA YAZILI -----------
+  ok('34h - (1) OYNAKLIK bacagi bu kartta YOK (ATR iki kez olculmuyor)',
+    !/atrPlan|oynaklik|ATR/i.test(kartKod34));
+  ok('34h - (1) oynaklik bacagi RiskOdulKart`ta GERCEKTEN duruyor',
+    /atrPlan|oynaklik/i.test(riskSrc34));
+  ok('34h - (2) ham temettu kunyesi TemettuKart`ta, GUN FARKI YOK',
+    /exDividendTs|dividendTs/.test(temettuSrc34)
+    && !/katGunFarki|gunMetni|KATALIZOR_/.test(temettuSrc34));
+  ok('34h - (3) haber uyarisi SABIT cumle: sozlukte, UCTA DEGIL',
+    sozlukSrc34.includes('export const KATALIZOR_HABER_UYARISI')
+    && !ucSrc34.includes('KATALIZOR_HABER_UYARISI'));
+  ok('34h - diger iki bacagin NEREDE olduğu EKRANDA yazili',
+    kartSrc34.includes('Risk / Ödül')
+    && kartSrc34.includes('aynı ölçüm iki kez istenmiyor'));
+
+  // --- (8) SKORA GIRMEZ + YASAL --------------------------------------
+  ok('34i - "skora girmez" rozeti EKRANDA',
+    kartSrc34.includes('label="skora girmez"'));
+  ok('34i - cerceve satiri skora GIRMEDIGINI yaziyor',
+    kartSrc34.includes('skora GİRMEZ'));
+  ok('34i - yasal uyari kartta yazili',
+    kartSrc34.includes('yatırım tavsiyesi değildir'));
+  ok('34i - sozlukte VAAT/TAVSIYE dili YOK',
+    !/kazandırır|garanti|al\/sat|tavsiye ederiz/.test(sozlukSrc34.slice(
+      sozlukSrc34.indexOf('export const KATALIZOR_TEMETTU_SOZLUK'))));
+
+  // --- (9) EKRAN DAVRANISI -------------------------------------------
+  ok('34j - kart pazari PROP olarak aliyor, KENDI CIKARMIYOR',
+    /pazar:\s*KatalizorPazar/.test(kartKod34)
+    && !/\.IS'|endsWith\(|pazarCikar/.test(kartKod34));
+  ok('34j - istek anahtari SEMBOL + PAZAR (iki pazar karismaz)',
+    kartKod34.includes("sembol + '|katalizor|' + pazar"));
+  ok('34j - ariza / bos / olculdu halleri AYRI (Durum + sart)',
+    kartKod34.includes('durum={durum}')
+    && kartKod34.includes('hata={hata}')
+    && kartKod34.includes('yenile={yenile}')
+    && kartKod34.includes("durum === 'veri' && govde"));
 }
 
 

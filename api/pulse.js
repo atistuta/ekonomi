@@ -291,6 +291,31 @@ export const SUNUCU_AZAMI_MADDE = 25;
 // aşmıyor ama ölçülmemiş; gerekirse ÖLÇÜLÜP büyütülür.
 export const AZAMI_SEMBOL_HABER = 4;
 
+// Istemcinin gonderebilecegi azami gun-degisimi sayisi. OLCULMEDI, SINIR:
+// app.js'te izleme listesi uzunlugunun bir ust tavani ARANDI ve BULUNAMADI,
+// yani kullanici listesi teorik olarak uzun olabilir. 240 bir GOVDE KORUMASI
+// (sayi basina ~8 bayt -> ~2 KB, AZAMI_GOVDE_BAYT'in cok altinda); esigin
+// "dogru" sayi oldugu iddia EDILMIYOR. Asilirsa 400 `cok_gunDegisimleri`.
+export const AZAMI_DEGISIM = 240;
+
+/**
+ * ⚠️ ETIKET SATIRLARI: `satirlar` isteğe bağlı, çünkü makro
+ * etiketi (`pulseMakroEtiketKod`) SEKTÖRÜ okuyor, sektör de SEMBOL
+ * ADINDAN geliyor. `gunDegisimleri` bilerek adSİZ tarafını tutuyor;
+ * burada ad OLMADAN ölçüm MÜMKÜN DEĞİL, bu yüzden ad isteniyor
+ * — ama ZORUNLU DEĞİL: gönderilmezse etiket ÜRETİLMEZ, uydurulmaz.
+ * SINIR 40: ekranda ani-hareket listesi 20'yi geçmiyor (`MAX_PUSH`),
+ * iki kat pay bırakıldı. Aşılırsa 400 `cok_satir` — SESSİZ KIRPMA YOK.
+ */
+export const AZAMI_SATIR = 40;
+
+/**
+ * Cevapta taşınan manşet sayısı. 3 = web'in `headlines` tavanı
+ * (`.slice(0, 3)`); ekranın iki yerde ayrı sayıda manşet göstermesi
+ * için bir sebep yok. SEÇİM, ÖLÇÜM DEĞİL.
+ */
+export const AZAMI_MANSET = 3;
+
 /**
  * İstemci manşet VERDİ Mİ? Tek soru, tek yerde — iki ayrı yerde
  * sorulursa bir gün ayrışır ve geriye dönük uyum sessizce kırılır.
@@ -373,10 +398,27 @@ try {
 }
 
 /**
- * Tek manşet listesini doğrula ve motorun okuduğu alanlara İNDİR.
+ * ⚠️ İSTEMCİDEN GELEN BAĞLANTI GÜVENLİ Mİ?
+ * `mansetler` alanı bu bağlantıyı TELE GERİ koyuyor ve native onu
+ * `Linking.openURL` ile AÇIYOR. `javascript:` / `data:` / `file:`
+ * bir şemanın oraya kadar gitmesine izin vermek, istemcinin
+ * gövdesindeki herhangi bir dizgiyi cihazda çalıştırılabilir kılardı.
+ * YALNIZ http/https geçiyor; geçmezse bağlantı BOŞ kalır (manşet
+ * yine taşınır, ekranda tıklanabilir GÖRÜNMEZ) — 400 atılmaz, çünkü
+ * bağlantı ölçümün PARÇASI DEĞİL, yanında giden bir kolaylık.
+ */
+export function guvenliBaglanti(v) {
+  const t = String(v ?? '').trim();
+  if (!t || t.length > 500) return '';
+  return /^https?:\/\//i.test(t) ? t : '';
+}
+
+/**
+ * Tek manşet listesini doğrula ve taşınacak alanlara İNDİR.
  * Motor yalnız `title` + `description` (regex) ve `pubDate` (tarih)
- * okuyor; bağlantı, kaynak adı, emoji BİLEREK atılıyor — tele geri
- * dönmeyecekleri için taşınmalarının anlamı yok.
+ * okuyor. `link` + `source` MOTOR İÇİN DEĞİL: cevabın `mansetler`
+ * alanı onları tele geri koyuyor, bu yüzden artık taşınıyorlar.
+ * `emoji` hâlâ atılıyor — hiçbir yere gitmiyor.
  * @returns {object[] | {error:string, ...}}
  */
 export function ayristirListe(ham, ad) {
@@ -391,6 +433,8 @@ export function ayristirListe(ham, ad) {
       title: String(it.title ?? ''),
       description: String(it.description ?? ''),
       pubDate: it.pubDate == null ? '' : String(it.pubDate),
+      link: guvenliBaglanti(it.link),
+      source: String(it.source ?? '').slice(0, 80),
     });
   }
   return out;
@@ -439,6 +483,43 @@ export function ayristirGovde(body) {
   const rk = sayi01(body.risk, 'risk');
   if (rk.error) return hata(400, rk);
 
+  // Genişliğin YAŞI (ms). `pulseRealityCodes` bayat genişliği fiyat
+  // gerçekliği SAYMIYOR (30 dk kapısı motorda). Verilmezse `null` kalır ve
+  // çekirdek genişlik kaynak ÜRETMEZ — "taze" varsaymak uydurma olurdu.
+  let genislikYas = null;
+  if (!(body.genislikYas === undefined || body.genislikYas === null || body.genislikYas === '')) {
+    const y = Number(body.genislikYas);
+    if (!Number.isFinite(y) || y < 0) return hata(400, { error: 'bad_genislikYas' });
+    genislikYas = y;
+  }
+
+  // İzlenen sembollerin GÜN DEĞİŞİMİ (yüzde PUANI, örn. -1.4).
+  // SEMBOL ADİ İSTENMİYOR: çekirdek adlardan bağımsız ölçüm yapıyor, ad
+  // taşımak gereksiz kişisel veri olurdu. Dizi değilse 400; içindeki
+  // sayı olmayan öğeler çekirdekte süzülüyor (sessizce 0 sayılmıyor).
+  let gunDegisimleri = null;
+  if (!(body.gunDegisimleri === undefined || body.gunDegisimleri === null)) {
+    if (!Array.isArray(body.gunDegisimleri)) return hata(400, { error: 'bad_gunDegisimleri' });
+    if (body.gunDegisimleri.length > AZAMI_DEGISIM) return hata(400, { error: 'cok_gunDegisimleri', azami: AZAMI_DEGISIM });
+    gunDegisimleri = body.gunDegisimleri.map((v) => Number(v));
+  }
+
+  // Ani-hareket SATIRLARI: `{ sembol, yukari }`. `yukari` KESİN boolean
+  // isteniyor — "0/1/'true'" kabul etmek, yönü yanlış okuyup etiketi
+  // ters basmaya açık kapı bırakmak olurdu.
+  let satirlar = null;
+  if (!(body.satirlar === undefined || body.satirlar === null)) {
+    if (!Array.isArray(body.satirlar)) return hata(400, { error: 'bad_satirlar' });
+    if (body.satirlar.length > AZAMI_SATIR) return hata(400, { error: 'cok_satir', azami: AZAMI_SATIR });
+    satirlar = [];
+    for (const it of body.satirlar) {
+      if (!it || typeof it !== 'object' || Array.isArray(it)) return hata(400, { error: 'bad_satirlar' });
+      const sem = String(it.sembol ?? '').trim().toUpperCase();
+      if (!sem || sem.length > 24 || typeof it.yukari !== 'boolean') return hata(400, { error: 'bad_satirlar' });
+      satirlar.push({ symbol: sem, up: it.yukari });
+    }
+  }
+
   // `simdi` YALNIZ test / yeniden oynatma içindir: tazelik penceresini
   // sabitleyip cevabı deterministik yapar. Verilmezse Date.now().
   let simdi = null;
@@ -452,6 +533,9 @@ export function ayristirGovde(body) {
     faiz,
     enflasyon,
     genislik,
+    genislikYas,
+    gunDegisimleri,
+    satirlar,
     enflasyonBaskisi: eb.yok ? null : eb.deger,
     risk: rk.yok ? null : rk.deger,
     simdi,
@@ -542,8 +626,11 @@ export default async function handler(req, res) {
         // Taşıyıcının maddesi `{title, link, pubDate, source}`; motor
         // `title` + `description` + `pubDate` okuyor. `description`
         // UYDURULMUYOR: taşıyıcı döndürmüyor, boş geçiyor.
+        // `link` + `source` cevabın `mansetler` alanı için taşınıyor;
+        // ortak kapıda (`ayristirListe`) şema doğrulamasından geçiyorlar.
         const cevir = (r) => (r.maddeler || []).map((m) => ({
           title: m.title, description: '', pubDate: m.pubDate,
+          link: m.link, source: m.source,
         }));
 
         // Gövde YERİNDE değiştirilmiyor, YENİSİ kuruluyor: çağıranın
@@ -625,6 +712,101 @@ export default async function handler(req, res) {
       };
     }
 
+    // --- ⚠️ FİYAT YALANLAMA: duruş ile fiyat çelişiyor mu?
+    //  Çekirdek SAF ve KOD döndürüyor (`pulseRealityCodes`, motor).
+    //  EŞIK SAYILARI BURADA YOK — 45/55/30dk/6/0.70/1.0 motorda kalıyor.
+    //  CÜMLE DE YOK: `kaynaklar[].kod` makine kodu; Türkçesi native'de
+    //  `lib/sozluk.ts`te, webde `pulseMacroReality` kabuğunda seçiliyor.
+    //
+    //  GİRDİ EKSİKSE KAYNAK ÜRETİLMİYOR, varsayılan KONULMUYOR:
+    //    · `genislik` yoksa (ya da `genislikYas` yoksa/bayatsa) genişlik
+    //      kaynağı düşer — `eksikGerceklik` nesi eksik olduğunu SÖYLER.
+    //    · `gunDegisimleri` 6'dan azsa satır kaynağı düşer.
+    //  Nötr duruşta `want: null` döner: nötr bir yön iddiası etmediği için
+    //  yalanlanacak bir şey de yok (boş `celiski` ile aynı şey DEĞİL).
+    const eksikGerceklik = [];
+    if (ay.genislik === null) eksikGerceklik.push('genislik');
+    else if (ay.genislikYas === null) eksikGerceklik.push('genislikYas');
+    if (ay.gunDegisimleri === null) eksikGerceklik.push('gunDegisimleri');
+    const gerceklik = ENG.pulseRealityCodes({
+      kod: st.cls,
+      genislik: ay.genislik,
+      genislikYas: ay.genislikYas,
+      gunDegisimleri: ay.gunDegisimleri || [],
+    });
+
+    // --- 🏦 MAKRO YORUM KODLARI + ani-hareket ETİKETLERİ
+    //  Çekirdekler SAF ve KOD döndürüyor (`pulseMakroYorumKod`,
+    //  `pulseMakroEtiketKod`). EŞİK (0,15) ve CÜMLE motorda/native'de;
+    //  bu uç ikisini de YAZMIYOR.
+    //
+    //  `varMi` = web'in `hasData`sı: 14 günlük pencereye giren manşet
+    //  SAYISI > 0. Manşet yoksa yorum kodu 'sakin' döner — "nötr" ile
+    //  AYNI ŞEY DEĞİL (biri "manşet YOK", öteki "yön dengede").
+    //  `taze2g` = web'in `fresh2d`ı: iki liste AYRIK olduğu için toplam,
+    //  birleşik liste üzerindeki sayımla AYNI sonucu veriyor.
+    const tumTaze = faizTaze.concat(enfTaze);
+    const taze2g = ENG.pulseRecentCount(tumTaze, TAZE_GUN);
+    const makroBenzeri = {
+      hasData: tumTaze.length > 0,
+      cls: st.cls,
+      inflDir: enflasyonYon,
+      fresh2d: taze2g,
+      biasUp: st.biasUp,
+      biasDown: st.biasDown,
+    };
+    const yorum = ENG.pulseMakroYorumKod(makroBenzeri, ay.satirlar || []);
+    // Satır gönderilmediyse `etiketler` NULL — boş dizi "ölçtüm,
+    // etiket çıkmadı" demek olurdu, oysa HİÇ ÖLÇMEDİK.
+    let etiketler = null;
+    if (ay.satirlar) {
+      etiketler = [];
+      for (const r of ay.satirlar) {
+        const kod = makroBenzeri.hasData
+          ? ENG.pulseMakroEtiketKod(r.symbol, r.up, st.biasUp, st.biasDown)
+          : null;
+        if (kod) etiketler.push({ sembol: r.symbol, kod });
+      }
+    }
+    // Yorum için VERİLMEYEN girdi: satır yoksa `uyumlu` boş kalır ve
+    // bu "uyumlu sembol yok" demek DEĞİL — ekran ayırt edebilsin.
+    const eksikYorum = ay.satirlar ? [] : ['satirlar'];
+
+    // En yeni manşetin zamanı (ms epoch) — web'in `lastTs`i. Tarihi
+    // okunamayan manşet SAYILMIYOR; hiç okunamazsa `null` (0 DEĞİL).
+    const sonManset = tumTaze.reduce((mx, it) => {
+      const t = Date.parse(it.pubDate);
+      return (!isNaN(t) && t > mx) ? t : mx;
+    }, 0) || null;
+
+    // --- 🗞️ MANŞETLER (web'in `headlines`ı) ------------------------
+    //  SIRALAMA VE TAVAN web'le AYNI: tarihi okunabilen + bağlantısı
+    //  GÜVENLİ olan manşetler, en yeniden eskiye, EN ÇOK 3.
+    //  Bağlantısız manşet DİZİYE GİRMİYOR — web de girmiyor
+    //  (`.filter((it) => it.title && it.link)`), iki taraf aynı kümeyi
+    //  göstersin.
+    //  SEÇİMİ BURADA YAPIYORUZ ÇÜNKÜ ÖLÇÜM DEĞİL: eşik yok, ağırlık
+    //  yok; yalnız "en yeni 3" kırpması. Biçimleme (göreli zaman)
+    //  native'de.
+    //
+    //  ⚠️ pmBig (yüksek etkili manşet bloku) HÂLÂ YOK: web onu AYRI
+    //  bir beslemeden (`pmBig` sorgusu) çekiyor, bu uç o isteği
+    //  ATMIYOR. Atmak sunucu yolunda 6 → 7 paralel istek demek ve
+    //  `maxDuration 10` aritmetiğini DEĞİŞTİRİR — ölçülmeden
+    //  eklenmiyor.
+    const mansetler = tumTaze
+      .filter((it) => it.title && it.link)
+      .map((it) => ({ it, t: Date.parse(it.pubDate) }))
+      .filter((x) => !isNaN(x.t))
+      .sort((a, b) => b.t - a.t)
+      .slice(0, AZAMI_MANSET)
+      .map((x) => ({
+        title: x.it.title,
+        link: x.it.link,
+        pubDate: x.it.pubDate,
+        source: x.it.source || '',
+      }));
+
     // Gövdeye bağlı, istemciye özel cevap: CDN'de paylaşılmamalı.
     // Öteki uçların 5 dakikalık penceresi burada YANLIŞ olurdu.
     res.setHeader('Cache-Control', 'no-store');
@@ -641,6 +823,10 @@ export default async function handler(req, res) {
         faiz2g: ENG.pulseRecentCount(ay.faiz, TAZE_GUN),
         enflasyon2g: ENG.pulseRecentCount(ay.enflasyon, TAZE_GUN),
       },
+      varMi: makroBenzeri.hasData,
+      taze2g,
+      sonManset,
+      mansetler,
       pencere: {
         gun: PENCERE_GUN,
         tazelikSaat: ENG.PULSE_FRESH_H,
@@ -648,6 +834,11 @@ export default async function handler(req, res) {
       },
       degerlendirilen: { faiz: faizTaze.length, enflasyon: enfTaze.length },
       konjonktur,
+      gerceklik,
+      eksikGerceklik,
+      yorum,
+      eksikYorum,
+      etiketler,
       // Yol AÇIKÇA bildiriliyor — istemci tahmin etmiyor.
       kaynak,
       haberler,

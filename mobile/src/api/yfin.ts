@@ -236,15 +236,117 @@ export type YfinKunye = {
 
   /** Son fiyat (ham). */
   price?: number | null;
+
+  /**
+   * 52 HAFTALIK TEPE / DIP — **PARA**, birimi `currency`
+   * (api/_yfin.js:132-141). Olculdu 2026-10-29: AAPL 351.73 / 243.42,
+   * ASELS.IS 450 / 171.5. `summaryDetail` blogundan geliyor, EK BIR
+   * yukari istek ACMIYOR.
+   *
+   * ⚠️ BANT KONUMU UCTA HESAPLANMIYOR ve ISTEMCIDE DE HESAPLANMAZ:
+   * `(price - lo) / (hi - lo)` bir TUREV ORAN — native'de yasak
+   * (api/_yfin.js'teki not da bunu yaziyor). Ekran iki sayiyi ve
+   * fiyati AYRI AYRI basar.
+   */
+  fiftyTwoWeekHigh?: number | null;
+  fiftyTwoWeekLow?: number | null;
 };
 
 /**
- * `/api/yfin` cevabı. ÖLÇÜLDÜ: üst düzeyde `results` DIŞINDA alan yok
- * (hata hâlinde 400/502 + `{error}` — onu `apiGet` `ApiError`a
- * çeviriyor, gövde buraya hiç gelmiyor).
+ * `ekstrem` imi taşıyan alanlar — uçtaki `KIYAS_SATIRLARI`nın KAPALI
+ * KÜMESİ (api/_yfin.js). Küme `app.js` `COMPARE_ROWS`un YÖNÜ OLAN
+ * satırlarından geliyor; `sector`/`industry`/`price`/`marketCap` burada
+ * YOK, çünkü onların "en iyisi" diye bir şey yok.
  */
+export type YfinEkstremAlan =
+  | 'trailingPE'
+  | 'forwardPE'
+  | 'peg'
+  | 'priceToBook'
+  | 'priceToSales'
+  | 'evEbitda'
+  | 'profitMargin'
+  | 'returnOnEquity'
+  | 'revenueGrowth'
+  | 'debtToEquity'
+  | 'dividendYield';
+
+/**
+ * Bir satırın ekstremi. HESAP MOTORDA (`rowExtrema`, api/_motor.js) —
+ * istemci yalnız SEMBOL EŞİTLİĞİ arar, sayı karşılaştırmaz (§5.1).
+ *
+ * NİYE İNDEKS DEĞİL SEMBOL: tablo `ok:false` künyeleri süzüyor
+ * (`kunyeler.filter((k) => k.ok)`), yani dizideki indeks ile ekrandaki
+ * sütun ÖRTÜŞMEZ. İndeks taşımak imi sessizce yanlış sütuna basardı.
+ *
+ * `yon` bilgi amaçlı: hangi yönün "iyi" sayıldığını motor söylüyor
+ * (`low` = küçük olan iyi). İstemci bu alanla HESAP YAPMAZ.
+ */
+export type YfinEkstremSatir = {
+  yon: 'low' | 'high';
+  eniyi: string;
+  enkotu: string;
+};
+
+/**
+ * `/api/yfin` cevabı.
+ *
+ * ÖLÇÜLDÜ 2026-10-31: üst düzeyde `results` DIŞINDA bir alan DAHA var —
+ * `ekstrem` (S8 #10a). Künye nesnelerinin İÇİ büyümedi; im ayrı bir
+ * kardeş alan olarak geliyor ki `YfinKunye` sözleşmesi sessizce
+ * değişmesin.
+ *
+ * ÜÇ HÂL AYRI: `undefined` = uç bu sürümde göndermiyor · `null` = uç
+ * motoru kuramadı, yani ÖLÇEMEDİ · nesne = ölçüldü. Boş nesne `{}`
+ * geçerli bir ölçüm: "ölçtüm, ekstrem çıkmadı" (tek sembol, ya da tüm
+ * değerler eşit). Bir satırın anahtarı HİÇ YOKSA o satırda iki geçerli
+ * değer bulunamadı demektir — 0 uydurulmaz.
+ *
+ * (Hata hâlinde 400/502 + `{error}` — onu `apiGet` `ApiError`a
+ * çeviriyor, gövde buraya hiç gelmiyor.)
+ */
+/**
+ * Senaryo kutusu — Boğa / Baz / Ayı. `px` HAM FİYAT, `ret` HAM KESİR
+ * (0,40 = kırk yüzde). 100 ile ÇARPILMIŞ DEĞİL: ölçek değiştirmek
+ * motorun işi, istemci yalnız basar (`lib/format.ts` başlığı).
+ */
+export type YfinSenaryoKutu = {
+  px: number;
+  ret: number;
+};
+
+/**
+ * Bir sembolün bilanço senaryosu. HESAP MOTORDA (`earnScenario`,
+ * api/_motor.js): analist beklenti dağılımı × tepki katsayısı (K=2,0),
+ * ±%40 tavanla sınırlı. İSTEMCİDE O KATSAYI YOK ve olmayacak (§5.1).
+ *
+ * İKİ BİÇİM:
+ *  · `{ tight: true }` — MAKİNE KODU: analistler tek noktada hemfikir,
+ *    dağılım sıfır. Üç özdeş %0 kutusu çizmek "senaryo ölçtüm" demek
+ *    olurdu; motor bu hâli ayrıca bildiriyor, istemci cümleyi seçiyor.
+ *  · üç kutu — ham sayılar. `base.ret` daima 0: konsensüs tutarsa
+ *    fiyatın değişmemesi beklenir (piyasa fiyatladı), bu bir TAHMİN
+ *    değil mekanik çerçeve.
+ */
+export type YfinSenaryo =
+  | { tight: true }
+  | { bull: YfinSenaryoKutu; base: YfinSenaryoKutu; bear: YfinSenaryoKutu };
+
 export type YfinResponse = {
   results: YfinKunye[];
+  ekstrem?: Partial<Record<YfinEkstremAlan, YfinEkstremSatir>> | null;
+  /**
+   * SEMBOL anahtarlı senaryo sözlüğü (S8 #11) — `results`in YANINDA,
+   * künye nesnesinin İÇİNDE değil (`ekstrem` ile aynı gerekçe: künye
+   * sözleşmesi sessizce büyümesin). Anahtar indeks DEĞİL sembol, çünkü
+   * kart ölçülemeyen künyeleri süzüyor.
+   *
+   * DÖRT HÂL: `undefined` = uç göndermedi — `deep` sorulmadıysa alan
+   * HİÇ gelmiyor · `null` = uç motoru kuramadı, ÖLÇEMEDİ · `{}` =
+   * ölçtüm, hiçbir sembolde senaryo çıkmadı · sembol anahtarı = ölçüm.
+   * Senaryo üretilemeyen sembolün anahtarı HİÇ KONULMAZ — 0 uydurulmaz.
+   */
+  senaryo?: Record<string, YfinSenaryo> | null;
 };
 
 export type YfinOptions = Omit<RequestOptions, 'query'> & {

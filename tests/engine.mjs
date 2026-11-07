@@ -64,6 +64,13 @@ export const SLICES = [
   ['ysym', '  function yahooSymbol(symbol, market) {', '  async function fetchYahooChart('],
   // fetchYahooOHLC + 23 indikatör fonksiyonu + computeVadeScore: tek bitişik blok
   ['ta', '  // ===== Teknik analiz: OHLCV + indikatörler =====', '  function rankedSRZones(daily, opts) {'],
+  // Mum formasyonu (G1, 2026-10-29): detectCandlePattern `ta` diliminin DIŞINDA
+  // kalmıştı, bu yüzden motorda yoktu ve uç mum formasyonunu döndüremiyordu.
+  // ÖLÇÜLDÜ: gövdede document/innerHTML/localStorage/fetch YOK — saf girdi-çıktı
+  // (yalnız candles okur). Skora GİRMEZ (computeVadeScore onu çağırmaz); yalnız
+  // taHamGostergeler ondan `code` + `sig` makine kodunu alır. Bitiş imi
+  // renderTAIndicators'tan ÖNCE — o DOM yazar, dilimin dışında kaldı.
+  ['mum', '  function detectCandlePattern(candles) {', '  function renderTAIndicators(symbol, market, closes, ind) {'],
   ['fa-core', '  function faInterp(x, pts) {', '  const FA_GROUPS = ['],
   // fmtTL / fmtUSD: FA modelleri NOT metinlerini bunlarla kuruyor. Skora
   // GIRMEZ ama fonksiyon yoksa model hic kurulamaz (olculdu: secFetchModel
@@ -89,6 +96,37 @@ export const SLICES = [
   // esikleri YENIDEN YAZMASI gerekmiyor, motordan cagiriyor.
   ['makro-faz', '  const CYCLE_PHASES = {', '  // Makro nabzını hesapla'],
   ['nabiz-yon', "  const RATE_SENSITIVE = ['tech'", '  async function computePulseMacro(force) {'],
+
+  // --- Nabiz gun-ici cekirdegi (2026-11-03, S8 #1/#6) ---
+  // SORUN: `analyzeIntraday` app.js 11973'te, poll.js 237'de ve
+  // worker/movers.mjs 72'de UC KEZ yaziliydi (olculdu: ayni formuller,
+  // yedi kucuk fark - girdi sekli, `<3` korumasinin yeri, `||` vs `??`,
+  // `prevClose` zinciri, `breakout`/`spark` yalniz app'te). Ucunden de
+  // UCA cikan sayi YOK: `/api/chart` yalniz ham `mumlar[]` donduruyordu,
+  // yani native `dayChg`/`hourChg`/`rvol`/`breakout` goremiyordu.
+  //
+  // IKI DILIM, CUNKU ARALARI KIRLI: 11944 `pulseSymbols` getPortfolio/
+  // loadLists okuyor, 11999 `pulseWhyThemes` modul durumu (`pulseThemes`)
+  // okuyor. Ikisi de dilimlerin DISINDA kaldi; esikler ile saf gun-ici
+  // hesabi ayri ayri alindi.
+  //
+  // OLCULDU: iki bolgede de document./innerHTML/getElementById/
+  // localStorage/fetch/proxy/setDiag/taAllSymbols/getPortfolio/loadLists
+  // desenlerinin HICBIRI yok.
+  ['nabiz-esik', '  const PULSE_TH = {', '  function pulseSymbols() {'],
+  ['nabiz-gunici', '  function analyzeIntraday(candles, meta) {',
+    '  // Neden yükseldi/düştü? → sembolün sektörünü etkileyen SICAK gündem temaları'],
+
+  // FIYAT-YALANLAMA CEKIRDEGI (2026-11-03, S8 #1/#6 ikinci katman).
+  // `pulseMacroReality` KENDISI dilimlenemez: HTML uretiyor ve modul
+  // durumu (`macroBreadthSeen`) okuyor. O yuzden olcum `pulseRealityCodes`
+  // adli SAF cekirdege cikarildi; web kabugu artik ondan HTML oruyor
+  // (cikti birebir ayni). Dilim PMAC esikleriyle BASLIYOR cunku
+  // karsilastirma sayilari cekirdekle AYNI YERDE durmali.
+  // OLCULDU: bolgede document./innerHTML/getElementById/localStorage/
+  // fetch/proxy/macroBreadthSeen desenlerinin HICBIRI yok.
+  ['nabiz-gerceklik', '  const PMAC_BREADTH_WEAK = 45,',
+    '  // ---- WEB KABUGU (dilim burada biter) ----'],
 
   // --- B1 (2026-10-26): sekiz SAF blok daha devredildi. Hepsinde OLCULDU:
   // document./innerHTML/getElementById/querySelector/localStorage/
@@ -144,6 +182,70 @@ export const SLICES = [
   // taAllSymbols() ile KULLANICININ listesini okuyor; motor kullanici
   // verisi okumaz, evren uca `symbols` parametresi olarak gelir.
   ['radar', '  const SECTORS = {', '  function radarUniverse() {'],
+
+  // S8 #10a (2026-10-31): kiyas tablosunda satir bazli en iyi/en kotu
+  // sutunu bulan SAF karsilastirma. Dilim YALNIZ rowExtrema'yi aliyor;
+  // COMPARE_ROWS (12595) BILEREK DISARIDA — icinde `xf: trIndustry`
+  // fonksiyon referansi ve Turkce `label`/`hint` metni var, ikisi de
+  // motora girmemeli (ReferenceError + HAM SAYI kurali). Satir tarifi
+  // (key/type/dir) uca ait makine tablosu olarak kaliyor. Bitis imi
+  // yfinQuery'den ONCE: o aga gidiyor.
+  ['kiyas-uc', '  function rowExtrema(row, metrics) {', '  async function yfinQuery(ysyms) {'],
+
+  // S8 #11 (2026-10-31): bilanco senaryosu (Boga/Baz/Ayi). ENVANTER
+  // NOTU YANLIS CIKTI: api/_kesif.js:1061 "Senaryo matematigi
+  // (`earnScenario`) BICIMLEME, uca girmez" diyordu — OLCULDU, icinde
+  // K=2.0 tepki katsayisi, CAP=0.40 tavani ve dagilim aritmetigi var
+  // (app.js:9535-9549). Bicimleme degil, ISTEMCI FORMULU; §5.1 geregi
+  // motora tasindi. Dilim YALNIZ earnScenario'yu aliyor; bitis imi
+  // initEarn'den ONCE (o DOM'a olay bagliyor).
+  ['earn-senaryo', '  function earnScenario(res) {', '  function initEarn() {'],
+
+  // S8 #8a (2026-11-02): tema adayi <-> haber eslesmesi. OLCULDU: web bu
+  // isi TARAYICIDA yapiyor ve icinde ESIK var — anlamli sozcuk >=4 harf,
+  // TEMA_TASIYICI durak sozcuk listesi, sembol kelime-siniri regexi.
+  // `/api/news?q=` ilgi suzgeci UYGULAMIYOR (olculdu: api/_haber.js
+  // icinde temaBaslikIlgili yok), yani ince istemci ya bu kurali
+  // kopyalayacak (S5.1 ihlali) ya da tema haberleri eksik kalacakti.
+  //
+  // UC DILIM, BIR OZELLIK: aradaki `themeFetchLLM` ve `themeFetchNews`
+  // AG CAGIRAN islevler — dilime GIRMEZ (motorda `fetch` yok). Bu yuzden
+  // bitisik bir bolge kesilemedi.
+  ['tema-norm', '  // LLM adayı → {base, market, yahoo} normalize',
+    '  // Semantik adayları Claude ucundan al'],
+  ['tema-ilgi', '  // NE: Google News RSS,',
+    '  // Google News (US+TR) → birleşik başlık listesi'],
+  ['tema-kanit', '  // Bir adayın haberde geçip geçmediğini sapta',
+    '  // NE: insan-okunur Google Haberler SAYFASI (RSS DEĞİL).'],
+
+  // GUNDEM (agendaScore) — "Gunun Gundemi" kavram motoru. IKI DILIM,
+  // BIR OZELLIK: aradaki `let agendaBusy = false;` bir EKRAN KILIDI
+  // (iki istegin ayni anda yenilemesini onluyor) — motorda mutable
+  // modul durumu tutmanin anlami yok, bu yuzden ikiye bolundu.
+  //
+  // OLCULDU: iki dilimde document/innerHTML/fetch/cacheGet YOK; tek
+  // `localStorage` ve `cacheGet/cacheSet` gecisi YORUM icinde (app.js
+  // 11278 ve 11385) — kod degil.
+  //
+  // BAGIMLILIK: agendaScore `scoreHeadline` + `sentiLabel` cagiriyor,
+  // ikisi de 'haber-skor' diliminde ve ONCE geliyor.
+  //
+  // DISA VERILMEYEN: `computeAgenda` (AGA CIKIYOR: fetchRSS + cache) ve
+  // `agendaMatchedStocks` (KULLANICI EVRENINE bakiyor → saf degil).
+  // Cekme isi `api/_gundem.js`in, evren isi cagiranin.
+  ['gundem-sozluk', '  const AGENDA_LEXICON = [', '  let agendaBusy = false;'],
+  ['gundem-skor', '  function agendaCleanTitle(t) {', '  async function computeAgenda(force) {'],
+  // S8 #1/#6 beşinci katman (2026-11-03): ENDEKS EŞİK TABLOSU.
+  // SORUN ÖLÇÜLDÜ: `/api/causal` `hareketler[].notable` alanını
+  // İSTEMCİDEN zorunlu istiyordu (api/causal.js:170), ama `notable`
+  // app.js'te bir ekran sabiti olarak duruyordu (INDEX_PULSE) ve
+  // HİÇBİR uç onu döndürmüyordu — yani native istemci ya eşiği kendi
+  // iline yazacak (§5.1 ihlali) ya da nedensellik bağlarını hiç
+  // isteyemeyecekti. §5.1 gereği eşik motora taşındı.
+  // Dilim YALNIZ `INDEX_ESIK`i alıyor; `INDEX_PULSE` BİLEREK DIŞARIDA —
+  // içinde emoji, Türkçe `name` ve pazar kodu var, üçü de SUNUM.
+  // Bitiş imi `INDEX_PULSE` bildiriminin kendisi.
+  ['endeks-esik', '  const INDEX_ESIK = {', '  const INDEX_PULSE = ['],
 ];
 
 // Dilimlerden dışarı verilecek motor sembolleri.
@@ -155,7 +257,7 @@ export const EXPORTS = [
   // FA/TA harmanı. Önceden app.js'te üçer kopyaydılar ve motorun
   // dışında kaldıkları için /api/score kullanıcının GÖRDÜĞÜ skoru
   // döndüremiyordu.
-  'FA_PE', 'faPeCriterion',
+  'FA_PE', 'faPeCriterion', 'faKriterKod', 'faKriterIsaretle',
   'faBand', 'taBand', 'COMPOSITE_MATRIX', 'COMPOSITE_BLEND', 'compositeBlend',
   'computeHolisticScore',
   // Plan katmanı: 2026-10-14'te ekran katmanından devredildi (D1).
@@ -164,6 +266,25 @@ export const EXPORTS = [
   // (levels) üretiyordu ama PLANI üretmiyordu, yani /api/recommend kullanıcının
   // GÖRDÜĞÜ planı döndüremezdi. Türkçe cümleler çağrı noktasında kaldı.
   'momentumInfo', 'buyZoneProximity', 'planRiskReward',
+  // #14 (2026-11-03): `atr / price * 100` app.js'te IKI YERDE hesaplaniyordu
+  // ve IKI FARKLI soruya cevap veriyordu (uc kademeli oynaklik sinifi ile
+  // SESSIZ ORTA BANDI olan plan/stop uyarisi). Ikisini tek kazanana
+  // indirmek webdeki bir davranisi sessizce silerdi; bu yuzden IKI AYRI
+  // makine kodu. Ikisi de `ta` diliminin ICINDE (planRiskReward'in
+  // ardinda) - yeni dilim GEREKMEDI.
+  'atrVolKod', 'atrPlanKod',
+  // (G) 2026-11-05: katalizor/risk satirinin YAKLASAN TEMETTU bacagi.
+  // Esik (45 gun) ve gun farki hesabi webde TARAYICIDA duruyordu
+  // (fillCatalysts). Native istemci hesap yapmaz, esik tasimaz -> karar
+  // motora, hesap /api/katalizor ucuna tasindi. Gun farki ile esik
+  // karari AYRI iki soru oldugu icin AYRI iki fonksiyon.
+  'KAT_TEMETTU_GUN', 'KAT_TEMETTU_KODLARI', 'katGunFarki', 'katTemettuKod',
+  // G1 (2026-10-29): ham gösterge sözlüğü. /api/score + /api/analyze bu iki
+  // sembol olmadan ekranın bastığı HAM sayıları döndüremiyordu (ölçüldü: hiçbir
+  // uç ema20/rsi/macd/boll/obv/ichimoku ham değerini taşımıyordu). detectCandlePattern
+  // DIŞA VERİLMİYOR: Türkçe `name`/`txt` üretir — uca yalnız `code` + `sig` gider,
+  // onu da taHamGostergeler taşıyor (HAM SAYI kuralı).
+  'taHamGostergeler', 'taHamUcGostergeler',
   'fetchIsYatirimMali', 'parseIsMali', 'bistFundamentalModel',
   'secGet', 'secResolveCik', 'secFetchModel',
   // Nedensellik katmani: 2026-10-18'de /api/causal icin devredildi.
@@ -171,6 +292,10 @@ export const EXPORTS = [
   // "hangi gundem konsepti bu endeks hareketiyle hizali" korelasyon
   // okumasidir. Turkce cumle yine cagri noktasinda.
   'CAUSAL_INDEX_AFFINITY', 'causalAlign', 'computeCausalLinks',
+  // S8 #1/#6 beşinci katman: endeks "belirgin"/"sert" eşikleri.
+  // Ucun `notable`ı istemciden istemek zorunda kalmaması için dışa
+  // verildi — eşik motorda kalır, istemci yalnız `kind` + `pct` yollar.
+  'INDEX_ESIK',
   // Makro/nabiz katmani: 2026-10-19'da /api/pulse icin devredildi.
   // SKORA DOKUNMAZ. Turkce cumleler (CYCLE_PHASES.label, PMAC_STANCE_TR)
   // BILEREK dısarı verilmiyor — HAM SAYI kurali: uc yalniz kod dondurur.
@@ -182,9 +307,34 @@ export const EXPORTS = [
   'macroInflPressure', 'macroRiskPressure',
   // Tema isisi: /api/theme + /api/radar ayni isi iki yerde yapmasin diye.
   'themeHeat',
+  // S8 #10a: kiyas satiri ekstremi. Motorda cunku "en iyi/en kotu" bir
+  // KARSILASTIRMA KURALI — istemcide esik/kiyas yasak (§5.1). Uc yalniz
+  // satir tarifini verip sonucu tasiyor.
+  'rowExtrema',
+  // S8 #11: bilanco senaryosu — tepki katsayisi/tavan motorda.
+  'earnScenario',
+  // S8 #8a: tema haber eslesmesi — esik (>=4 harf) ve durak sozcuk
+  // listesi motorda.
+  'themeNorm',
+  'temaSorguSozcukleri',
+  'temaBaslikIlgili',
+  'themeMatchNews',
+  'themeNewsHits',
   'FADE_WIN', 'fadedAround', 'rateDirection', 'inflDirection',
   'RATE_SENSITIVE', 'pulseRecentCount',
   'PULSE_FRESH_H', 'PULSE_FRESH_W', 'pulseFreshWithin', 'pulseFreshWeight', 'pulseStance',
+  // S8 #1/#6 (2026-11-03): gun-ici nabiz cekirdegi. `PULSE_TH` disa
+  // veriliyor cunku `pulseIsSudden` donusunde `th`'yi ZATEN tasiyor —
+  // uc esikleri YENIDEN YAZMASIN diye motordan okuyor.
+  'PULSE_TH', 'analyzeIntraday', 'pulseIsSudden',
+  // S8 #1/#6 ikinci katman: fiyat-yalanlama. Esikler (45/55/30dk/6/0.70/
+  // 1.0) DISA VERILMIYOR — uc onlari ne okuyor ne yaziyor; yalniz
+  // `pulseRealityCodes` donusundeki `kod`lari tasiyor.
+  'pulseRealityCodes',
+  // Makro yorumun KODLARI ve ani-hareket satirinin makro etiketi:
+  // cumle/HTML uretmiyorlar, web kabugu ve uc ayni kodlardan okuyor.
+  'pulseMakroEtiketKod',
+  'pulseMakroYorumKod',
   // B1 (2026-10-26) sekiz yeni dilimden DISA VERILENLER. Hicbiri skoru
   // degistirmez — composite/vade skorunu ne okur ne yazar. Disa VERILMEYENLER
   // ve nedenleri dilim yorumlarinda yazili (metalMacroInputs, priceOppChip,
@@ -193,11 +343,24 @@ export const EXPORTS = [
   'shortNum',
   'scoreBand', 'cryptoCategory', 'computeCryptoValue',
   'METAL_MACRO_W', 'computeMetalMacro',
-  'SENTI_POS', 'SENTI_NEG', 'scoreHeadline', 'sentiLabel',
-  'oppTag', 'priceOppAdj',
+  'SENTI_POS', 'SENTI_NEG', 'scoreHeadline', 'sentiLabel', 'sentiAggregate',
+  // "Neden hareket ediyor?" ham kod katmani (S34). Skora GIRMEZ: hareketi
+  // haber akisiyla uzlastiran yorum katmani. Turkce cumle DONDURMEZ,
+  // yalniz kapali kod kumesi — cumle web ekraninda / sozluk.ts'te secilir.
+  'WHY_SERT', 'WHY_BELIRGIN', 'WHY_HABER_ESIK',
+  'WHY_HAREKET_KODLARI', 'WHY_YON_KODLARI', 'WHY_HABER_YON_KODLARI',
+  'WHY_UZLASMA_KODLARI', 'WHY_KUTUP_KODLARI',
+  'whyGunlukYuzde', 'whyHareketKod', 'whyYonKod', 'whyHaberYonKod',
+  'whyUzlasmaKod', 'whyKutupKod',
+  'oppTag', 'priceOppAdj', 'oppCombined',
   'SCAN_PRESETS', 'scanBlend', 'scanScore', 'scanTag',
   'SEK_META', 'sekMedian', 'sekClassify', 'sekSortGroups',
   'SECTORS', 'SYMBOL_SECTORS', 'RADAR_THEMES',
+  // Gundem motoru (S20.14). Hicbiri skoru degistirmez: TA/FA/bileske
+  // ne okuyor ne yaziyor — sunum + haber katmani.
+  'AGENDA_LEXICON', 'AGENDA_STOP', 'AGENDA_VALUE_SECTORS',
+  'agendaKwHit', 'agendaStemHit', 'agendaAdmit', 'agendaCleanTitle',
+  'agendaScore',
 ];
 
 function countOf(src, needle) {

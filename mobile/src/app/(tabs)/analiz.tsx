@@ -70,6 +70,33 @@
 //  kalemleri (truncgil ham geçişi). Ham geçiş bir SÖZLEŞME değil;
 //  ölçülmeyen alan çizilmiyor, istemcide türetilmiyor.
 //
+//  ── 🏭 SEKTÖR → ⚖️ KARŞILAŞTIR KÖPRÜSÜ ────────────────────────────
+//  Keşfet'teki 🏭 Sektör dağılımı kartı bir grubun sembollerini `kiyas`
+//  yol parametresiyle (virgülle ayrık) BU ekrana taşıyor; parametre
+//  varsa ⚖️ Karşılaştır turu TAKİP LİSTESİ yerine O SEMBOLLERLE
+//  koşuyor. Yeni sekme açılmadı, yeni uç çağrılmadı, ikinci bir tur
+//  eklenmedi — AYNI `/api/compare` turunun girdisi değişiyor.
+//
+//  SINIR SESSİZ KIRPILMIYOR: `/api/compare` bir turda en çok
+//  `AZAMI_SEMBOL` sembol alıyor ve fazlasını 400 ile REDDEDİYOR
+//  (api/client.ts `sembolUcu`). Gelen küme büyükse ilk `AZAMI_SEMBOL`
+//  sorulup DIŞARIDA KALAN SAYI EKRANA YAZILIYOR.
+//
+//  KÜNYE TURU LİSTENİN: temel metrik tablosu `/api/yfin` turundan
+//  geliyor ve o tur TAKİP LİSTESİYLE koşuyor (Bilanço + Temettü da aynı
+//  turu paylaşıyor). İkinci bir künye turu açmak aynı veriyi iki kez
+//  sormak olurdu; bu yüzden tablo taşınan kümeden GENİŞ olabilir ve
+//  bunu kart üstündeki not AÇIKÇA yazıyor.
+//
+//  ── SIRALAMA KURALI (TASARIM TURU 2) ───────────────────────────────
+//  1) Seçimin kendisi (Sembol kartı)
+//  2) Seçilen sembolün ölçümü: grafik (hızlı uç) → skorlar (yavaş tur)
+//  3) Liste genişliğindeki turlar: kıyas · bilanço · temettü
+//  4) Seçilen sembolle İLGİSİZ sabit evrenler: kripto · maden (EN ALTTA)
+//  ÖLÇÜLDÜ 2026-10-31: sıra ZATEN bu; hiçbir kart taşınmadı. Grafiğin
+//  skorlardan önce gelme gerekçesi (262 ms ↔ 45-55 sn) KORUNDU —
+//  "karar önce" kuralı o ölçümü ezmiyor. Bölüm başlıkları eklendi.
+//
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
@@ -78,19 +105,23 @@ import { useCallback, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import {
+  AZAMI_SEMBOL,
   VARSAYILAN_ARALIK,
   fetchAnalyze,
   fetchChart,
   fetchCompare,
   fetchYfin,
   useIstek,
+  useKiyas,
   useListe,
   type AnalyzeRow,
   type Aralik,
   type Direk,
   type PlanSeviye,
+  type Vade,
 } from '@/api';
 import {
+  BolumBasligi,
   Card,
   Dugme,
   Durum,
@@ -99,6 +130,7 @@ import {
   Pill,
   ScoreGauge,
   ScreenShell,
+  VadeSecici,
   VeriYok,
 } from '@/components';
 import {
@@ -107,8 +139,10 @@ import {
   KarsilastirKart,
   KriptoKart,
   METAL_SEMBOLLER,
+  MaliTablolarKart,
   MetalKart,
   TemettuKart,
+  TezDefteriKart,
 } from '@/components/analiz';
 import { formatOran, formatPercent, formatPrice, formatScore } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
@@ -125,7 +159,12 @@ const DIREK_METIN: Record<string, string> = {
 export default function AnalizScreen() {
   const { colors } = useTheme();
   const liste = useListe();
-  const params = useLocalSearchParams<{ sym?: string }>();
+  // KIYAS SETI (`sb:compare`): detay ekranindaki "Karsilastirmaya
+  // ekle" dugmesinin yazdigi KALICI kume. Oncelik sirasi EKRANDA
+  // yazili: ① `?kiyas=` koprusu (acik gezinme) ② kalici set
+  // ③ takip listesi. Ucuncu basamak eski davranis.
+  const kiyasSeti = useKiyas();
+  const params = useLocalSearchParams<{ sym?: string; kiyas?: string }>();
   const [secili, setSecili] = useState<string | null>(null);
 
   const sembol = useMemo(() => {
@@ -133,11 +172,24 @@ export default function AnalizScreen() {
     return secili ?? p ?? liste[0] ?? null;
   }, [secili, params.sym, liste]);
 
+  // VADE: motorun DÖRT penceresi (gunici · kisa · orta · uzun) native'de
+  // 'orta'ya SABİTLENMİŞTİ; üçü ekrana hiç ulaşmıyordu. Varsayılan
+  // 'orta' — seçim yapılmadığında eski davranış birebir aynı.
+  //
+  // TEK DURUM, İKİ TUR: analiz turu da kıyas turu da AYNI vadeyi
+  // kullanıyor. İkisine ayrı seçici koymak, aynı ekranda iki farklı
+  // pencereden gelen sayıları yan yana göstermek olurdu.
+  const [vade, setVade] = useState<Vade>('orta');
+
   const cagri = useCallback(
-    (signal: AbortSignal) => fetchAnalyze(sembol ? [sembol] : [], { vade: 'orta', signal }),
-    [sembol],
+    (signal: AbortSignal) => fetchAnalyze(sembol ? [sembol] : [], { vade, signal }),
+    [sembol, vade],
   );
-  const { durum, veri, hata, yenile } = useIstek(cagri, sembol ?? '', { etkin: Boolean(sembol) });
+  // ANAHTAR VADEYİ TAŞIYOR (zorunlu): çıplak `sembol` anahtarı vade
+  // değiştiğinde önceki vadenin önbellekli satırını basardı.
+  const { durum, veri, hata, yenile } = useIstek(cagri, (sembol ?? '') + '|' + vade, {
+    etkin: Boolean(sembol),
+  });
 
   const satir: AnalyzeRow | null = veri?.sonuclar?.[0] ?? null;
 
@@ -161,13 +213,47 @@ export default function AnalizScreen() {
   // NEDEN `liste` ANAHTARI: liste değişmedikçe yeniden sorulmuyor;
   // sembol seçimi bu iki turu TETİKLEMİYOR (seçim tek sembolün dökümünü
   // değiştirir, listeyi değiştirmez).
-  const karsilastirCagri = useCallback(
-    (signal: AbortSignal) => fetchCompare(liste, { vade: 'orta', signal }),
-    [liste],
+  //
+  // 🏭 SEKTÖR KÖPRÜSÜ: `kiyas` parametresi varsa kıyas turu O SEMBOLLERLE
+  // koşuyor. Parametre YOKSA davranış eskisi gibi (takip listesi).
+  const gelenKiyas = useMemo(() => {
+    const ham = typeof params.kiyas === 'string' ? params.kiyas : '';
+    return ham
+      .split(',')
+      .map((x) => x.trim().toUpperCase())
+      .filter(Boolean);
+  }, [params.kiyas]);
+  const depoKiyas = useMemo(
+    () => kiyasSeti.map((k) => k.symbol).filter(Boolean),
+    [kiyasSeti],
   );
-  const karsilastir = useIstek(karsilastirCagri, 'compare:' + liste.join(','), {
-    etkin: liste.length > 0,
-  });
+  const kiyasListesi = useMemo(() => {
+    if (gelenKiyas.length) return gelenKiyas.slice(0, AZAMI_SEMBOL);
+    if (depoKiyas.length) return depoKiyas.slice(0, AZAMI_SEMBOL);
+    return liste;
+  }, [gelenKiyas, depoKiyas, liste]);
+  // Kume NEREDEN geldi: cumleyi ekranda somut yapmak icin.
+  const kiyasKaynak: 'kopru' | 'set' | 'liste' = gelenKiyas.length
+    ? 'kopru'
+    : depoKiyas.length
+      ? 'set'
+      : 'liste';
+  // Kırpılan sembol sayısı: GİZLENMİYOR, kartın üstünde yazıyor.
+  // Kırpma HANGİ kaynaktan gelirse gelsin sayılıyor: kalıcı kıyas
+  // seti de (8 slot) uç sınırının (AZAMI_SEMBOL) üstüne çıkabilir.
+  const kiyasHam = kiyasKaynak === 'kopru' ? gelenKiyas.length : depoKiyas.length;
+  const kiyasDisarida =
+    kiyasKaynak !== 'liste' && kiyasHam > AZAMI_SEMBOL ? kiyasHam - AZAMI_SEMBOL : 0;
+
+  const karsilastirCagri = useCallback(
+    (signal: AbortSignal) => fetchCompare(kiyasListesi, { vade, signal }),
+    [kiyasListesi, vade],
+  );
+  const karsilastir = useIstek(
+    karsilastirCagri,
+    'compare:' + kiyasListesi.join(',') + '|' + vade,
+    { etkin: kiyasListesi.length > 0 },
+  );
 
   // TEK yfin turu, İKİ kart: Bilanço `earnings`, Temettü `dividendYield`
   // okuyor. `deep` varsayılan açık — `earnings` yalnız onunla geliyor.
@@ -218,12 +304,32 @@ export default function AnalizScreen() {
             />
           ))}
         </View>
+        {/* TASARIM TURU 2 — TEK GÖRSEL BİÇİM: bu cümle ham `<Text>`ti,
+            oysa AYNI cümle Bugün ve Keşfet'te `Durum`un `bosMetin`i
+            olarak, yani `VeriYok` gövdesinde çiziliyor. Aynı bilgi iki
+            ayrı görünümdeydi. `kartsiz`: gövde zaten bir `Card` içinde.
+            ÜÇ DAL KARIŞTIRILMADI — bu dal "liste boş" (kullanıcı henüz
+            sembol eklemedi); "uç göndermedi" ve "ölçülemedi" dalları
+            aşağıdaki `Durum`/`VeriYok` çağrılarında AYRI duruyor. */}
         {!liste.length ? (
-          <Text style={[type.small, { color: colors.textDim }]}>
-            Takip listesi boş. Arama sekmesinden sembol ekle.
-          </Text>
+          <VeriYok metin="Takip listesi boş. Arama sekmesinden sembol ekle." kartsiz />
         ) : null}
       </Card>
+
+      {/* VADE SEÇİCİ: sembol kartının HEMEN ALTINDA, çünkü ekranın iki
+          girdisi var (hangi sembol · hangi pencere) ve ikisi de ölçüm
+          başlamadan önce seçiliyor. Hem derin dalış hem kıyas turu bu
+          seçimi kullanıyor. */}
+      <Card
+        title="Vade"
+        subtitle="Motorun hangi penceresi sorulacak — derin dalış ve ⚖️ Karşılaştır turu bu seçimle koşuyor.">
+        <VadeSecici deger={vade} onDegis={setVade} />
+      </Card>
+
+      <BolumBasligi
+        baslik="Seçilen sembolün ölçümü"
+        kunye="Grafik hızlı uçtan, skorlar yavaş turdan; ikisi AYRI ölçüm."
+      />
 
       {/* NEDEN SKOR KARTLARINDAN ÖNCE: grafik ucu 262 ms, analiz turu
           45-55 sn. Grafiği aşağıya koymak, hızlı gelen veriyi yavaş
@@ -371,14 +477,62 @@ export default function AnalizScreen() {
         )
       ) : null}
 
+      {/* 📊 MALİ TABLOLAR — SEÇİLEN SEMBOLÜN ölçümü, bu yüzden liste
+          turlarının ÜSTÜNDE. Kendi isteğini kendi atıyor (kalıp:
+          `detay/IceridenKart.tsx`); derin dalışın durumuna BAĞLI DEĞİL.
+
+          PAZAR BİR HESAP DEĞİL, BİÇİM EŞLEMESİ: '.IS' ile biten sembol
+          BIST, ötekiler ABD — aynı eşleme `kesfet/TaramaKart.tsx:130`
+          ve `analiz/BilancoKart.tsx` başlığında da yerinde yapılıyor;
+          `lib/` DEĞİŞTİRİLMEDİ.
+
+          Kart TEMEL SKORA GİRMİYOR: ham kalem gösteriyor, marj/oran
+          HESAPLAMIYOR. */}
+      {sembol ? (
+        <MaliTablolarKart
+          sembol={sembol}
+          pazar={sembol.toUpperCase().endsWith('.IS') ? 'BIST' : 'US'}
+        />
+      ) : null}
+
+      <BolumBasligi
+        baslik="Liste genişliğindeki turlar"
+        kunye="Girdisi takip listen; seçilen sembolün turundan bağımsız."
+      />
+
       {/* Liste kartları: derin dalışın DURUMUNA bağlı değil — kendi
           istekleri, kendi durum/hata kutuları. */}
+      {/* TAŞINAN KÜME EKRANDA YAZILI: kullanıcı kıyasın neyle koştuğunu
+          tahmin etmesin. Künye tablosunun daha geniş olabileceği de
+          burada söyleniyor (künye turu takip listesiyle koşuyor). */}
+      {kiyasKaynak !== 'liste' ? (
+        <Text style={[type.micro, { color: colors.textDim }]}>
+          {(kiyasKaynak === 'kopru'
+            ? '⚖️ Kıyas 🏭 Sektör dağılımından taşınan '
+            : '⚖️ Kıyas, hisse sayfalarından kurduğun karşılaştırma setindeki ') +
+            kiyasListesi.length +
+            ' sembolle koşuyor: ' +
+            kiyasListesi.join(', ') +
+            (kiyasDisarida > 0
+              ? ' · ' +
+                kiyasDisarida +
+                ' sembol bu tura GİRMEDİ: kıyas ucu bir turda en çok ' +
+                AZAMI_SEMBOL +
+                ' sembol alıyor.'
+              : '') +
+            ' · Alttaki temel metrik tablosu TAKİP LİSTESİNİN künye turundan gelir, bu kümeden geniş olabilir.'}
+        </Text>
+      ) : null}
       <KarsilastirKart
         veri={karsilastir.veri}
         durum={karsilastir.durum}
         hata={karsilastir.hata}
         yenile={karsilastir.yenile}
-        semboller={liste}
+        semboller={kiyasListesi}
+        /* Temel metrik tablosunun kaynağı — SIRALAMADAN AYRI UÇ. Aynı
+           `kunye` turu Bilanço ve Temettü kartlarını da besliyor; ikinci
+           bir tur açmak aynı veriyi iki kez sormak olurdu. */
+        kunye={kunye.veri}
       />
       <BilancoKart
         veri={kunye.veri}
@@ -393,6 +547,17 @@ export default function AnalizScreen() {
         hata={kunye.hata}
         yenile={kunye.yenile}
         semboller={liste}
+      />
+
+      {/* NEDEN BURADA: tez defteri kullanıcının KENDİ notları ve
+          CİHAZDA duruyor (yeni uç yok). Seçilen sembolle ilgili bir
+          yüzey olduğu için piyasa şeridinin ÜSTÜNDE; şerit ise
+          sembolden bağımsız sabit evrenler. */}
+      <TezDefteriKart onerilenSembol={sembol ?? undefined} />
+
+      <BolumBasligi
+        baslik="Piyasa şeridi"
+        kunye="Seçilen sembolle ilgisiz sabit evrenler; bağlam, döküm değil."
       />
 
       {/* NEDEN EN ALTTA: bu iki kart SEÇİLEN SEMBOLLE İLGİSİZ sabit

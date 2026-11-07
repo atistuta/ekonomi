@@ -30,9 +30,53 @@
 //  hedef fiyatı "artış" diye işaretlemek, fiyatla kıyaslama hesabı
 //  yapmak olurdu.
 //
+//  ── MOMENTUM BLOĞU NEDEN BURADA (eklendi 2026-10-29, ŞERİT F) ─────
+//  `plan.momentum` tipte vardı (`types.ts` PlanMomentum) ama HİÇBİR
+//  ekranda basılmıyordu. Yeni kart açılmadı: momentum `plan`ın dördüncü
+//  uzvu — `seviye` ve `riskOdul` bu kartta zaten basılıyor, `yakinlik`
+//  başlık rozetinde duruyor. Momentumu ayrı karta koymak aynı `plan`
+//  nesnesini iki kart arasında bölmek, `plan === null` gerekçesini de
+//  iki yerde anlatmak demekti.
+//
+//  ALANLAR HAM (ölçüldü `api/_motor.js:950-975`, `momentumInfo`):
+//  kapalı turda `{active:false}` ya da `{active:false, trendAligned,
+//  adx, gapPct}`; açık turda `{active:true, zone:[alt,üst], gapPct,
+//  adx, sma50, sma200}`. `zone`/`sma50`/`sma200` tipte AD İLE yok,
+//  index imzasından (`[k: string]: unknown`) geliyor — bu yüzden
+//  `sayiYa()`/`sayiDizisi()` kapısından geçiyorlar; tip genişletilmedi
+//  çünkü alan kümesinin uçta sabit olmadığını tipin kendi notu söylüyor.
+//
+//  `gapPct` ÖLÇÜLDÜ = KESİR, YÜZDE PUANI DEĞİL (`_motor.js:963`:
+//  `(p - bzTop) / p`). Adında "Pct" geçmesine aldanıp `formatPercent`e
+//  vermek sayıyı 100 kat küçük gösterirdi; `formatOran` ile basılıyor ve
+//  ×100 YAPILMIYOR — ölçeği altyazı söylüyor.
+//
+//  `sma50`/`sma200` momentum gövdesinde de geliyor ama BASILMIYOR:
+//  `seviye` bölümünde aynı iki kalem zaten var (yukarıda SMA 50 / SMA
+//  200 satırları). İkinci kez basmak kullanıcıya iki ayrı ölçüm sanısı
+//  verirdi.
+//
 //  BURADA HESAP YOK: alım bandının ortası alınmaz, hedef-fiyat farkı
 //  yüzdeye çevrilmez (`sellUpPct` zaten uçtan geliyor), R/R yeniden
 //  bölünmez.
+//
+//  ── OYNAKLIK BLOĞU NEDEN BURADA (eklendi 2026-11-03, Ş8 #14) ──────
+//  `atr / price * 100` app.js'te İKİ YERDE hesaplanıyor ve İKİ FARKLI
+//  soruya cevap veriyordu: ATR kartı ÜÇ KADEMELİ oynaklık sınıfı +
+//  "stop için ATR'nin 1.5-2 katı" cümlesi basıyor; katalizör satırı ise
+//  yalnız UÇLARDA (>=4 / <1.5) konuşup ARADA SUSUYOR. İkisi motorda iki
+//  ayrı makine koduna çevrildi (`atrVolKod` / `atrPlanKod`, kapısı
+//  uc-test ⑤g) ve `plan`ın beşinci/altıncı uzvu olarak buraya geldi:
+//  ATR satırı bu kartta ZATEN basılıyor, oranın sınıfını ayrı karta
+//  koymak aynı sayıyı iki yerde aratmak olurdu.
+//
+//  SESSİZ BANT KORUNUYOR: `atrPlan.kod === null` = ÖLÇTÜM, söylenecek
+//  bir şey yok → ekrana CÜMLE BASILMIYOR (web ile birebir). `atrPlan`
+//  nesnesinin KENDİSİ `null` ise bu "ölçemedim"dir ve ayrı yazılıyor;
+//  ikisini karıştırmak sessiz bantta da "ölçemedim" bastırırdı.
+//
+//  `stopKat` SAYILARI UÇTAN: "ATR × 1,5 – 2" notundaki iki sayı motorun
+//  çıktısı; buraya yazılsa istemciye eşik yazmak olurdu (§5.1).
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
@@ -43,6 +87,7 @@ import { Satir } from './Satir';
 import type { AnalyzeRow, Market } from '@/api';
 import { Card, Pill, VeriYok } from '@/components';
 import { EMPTY, formatOran, formatPercent, formatPrice } from '@/lib/format';
+import { ATR_PLAN_SOZLUK, OYNAKLIK_SOZLUK, sozluktenSec } from '@/lib/sozluk';
 import { signalOf, space, toneColors, type, useTheme } from '@/theme';
 
 /**
@@ -67,6 +112,23 @@ const KAYNAK_ETIKET: Record<string, string> = {
   sma200: 'SMA200',
   high: 'zirve',
 };
+
+/**
+ * Index imzasından (`[k: string]: unknown`) gelen `[alt, üst]` dizisi:
+ * iki ucu da SAYI ise döner, değilse `null`. Dönüştürme YOK — `Number(v)`
+ * yazmak ucun göndermediği bir sayıyı uydurmak olurdu.
+ */
+function sayiDizisi(v: unknown): number[] | null {
+  if (!Array.isArray(v)) return null;
+  const sayilar = v.filter((x): x is number => typeof x === 'number' && Number.isFinite(x));
+  return sayilar.length >= 2 ? sayilar : null;
+}
+
+/** Üç dal: alan bildirilmemiş → '—'; `true`/`false` → Türkçesi. Yorum yok. */
+function evetHayir(v: unknown): string {
+  if (typeof v !== 'boolean') return EMPTY;
+  return v ? 'evet' : 'hayır';
+}
 
 export type RiskOdulKartProps = {
   satir: AnalyzeRow;
@@ -118,6 +180,27 @@ export function RiskOdulKart({ satir }: RiskOdulKartProps) {
 
   const hedefUzak = yuzde(r?.sellUpPct);
   const kirilim = yuzde(r?.brkPct);
+
+  // Momentum: ham alanlar; `zone` index imzasından geldiği için kapıdan geçiyor.
+  const mom = plan.momentum;
+  const momBant = sayiDizisi(mom?.zone);
+
+  // ── OYNAKLIK (başlıktaki gerekçe) ─────────────────────────────────
+  // `undefined` = uç bu alanı göndermedi (eski sürüm) → HİÇBİR ŞEY
+  // çizilmez; `null` = ölçemedim. İkisi ayrı dal.
+  const vol = plan.oynaklik;
+  const volCumle = sozluktenSec(OYNAKLIK_SOZLUK, vol?.kod);
+  // Notun SAYILARI uçtan (`stopKat`); burada çarpan yazılmıyor.
+  const stopNot =
+    vol?.stopKat && vol.stopKat.length >= 2
+      ? 'yaygın stop mesafesi: ATR × ' +
+        formatOran(vol.stopKat[0]) +
+        ' – ' +
+        formatOran(vol.stopKat[1])
+      : undefined;
+  // SESSİZ BANT: `kod === null` ise cümle YOK (web `fillCatalysts` ile
+  // birebir). Nesne `null` ise "ölçemedim" ayrıca yazılıyor.
+  const bandCumle = sozluktenSec(ATR_PLAN_SOZLUK, plan.atrPlan?.kod);
 
   return (
     <Card
@@ -199,6 +282,57 @@ export function RiskOdulKart({ satir }: RiskOdulKartProps) {
         </View>
       ) : (
         <VeriYok metin="Risk / ödül kalemleri bu turda gelmedi." kartsiz />
+      )}
+
+      {/* OYNAKLIK — başlıktaki gerekçe. Sınıf motordan, eşik burada yok.
+          Alan HİÇ gelmediyse (eski uç sürümü) blok çizilmez: sorulmayan
+          sorunun cevabı ekranda görünmez. */}
+      {vol === undefined ? null : vol === null ? (
+        <VeriYok metin="Oynaklık sınıfı bu turda ölçülemedi." kartsiz />
+      ) : (
+        <View style={styles.liste}>
+          <Text style={[type.microBold, { color: colors.textDim }]}>Oynaklık (ATR / fiyat)</Text>
+          <Satir
+            etiket="ATR / fiyat"
+            not="günlük ortalama bar aralığının fiyata oranı"
+            deger={formatPercent(vol.atrPct)}
+          />
+          <Satir
+            etiket="Oynaklık bandı"
+            not={stopNot}
+            deger={volCumle ?? EMPTY}
+          />
+          {/* İKİNCİ SORU: plan/stop bandı. Sessiz bantta HİÇBİR ŞEY. */}
+          {plan.atrPlan === null ? (
+            <Text style={[type.micro, { color: colors.textFaint }]}>
+              Plan bandı ölçülemedi.
+            </Text>
+          ) : bandCumle ? (
+            <Text style={[type.micro, { color: colors.textFaint }]}>{bandCumle}</Text>
+          ) : null}
+        </View>
+      )}
+
+      {/* MOMENTUM — başlıktaki gerekçe. Ham alanlar, eşik/çevrim yok. */}
+      {mom ? (
+        <View style={styles.liste}>
+          <Text style={[type.microBold, { color: colors.textDim }]}>Momentum rejimi</Text>
+          <Satir
+            etiket="Rejim"
+            not="motorun kararı — eşik istemcide yok"
+            deger={mom.active ? 'açık' : 'kapalı'}
+          />
+          <Satir etiket="Trend hizası" deger={evetHayir(mom.trendAligned)} />
+          <Satir etiket="ADX" deger={formatOran(mom.adx, 1)} />
+          <Satir
+            etiket="Banda boşluk"
+            not="KESİR — 0,0200 yüzde 2 demek; uç yüzdeye çevirmiyor"
+            deger={formatOran(mom.gapPct, 4)}
+          />
+          {momBant ? <Satir etiket="Momentum alım bandı" deger={bant(momBant)} /> : null}
+        </View>
+      ) : (
+        <VeriYok metin="Momentum rejimi bu turda ölçülmedi." kartsiz />
       )}
     </Card>
   );

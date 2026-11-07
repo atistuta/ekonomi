@@ -63,7 +63,13 @@ import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
 export type TaramaKartProps = {
   /** Taranacak semboller — kullanıcının takip listesi. */
   liste: readonly string[];
-  onSembol?: (sym: string) => void;
+  /**
+   * Satıra dokunulunca çağrılır. `pazar` İKİNCİ PARAMETRE (TASARIM
+   * TURU 2): bu satırın pazar kodu uçtan geliyor ve hisse ekranı onu
+   * `.IS` ekini koymak için kullanıyor; düşürülürse BIST sembolü ABD'de
+   * ölçülüyor (ölçüm: `app/hisse/[sembol].tsx` başlığı).
+   */
+  onSembol?: (sym: string, pazar?: string | null) => void;
 };
 
 /**
@@ -252,7 +258,13 @@ function TaramaSatiri({
   onSembol,
 }: {
   sonuc: TaramaSonuc;
-  onSembol?: (sym: string) => void;
+  /**
+   * Satıra dokunulunca çağrılır. `pazar` İKİNCİ PARAMETRE (TASARIM
+   * TURU 2): bu satırın pazar kodu uçtan geliyor ve hisse ekranı onu
+   * `.IS` ekini koymak için kullanıyor; düşürülürse BIST sembolü ABD'de
+   * ölçülüyor (ölçüm: `app/hisse/[sembol].tsx` başlığı).
+   */
+  onSembol?: (sym: string, pazar?: string | null) => void;
 }) {
   const { colors } = useTheme();
   const clsMetni = sonuc.cls ? (CLS_AD[sonuc.cls] ?? sonuc.cls) : null;
@@ -298,7 +310,7 @@ function TaramaSatiri({
 
   return (
     <Pressable
-      onPress={() => onSembol(sonuc.sym)}
+      onPress={() => onSembol(sonuc.sym, sonuc.market)}
       accessibilityRole="button"
       accessibilityLabel={sonuc.sym + ' — hisse sayfasına git'}
       style={({ pressed }) => (pressed ? { backgroundColor: colors.bgPressed } : null)}>

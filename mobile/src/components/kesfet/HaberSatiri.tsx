@@ -18,6 +18,19 @@
 //  kopyasını kullanıyor" ölçümü artık geçerli değil). Gövde iki dosyada
 //  BİREBİR aynıydı; davranış değişmedi.
 //
+//  ── TÜR VE SEMBOL ROZETİ (eklendi 2026-10-29, ŞERİT F) ────────────
+//  ÖLÇÜLDÜ: uç maddeye `type` ve `symbol` alanlarını YAZIYOR
+//  (api/_haber.js:81 `MADDE_ALANLARI`, :242) ama native sözleşme tipi
+//  dört alan sayıyordu ve bu ikisi gövdede GELDİĞİ HÂLDE hiçbir ekrana
+//  ulaşmıyordu. Artık satırın solunda basılıyorlar.
+//
+//  ROZET HAM: ucun verdiği dizgi olduğu gibi gidiyor — 'NEWS' → "Haber"
+//  gibi bir çeviri sözlüğü BİLEREK yazılmadı; uç yarın üçüncü bir tür
+//  ilan ederse sözlükte karşılığı olmadığı için sessizce düşerdi.
+//  `symbol` `null` ise rozet HİÇ basılmıyor: serbest metin sorgusunda
+//  maddenin hissesi YOKTUR ve sorgu metnini sembol gibi yazmak uydurma
+//  olurdu (uç başlığının kendi gerekçesi).
+//
 //  BURADA HESAP YOK: metinler ucun verdiği gibi basılıyor; kısaltma,
 //  çeviri ya da "olumlu/olumsuz" etiketi yok — o yorum olurdu. Tarih
 //  biçimlemesi `lib/format.ts`e bırakılıyor.
@@ -28,6 +41,7 @@
 import { Linking, StyleSheet, Text, View } from 'react-native';
 
 import { type HaberMadde } from '@/api';
+import { Pill } from '@/components';
 import { formatHaberTarih } from '@/lib/format';
 import { space, type, useTheme } from '@/theme';
 
@@ -41,9 +55,21 @@ export function HaberSatiri({ madde }: HaberSatiriProps) {
   const link = (madde.link ?? '').trim();
   const kaynak = (madde.source ?? '').trim();
   const tarih = formatHaberTarih(madde.pubDate);
+  // Ham dizgiler: boşsa rozet HİÇ basılmıyor (yer tutucu uydurulmuyor).
+  const tur = (madde.type ?? '').trim();
+  const sembol = (madde.symbol ?? '').trim();
 
   return (
     <View style={styles.satir}>
+      {tur || sembol ? (
+        <View style={styles.rozetler}>
+          {tur ? <Pill label={tur} tone="neutral" variant="outline" glyph={null} size="sm" /> : null}
+          {sembol ? (
+            <Pill label={sembol} tone="info" variant="outline" glyph={null} size="sm" />
+          ) : null}
+        </View>
+      ) : null}
+
       {/* Bağlantı YOKSA basılabilir görünmüyor: tıklanınca hiçbir şey
           olmayan bir başlık, çalışıyormuş gibi görünen bir yalandır. */}
       <Text
@@ -67,4 +93,5 @@ export function HaberSatiri({ madde }: HaberSatiriProps) {
 
 const styles = StyleSheet.create({
   satir: { gap: 2, paddingVertical: space.sm },
+  rozetler: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, paddingBottom: 2 },
 });

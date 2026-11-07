@@ -267,7 +267,19 @@ export default async function handler(req, res) {
             composite: { band: null, why: 'eksik skor' },
           };
         }
-        sonuclar.push({ ...kayit, sayac, tam: sayacTam(sayac) });
+        // G1 (2026-10-29): ekranın bastığı HAM gösterge değerleri. EK (additive)
+        // alan — mevcut hiçbir alanın adı/yeri/birimi/tipi DEĞİŞMEDİ, `ta.ham`
+        // yalnızca EKLENİR ve `ta` içinde en sona gelir. Skora DOKUNMAZ: eşik,
+        // ağırlık, yorum yok; HAM SAYI + sabit-küme makine kodu (mumKodu/mumSinyali/
+        // fibYon) döner. TA skoru yoksa (ölçülemedi) ham blok ÜRETİLMEZ → null,
+        // SIFIR DEĞİL. Mum aynı turda zaten çekildi: api/_ag.js `birKez` ikinci ağı
+        // AÇMAZ, yalnız sayac.tekrar artar (kesinti/tam sayacına dokunmaz).
+        let hamTA = null;
+        if (kayit.ta && kayit.ta.score != null) {
+          hamTA = await ENG.taHamUcGostergeler(row.sym, row.market);
+        }
+        const taBlok = kayit.ta ? { ...kayit.ta, ham: hamTA } : kayit.ta;
+        sonuclar.push({ ...kayit, ta: taBlok, sayac, tam: sayacTam(sayac) });
       }
     } finally {
       AG.odakla(null); // sayaç odağı genele dönsün (sonraki istek temiz başlar)

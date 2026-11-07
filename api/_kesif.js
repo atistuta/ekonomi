@@ -71,7 +71,7 @@ import { anahtar, oku, yaz, TTL_FIYAT } from './_onbellek.js';
 import {
   KAPSAMLAR, VARSAYILAN_KAPSAM,
   AZAMI_KAP, VARSAYILAN_KAP, AZAMI_TEMETTU, VARSAYILAN_TEMETTU,
-  bosTakvimSayac, takvimTam, kapCek, temettuCek,
+  bosTakvimSayac, takvimTam, kapCek, temettuCek, trTakvimGunu,
 } from './_takvim.js';
 
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
@@ -140,6 +140,16 @@ export const OLCUM_SAYISAL = Object.freeze([
   'earningsGrowth', 'debtToEquity', 'dividendYield', 'price',
 ]);
 export const OLCUM_METINSEL = Object.freeze(['sector', 'industry', 'name', 'bizSummary']);
+
+// Sektör kovasına TELE ÇIKAN `bizSummary` tavanı — 400 karakter.
+// ÖLÇÜM/GEREKÇE: ekranın okuduğu şey TAM metin değil, İLK CÜMLE
+// (`sekBizHtml` → `firstSentence(s.biz)`, app.js:10052). Yahoo
+// `longBusinessSummary` 1–3 KB bandında; 20 hisselik bir sektör
+// cevabında tamamını taşımak gövdeyi ~40 KB şişirir. 400 karakter bir
+// iş tanımının ilk cümlesini rahat alır.
+// SESSİZ KIRPMA YOK: kesilen maddede `bizSummaryKirpik: true` dönüyor.
+// (Girdi tarafında ayrıca `ayristirOlcumler`in 2048 tavanı var.)
+export const SEKTOR_BIZ_AZAMI = 400;
 
 function kisaOnbellek(res) {
   res.setHeader('Cache-Control', 'public, max-age=30');
@@ -390,8 +400,14 @@ export async function taramaHandler(req, res) {
 //      sira ∈ SIRA_KIPLERI (cheap|growth|margin|count), varsayılan cheap
 //    Cevap 200: { sira, gruplar[], degerlendirilen, siniflanan, surum, ms, uyari }
 //      gruplar[] = { anahtar, n, medPe, medFpe, medGrowth, medMargin, medPeg,
-//                    hisseler: [ { sym, market, basis, trailingPE, forwardPE,
+//                    hisseler: [ { sym, market, basis, name, industry,
+//                                  bizSummary, bizSummaryKirpik,
+//                                  trailingPE, forwardPE,
 //                                  revenueGrowth, profitMargin, peg } ] }
+//      `name`/`industry`/`bizSummary` SUNUM alanları: gruplamaya da,
+//      medyana da, sıralamaya da GİRMEZ. Ölçülemeyen `null`.
+//      `bizSummary` `SEKTOR_BIZ_AZAMI` karakterde kesiliyor; kesildiyse
+//      `bizSummaryKirpik: true` (sessiz kırpma yok).
 //      `anahtar` SEK_META anahtarı ('Technology' … '_other'). Emoji (`e`) ve
 //      Türkçe ad (`n`) TELE KONMADI: istemcide zaten var.
 //      `basis` sınıflandırmanın hangi kademeden geldiği —
@@ -438,10 +454,24 @@ export async function sektorHandler(req, res) {
       const cl = ENG.sekClassify(k.m, { symbol: k.sym, market: k.market });
       siniflanan++;
       if (!kova.has(cl.key)) kova.set(cl.key, { anahtar: cl.key, hisseler: [] });
+      // `bizSummary` tavanı — kesilirse `bizSummaryKirpik` ile BİLDİRİLİYOR.
+      const bizHam = k.m.bizSummary;
+      const bizKirpik = typeof bizHam === 'string' && bizHam.length > SEKTOR_BIZ_AZAMI;
       kova.get(cl.key).hisseler.push({
         sym: k.sym,
         market: k.market,
         basis: cl.basis,
+        // --- KİMLİK ALANLARI (sunum; medyana/sıralamaya GİRMEZ) ---
+        // Hisse ekranda YALNIZ sembolle görünüyordu. Üçü de GELEN kayıtta
+        // ZATEN var (`OLCUM_METINSEL`) → EK ÜST-KAYNAK İSTEĞİ YOK, sembol
+        // başına 0 istek, 0 ms. Adlar `/api/yfin` ile BİREBİR.
+        // Alan yoksa `null`: boş dizge YOK, `sym`i ad yerine KOPYALAMA YOK
+        // (app.js:10079 `res.name || u.symbol` yedeğini yapıyor — o bir
+        // EKRAN kararı, uca taşınmadı).
+        name: k.m.name,
+        industry: k.m.industry,
+        bizSummary: bizKirpik ? bizHam.slice(0, SEKTOR_BIZ_AZAMI) : bizHam,
+        bizSummaryKirpik: bizKirpik,
         trailingPE: k.m.trailingPE,
         forwardPE: k.m.forwardPE,
         revenueGrowth: k.m.revenueGrowth,
@@ -1028,7 +1058,14 @@ export async function aramaHandler(req, res) {
 //    · Kazanç (earn) sekmesi: `/api/yfin?deep=1&symbols=…` zaten
 //      `earnings{ts, epsAvg/High/Low, revAvg/High/Low}` + `price`
 //      döndürüyor — `fetchEarnBatch`in (app.js:9398) okuduğu küme BU.
-//      Senaryo matematiği (`earnScenario`) BİÇİMLEME, uca girmez.
+//      BU SATIRDA YANLIŞ BİR İDDİA VARDI (düzeltildi 2026-10-31):
+//      "Senaryo matematiği (`earnScenario`) BİÇİMLEME, uca girmez"
+//      yazıyordu. ÖLÇÜLDÜ, yanlış: `earnScenario` (app.js:9535-9549)
+//      içinde K=2,0 tepki katsayısı, ±%40 tavanı ve analist dağılımı
+//      aritmetiği var — biçimleme değil İSTEMCİ FORMÜLÜ. Ş8 #11 ile
+//      motora taşındı (`tests/engine.mjs` dilim `earn-senaryo`) ve uç
+//      `deep=1` kipinde `senaryo` kardeş alanını döndürüyor
+//      (`api/_yfin.js` `senaryoKatmani`). Native yalnız basıyor.
 //    · Momentum sekmesi: `/api/recommend?symbols=…&vade=orta` gövdesinde
 //      `plan.momentum` = motorun `momentumInfo` çıktısının TAMAMI
 //      (`active`, `zone`, `adx`, `gapPct`, `sma50`, `sma200`). Süzme ve
@@ -1047,7 +1084,26 @@ export async function aramaHandler(req, res) {
 //            temettu?:    (madde[]|null),   // kapsam temettu/hepsi ise VAR
 //            temettuAdet?:(number|null),
 //            temettuAtlanan?:(number|null), temettuTekrar?:(number|null),
+//            temettuGecmisAdet?:(number|null),
+//            temettuGelecekAdet?:(number|null),
+//            temettuBugun?:(string|null),
 //            sayac, tam, ms, uyari }
+//
+//  TEMETTÜ GEÇMİŞ/GELECEK (eklendi 2026-10-29): her maddede `paid`
+//  (true = tarihi BUGÜN ya da geçmiş · false = gelecek · null =
+//  ölçülemedi). İkizi app.js:6681 `paid: d.date <= today`. Karşılaştırma
+//  günü `temettuBugun` alanında YAZILI (TR yerel günü, `YYYY-MM-DD`).
+//  Sıralama ve "yakın geçmiş" penceresi UÇTA YOK — o EKRAN kararı
+//  (app.js:6690).
+//
+//  ÖLÇÜLMÜŞ TUZAK — TAVAN GELECEĞİ KESEBİLİR: kaynak sayfa ayları
+//  OCAK→ARALIK sırasında basıyor, `ayristirTemettu` da BELGE SIRASINDA
+//  `temettuAdet` tavanına kadar alıyor. Yılın ikinci yarısında
+//  varsayılan 120 madde tavanı GEÇMİŞ satırlarla dolabilir ve gelecek
+//  temettüler listeye hiç girmeyebilir. Bu MEVCUT davranış; bu şeritte
+//  DEĞİŞTİRİLMEDİ (madde seçimini değiştirmek alan eklemek değil).
+//  `temettuGelecekAdet === 0` iken `temettuAdet === temettuAzami`
+//  görülüyorsa istemci `temettuAdet=400` ile tekrar sormalı.
 //    400 → bad_kapsam | bad_limit
 //    405 → method_not_allowed (Allow başlığıyla)
 //    502 → takvim_alinamadi (İSTENEN KAYNAKLARIN HEPSİ okunamadı)
@@ -1103,8 +1159,14 @@ export async function takvimHandler(req, res) {
   const temettuAzami = nTemettu === null ? VARSAYILAN_TEMETTU : nTemettu;
 
   const t0 = Date.now();
+  // GÜN — `temettu[].paid` için TEK karşılaştırma noktası. Saat BURADA
+  // okunuyor, taşıyıcının ayrıştırıcıları SAF kalsın diye (`trTakvimGunu`
+  // ms'yi dışarıdan alıyor). TR yerel günü; gerekçe `_takvim.js` başlığı.
+  const bugun = trTakvimGunu(Date.now());
   // Önbellek anahtarında MOTOR İMZASI YOK: gövde motordan bağımsız.
-  const obAnahtar = anahtar('takvim', { kapsam, kapAzami, temettuAzami });
+  // `bugun` anahtarda VAR: `paid` güne bağlı, gün dönünce dünün gövdesi
+  // "ödenmedi" basmaya devam etmesin (TTL 5 dk olsa bile sözleşme net).
+  const obAnahtar = anahtar('takvim', { kapsam, kapAzami, temettuAzami, bugun });
   const obVurus = await oku(obAnahtar);
   if (obVurus) {
     res.setHeader('X-Onbellek', 'isabet');
@@ -1121,7 +1183,7 @@ export async function takvimHandler(req, res) {
     // kalır ama ekranı iki kat bekletirdi.
     const [kapS, temettuS] = await Promise.allSettled([
       kapIstendi ? kapCek({ sayac, azami: kapAzami }) : Promise.resolve(null),
-      temettuIstendi ? temettuCek({ sayac, azami: temettuAzami }) : Promise.resolve(null),
+      temettuIstendi ? temettuCek({ sayac, azami: temettuAzami, bugun }) : Promise.resolve(null),
     ]);
     const kapD = kapS.status === 'fulfilled' ? kapS.value : null;
     const temettuD = temettuS.status === 'fulfilled' ? temettuS.value : null;
@@ -1152,6 +1214,16 @@ export async function takvimHandler(req, res) {
       ...(temettuIstendi ? {
         temettu,
         temettuAdet: temettu ? temettu.length : null,
+        // GEÇMİŞ / GELECEK DİLİMİ — `paid` sayımı. İstemci diziyi kendi
+        // bölebilir; bu iki sayı "liste kısaldı mı, hangi tarafı kısaldı"
+        // sorusunu TEK bakışta yanıtlıyor (aşağıdaki TAVAN notu).
+        // `paid === null` olan madde İKİSİNE DE girmez → toplamları
+        // `temettuAdet`ten küçük olabilir, bu bir ölçüm.
+        temettuGecmisAdet: temettu ? temettu.filter((d) => d.paid === true).length : null,
+        temettuGelecekAdet: temettu ? temettu.filter((d) => d.paid === false).length : null,
+        // Karşılaştırma günü GÖVDEDE: istemci `paid`in neye göre
+        // hesaplandığını görebilsin (önbellekten gelen gövdede de duruyor).
+        temettuBugun: bugun,
         // Ayrıştırıcının ATLADIĞI ve TEKİLLEŞTİRDİĞİ satır sayısı
         // görünür: sessizce kaybolan satır olmasın.
         temettuAtlanan: temettuD ? temettuD.atlanan : null,

@@ -65,7 +65,10 @@
 //        kind     endeks türü — SABİT KÜME, motorun CAUSAL_INDEX_AFFINITY
 //                 anahtarları (equity_tech|equity_us|equity_tr|gold)
 //        pct      günlük değişim yüzdesi, HAM sayı
-//        notable  "belirgin" eşiği (yüzde) — istemcinin endeks ayarından
+//        notable  SEÇİMLEİK. "belirgin" eşiği (yüzde puan). YOKSA motorun
+//                 `INDEX_ESIK` tablosundan `kind`e göre OKUNUYOR — eşik
+//                 motorun ayarı, istemcinin değil (§5.1). İki yerde de yoksa
+//                 400 `bad_notable`: eşik UYDURULMUYOR.
 //      gundem: [ { key, sectors, risk, tone, heat, heads } ]  AZAMI_KONSEPT
 //        sectors  [[sektor, 'up'|'down'], ...]
 //        risk     'on' | 'off' | null
@@ -137,11 +140,12 @@ try {
 
 /**
  * Gövdeyi doğrula ve motorun beklediği biçime çevir. SAF: ağa çıkmaz,
- * motoru ÇAĞIRMAZ (yalnız geçerli `kind` kümesini motordan okur). Bu
+ * motoru ÇAĞIRMAZ (yalnız geçerli `kind` kümesini ve `INDEX_ESIK`
+ * eşik tablosunu motordan okur — ikisi de VERİ, çağrı değil). Bu
  * yüzden dışa aktarılıyor — tests/uc-test.mjs ağsız ölçebiliyor.
  * @returns {{rows:object[], ag:object} | {hata:{http:number, govde:object}}}
  */
-export function ayristirGovde(body, gecerliKindler) {
+export function ayristirGovde(body, gecerliKindler, esikTablosu) {
   const hata = (http, govde) => ({ hata: { http, govde } });
   if (!body || typeof body !== 'object' || Array.isArray(body)) return hata(400, { error: 'govde_yok' });
 
@@ -167,9 +171,16 @@ export function ayristirGovde(body, gecerliKindler) {
     if (!gecerliKindler.includes(kind)) return hata(400, { error: 'bad_kind', izinli: gecerliKindler });
     const pct = Number(h.pct);
     if (!Number.isFinite(pct)) return hata(400, { error: 'bad_pct' });
-    const notable = Number(h.notable);
-    if (!Number.isFinite(notable) || notable < 0) return hata(400, { error: 'bad_notable' });
-    rows.push({ cfg: { kind, notable }, pct });
+    // `notable` SEÇİMLEİK (2026-11-03): eşik motorun `INDEX_ESIK`
+    // tablosunda duruyor, bu yüzden ince istemcinin onu GÖNDERMESİ
+    // GEREKMİYOR — göndermek zorunda olması eşiği ekrana taşıyordu
+    // (§5.1). GÖVDE ÖNCE gelir: web kendi tablosundan ölçüp yolladığında
+    // sunucu onu EZMEZ, iki taraf sessizce ayrışmasın diye.
+    // İKİ YERDE DE YOKSA 400: varsayılan bir eşik SEÇİLMİYOR.
+    const tabloEsik = esikTablosu && esikTablosu[kind] ? Number(esikTablosu[kind].notable) : NaN;
+    const ham = h.notable === undefined || h.notable === null ? tabloEsik : Number(h.notable);
+    if (!Number.isFinite(ham) || ham < 0) return hata(400, { error: 'bad_notable' });
+    rows.push({ cfg: { kind, notable: ham }, pct });
   }
 
   // Gündem konseptleri → motorun okuduğu alanlar YALNIZCA. Fazlası (label,
@@ -239,7 +250,7 @@ export default async function handler(req, res) {
     }
   }
 
-  const ay = ayristirGovde(body, Object.keys(ENG.CAUSAL_INDEX_AFFINITY));
+  const ay = ayristirGovde(body, Object.keys(ENG.CAUSAL_INDEX_AFFINITY), ENG.INDEX_ESIK);
   if (ay.hata) {
     kisaOnbellek(res);
     res.status(ay.hata.http).json({ ...ay.hata.govde, uyari: UYARI });

@@ -73,6 +73,13 @@
 //                  `time` saniye cinsinden UNIX damgası (üst kaynağın
 //                  verdiği gibi; ms'e çevirmek biçimleme sayılır).
 //      kunye     = üst-kaynak künyesinin SÜZÜLMÜŞ hâli (KUNYE_ALANLARI).
+//      gunici    = ⚡ GÜN İÇİ ÖLÇÜM (motorun `analyzeIntraday`ı), YALNIZ
+//                  `interval=5m` iken. `null` ise `guniciKod` NEDENİNİ
+//                  söyler. Alanlar: price · prevClose · dayChg · hourChg ·
+//                  rvol · breakout · sudden · bigDay · esik{day,hour,step} ·
+//                  esikKumesi. `spark` BİLEREK TAŞINMIYOR: `mumlar[]` aynı
+//                  seriyi zaten taşıyor, ikinci kopya saf şişme olurdu.
+//      guniciKod = null | 'adim_uygun_degil' | 'mum_az'
 //      adet      = mumlar.length — istemci boş seriyi alan okumadan görsün.
 //    Cevap 4xx: { error: <makine kodu>, ... , uyari }
 //    Cevap 502: { error: 'grafik_alinamadi', uyari }   (içeriden gelen
@@ -139,6 +146,46 @@ export const KUNYE_ALANLARI = [
   'fiftyTwoWeekHigh', 'fiftyTwoWeekLow',
   'dataGranularity', 'range',
 ];
+
+// ---------------------------------------------------------------------
+//  ⚡ GÜN İÇİ ÖLÇÜM NİYE BU UÇTA (eklendi 2026-11-03, Ş8 #1/#6)
+//
+//  SORUN (ölçüldü): `analyzeIntraday` ÜÇ YERDE yazılıydı — app.js 11973,
+//  poll.js 237, worker/movers.mjs 72. Aynı formüller, yedi küçük fark
+//  (girdi şekli, `<3` korumasının yeri, `||` vs `??`, `prevClose`
+//  zinciri, `breakout`/`spark` yalnız app'te) ve tüketici tarafında
+//  gerçek bir SAPMA: app `up = dayChg >= 0`, poll `up = dayChg > 0`.
+//  Üçünden de UCA çıkan sayı YOKTU; `/api/chart` ham `mumlar[]`
+//  döndürüyordu, yani native `dayChg`/`hourChg`/`rvol`/`breakout`
+//  göremiyordu ve nabzı HİÇ kuramıyordu.
+//
+//  NİYE YENİ UÇ DEĞİL: mumlar ZATEN burada iniyor. Ayrı uç aynı seriyi
+//  İKİNCİ KEZ indirirdi, üstüne Vercel Hobby 12 fonksiyon tavanı dolu.
+//  Hesap motorda (`ENG.analyzeIntraday` + `ENG.pulseIsSudden`), burada
+//  yalnız ÇAĞRI ve TAŞIMA var — eşik/formül yazılmadı.
+//
+//  NİYE YALNIZ `interval=5m`: `analyzeIntraday` içinde `ago = hi - 12`
+//  yorumu "~60 dk (12 x 5dk)" diyor. 15m/60m/1d adımlarında aynı satır
+//  3 saatlik ya da 12 GÜNLÜK değişimi `hourChg` adıyla basardı. Yanlış
+//  etiketli sayı basmak yerine alan `null` dönüyor ve `guniciKod`
+//  NEDENİ söylüyor — "sormadım" ile "ölçemedim" karışmıyor.
+// ---------------------------------------------------------------------
+
+/**
+ * Hangi eşik kümesi (`PULSE_TH` anahtarı). Bu bir EŞİK SEÇİMİ DEĞİL,
+ * YÖNLENDİRME: sayılar motorda duruyor, burada yalnız hangi kümenin
+ * okunacağı belirleniyor. Web aynı işi `pulseSymbols` içindeki `thkey`
+ * etiketiyle yapıyor (app.js ~11944) — oradaki kaynak kullanıcı
+ * listesi olduğu için uçta kullanılamıyor, kural SEMBOLDEN okunuyor.
+ * SAF: dışa aktarılıyor ki kapı fikstürle ölçebilsin.
+ */
+export function esikKumesiAnahtari(sym, market) {
+  const u = String(sym || '').toUpperCase();
+  if (u.endsWith('-USD')) return 'CRYPTO';
+  // Yahoo vadeli maden sembolleri — `METAL_SPOT.ysym` ile aynı küme.
+  if (u === 'GC=F' || u === 'SI=F' || u === 'PL=F') return 'METAL';
+  return market === 'BIST' ? 'BIST' : 'US';
+}
 
 /**
  * Künyeyi süz. SAF: ağa çıkmaz, motora dokunmaz. Bu yüzden dışa
@@ -309,6 +356,29 @@ export default async function handler(req, res) {
       kisaOnbellek(res);
     }
 
+    // ⚡ Gün içi katman (gerekçe `esikKumesiAnahtari` başlığında).
+    //  Motor `null` dönerse (mum < 3) sayı UYDURULMUYOR.
+    let gunici = null;
+    let guniciKod = interval === '5m' ? null : 'adim_uygun_degil';
+    if (!guniciKod) {
+      const a = ENG.analyzeIntraday(mumlar, seri && seri.meta);
+      if (!a) {
+        guniciKod = 'mum_az';
+      } else {
+        const esikKumesi = esikKumesiAnahtari(hedef.sym, hedef.market);
+        const sd = ENG.pulseIsSudden(a, esikKumesi);
+        // `spark` ÇIKARILIYOR: `mumlar[]` aynı seriyi taşıyor.
+        const { spark, ...olcum } = a; // eslint-disable-line no-unused-vars
+        gunici = {
+          ...olcum,
+          sudden: sd.sudden,
+          bigDay: sd.bigDay,
+          esik: sd.th,
+          esikKumesi,
+        };
+      }
+    }
+
     const govde = {
       sym: hedef.sym,
       market: hedef.market,
@@ -317,6 +387,8 @@ export default async function handler(req, res) {
       mumlar,
       adet: mumlar.length,
       kunye: suzKunye(seri && seri.meta),
+      gunici,
+      guniciKod,
       sayac,
       tam,
       surum: { motor: IMZA, ayar: IMZA_AYAR },

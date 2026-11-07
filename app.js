@@ -254,7 +254,14 @@
       const title = decode(m[2]);
       const date  = parseDate(m[3]);
       // Başlıktan ticker(lar)ı çıkar: ***IZFAS*** veya ***OMP ** ODP*** (çoklu)
-      const tickerBlock = title.match(/\*\*\*([^*]+)\*\*\*/);
+      // İKİZİ: api/_takvim.js `kapSemboller`. ÖLÇÜM (2026-10-30, canlı
+      // /api/takvim?kapsam=hepsi, 30 madde): eski `[^*]+` bloğu
+      // `***GRFIN ** EMVAR***` biçimini EŞLEYEMİYOR, 16/30 maddede
+      // sembol null kalıyordu. Tembel `[\s\S]+?` bloğun İÇİNDEKİ `**`
+      // ayraçlarını geçiyor; kapanış yine `***` arıyor, iki ayrı blok
+      // birleşmiyor. Aynı 30 maddede ölçüm: 16 düzeldi, 0 null kaldı,
+      // daha önce ayrışan 14 maddenin HİÇBİRİ değişmedi.
+      const tickerBlock = title.match(/\*\*\*([\s\S]+?)\*\*\*/);
       const tickers = tickerBlock
         ? tickerBlock[1].split(/[\s*,]+/).filter(t => /^[A-Z][A-Z0-9]{1,5}$/.test(t))
         : [];
@@ -1466,6 +1473,196 @@
     const rrRatio = (sellUpPct != null && brkPct != null && brkPct < 0 && Math.abs(brkPct) > 0.01)
       ? sellUpPct / Math.abs(brkPct) : null;
     return { sellUpPct, sellKind: L.sellKind || 'sell', brkPrimary, brkKind, brkPct, brkMajor, atrStop, rrRatio };
+  }
+
+  // ===== ATR / FİYAT ORANININ İKİ AYRI SORUSU (Ş8 #14) =====
+  //
+  //  SORUN (ölçüldü 2026-11-03): `atr / price * 100` app.js'te İKİ YERDE
+  //  hesaplanıyor ve İKİ FARKLI SORUYA cevap veriyor:
+  //
+  //    (1) ATR (14) · Volatilite kartı (eski satır 4583-4586):
+  //        ÜÇ KADEMELİ oynaklık sınıfı — >=4 yüksek · >=2 orta · altı düşük,
+  //        ARTI "stop/pozisyon için ATR'nin 1.5-2 katı" mesafe cümlesi.
+  //        Her ölçümde bir sınıf çıkar; sessiz bant YOK.
+  //
+  //    (2) fillCatalysts katalizör satırı (eski satır 5828-5830):
+  //        PLAN/BÖLGE uyarısı — >=4 "bölgeler geniş, giriş/çıkışta risk
+  //        yüksek" · <1.5 "sakin seyir, kırılımlar daha anlamlı" · ARADA
+  //        (1.5 <= x < 4) HİÇBİR ŞEY BASILMIYOR. Yani SESSİZ BANDI VAR.
+  //
+  //  NİYE TEK FONKSİYON DEĞİL: sınırlar farklı (2 / 4 ile 1.5 / 4), kademe
+  //  sayısı farklı (3 ile 2+sessiz) ve ikisini tek "kazanan"a indirmek
+  //  webdeki iki davranıştan BİRİNİ SESSİZCE SİLERDİ. Bu yüzden iki ayrı
+  //  makine kodu üretiliyor; hangisinin hangi kartta kullanılacağını
+  //  ÇAĞIRAN seçiyor.
+  //
+  //  HAM SAYI KURALI (BAGIMLILIK_GRAFIGI §5.1): ikisi de SAYI + SABİT
+  //  KÜMELİ kod döndürür — emoji yok, toFixed yok, Türkçe cümle yok.
+  //  Cümleyi web'de çağrı noktası, native'de `mobile/src/lib/sozluk.ts`
+  //  kuruyor. `stopKat` da SAYI olarak taşınıyor (web cümlesindeki
+  //  "1.5-2 katı"), çünkü o iki sayıyı istemciye yazmak istemciye eşik
+  //  yazmak olurdu.
+  //
+  //  NİYE `taHamGostergeler` BU ORANI TAŞIMIYOR: orada (satır ~1490)
+  //  "türev oranlar BİLEREK yok, referans değerler döndüğü için istemci
+  //  kendi bölmesini yapar" yazıyor ve o duruş DEĞİŞMEDİ. Buraya giren
+  //  şey oranın kendisi değil, oranın SINIFLANDIRILMASI — eşikler
+  //  istemciye kopyalanmasın diye.
+  //
+  //  BOŞ DEĞER: ölçüm yoksa `null` döner, SIFIR DÖNMEZ (atrPct = 0
+  //  geçerli bir ölçümdür: hiç hareket etmemiş bar).
+  // =========================================================================
+
+  //  OYNAKLIK SINIFI (soru 1). Üç kademe, sessiz bant yok.
+  //  `null` = ATR ölçülemedi. `atrPct === null` = ATR var ama fiyat yok →
+  //  oran ölçülemedi; `kod` da null olur (web'de `lvl = ''`).
+  function atrVolKod(atr, price) {
+    if (atr == null) return null;
+    const atrPct = price ? (atr / price * 100) : null;
+    const kod = atrPct == null ? null : atrPct >= 4 ? 'yuksek' : atrPct >= 2 ? 'orta' : 'dusuk';
+    return { atr, atrPct, kod, stopKat: [1.5, 2] };
+  }
+
+  //  PLAN / STOP BANDI (soru 2). İki kod + SESSİZ ORTA BANT.
+  //  `null`      = ölçemedim (ATR ya da fiyat yok).
+  //  `kod: null` = ÖLÇTÜM, söylenecek bir şey yok (1.5 <= atrPct < 4) —
+  //                web'de bu durumda katalizör satırına madde EKLENMEZ.
+  function atrPlanKod(atr, price) {
+    if (atr == null || !price) return null;
+    const atrPct = atr / price * 100;
+    const kod = atrPct >= 4 ? 'genis' : atrPct < 1.5 ? 'sakin' : null;
+    return { atrPct, kod };
+  }
+
+  // =========================================================================
+  //  KATALİZÖR / RİSK SATIRI — YAKLAŞAN TEMETTÜ EŞİĞİ          (Ş8 · (G))
+  // -------------------------------------------------------------------------
+  //  SORUN (ölçüldü 2026-11-05): `fillCatalysts` yaklaşan temettü maddesini
+  //  TARAYICIDA karara bağlıyordu — `Math.round((d - today)/86400000)` ile
+  //  gün farkını kendi hesaplıyor, sonra `days <= 45` eşiğiyle maddeyi
+  //  basıp basmamaya karar veriyordu. Native istemci hesap YAPMAZ ve eşik
+  //  TAŞIMAZ (BAGIMLILIK_GRAFIGI §5.1), yani bu madde native'e OLDUĞU GİBİ
+  //  taşınamazdı. Karar buraya, hesap `/api/katalizor` ucuna taşındı.
+  //
+  //  NİYE `atrPlanKod` GİBİ AYRI İKİ FONKSİYON: gün farkı ile eşik kararı
+  //  AYRI sorular — uç gün farkını da basıyor (ekranda "18 gün" yazacak),
+  //  ama maddenin BASILIP BASILMAYACAĞINA kod karar veriyor.
+  //
+  //  SESSİZ BANT YOK, ÜÇ KOD VAR: `yakin` (eşik içinde) · `uzak` (ölçüldü,
+  //  eşiğin dışında) · `gecti` (tarih geçmiş). Web ARADA susuyordu ama o
+  //  susma bir BİLGİ KAYBIYDI: "temettü var, ama uzak" ile "temettü yok"
+  //  ekranda aynı görünüyordu. Üç kod bunu ayırıyor; hangisinin EKRANDA
+  //  cümleye çevrileceğini ÇAĞIRAN seçiyor (web yalnız `yakin` basmaya
+  //  devam ediyor — davranış birebir korunuyor).
+  //
+  //  BOŞ DEĞER: tarih ölçülemediyse `null`, SIFIR DÖNMEZ (0 gün geçerli
+  //  bir ölçümdür: temettü BUGÜN).
+  // =========================================================================
+  const KAT_TEMETTU_GUN = 45;
+  const KAT_TEMETTU_KODLARI = ['yakin', 'uzak', 'gecti'];
+
+  //  GÜN FARKI (soru 1). İki zaman damgası arası TAM gün sayısı.
+  //  `null` = taraflardan biri ölçülemedi. Negatif = tarih GEÇMİŞ.
+  function katGunFarki(hedefMs, simdiMs) {
+    const h = Number(hedefMs);
+    const s = Number(simdiMs);
+    if (!Number.isFinite(h) || !Number.isFinite(s)) return null;
+    return Math.round((h - s) / 86400000);
+  }
+
+  //  EŞİK KARARI (soru 2). Gün farkı → kapalı küme kodu.
+  //  `null` = gün farkı ölçülemedi.
+  function katTemettuKod(gun) {
+    if (gun == null || !Number.isFinite(Number(gun))) return null;
+    const g = Number(gun);
+    if (g < 0) return 'gecti';
+    return g <= KAT_TEMETTU_GUN ? 'yakin' : 'uzak';
+  }
+
+  // ===== HAM GÖSTERGE SÖZLÜĞÜ (uç + native kart için) =====
+  // SORUN (ölçüldü 2026-10-29): renderTAIndicators ekranda 20+ HAM gösterge
+  // değeri basıyor ama hiçbir uç bu sayıları döndürmüyordu — native teknik kart
+  // çizecek sayıyı bulamıyordu. Burası YENİ İNDİKATÖR MATEMATİĞİ YAZMAZ: aynı
+  // calc* fonksiyonlarını renderTAIndicators çağrı noktasıyla (3618) AYNI
+  // parametrelerle çağırır ve son bardaki skalerleri DÜZ bir sözlük olarak verir.
+  // HAM SAYI KURALI (BAGIMLILIK_GRAFIGI §5.1): yalnız sayı + sabit-küme makine
+  // kodu döner; eşik/ağırlık/yorum ve Türkçe cümle YOK — onlar istemcide kalır.
+  // Hesaplanamayan değer null DÖNER, SIFIR DÖNMEZ (0 geçerli bir OBV/MACD değeri).
+  // SKORA DOKUNMAZ: computeVadeScore / computeHolisticScore ne okunur ne yazılır.
+  // BİRİMLER — fiyat alanları (fiyat, ema20, sma50, sma200, bollUst/Orta/Alt, atr,
+  //   tenkan, kijun, senkouA/B, fibHi/Lo/Fark, vpPoc/Vah/Val, ofFiyatDegisim):
+  //   enstrümanın para birimi, ÇARPAN YOK. rsi/rsi3Once/stochK/stochD/adx/plusDI/
+  //   minusDI/ofAlisYuzde: 0-100 (yüzde puan). obv/obv20Once/ofCvdDegisim/
+  //   ofBugunDelta: hacim (adet) birimi. ofBugunZ: oransız z-benzeri kat sayısı.
+  //   bar/ichiBase/ofPencere: BAR SAYISI. Türev oranlar (bollGenislikYuzde,
+  //   atrYuzde, obv değişim %) BİLEREK yok: referans değerler döndüğü için
+  //   istemci kendi bölmesini yapar, matematik iki yere kopyalanmaz.
+  // PENCERE UYARISI: ema/sma/rsi/macd/adx/stoch/atr/obv/ichimoku son barda
+  //   pencereden bağımsızdır; fib*, vp*, of* ise VERİLEN pencereye göre hesaplanır
+  //   (web = görünen periyot, uç = 5y/1d) — bu yüzden `bar` da dönüyor.
+  function taHamGostergeler(candles) {
+    if (!candles || !candles.length) return null;
+    const sy = (v) => (Number.isFinite(v) ? v : null);
+    const son = (a) => (a && a.length ? sy(a[a.length - 1]) : null);
+    const geri = (a, k) => (a && a.length > k ? sy(a[a.length - 1 - k]) : null);
+    const closes = candles.map((c) => c.close);
+    const highs = candles.map((c) => c.high);
+    const lows = candles.map((c) => c.low);
+    const vols = candles.map((c) => c.volume);
+    const ema20 = calcEMA(closes, 20);
+    const sma50 = calcSMA(closes, 50);
+    const sma200 = calcSMA(closes, 200);
+    const boll = calcBollinger(closes, 20, 2) || {};
+    const rsiArr = calcRSI(closes, 14);
+    const macd = calcMACD(closes, 12, 26, 9) || {};
+    const adx = calcADX(highs, lows, closes, 14) || {};
+    const stoch = calcStochastic(highs, lows, closes, 14, 3, 3) || {};
+    const atr = calcATR(highs, lows, closes, 14);
+    const obv = calcOBV(closes, vols);
+    const ichi = calcIchimoku(highs, lows, closes) || {};
+    const fib = calcFibonacci(highs, lows);
+    const vp = calcVolumeProfile(candles, 24);
+    const of = calcOrderFlow(candles, 14);
+    const mum = detectCandlePattern(candles);
+    // Senkou A/B bulutu `base` bar İLERİ kaydırılmış dizilerdir; son bardaki
+    // bulut değeri bu yüzden base bar geride okunur (renderTAIndicators ile aynı).
+    const base = sy(ichi.base);
+    const bulut = (a) => (a && base != null && a.length > base ? sy(a[a.length - 1 - base]) : null);
+    return {
+      bar: candles.length,
+      fiyat: son(closes),
+      ema20: son(ema20), sma50: son(sma50), sma200: son(sma200),
+      rsi: son(rsiArr), rsi3Once: geri(rsiArr, 3),
+      stochK: son(stoch.k), stochD: son(stoch.d),
+      macdCizgi: son(macd.macdLine), macdSinyal: son(macd.signalLine),
+      macdHist: son(macd.hist), macdHistOnceki: geri(macd.hist, 1),
+      bollUst: son(boll.upper), bollOrta: son(boll.mid), bollAlt: son(boll.lower),
+      adx: son(adx.adx), plusDI: son(adx.plusDI), minusDI: son(adx.minusDI),
+      atr: son(atr),
+      obv: son(obv), obv20Once: geri(obv, 20),
+      tenkan: son(ichi.tenkan), kijun: son(ichi.kijun),
+      senkouA: bulut(ichi.senkouA), senkouB: bulut(ichi.senkouB), ichiBase: base,
+      fibHi: fib ? sy(fib.hi) : null, fibLo: fib ? sy(fib.lo) : null,
+      fibFark: fib ? sy(fib.diff) : null,
+      fibYon: fib ? (fib.up ? 'up' : 'down') : null,
+      vpPoc: vp ? sy(vp.poc) : null, vpVah: vp ? sy(vp.vah) : null, vpVal: vp ? sy(vp.val) : null,
+      ofAlisYuzde: of ? sy(of.buyPct) : null, ofCvdDegisim: of ? sy(of.cvdSlope) : null,
+      ofFiyatDegisim: of ? sy(of.priceSlope) : null, ofBugunZ: of ? sy(of.todayZ) : null,
+      ofBugunDelta: of ? sy(of.todayDelta) : null, ofPencere: of ? sy(of.win) : null,
+      mumKodu: mum ? mum.code : null, mumSinyali: mum ? mum.sig : null,
+    };
+  }
+
+  // Uç tarafı sarmalayıcı (/api/score + /api/analyze): mumu KENDİSİ çeker, çünkü
+  // api/_akis.js `daily` dizisini uca geri vermiyor. Pencere api/_akis.js taHam()
+  // ile AYNI (5y/1d) — api/_ag.js `birKez` aynı turda ikinci ağı AÇMAZ, yalnız
+  // sayac.tekrar artar (tam/kesinti sayacına dokunmaz). Hata = null, 0 DEĞİL.
+  async function taHamUcGostergeler(symbol, market) {
+    let mumlar = null;
+    try { mumlar = (await fetchYahooOHLC(symbol, market, '5y', '1d')).candles; }
+    catch (e) { return null; }
+    if (!mumlar || !mumlar.length) return null;
+    try { return taHamGostergeler(mumlar); } catch (e) { return null; }
   }
 
   // ===== Sıralı Destek/Direnç Bölgeleri (Ranked S/R Zones — Zeiierman uyarlaması) =====
@@ -4296,7 +4493,7 @@
 
   // Son bardaki mum (candlestick) formasyonunu tespit eder — trend bağlamıyla.
   // Formasyon tek başına AL/SAT değildir; trendin ucunda "olası dönüş/teyit" öncüsüdür.
-  // Döner: { name, sig, txt } | null
+  // Döner: { code, name, sig, txt } | null  (code = sabit küme MAKİNE KODU — uç bunu döndürür)
   function detectCandlePattern(candles) {
     if (!candles || candles.length < 8) return null;
     const n = candles.length, c = candles[n - 1], p = candles[n - 2];
@@ -4317,42 +4514,42 @@
     // Öncelik: güçlü çift-bar formasyonları > harami > tek-bar fitil
     // 1) Yutan Boğa (Bullish Engulfing) — düşüş ucunda dönüş
     if (down(p) && up(c) && c.close >= p.open && c.open <= p.close && cB > pB * 0.9) {
-      return { name: 'Yutan Boğa (Bullish Engulfing)', sig: downTrend ? 'bull' : 'neutral',
+      return { code: 'bullishEngulfing', name: 'Yutan Boğa (Bullish Engulfing)', sig: downTrend ? 'bull' : 'neutral',
         txt: `Bugünkü yeşil mum, dünkü kırmızı mumun gövdesini tümüyle yutuyor — alıcılar kontrolü ele aldı.${downTrend ? ' Düşüş sonrası geldiği için <b>olası dip dönüşü</b> öncüsü; teyit için ertesi bar yükselişi beklenir.' : ' Trend bağlamı zayıf (belirgin düşüş öncesi yok) — teyit gücü sınırlı.'}` };
     }
     // 2) Yutan Ayı (Bearish Engulfing) — yükseliş ucunda dönüş
     if (up(p) && down(c) && c.open >= p.close && c.close <= p.open && cB > pB * 0.9) {
-      return { name: 'Yutan Ayı (Bearish Engulfing)', sig: upTrend ? 'bear' : 'neutral',
+      return { code: 'bearishEngulfing', name: 'Yutan Ayı (Bearish Engulfing)', sig: upTrend ? 'bear' : 'neutral',
         txt: `Bugünkü kırmızı mum, dünkü yeşil mumun gövdesini tümüyle yutuyor — satıcılar kontrolü aldı.${upTrend ? ' Yükseliş sonrası geldiği için <b>olası tepe dönüşü</b> öncüsü.' : ' Belirgin yükseliş öncesi yok — teyit gücü sınırlı.'}` };
     }
     // 3) Kara Bulut Örtüsü (Dark Cloud Cover) — yükselişte dönüş
     if (up(p) && down(c) && c.open > p.high && c.close < pMid && c.close > p.open) {
-      return { name: 'Kara Bulut Örtüsü (Dark Cloud Cover)', sig: upTrend ? 'bear' : 'neutral',
+      return { code: 'darkCloudCover', name: 'Kara Bulut Örtüsü (Dark Cloud Cover)', sig: upTrend ? 'bear' : 'neutral',
         txt: `Fiyat dünkü zirvenin üstünde açılıp gün içinde dünkü gövdenin ortasının altına kapandı — alım iştahı gün içinde kırıldı.${upTrend ? ' Yükseliş ucunda <b>zayıflama/dönüş</b> sinyali.' : ''}` };
     }
     // 4) Delici Hat (Piercing Line) — düşüşte dönüş
     if (down(p) && up(c) && c.open < p.low && c.close > pMid && c.close < p.open) {
-      return { name: 'Delici Hat (Piercing Line)', sig: downTrend ? 'bull' : 'neutral',
+      return { code: 'piercingLine', name: 'Delici Hat (Piercing Line)', sig: downTrend ? 'bull' : 'neutral',
         txt: `Fiyat dünkü dibin altında açılıp dünkü gövdenin ortasının üstüne kapandı — satış paniği alıcılarla karşılandı.${downTrend ? ' Düşüş ucunda <b>olası dip dönüşü</b>.' : ''}` };
     }
     // 5) Boğa Harami — büyük kırmızı sonrası küçük yeşil, önceki gövde içinde
     if (down(p) && up(c) && cB < pB * 0.6 && c.open >= p.close && c.close <= p.open) {
-      return { name: 'Boğa Harami (Bullish Harami)', sig: downTrend ? 'bull' : 'neutral',
+      return { code: 'bullishHarami', name: 'Boğa Harami (Bullish Harami)', sig: downTrend ? 'bull' : 'neutral',
         txt: `Büyük düşüş mumunun ardından gövdesi içinde kalan küçük yeşil mum — satış ivmesi durakladı, kararsızlık.${downTrend ? ' Düşüş ucunda <b>olası dönüş</b>; teyit için kırılım beklenir.' : ''}` };
     }
     // 6) Ayı Harami — büyük yeşil sonrası küçük kırmızı, önceki gövde içinde
     if (up(p) && down(c) && cB < pB * 0.6 && c.open <= p.close && c.close >= p.open) {
-      return { name: 'Ayı Harami (Bearish Harami)', sig: upTrend ? 'bear' : 'neutral',
+      return { code: 'bearishHarami', name: 'Ayı Harami (Bearish Harami)', sig: upTrend ? 'bear' : 'neutral',
         txt: `Büyük yükseliş mumunun ardından gövdesi içinde kalan küçük kırmızı mum — alış ivmesi durakladı.${upTrend ? ' Yükseliş ucunda <b>olası dönüş</b> uyarısı.' : ''}` };
     }
     // 7) Çekiç (Hammer) — küçük gövde tepede, uzun alt fitil, düşüş ucunda
     if (loSh(c) >= cB * 2 && upSh(c) <= cB * 0.7 && cB <= cR * 0.4) {
-      return { name: 'Çekiç (Hammer)', sig: downTrend ? 'bull' : 'neutral',
+      return { code: 'hammer', name: 'Çekiç (Hammer)', sig: downTrend ? 'bull' : 'neutral',
         txt: `Uzun alt fitil + küçük gövde — gün içinde satıcılar bastırdı ama alıcılar fiyatı geri topladı.${downTrend ? ' Düşüş ucunda <b>dip arayışı/dönüş</b> öncüsü; teyit için ertesi gün yükselişi.' : ' Belirgin düşüş öncesi yoksa anlamı zayıftır.'}` };
     }
     // 8) Kayan Yıldız (Shooting Star) — küçük gövde altta, uzun üst fitil, yükseliş ucunda
     if (upSh(c) >= cB * 2 && loSh(c) <= cB * 0.7 && cB <= cR * 0.4) {
-      return { name: 'Kayan Yıldız (Shooting Star)', sig: upTrend ? 'bear' : 'neutral',
+      return { code: 'shootingStar', name: 'Kayan Yıldız (Shooting Star)', sig: upTrend ? 'bear' : 'neutral',
         txt: `Uzun üst fitil + küçük gövde — alıcılar yukarı denedi ama satıcılar fiyatı geri itti.${upTrend ? ' Yükseliş ucunda <b>tepe/dönüş</b> uyarısı.' : ' Belirgin yükseliş öncesi yoksa anlamı zayıftır.'}` };
     }
     return null;
@@ -4722,7 +4919,109 @@
       key: 'pe', group: 'valuation', weight: FA_PE.weight, label: 'Değerleme (F/K)',
       score: pe < 0 ? FA_PE.neg : faInterp(pe, FA_PE.bp),
       note: note || '',
+      // `note` CAGIRANIN, `kod` MOTORUN: uc cumle tasimiyor, dal tasiyor.
+      sayilar: { kat: typeof pe === 'number' && Number.isFinite(pe) ? pe : null },
+      kod: faKriterKod('pe', { kat: pe }, null),
     };
+  }
+
+  // ===== Kriter NOT'unun MAKINE KODU — §5.1 (2026-11-03, D sinifi #12) =====
+  //
+  //  OLCUM: temel panelde her kriterin altinda Turkce bir cumle var
+  //  (`c.note`). Ama `api/_akis.js` kriteri `{key, weight, score}`e
+  //  kirpiyordu — cumlenin ne HAM GIRDISI ne de hangi esik DALINA
+  //  dustugu TELE CIKMIYORDU. Native kart bu yuzden yalniz kriterin
+  //  adini ve skorunu basabiliyordu.
+  //
+  //  COZUM: cumle TELE CIKMIYOR (§5.1: ucta Turkce cumle yok). Kriter
+  //  olctugu HAM SAYILARI (`sayilar`) ve dusen dali soyleyen MAKINE
+  //  KODUNU (`kod`) tasiyor; cumleyi native `lib/sozluk.ts` kuruyor.
+  //  ESIK NATIVE'E GECMIYOR — dal burada, motorda seciliyor.
+  //
+  //  DAL ESIKLERI IKI YERDE: burada ve NOT metninin kendi icinde
+  //  (`netMargin >= 10 ? ... : ...`). Kayma `tests/uc-test.mjs` ile
+  //  olculuyor: fikstur kriterinin `kod`u ile `note` metni UYUSMAK
+  //  ZORUNDA.
+  function faKriterKod(key, s, pazar) {
+    const q = (ad) => {
+      const v = s && s[ad];
+      return typeof v === 'number' && Number.isFinite(v) ? v : null;
+    };
+    const tr = pazar === 'BIST';
+    const trend = (iyi, kotu) => {
+      const a = q('onceki'), b = q('simdi');
+      return a == null || b == null ? null : (b > a ? iyi : kotu);
+    };
+    switch (key) {
+      case 'netMargin': {
+        const v = q('pct');
+        return v == null ? null : v >= 10 ? 'netMargin.saglikli' : v > 0 ? 'netMargin.ince' : 'netMargin.zarar';
+      }
+      case 'ocfMargin': return q('pct') == null ? null : 'ocfMargin.olculdu';
+      case 'ebitdaMargin': return q('pct') == null ? null : 'ebitdaMargin.olculdu';
+      // BIST'te gelir/kar TL nominal: enflasyon uyarisi AYRI KOD, cunku
+      // ABD kriterinde o uyari YOK ve cumle ayrisiyor.
+      case 'roe': return q('pct') == null ? null : tr ? 'roe.nominal-try' : 'roe.olculdu';
+      case 'roa': return q('pct') == null ? null : 'roa.olculdu';
+      case 'revYoY': return q('pct') == null ? null : tr ? 'revYoY.nominal-try' : 'revYoY.olculdu';
+      case 'revCagr': return q('pct') == null ? null : tr ? 'revCagr.nominal-try' : 'revCagr.olculdu';
+      case 'netTrend': {
+        const v = q('pct');
+        return v == null ? null : v > 0 ? 'netTrend.artti' : 'netTrend.azaldi';
+      }
+      // `oran` YOKSA uzun vadeli finansal borc ~yok dalidir; bu bir
+      // OLCUM EKSIGI DEGIL, bolme yapilacak borcun olmamasidir.
+      case 'cashLt': return q('oran') == null ? 'cashLt.borc-yok' : 'cashLt.oran';
+      case 'ndEbitda': {
+        const k = q('kat');
+        if (k == null) return q('tutar') == null ? null : 'ndEbitda.net-nakit';
+        return k <= 3 ? 'ndEbitda.dusuk' : k <= 4 ? 'ndEbitda.orta' : 'ndEbitda.yuksek';
+      }
+      case 'd2e': {
+        const v = q('oran');
+        return v == null ? null : v < 1 ? 'd2e.saglikli' : v <= 2 ? 'd2e.orta' : 'd2e.yuksek';
+      }
+      case 'curRatio': return q('oran') == null ? null : 'curRatio.olculdu';
+      case 'quickRatio': return q('oran') == null ? null : 'quickRatio.olculdu';
+      case 'fcfPos': {
+        const v = q('tutar');
+        return v == null ? null : v > 0 ? 'fcfPos.pozitif' : 'fcfPos.negatif';
+      }
+      case 'accruals': {
+        const o = q('ocf'), k = q('netKar');
+        return o == null || k == null ? null : o > k ? 'accruals.nakit-destekli' : 'accruals.donusmuyor';
+      }
+      case 'roaUp': return trend('roaUp.iyilesiyor', 'roaUp.geriliyor');
+      case 'gmUp': return trend('gmUp.gucleniyor', 'gmUp.zayifliyor');
+      case 'crUp': return trend('crUp.gucleniyor', 'crUp.zayifliyor');
+      case 'pe': {
+        const v = q('kat');
+        return v == null ? null : v < 0 ? 'pe.negatif' : 'pe.olculdu';
+      }
+      default: return null;
+    }
+  }
+
+  /**
+   * Kriter listesine ham sayilari + makine kodunu isler. Sozlukte yeri
+   * OLMAYAN kriter dokunulmadan kalir: `kod` da `sayilar` da EKLENMEZ,
+   * boylece "sormadim" (alan yok) ile "olcemedim" (`null`) karismaz.
+   * Sayi olmayan ve metin olmayan alanlar (ornegin `undefined`) dusurulur;
+   * `birim` gibi metin alanlari MAKINE KODUDUR (TRY/USD), cumle degil.
+   */
+  function faKriterIsaretle(C, sozluk, pazar) {
+    for (const c of C) {
+      const s = sozluk[c.key];
+      if (!s) continue;
+      const temiz = {};
+      for (const k of Object.keys(s)) {
+        const v = s[k];
+        if (typeof v === 'number' ? Number.isFinite(v) : typeof v === 'string') temiz[k] = v;
+      }
+      c.sayilar = temiz;
+      c.kod = faKriterKod(c.key, temiz, pazar);
+    }
+    return C;
   }
 
   const FA_GROUPS = [
@@ -5731,11 +6030,12 @@
   // Katalizör / risk satırı — ucuz, cache'li kaynaklar (volatilite + yaklaşan temettü + haber uyarısı)
   async function fillCatalysts(symbol, market, lvl, aliveFn) {
     const items = [];
-    if (lvl && lvl.atr != null && lvl.price) {
-      const atrPct = lvl.atr / lvl.price * 100;
-      if (atrPct >= 4) items.push({ i: '⚠️', t: `Yüksek volatilite (günlük ≈ %${atrPct.toFixed(1)}) — bölgeler geniş, giriş/çıkışta risk yüksek.` });
-      else if (atrPct < 1.5) items.push({ i: 'ℹ️', t: `Düşük volatilite (günlük ≈ %${atrPct.toFixed(1)}) — sakin seyir; olası kırılımlar daha anlamlı.` });
-    }
+    // EŞİK BURADA DEĞİL: karar motorda (`atrPlanKod`, Ş8 #14). Orta
+    // bantta `kod === null` döner ve madde EKLENMEZ — eski satır içi
+    // `>=4 / <1.5` karşılaştırmasıyla birebir aynı davranış.
+    const atrPlan = lvl ? atrPlanKod(lvl.atr, lvl.price) : null;
+    if (atrPlan && atrPlan.kod === 'genis') items.push({ i: '⚠️', t: `Yüksek volatilite (günlük ≈ %${atrPlan.atrPct.toFixed(1)}) — bölgeler geniş, giriş/çıkışta risk yüksek.` });
+    else if (atrPlan && atrPlan.kod === 'sakin') items.push({ i: 'ℹ️', t: `Düşük volatilite (günlük ≈ %${atrPlan.atrPct.toFixed(1)}) — sakin seyir; olası kırılımlar daha anlamlı.` });
     try {
       const today = new Date();
       let divs = [];
@@ -5743,8 +6043,11 @@
       else { divs = await fetchYahooDividends(symbol).catch(() => []); }
       const upcoming = (divs || []).filter((d) => d.date > today).sort((a, b) => a.date - b.date)[0];
       if (upcoming) {
-        const days = Math.round((upcoming.date - today) / 86400000);
-        if (days <= 45) items.push({ i: '📅', t: `Yaklaşan temettü: ${fmtDate(upcoming.date)} (${days} gün) — tarih civarı oynaklık ve fiyat düzeltmesi olabilir.` });
+        // GÜN FARKI ve 45 GÜN EŞİĞİ motorda (`katGunFarki` /
+        // `katTemettuKod`, Ş8 (G)). Burada yalnız `yakin` kodu
+        // basılıyor — webin eski davranışı birebir.
+        const days = katGunFarki(upcoming.date, today);
+        if (katTemettuKod(days) === 'yakin') items.push({ i: '📅', t: `Yaklaşan temettü: ${fmtDate(upcoming.date)} (${days} gün) — tarih civarı oynaklık ve fiyat düzeltmesi olabilir.` });
       }
     } catch (e) {}
     if (aliveFn && !aliveFn()) return;
@@ -6060,6 +6363,32 @@
       score: grossMargin > grossMargin1 ? 82 : 42, note: `Brüt marj %${grossMargin1.toFixed(1)} → %${grossMargin.toFixed(1)} — ${grossMargin > grossMargin1 ? 'güçleniyor (fiyatlama gücü)' : 'zayıflıyor (maliyet baskısı)'}.` });
     if (currentRatio != null && currentRatio1 != null) add({ key: 'crUp', group: 'quality', weight: 0.03, label: 'Cari Oran Trendi',
       score: currentRatio > currentRatio1 ? 78 : 45, note: `Cari oran ${currentRatio1.toFixed(2)} → ${currentRatio.toFixed(2)} — likidite ${currentRatio > currentRatio1 ? 'güçleniyor' : 'zayıflıyor'}.` });
+
+    // §5.1: her kriterin HAM SAYILARI + MAKINE KODU. Cumle TELE CIKMIYOR;
+    // native `lib/sozluk.ts` bu koddan cumleyi kuruyor. Tutar tasiyan
+    // alanlar `birim` ile geliyor, cunku para birimi bicimlemesi
+    // (`fmtTL`) native'de YENIDEN TURETILEMEZ.
+    faKriterIsaretle(C, {
+      netMargin: { pct: netMargin },
+      ocfMargin: { pct: ocfMargin },
+      roe: { pct: roe },
+      revYoY: { pct: revYoY },
+      revCagr: { pct: revCagr },
+      netTrend: { pct: netGrowth },
+      // `ltFin <= 0` dali: bolunecek borc YOK -> oran gonderilmiyor.
+      cashLt: ltFin > 0 ? { oran: cashTotal / ltFin, nakit: cashTotal, borc: ltFin, birim: 'TRY' } : {},
+      ndEbitda: (netDebt != null && netDebt < 0)
+        ? { tutar: -netDebt, birim: 'TRY' }
+        : { kat: ndToEbitda },
+      d2e: { oran: d2e },
+      curRatio: { oran: currentRatio },
+      quickRatio: { oran: quickRatio, stok: inventoryV, birim: 'TRY' },
+      fcfPos: { tutar: freeCF, pct: fcfMargin, birim: 'TRY' },
+      accruals: { ocf: operCF, netKar: netProfit, birim: 'TRY' },
+      roaUp: { onceki: roa1, simdi: roa },
+      gmUp: { onceki: grossMargin1, simdi: grossMargin },
+      crUp: { onceki: currentRatio1, simdi: currentRatio },
+    }, 'BIST');
 
     const price = meta && meta.regularMarketPrice;
     const tiles = [
@@ -6460,6 +6789,30 @@
       score: grossMargin > grossMarginPrev ? 82 : 42, note: `Brüt marj %${grossMarginPrev.toFixed(1)} → %${grossMargin.toFixed(1)} — ${grossMargin > grossMarginPrev ? 'güçleniyor (fiyatlama gücü)' : 'zayıflıyor (maliyet baskısı)'}.` });
     if (curRatio != null && curRatioPrev != null) add({ key: 'crUp', group: 'quality', weight: 0.03, label: 'Cari Oran Trendi',
       score: curRatio > curRatioPrev ? 78 : 45, note: `Cari oran ${curRatioPrev.toFixed(2)} → ${curRatio.toFixed(2)} — likidite ${curRatio > curRatioPrev ? 'güçleniyor' : 'zayıflıyor'}.` });
+
+    // §5.1: ham sayilar + makine kodu (BIST dalinin ayni isi; esikler
+    // TEK YERDE, `faKriterKod`). Birim USD, cunku bicimleme `fmtUSD`.
+    faKriterIsaretle(C, {
+      netMargin: { pct: netMargin },
+      ebitdaMargin: { pct: ebitdaMargin },
+      ocfMargin: { pct: ocfMargin },
+      roe: { pct: roe },
+      roa: { pct: roa },
+      revYoY: { pct: revYoY },
+      revCagr: { pct: revCagr },
+      netTrend: { pct: netGrowth },
+      ndEbitda: (netDebt != null && netDebt < 0)
+        ? { tutar: -netDebt, birim: 'USD' }
+        : { kat: ndToEbitda },
+      d2e: { oran: dToE },
+      curRatio: { oran: curRatio },
+      quickRatio: { oran: quickRatio, stok: inventory, birim: 'USD' },
+      fcfPos: { tutar: fcf, birim: 'USD' },
+      accruals: { ocf: ocf, netKar: ni, birim: 'USD' },
+      roaUp: { onceki: roaPrev, simdi: roa },
+      gmUp: { onceki: grossMarginPrev, simdi: grossMargin },
+      crUp: { onceki: curRatioPrev, simdi: curRatio },
+    }, 'US');
 
     const statementTiles = [
       { label: 'Gelir (TTM)', val: usd(rev) },
@@ -7567,30 +7920,30 @@
     if (req !== spReq) return;
     const price = q && q.price != null ? q.price : null;
     const prev = q && q.prevClose != null ? q.prevClose : null;
-    const pct = (price != null && prev) ? (price - prev) / prev * 100 : null;
-    const absP = pct == null ? null : Math.abs(pct);
+    // Eşikler ve karar ağacı ARTIK BURADA DEĞİL: motor diliminde
+    // (whyHareketKod / whyUzlasmaKod). Bu ekran o kodları yalnız
+    // Türkçeye çeviriyor; /api/neden aynı kodları native'e taşıyor.
+    const pct = whyGunlukYuzde(price, prev);
     const moveDir = pct == null ? 0 : (pct > 0 ? 1 : (pct < 0 ? -1 : 0));
     const sScore = se ? se.score : 0;
     const sHits = se ? se.hits : 0;
-    const newsDir = (!sHits) ? 0 : (sScore >= 0.12 ? 1 : (sScore <= -0.12 ? -1 : 0));
-    // Hareket büyüklüğü eşikleri (yaklaşık; günlük tipik oynaklığa göre)
-    const BIG = 3.0, MOD = 1.2;
-    const moveWord = absP == null ? '—'
-      : absP >= BIG ? 'sert' : absP >= MOD ? 'belirgin' : 'sakin';
+    const hareketKod = whyHareketKod(pct);
+    const uzlasma = whyUzlasmaKod(pct, sScore, sHits);
+    const moveWord = hareketKod === 'olcum_yok' ? '—' : hareketKod;
     const moveSign = pct == null ? '' : (pct >= 0 ? '+' : '');
     const dirWord = moveDir > 0 ? 'yükseliş' : moveDir < 0 ? 'düşüş' : 'yatay';
 
     let verdict, vCls, vDot;
-    if (absP == null) {
+    if (uzlasma === 'olcum_yok') {
       verdict = 'Bugünkü fiyat değişimi alınamadı; aşağıdaki başlıklardan gündemi izleyebilirsin.';
       vCls = 'neutral'; vDot = '⚪';
-    } else if (absP < MOD) {
+    } else if (uzlasma === 'sakin') {
       verdict = `Bugün ${dirWord} <b>sakin</b> (${moveSign}${pct.toFixed(2)}%). Belirgin bir katalizör görünmüyor; olağan gün içi dalgalanma aralığında.`;
       vCls = 'neutral'; vDot = '⚪';
-    } else if (sHits && newsDir !== 0 && newsDir === moveDir) {
+    } else if (uzlasma === 'haber_uyumlu') {
       verdict = `Bugünkü <b>${moveWord} ${dirWord}</b> (${moveSign}${pct.toFixed(2)}%) haber akışıyla <b>uyumlu</b> — ${se.label.toLowerCase()}. Hareket büyük olasılıkla <b>şirkete özel bir gelişmeden</b> besleniyor (aşağıdaki başlıklara bak).`;
       vCls = moveDir > 0 ? 'bull' : 'bear'; vDot = moveDir > 0 ? '🟢' : '🔴';
-    } else if (sHits && newsDir !== 0 && newsDir !== moveDir) {
+    } else if (uzlasma === 'celiski') {
       verdict = `<b>Çelişki:</b> fiyat ${dirWord} yönünde (${moveSign}${pct.toFixed(2)}%) ama haber akışı ters yönde (${se.label.toLowerCase()}). Hareket haberle açıklanmıyor olabilir — <b>piyasa geneli/sektörel akım ya da teknik</b> baskın olabilir; temkinli oku.`;
       vCls = 'warn'; vDot = '⚠️';
     } else {
@@ -7633,7 +7986,7 @@
     // Haber Nabzı (Faz 2 sentiment) — hâlihazırda çekilen başlıklardan hesapla, ekstra istek yok
     let sRaw = 0, sHits = 0;
     newsItems.forEach((n) => { const r = scoreHeadline(n.title + ' ' + (n.description || '')); sRaw += r.s; sHits += r.hits; });
-    const sScore = sHits ? Math.max(-1, Math.min(1, sRaw / (Math.abs(sRaw) + 4))) : 0;
+    const sScore = sentiAggregate(sRaw, sHits);
     const sLab = sentiLabel(sScore, sHits);
     // Fırsatlar tarayıcısının cache'ini de ısıt (aynı hisseye ikinci kez istek gitmesin)
     newsSentiMem[market + ':' + symbol] = { symbol, market, score: sScore, n: newsItems.length, hits: sHits, label: sLab.label, cls: sLab.cls, items: [], t: Date.now() };
@@ -8723,7 +9076,7 @@
     // kullanıcıya da böyle yazılıyor — uydurma bir "uç ilişkisi" sunulmuyor.
     const newsBody = `
       <div class="ts-info">Aşağıdaki başlıklar, bu temada listelenen <b>hisseleri destekleyen</b> haberlerdir.
-        Eşleşme <b>uçtan gelmiyor</b>: <code>/api/theme</code> yalnız sembol/ad/gerekçe döndürüyor, haber–hisse
+        Eşleşme <b>uçtan gelmiyor</b>: <b>/api/theme</b> yalnız sembol/ad/gerekçe döndürüyor, haber–hisse
         bağı bu sayfada başlık metninde sembol ya da şirket adı aranarak kuruluyor. Bilgi amaçlıdır, yatırım tavsiyesi değildir.</div>
       ${groups.length ? groups.map((g) => `
         <div class="ts-nblock">
@@ -8940,6 +9293,102 @@
     return { label: 'Negatif haber akışı', cls: 'bear' };
   }
 
+  // Baslik puanlarini -1..+1 bandina indiren YUMUSAK SIKISTIRMA.
+  // raw = sum(scoreHeadline().s), hits = sum(scoreHeadline().hits).
+  // raw/(|raw|+4): tek bir sert manset bandi doldurmasin, ama cok
+  // sayida hafif manset birikebilsin (raw=4 -> 0.5, raw=8 -> 0.67).
+  // Sabit 4 ve -1..+1 siniri BU FONKSIYONDA tek yerde durur; eskiden
+  // ayni formul app.js'te IKI yerde satir ici yaziliydi (hisse sayfasi
+  // + Firsatlar duyarlilik tarayicisi) ve uca tasinamiyordu.
+  // hits yoksa 0 degil 0 DONER cunku -1..+1 bandinda 0 'sinyal yok'
+  // demektir; cagiran taraf hits=0 dalini AYRI basar (sentiLabel).
+  function sentiAggregate(raw, hits) {
+    if (!hits) return 0;
+    return Math.max(-1, Math.min(1, raw / (Math.abs(raw) + 4)));
+  }
+
+  // ===== "Neden hareket ediyor?" — HAM KOD KATMANI (motora girer) =====
+  // NIYE BURADA: bu kararin esikleri eskiden `fillSpWhy` icinde, EKRAN
+  // katmaninda satir ici duruyordu (BIG=3.0, MOD=1.2, 0.12) ve sunucuya
+  // tasinamiyordu — native istemci hesap YAPMAZ, dolayisiyla uc tarafi
+  // ayni kararı veremezdi. Blok motor diliminin icine alindi: tek esik
+  // kumesi, tek karar agaci, hem web hem /api/neden ayni fonksiyonu
+  // cagiriyor. HAM SAYI KURALI: buradan TURKCE CUMLE cikmaz, yalniz
+  // KAPALI KOD KUMESI doner; cumleyi web kendi ekraninda, native
+  // `mobile/src/lib/sozluk.ts` icinde secer.
+  //
+  // SKORA GIRMEZ: ne teknik ne temel skor bu kodlari okur. Hareketi
+  // haber akisiyla uzlastiran bir YORUM katmanidir.
+  //
+  // ESIKLERIN GEREKCESI — ÖLÇÜLMEDİ, DEVRALINDI: 3.0 / 1.2 / 0.12 web
+  // surumunden oldugu gibi tasindi. Gunluk tipik oynakliga gore
+  // kalibre EDILMEDI; degisecekse once olculur.
+  const WHY_SERT = 3.0;        // |%| >= 3.0 -> 'sert'
+  const WHY_BELIRGIN = 1.2;    // |%| >= 1.2 -> 'belirgin'
+  const WHY_HABER_ESIK = 0.12; // |duyarlilik| >= 0.12 -> yonlu haber akisi
+
+  // Kapali kod kumeleri. Istemci sozlugu BUNLARLA birebir esitlenir;
+  // listeye yeni kod girerse sozluk eksik kalir ve kapi kirmizi yanar.
+  const WHY_HAREKET_KODLARI = ['olcum_yok', 'sakin', 'belirgin', 'sert'];
+  const WHY_YON_KODLARI = ['olcum_yok', 'yatay', 'yukselis', 'dusus'];
+  const WHY_HABER_YON_KODLARI = ['sinyal_yok', 'notr', 'pozitif', 'negatif'];
+  const WHY_UZLASMA_KODLARI = ['olcum_yok', 'sakin', 'haber_uyumlu', 'celiski', 'haber_yok'];
+  const WHY_KUTUP_KODLARI = ['notr', 'pozitif', 'negatif'];
+
+  // Bugunkü yuzde degisim. prevClose 0 ise BOLME YOK -> null ("olcemedim"),
+  // 0 DEGIL: 0 "degismedi" demek olurdu ve yalan olurdu.
+  function whyGunlukYuzde(price, prevClose) {
+    if (price == null || prevClose == null || !prevClose) return null;
+    return (price - prevClose) / prevClose * 100;
+  }
+
+  function whyHareketKod(pct) {
+    if (pct == null || !Number.isFinite(pct)) return 'olcum_yok';
+    const a = Math.abs(pct);
+    if (a >= WHY_SERT) return 'sert';
+    if (a >= WHY_BELIRGIN) return 'belirgin';
+    return 'sakin';
+  }
+
+  function whyYonKod(pct) {
+    if (pct == null || !Number.isFinite(pct)) return 'olcum_yok';
+    if (pct > 0) return 'yukselis';
+    if (pct < 0) return 'dusus';
+    return 'yatay';
+  }
+
+  // hits=0 -> 'sinyal_yok' ("hic esleyen sozcuk gormedim"), 'notr' DEGIL
+  // ("gordum, dengeli"). Ikisi ayri olgu; sentiLabel de ayni ayrimi yapar.
+  function whyHaberYonKod(score, hits) {
+    if (!hits) return 'sinyal_yok';
+    if (score >= WHY_HABER_ESIK) return 'pozitif';
+    if (score <= -WHY_HABER_ESIK) return 'negatif';
+    return 'notr';
+  }
+
+  // Karar agaci — webin `fillSpWhy` sirasinin AYNISI:
+  //   olcum yok            -> 'olcum_yok'
+  //   kucuk hareket        -> 'sakin'
+  //   buyuk + yonlu+uyumlu -> 'haber_uyumlu'
+  //   buyuk + yonlu+ters   -> 'celiski'
+  //   buyuk + yon yok      -> 'haber_yok'
+  function whyUzlasmaKod(pct, score, hits) {
+    const hareket = whyHareketKod(pct);
+    if (hareket === 'olcum_yok') return 'olcum_yok';
+    if (hareket === 'sakin') return 'sakin';
+    const hy = whyHaberYonKod(score, hits);
+    if (hy === 'sinyal_yok' || hy === 'notr') return 'haber_yok';
+    const y = whyYonKod(pct);
+    if ((hy === 'pozitif' && y === 'yukselis') || (hy === 'negatif' && y === 'dusus')) return 'haber_uyumlu';
+    return 'celiski';
+  }
+
+  // Tek basligin kutbu (scoreHeadline().s isareti).
+  function whyKutupKod(pol) {
+    if (pol == null || !Number.isFinite(pol) || pol === 0) return 'notr';
+    return pol > 0 ? 'pozitif' : 'negatif';
+  }
+
   // Bir hisse için haber duyarlılık skoru (cache'li, 30 dk)
   async function computeNewsSentiment(symbol, market, opts = {}) {
     const key = market + ':' + symbol;
@@ -8962,8 +9411,7 @@
       const r = scoreHeadline(it.title + ' ' + (it.description || ''));
       if (r.hits) { raw += r.s; totalHits += r.hits; scored.push({ title: it.title, link: it.link, pol: r.s }); }
     });
-    // Yumuşak sıkıştırma -1..+1 (raw=4 → 0.5, raw=8 → 0.67)
-    const score = totalHits ? Math.max(-1, Math.min(1, raw / (Math.abs(raw) + 4))) : 0;
+    const score = sentiAggregate(raw, totalHits);
     const lab = sentiLabel(score, totalHits);
     const res = { symbol, market, score, n: items.length, hits: totalHits, label: lab.label, cls: lab.cls,
                   items: scored.sort((a, b) => Math.abs(b.pol) - Math.abs(a.pol)).slice(0, 5), t: Date.now() };
@@ -9028,6 +9476,16 @@
     else             pts = -Math.min(8, (d - 1) * 4); // banda uzak: her ATR −4, −8 tavan
     if (pts < 0 && mom && mom.active) pts *= 0.4;     // güçlü trend → cezayı yumuşat
     return pts;
+  }
+  // Firsat BILESIK skoru: teknik skor + fiyat uygunlugu duzeltmesi.
+  // Sinir 2..99 computeVadeScore'un kendi bandiyla (2..98) ayni
+  // mertebede tutuluyor; priceOppAdj +8 ile tavana degebilsin diye 99.
+  // SIRALAMA KATMANI: computeVadeScore skorunu, alim bandini ve TA/FA
+  // bileske skorunu DEGISTIRMEZ. priceAdj olculemediyse 0 sayilir -
+  // fiyat uygunlugu bilinmeyen sembol teknik skoruyla siralanir.
+  function oppCombined(score, priceAdj) {
+    if (score == null) return null;
+    return Math.max(2, Math.min(99, score + (priceAdj || 0)));
   }
   function priceOppChip(prox) {
     if (!prox) return '';
@@ -9104,7 +9562,7 @@
     // Bileşik skor = teknik skor + fiyat uygunluğu (±8) + haber duyarlılığı eğimi (±7). Haber
     // gelene kadar teknik + fiyat. Fiyat uygunluğu (uygun alım fiyatına yakınlık) asıl fırsatı
     // oluşturan kilit parçadır: teknik güçlü ama fiyat banddan çok uzaksa sıra aşağı iner.
-    results.forEach((r) => { r.combined = Math.max(2, Math.min(99, r.score + (r.priceAdj || 0))); });
+    results.forEach((r) => { r.combined = oppCombined(r.score, r.priceAdj); });
 
     // Satırı çiz (bileşik skora göre)
     function oppRowHtml(r, i) {
@@ -11043,6 +11501,20 @@
       veto: ['silahlı soygun', 'silah kaçak', 'ruhsatsız silah', 'silahla yaral', 'silahlı kavga', 'drone show', 'drone gösteri'],
       sectors: [['defense', 'up'], ['space', 'up']],
       note: 'Artan savunma harcaması ve NATO gündemi savunma ve uzay/uydu tedarik zincirine doğrudan rüzgâr.' },
+    { key: 'politics', emoji: '🗳️', label: 'Seçim / Siyaset / Bütçe',
+      // `risk` ALANI YOK (bilinçli): öteki 22 kavramda `risk: 'on'|'off'`
+      // var, burada YOK. Seçim/bütçe haberinin yönü ölçülemez — aynı
+      // başlık sonuca göre hem risk alma hem riskten kaçış olabilir. Alanı
+      // boş bırakmak risk saymaşında OY KULLANMAMAK demek (`riskOn`/`riskOff`
+      // yalnız `it.risk` doluysa sayıyor). Uydurma bir yön basmaktan iyidir.
+      kw: ['ara seçim', 'ara seçimi', 'başkanlık seçim', 'başkanlık seçimi', 'genel seçim', 'genel seçimi', 'yerel seçim', 'yerel seçimi', 'seçim sonuç', 'seçim sonucu', 'seçim sonuçları', 'sandık sonuç', 'sandık sonuçları', 'midterm', 'presidential election', 'election results', 'exit poll', 'government shutdown', 'debt ceiling', 'borçlanma limiti', 'impeachment', 'referandum', 'referendum', 'tax bill', 'tax cut', 'vergi paketi', 'vergi düzenleme', 'bütçe açığı', 'bütçe teklif', 'budget deficit', 'fiscal policy', 'maliye politikası'],
+      weak: ['seçim', 'election', 'bütçe', 'vergi', 'kongre', 'senato', 'congress', 'senate', 'parlamento', 'kabine'],
+      ctx: ['borsa', 'piyasa', 'hisse', 'endeks', 'ekonomi', 'faiz', 'kur', 'dolar', 'tahvil', 'yatırımcı', 'enflasyon', 'hazine', 'market', 'markets', 'stocks', 'investor', 'bond', 'yields', 'economy', 'dollar', 'wall street', 'nasdaq'],
+      veto: ['kadro seçim', 'oyuncu seçim', 'jüri', 'yarışma', 'güzellik seçim', 'milli takım', 'şampiyona', 'transfer', 'kura çekim', 'şarkı seçim'],
+      sectors: [],  // SEKTÖR YÖNÜ UYDURULMADI: yön ölçülemediği için etkilenen
+      // sektör listesi BOŞ; `agendaMatchedStocks` ve etki satırı boş listeyle
+      // zaten hiç basmıyor (app.js `(it.sectors || [])`).
+      note: 'Seçim, bütçe ve vergi düzenlemesi başlıkları politika belirsizliğini doğrudan fiyatlara taşır; yön ölçülemediği için risk oyu ve sektör etkisi YAZILMIYOR.' },
   ];
 
   const AGENDA_STOP = new Set(('the a an and or of to in on for with at by from is are was be as it its this that new say says '
@@ -11346,11 +11818,25 @@
   // "Bugün" panelinin tepesinde, büyük endekslerdeki sert yükseliş/düşüşleri OTOMATİK yakalar ve
   // "ne oldu + neden" olarak açıklar. Neden'i makro dims (faiz/enflasyon/risk/büyüme) + sıcak gündem
   // temalarından çıkarır. YALNIZCA BİLGİ AMAÇLIDIR; hisse skoruna DAHİL DEĞİLDİR, tavsiye değildir.
+  // ÖLÇÜM AYARI (motor dilimi `endeks-esik`) — endeks türü başına
+  // "belirgin" (notable) ve "sert" (sharp) eşikleri, yüzde puan.
+  // NİYE AYRI TABLO: bu iki sayı EŞİK, yani §5.1 gereği motor-düzeyi
+  // ayar. İstemciye yazılması eşiği ekrana taşımak olurdu; `/api/causal`
+  // `notable`ı İSTEMCİDEN istiyordu ve native istemcinin onu ölçen bir
+  // kaynağı YOKTU. Aşağıdaki `INDEX_PULSE` sunum alanlarını (emoji, ad,
+  // sembol, pazar) EKLER — onlar motora girmez.
+  const INDEX_ESIK = {
+    equity_tr:   { sharp: 2.0, notable: 1.0 },
+    equity_us:   { sharp: 1.2, notable: 0.6 },
+    equity_tech: { sharp: 1.5, notable: 0.8 },
+    gold:        { sharp: 1.5, notable: 0.8 },
+  };
+
   const INDEX_PULSE = [
-    { key: 'XU100', symbol: 'XU100', market: 'BIST', emoji: '🇹🇷', name: 'BIST 100',   kind: 'equity_tr',   sharp: 2.0, notable: 1.0 },
-    { key: 'GSPC',  symbol: '^GSPC', market: 'US',   emoji: '🇺🇸', name: 'S&P 500',    kind: 'equity_us',   sharp: 1.2, notable: 0.6 },
-    { key: 'IXIC',  symbol: '^IXIC', market: 'US',   emoji: '💻', name: 'NASDAQ',      kind: 'equity_tech', sharp: 1.5, notable: 0.8 },
-    { key: 'GOLD',  symbol: 'GC=F',  market: 'US',   emoji: '🥇', name: 'Altın (ons)', kind: 'gold',        sharp: 1.5, notable: 0.8 },
+    { key: 'XU100', symbol: 'XU100', market: 'BIST', emoji: '🇹🇷', name: 'BIST 100',   kind: 'equity_tr',   ...INDEX_ESIK.equity_tr },
+    { key: 'GSPC',  symbol: '^GSPC', market: 'US',   emoji: '🇺🇸', name: 'S&P 500',    kind: 'equity_us',   ...INDEX_ESIK.equity_us },
+    { key: 'IXIC',  symbol: '^IXIC', market: 'US',   emoji: '💻', name: 'NASDAQ',      kind: 'equity_tech', ...INDEX_ESIK.equity_tech },
+    { key: 'GOLD',  symbol: 'GC=F',  market: 'US',   emoji: '🥇', name: 'Altın (ons)', kind: 'gold',        ...INDEX_ESIK.gold },
   ];
 
   // Endeks hareketinin "neden"i — makro boyutlardan (dims) yön-duyarlı çıkarım. Kâhinlik değil, okuma.
@@ -12013,33 +12499,36 @@
   }
 
   // Bir ani-hareket satırı faiz/enflasyon ile mi açıklanıyor?
+  // SEKTÖR KARŞILAŞTIRMASI BURADA DEĞİL: `pulseMakroEtiketKod` (dilim içi)
+  // yapıyor, bu kabuk yalnız kodu HTML'e çeviriyor — ÇIKTI BİREBİR AYNI.
+  const PMAC_TAG_HTML = {
+    faiz_baski: '<span class="pulse-why macro">🏦 Faiz/enflasyon baskısı</span>',
+    faiz_ruzgar: '<span class="pulse-why macro">🏦 Faiz/enflasyon rüzgârı</span>',
+  };
   function pulseMacroTag(row, macro) {
     if (!macro || !macro.hasData) return null;
-    const secs = SYMBOL_SECTORS[row.symbol] || [];
-    if (!secs.length) return null;
-    if (!row.up && macro.biasDown.some((s) => secs.includes(s)))
-      return '<span class="pulse-why macro">🏦 Faiz/enflasyon baskısı</span>';
-    if (row.up && macro.biasUp.some((s) => secs.includes(s)))
-      return '<span class="pulse-why macro">🏦 Faiz/enflasyon rüzgârı</span>';
-    return null;
+    const kod = pulseMakroEtiketKod(row.symbol, row.up, macro.biasUp, macro.biasDown);
+    return kod ? PMAC_TAG_HTML[kod] : null;
   }
 
-  // Bütüncül tek-cümle yorum — kullanıcının gerçek movers'larına bağlı
+  // Bütüncül tek-cümle yorum — kullanıcının gerçek movers'larına bağlı.
+  // EŞİK VE SEÇİM BURADA DEĞİL: `pulseMakroYorumKod` (dilim içi)
+  // hangi dalın geçerli olduğunu ve hangi sembollerin uyumlu saydığını
+  // ölçüyor; bu kabuk yalnız cümleyi örüyor — ÇIKTI BİREBİR AYNI.
   function pulseMacroComment(macro, rows) {
-    if (!macro || !macro.hasData)
+    const g = pulseMakroYorumKod(macro, rows);
+    if (g.kod === 'sakin')
       return 'Şu an öne çıkan faiz/enflasyon başlığı yok — makro cephe sakin. Ani hareketler daha çok hisseye özel.';
-    const when = macro.fresh2d ? 'son 2 günde' : 'son dönemde';
-    const hitDown = rows.filter((r) => !r.up && (SYMBOL_SECTORS[r.symbol] || []).some((s) => macro.biasDown.includes(s)));
-    const hitUp   = rows.filter((r) =>  r.up && (SYMBOL_SECTORS[r.symbol] || []).some((s) => macro.biasUp.includes(s)));
-    if (macro.cls === 'hawk') {
-      let s = `${when} faiz tarafında <b>şahin/sıkılaşma</b>${macro.inflDir >= 0.15 ? ' + enflasyon ısınma' : ''} okunuyor → <b>faize duyarlı teknoloji/çip/REIT</b> baskı altında olur, banka nispeten korunaklı.`;
-      if (hitDown.length) s += ` Listende <b>${hitDown.slice(0, 3).map((r) => r.symbol).join(', ')}</b> bugün geriliyor — bu eğilimle uyumlu.`;
+    const when = g.taze ? 'son 2 günde' : 'son dönemde';
+    if (g.kod === 'hawk') {
+      let s = `${when} faiz tarafında <b>şahin/sıkılaşma</b>${g.inflIsinma ? ' + enflasyon ısınma' : ''} okunuyor → <b>faize duyarlı teknoloji/çip/REIT</b> baskı altında olur, banka nispeten korunaklı.`;
+      if (g.uyumlu.length) s += ` Listende <b>${g.uyumlu.join(', ')}</b> bugün geriliyor — bu eğilimle uyumlu.`;
       s += ' Faiz yönü dönene kadar bu sektörlerde oynaklık sürebilir.';
       return s;
     }
-    if (macro.cls === 'dove') {
-      let s = `${when} faiz tarafında <b>güvercin/gevşeme</b>${macro.inflDir <= -0.15 ? ' + enflasyon soğuma' : ''} okunuyor → <b>faize duyarlı büyüme (teknoloji/çip/REIT) ve altın</b> rahatlar.`;
-      if (hitUp.length) s += ` Listende <b>${hitUp.slice(0, 3).map((r) => r.symbol).join(', ')}</b> bugün yükseliyor — bu rüzgârla uyumlu.`;
+    if (g.kod === 'dove') {
+      let s = `${when} faiz tarafında <b>güvercin/gevşeme</b>${g.inflSoguma ? ' + enflasyon soğuma' : ''} okunuyor → <b>faize duyarlı büyüme (teknoloji/çip/REIT) ve altın</b> rahatlar.`;
+      if (g.uyumlu.length) s += ` Listende <b>${g.uyumlu.join(', ')}</b> bugün yükseliyor — bu rüzgârla uyumlu.`;
       return s;
     }
     return `Faiz yönü şu an <b>net değil</b>; şahin ve güvercin başlıklar dengede. Faize duyarlı sektörlerde yön netleşene kadar oynaklık normaldir.`;
@@ -12072,37 +12561,130 @@
   //    tek bir büyük kaybeden ya da sakin-karışık bir gün tetiklemez.
   const PMAC_ROWS_MIN = 6, PMAC_ROWS_SHARE = 0.70, PMAC_ROWS_CHG = 1.0;
 
+  // ── ÇEKİRDEK: fiyat-yalanlama, SAF ve KOD DÖNDÜREN (2026-11-03, Ş8 #1/#6)
+  //
+  //  NİYE AYRI BİR FONKSİYON: aşağıdaki WEB KABUĞU (dilim dışı) HTML üretiyor ve
+  //  MODÜL DURUMU okuyor (`macroBreadthSeen`). İkisi de motora
+  //  dilimlenemez — motor saf çekirdek taşır, DOM ve durum taşımaz. Bu
+  //  yüzden ölçüm buraya çıkarıldı: eşik KARŞILAŞTIRMALARI burada,
+  //  cümle/HTML aşağıdaki kabukta, native cümlesi `lib/sozluk.ts`te.
+  //
+  //  GENİŞLİK PARAMETRE OLARAK GELİYOR (`genislik` + `genislikYas` ms):
+  //  çağıran nereden okuduğunu kendi bilir. Web `macroBreadthSeen`i verir,
+  //  uç ise kendi ölçtüğü/aldığı genilişliği verir. Ölçülmemiş genislik
+  //  (`null`) için KAYNAK ÜRETİLMEZ — varsayılan 50 koymak uydurma olurdu.
+  //
+  //  DÖNÜŞ: { want, kaynaklar: [{dir, kod, ...ham sayılar}], celiski: [...] }
+  //  `want` nötr duruşta `null`: nötr bir YÖN İDDİASI etmiyor, dolayısıyla
+  //  yalanlanacak bir şey de yok. `celiski` = `dir !== want` olan kaynaklar.
+  //  Serbest Türkçe YOK, yüzde işaretli metin YOK, HTML YOK.
+  function pulseRealityCodes(g) {
+    const kod = (g && g.kod) || null;
+    const want = kod === 'dove' ? 'strong' : kod === 'hawk' ? 'weak' : null;
+    const out = { want, kaynaklar: [], celiski: [] };
+    if (!want) return out;
+
+    const b = g && typeof g.genislik === 'number' ? g.genislik : NaN;
+    const yas = g && typeof g.genislikYas === 'number' ? g.genislikYas : NaN;
+    // BAYAT GENİŞLİK FİYAT GERÇEKLİĞİ SAYILMAZ: yaş ölçülmemişse de
+    // kaynak üretilmez (`NaN < x` false) — sessizce taç kondurulmuyor.
+    if (Number.isFinite(b) && Number.isFinite(yas) && yas < PMAC_BREADTH_MAXAGE) {
+      if (b <= PMAC_BREADTH_WEAK) out.kaynaklar.push({ dir: 'weak', kod: 'genislik_zayif', genislik: b });
+      else if (b >= PMAC_BREADTH_STRONG) out.kaynaklar.push({ dir: 'strong', kod: 'genislik_guclu', genislik: b });
+    }
+
+    // İZLENEN SEMBOLLERİN GÜN DEĞİŞİMİ: satır nesnesi DEĞİL, SAYI DİZİSİ
+    // geliyor. Çekirdek `r.a.dayChg` gibi bir kabuk şeklini tanımasa da
+    // aynı ölçümü yapar; dönüşte sembol ADİ yok çünkü eşik kararları
+    // adlardan bağımsız.
+    const d = ((g && g.gunDegisimleri) || []).filter((v) => typeof v === 'number' && Number.isFinite(v));
+    if (d.length >= PMAC_ROWS_MIN) {
+      const dusen = d.filter((v) => v < 0).length;
+      const ort = d.reduce((a, v) => a + v, 0) / d.length;
+      if (dusen / d.length >= PMAC_ROWS_SHARE && ort <= -PMAC_ROWS_CHG)
+        out.kaynaklar.push({ dir: 'weak', kod: 'satirlar_eksi', n: d.length, adet: dusen, ort });
+      else if ((d.length - dusen) / d.length >= PMAC_ROWS_SHARE && ort >= PMAC_ROWS_CHG)
+        out.kaynaklar.push({ dir: 'strong', kod: 'satirlar_arti', n: d.length, adet: d.length - dusen, ort });
+    }
+
+    out.celiski = out.kaynaklar.filter((k) => k.dir !== want);
+    return out;
+  }
+  // ── EŞİK ③: enflasyon yönünde "ısınma/soğuma" diyebilmek için
+  //    gereken en küçük büyüklük. GEREKÇE: `inflDirection` -1..+1
+  //    aralığında dönüyor; 0,15 altı tek bir manşetin ağırlığıyla
+  //    oluşabilir, yön İDDİASI TAŞIMAZ. Web'de bu sayı İKİ YERDE
+  //    (şahin/güvercin dallarında) satır arasına gömülmüştü; adı
+  //    verilip motora alındı ki uç aynı kapıdan geçsin.
+  const PMAC_INFL_WARM = 0.15;
+
+  // ── ÇEKİRDEK: ani-hareket satırı faiz/enflasyonla mı açıklanıyor?
+  //  SAF ve KOD döndürüyor; emoji/HTML web kabuğunda kalıyor.
+  //  `hasData` kapısı ÇAĞIRANDA: burada "veri yok" ile "sektörü yok"
+  //  aynı `null`a düşer, oysa ikisi AYNI ŞEY DEĞİL.
+  function pulseMakroEtiketKod(sembol, up, biasUp, biasDown) {
+    const secs = SYMBOL_SECTORS[sembol] || [];
+    if (!secs.length) return null;
+    if (!up && (biasDown || []).some((s) => secs.includes(s))) return 'faiz_baski';
+    if (up && (biasUp || []).some((s) => secs.includes(s))) return 'faiz_ruzgar';
+    return null;
+  }
+
+  // ── ÇEKİRDEK: bütüncül yorumun KODLARI — CÜMLE DEĞİL.
+  //  `kod`: 'sakin' (makro manşet yok) | 'hawk' | 'dove' | 'notr'.
+  //  `uyumlu`: duruşun yönüyle AYNI yöne giden, sektörü duruştan
+  //  etkilenen sembol adları (en çok 3 — cümleye sığan sayı).
+  //  'sakin' ile 'notr' AYRI: biri "makro manşet YOK", öteki
+  //  "manşet var, yön dengede" demek.
+  function pulseMakroYorumKod(macro, rows) {
+    const out = { kod: 'sakin', taze: false, inflIsinma: false, inflSoguma: false, uyumlu: [] };
+    if (!macro || !macro.hasData) return out;
+    out.kod = macro.cls === 'hawk' ? 'hawk' : macro.cls === 'dove' ? 'dove' : 'notr';
+    out.taze = !!macro.fresh2d;
+    out.inflIsinma = out.kod === 'hawk' && macro.inflDir >= PMAC_INFL_WARM;
+    out.inflSoguma = out.kod === 'dove' && macro.inflDir <= -PMAC_INFL_WARM;
+    const rr = (rows || []).filter((r) => r && r.symbol);
+    if (out.kod === 'hawk')
+      out.uyumlu = rr.filter((r) => !r.up && (SYMBOL_SECTORS[r.symbol] || []).some((x) => macro.biasDown.includes(x)))
+        .slice(0, 3).map((r) => r.symbol);
+    else if (out.kod === 'dove')
+      out.uyumlu = rr.filter((r) => r.up && (SYMBOL_SECTORS[r.symbol] || []).some((x) => macro.biasUp.includes(x)))
+        .slice(0, 3).map((r) => r.symbol);
+    return out;
+  }
+  // ---- WEB KABUGU (dilim burada biter) ----
+
   // Duruş ile fiyat çelişiyor mu? Çelişiyorsa görünür bir uyarı şeridi döndürür.
+  // EŞİK KARŞILAŞTIRMASI BURADA DEĞİL: `pulseRealityCodes` yapıyor. Bu
+  // kabuk yalnız kodları METNE çeviriyor — ÇIKTI BAŞINA BİREBİR AYNI
+  // (aynı sıra, aynı cümle, aynı biçimleme).
   function pulseMacroReality(macro, rows) {
     if (!macro || !macro.hasData) return '';
-    // Nötr duruş bir YÖN İDDİASI etmiyor — yalanlanacak bir şey yok.
-    const want = macro.cls === 'dove' ? 'strong' : macro.cls === 'hawk' ? 'weak' : null;
-    if (!want) return '';
-
-    const src = [];
-    if (macroBreadthSeen && Date.now() - macroBreadthSeen.at < PMAC_BREADTH_MAXAGE) {
-      const b = macroBreadthSeen.val;
-      const tail = `evrenin ortalama teknik skoru ${Math.round(b)}/100, nötr 50`;
-      if (b <= PMAC_BREADTH_WEAK) src.push({ dir: 'weak', txt: `piyasa genişliği <b>zayıf</b> (${tail})` });
-      else if (b >= PMAC_BREADTH_STRONG) src.push({ dir: 'strong', txt: `piyasa genişliği <b>güçlü</b> (${tail})` });
-    }
     const rr = (rows || []).filter((r) => r && r.a && typeof r.a.dayChg === 'number');
-    if (rr.length >= PMAC_ROWS_MIN) {
-      const dn = rr.filter((r) => r.a.dayChg < 0).length;
-      const avg = rr.reduce((a, r) => a + r.a.dayChg, 0) / rr.length;
-      const pct = (v) => (v >= 0 ? '+' : '') + v.toFixed(1).replace('.', ',') + '%';
-      if (dn / rr.length >= PMAC_ROWS_SHARE && avg <= -PMAC_ROWS_CHG)
-        src.push({ dir: 'weak', txt: `izlediğin ${rr.length} sembolün <b>${dn}'i bugün ekside</b> (ortalama ${pct(avg)})` });
-      else if ((rr.length - dn) / rr.length >= PMAC_ROWS_SHARE && avg >= PMAC_ROWS_CHG)
-        src.push({ dir: 'strong', txt: `izlediğin ${rr.length} sembolün <b>${rr.length - dn}'i bugün artıda</b> (ortalama ${pct(avg)})` });
-    }
+    const g = pulseRealityCodes({
+      kod: macro.cls,
+      genislik: macroBreadthSeen ? macroBreadthSeen.val : null,
+      genislikYas: macroBreadthSeen ? Date.now() - macroBreadthSeen.at : null,
+      gunDegisimleri: rr.map((r) => r.a.dayChg),
+    });
+    if (!g.celiski.length) return '';
 
-    const conflict = src.filter((s) => s.dir !== want);
-    if (!conflict.length) return '';
+    const pct = (v) => (v >= 0 ? '+' : '') + v.toFixed(1).replace('.', ',') + '%';
+    const txt = (k) => {
+      if (k.kod === 'genislik_zayif' || k.kod === 'genislik_guclu') {
+        const tail = `evrenin ortalama teknik skoru ${Math.round(k.genislik)}/100, nötr 50`;
+        return k.kod === 'genislik_zayif'
+          ? `piyasa genişliği <b>zayıf</b> (${tail})`
+          : `piyasa genişliği <b>güçlü</b> (${tail})`;
+      }
+      return k.kod === 'satirlar_eksi'
+        ? `izlediğin ${k.n} sembolün <b>${k.adet}'i bugün ekside</b> (ortalama ${pct(k.ort)})`
+        : `izlediğin ${k.n} sembolün <b>${k.adet}'i bugün artıda</b> (ortalama ${pct(k.ort)})`;
+    };
     const reads = macro.cls === 'dove'
       ? 'gevşeme / risk iştahı' : 'sıkılaşma / faize duyarlıda baskı';
     return `<div class="pmac-conflict">⚠️ <b>Yön teyit edilmedi:</b> haber akışı <b>${reads}</b> okuyor,
-      ancak ${conflict.map((s) => s.txt).join(' ve ')} — <b>piyasa tersini söylüyor.</b>
+      ancak ${g.celiski.map(txt).join(' ve ')} — <b>piyasa tersini söylüyor.</b>
       Duruş yalnız haber METNİNDEN geliyor; fiyat onu onaylamadı. Çelişki kapanana kadar bu yönü
       tek başına kanıt sayma. Bilgi amaçlıdır, yatırım tavsiyesi değildir.</div>`;
   }

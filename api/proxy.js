@@ -94,6 +94,41 @@ const IZINLI_KONAKLAR = new Set([
   'data.sec.gov',
 ]);
 
+// Ek taşıyıcı tablosu — rota adı -> o rotanın modülünü yükleyen ok
+// fonksiyonu. Belirteç LİTERAL olmak ZORUNDA (gerekçe aşağıda, dağıtım
+// noktasında). Yükleme tembel: /api/proxy?url=... yolundaki istek bu dört
+// dosyayı okumuyor.
+const TASIYICILAR = Object.freeze({
+  degisim: () => import('./_degisim.js'),
+  gundem:  () => import('./_gundem.js'),
+  // `hareket` bu tur acildi (⚡ Nabiz gun ici ani-hareket taramasi).
+  // Olculdu: /api/pulse MAKRO nabiz, gun ici tarama orada YOK — olcum
+  // yalniz TARAYICIDA yasiyordu. Motor uretimi GEREKMEDI (PULSE_TH,
+  // analyzeIntraday, pulseIsSudden zaten motorda). 13. uc dosyasi
+  // ACILMADI (Hobby tavani 12). Belirtec yine LITERAL.
+  hareket: () => import('./_hareket.js'),
+  iceriden: () => import('./_iceriden.js'),
+  // `katalizor` bu tur acildi (Katalizor/Risk satirinin YAKLASAN
+  // TEMETTU bacagi). Webde gun farki ve 45 gun esigi TARAYICIDA
+  // duruyordu; native istemci hesap YAPMAZ, esik TASIMAZ -> karar
+  // motora, hesap uca tasindi. Belirtec yine LITERAL.
+  katalizor: () => import('./_katalizor.js'),
+  kripto:  () => import('./_kripto.js'),
+  kur:     () => import('./_kur.js'),
+  // `mali` bu tur acildi (bilanco/gelir tablosu ham kalemleri: SEC XBRL
+  // + Is Yatirim MaliTablo). Webde bu kalemler TARAYICIDA cekilip orada
+  // marj/oran hesaplaniyordu; native istemci hesap YAPMAZ, olcum uca
+  // tasindi. 13. uc dosyasi ACILMADI (Hobby tavani 12). Belirtec yine
+  // LITERAL.
+  mali:    () => import('./_mali.js'),
+  metal:   () => import('./_metal.js'),
+  // `neden` bu tur acildi ("Neden hareket ediyor?"). Webde bu kart
+  // TARAYICIDA hesapliyordu; native istemci hesap YAPMAZ, karar uca
+  // tasindi. Belirtec yine LITERAL.
+  neden:   () => import('./_neden.js'),
+});
+export const TASIYICI_ROTALARI = Object.freeze(Object.keys(TASIYICILAR));
+
 export default async function handler(req, res) {
   // /api/yfin rewrite'i buraya dusuyor -> tasiyiciya devret. CORS basliklarini
   // yfinHandler kendisi kuruyor (ayni kume: *, GET/OPTIONS, 86400).
@@ -108,6 +143,23 @@ export default async function handler(req, res) {
     const { HANDLERLAR } = await import('./_kesif.js');
     const h = HANDLERLAR[rota];
     if (h) return h(req, res);
+  }
+
+  // Ayrı taşıyıcıdaki rotalar (degisim/gundem/kripto/metal). Bunlar
+  // _kesif.js'e GİRMEDİ: o dosya motor/tarama ailesinin gövdesi, bu
+  // dördü bağımsız kaynaklardan (Yahoo chart / yayıncı RSS'leri /
+  // CoinGecko / Google News) besleniyor.
+  // Tabloda LİTERAL belirteçli ok fonksiyonu var; `import(degisken)`
+  // Vercel'in paket izleyicisi tarafından İZLENMEZ, dosya bundle'a
+  // girmez ve uç canlıda 404 verir. Rota adı burada da ELLE `if` olarak
+  // yazılmıyor: tablo tek kaynak, uc-test aynı listeyi okuyor.
+  if (rota) {
+    const yukle = TASIYICILAR[rota];
+    if (yukle) {
+      const { HANDLERLAR } = await yukle();
+      const h = HANDLERLAR[rota];
+      if (h) return h(req, res);
+    }
   }
 
   // CORS

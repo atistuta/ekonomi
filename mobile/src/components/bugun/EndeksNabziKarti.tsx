@@ -49,12 +49,26 @@
 //  döndürüp döndürmediği (canlı istek atılmadı). Boş seri "ölçemedim"
 //  DEĞİL, "bu aralıkta mum yok" diye yazılır.
 //
+//  ── ⚡ GÜN İÇİ KATMAN (eklendi 2026-11-03, Ş8 #1/#6) ────────────────
+//  `/api/chart` artık `gunici` döndürüyor: motorun `analyzeIntraday` +
+//  `pulseIsSudden` ölçümü (dayChg · hourChg · rvol · breakout · sudden ·
+//  bigDay + okunan eşik kümesi). Kart ARTIK ÖNCE ONU OKUYOR:
+//    · `gunici.dayChg` tabanı `chartPreviousClose` → GECE BOŞLUĞU DAHİL.
+//      Kartın kendi aritmetiği ilk MUMUN açılışından sayıyordu, yani
+//      açılış boşluğunu GÖRMÜYORDU. İki sayı farklı şeyler ölçüyor;
+//      doğru olan uçtan geleni basmak.
+//    · `gunici === null` ise KENDİ aritmetiği yedek olarak kalıyor
+//      (`guniciKod` nedeni söyler: `mum_az` = ölçemedim, yazılır;
+//      `adim_uygun_degil` = sormadım, HİÇ satır çizilmez).
+//    · `sudden`/`bigDay`/`breakout` BOOLEAN geliyor; cümlesi
+//      `lib/sozluk.ts`te seçiliyor. Eşik SAYISI buraya girmiyor.
+//
 //  ── BURADA HESAP VAR MI ────────────────────────────────────────────
-//  Tek aritmetik: günlük değişim = (son kapanış − ilk açılış) ÷ ilk
-//  açılış × 100. Bu bir KÜNYE aritmetiği (serinin iki ucu), gösterge
-//  DEĞİL: eşik yok, ağırlık yok, pencere seçimi yok — pencereyi `range`
-//  belirliyor ve `range` ekranın verdiği parametre. Bunun ÖTESİNDE
-//  hiçbir sayı türetilmiyor: ortalama yok, oynaklık yok, skor yok.
+//  Tek aritmetik, ve o da artık YEDEK: günlük değişim = (son kapanış −
+//  ilk açılış) ÷ ilk açılış × 100. Bu bir KÜNYE aritmetiği (serinin iki
+//  ucu), gösterge DEĞİL: eşik yok, ağırlık yok, pencere seçimi yok —
+//  pencereyi `range` belirliyor ve `range` ekranın verdiği parametre.
+//  Bunun ÖTESİNDE hiçbir sayı türetilmiyor: ortalama yok, skor yok.
 //  `signalOf` yön okunu veriyor (theme/signal.ts) — eşiği orada,
 //  TEK yerde yazılı (renk körü güvenli ▲/▼ kuralı).
 //
@@ -76,7 +90,13 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import type { ApiError, ChartResponse, IstekDurum, Market } from '@/api';
 import { Card, Durum, OlcumEksikRozet, Pill, VeriYok } from '@/components';
-import { formatGunAy, formatPercent, formatPrice } from '@/lib/format';
+import { formatGunAy, formatOran, formatPercent, formatPrice } from '@/lib/format';
+import {
+  GUNICI_SESSIZLIK_SOZLUK,
+  GUNICI_SOZLUK,
+  guniciNabizKodu,
+  sozluktenSec,
+} from '@/lib/sozluk';
 import { numeric, signalOf, space, type, useTheme } from '@/theme';
 
 /**
@@ -153,7 +173,7 @@ export function EndeksNabziKarti({
   return (
     <Card
       title="📊 Endeks Nabzı"
-      subtitle="Büyük endekslerin günlük hareketi — /api/chart günlük serisi"
+      subtitle="Büyük endekslerin gün içi hareketi — /api/chart 5 dakikalık serisi"
       right={
         durum === 'veri' ? (
           <Pill
@@ -228,8 +248,16 @@ function EndeksSatiri({ tanim, olcum }: { tanim: EndeksTanim; olcum: EndeksOlcum
   // TEK aritmetik (dosya başlığı): serinin iki ucu. İlk açılış 0 ise
   // bölme yapılmaz — `null` kalır, "ölçülemedi" yazar. Sıfıra bölümden
   // doğan `Infinity`yi yüzde diye basmak uydurma olurdu.
-  const yuzde =
+  // ÖNCE UÇ: motorun gün içi ölçümü varsa gün değişimi ONDAN okunur
+  // (tabanı önceki kapanış → gece boşluğu dahil). Yedek aritmetik
+  // yalnız `gunici === null` hâlinde devreye giriyor.
+  const gunici = veri?.gunici ?? null;
+  const guniciKod = veri?.guniciKod ?? null;
+  const yedekYuzde =
     ilk && son && ilk.open !== 0 ? ((son.close - ilk.open) / ilk.open) * 100 : null;
+  const yuzde = gunici && Number.isFinite(gunici.dayChg) ? gunici.dayChg : yedekYuzde;
+  const nabizCumle = sozluktenSec(GUNICI_SOZLUK, guniciNabizKodu(gunici));
+  const sessizlik = sozluktenSec(GUNICI_SESSIZLIK_SOZLUK, guniciKod);
 
   const isaret = signalOf(yuzde);
   const kur = veri?.kunye?.currency ?? (tanim.pazar === 'BIST' ? 'TRY' : null);
@@ -246,7 +274,11 @@ function EndeksSatiri({ tanim, olcum }: { tanim: EndeksTanim; olcum: EndeksOlcum
             ? ', bu aralıkta mum yok'
             : yuzde == null
               ? ', günlük değişim ölçülemedi'
-              : ', günlük ' + isaret.a11yLabel + ' ' + formatPercent(yuzde));
+              : ', günlük ' +
+                isaret.a11yLabel +
+                ' ' +
+                formatPercent(yuzde) +
+                (nabizCumle ? ', ' + nabizCumle : ''));
 
   return (
     <View style={[styles.satir, { borderColor: colors.border }]} accessible accessibilityLabel={a11y}>
@@ -274,15 +306,34 @@ function EndeksSatiri({ tanim, olcum }: { tanim: EndeksTanim; olcum: EndeksOlcum
             {'ölçüldü, bu aralıkta mum yok (adet ' + String(veri.adet) + ') — kapalı pazar olabilir.'}
           </Text>
         ) : (
-          <Text style={[type.micro, { color: colors.textFaint }]}>
-            {'ilk açılıştan son kapanışa · ' +
-              String(mumlar.length) +
-              ' mum · ' +
-              veri.range +
-              '/' +
-              veri.interval +
-              (son ? ' · son mum ' + formatGunAy(son.time) : '')}
-          </Text>
+          <>
+            <Text style={[type.micro, { color: colors.textFaint }]}>
+              {(gunici ? 'önceki kapanıştan şimdiye · ' : 'ilk açılıştan son kapanışa · ') +
+                String(mumlar.length) +
+                ' mum · ' +
+                veri.range +
+                '/' +
+                veri.interval +
+                (son ? ' · son mum ' + formatGunAy(son.time) : '')}
+            </Text>
+            {/* Nabız cümlesi: motorun boolean'ı varsa yazılır, üçü de
+                `false` ise SATIR YOK (uydurma "sakin" cümlesi basmıyoruz). */}
+            {nabizCumle ? (
+              <Text style={[type.micro, { color: colors.textDim }]}>{nabizCumle}</Text>
+            ) : null}
+            {/* Gün içi ölçüm hacim oranını da taşıyor; ham oran, 1 =
+                ortalama. Eşiği YOK, yorumu YOK. */}
+            {gunici && Number.isFinite(gunici.rvol) ? (
+              <Text style={[type.micro, numeric, { color: colors.textFaint }]}>
+                {'son barın hacmi / ortalama · ' + formatOran(gunici.rvol, 2)}
+              </Text>
+            ) : null}
+            {/* `mum_az` = ÖLÇEMEDİM, yazılır. `adim_uygun_degil` =
+                SORMADIM, sözlükte yok → bu satır hiç çizilmez. */}
+            {!gunici && sessizlik ? (
+              <Text style={[type.micro, { color: colors.textDim }]}>{sessizlik}</Text>
+            ) : null}
+          </>
         )}
       </View>
 
@@ -295,7 +346,11 @@ function EndeksSatiri({ tanim, olcum }: { tanim: EndeksTanim; olcum: EndeksOlcum
                 veriyor (theme/signal.ts gerekçesi). */}
             <Pill label={formatPercent(yuzde)} tone={isaret.tone} glyph={isaret.arrow} size="sm" />
             <Text style={[type.micro, numeric, { color: colors.textFaint }]}>
-              {'son ' + formatPrice(son ? son.close : null, kur)}
+              {'son ' +
+                formatPrice(
+                  gunici && Number.isFinite(gunici.price) ? gunici.price : son ? son.close : null,
+                  kur,
+                )}
             </Text>
           </>
         )}

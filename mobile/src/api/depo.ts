@@ -84,7 +84,7 @@ import { useSyncExternalStore } from 'react';
 
 import { depoCalisiyorMu } from '@/lib/kalici';
 
-import { AZAMI_SEMBOL } from './types';
+import { AZAMI_SEMBOL, WATCHLIST_CODE_BICIM } from './types';
 
 // ---------------------------------------------------------------------
 //  1. ANAHTARLAR — web ile BİREBİR (yukarıdaki ölçüm bloğu)
@@ -983,6 +983,39 @@ export async function listeEvreneAl(id: string, dahil: boolean): Promise<YazSonu
 }
 
 /**
+ * Liste için bildirim istenip istenmediği (web'in 🔔 düğmesi,
+ * `setListNotify` app.js:2122).
+ *
+ * NİYE AYRI BİR BAYRAK: `inUniverse` ANALİZ evrenini kuruyor
+ * (`evrenSemboller`, depo.ts:1036 — Fırsatlar/Radar/Bugün hangi hisseleri
+ * ölçsün), `notify` ise PUSH evrenini (web `collectWatchlistPayload`
+ * app.js:2238 `if (l.notify === false) return`). Kullanıcı bir listeyi
+ * ölçtürmek isteyip telefonunun titremesini İSTEMEYEBİLİR; tek bayrakla
+ * bu iki istek ayrılamaz.
+ *
+ * GERİYE DÖNÜK VARSAYILAN `true`: alan YOKSA bildirim AÇIK sayılıyor —
+ * web de öyle (`l.notify !== false`, app.js:8286). Varsayılanı `false`
+ * yapmak, eski cihazlardaki listelerin bildirimlerini SESSİZCE kesmek
+ * olurdu.
+ *
+ * BU YAZICI AĞA ÇIKMIYOR: bayrak cihazda duruyor. Bayrağın push evrenine
+ * dönüştüğü yer `/api/watchlist` POST'u (`senkronYaz`) ve o çağrı BU
+ * EKRANDAN YAPILMIYOR — bayrağı yazmak ile senkronu tetiklemek AYRI iki
+ * karar, ikisini tek düğmeye bağlamak kullanıcının bilmediği bir ağ
+ * isteği doğurur.
+ */
+export async function listeBildirimAyarla(id: string, acik: boolean): Promise<YazSonuc> {
+  const listeler = listelerDepo.al();
+  if (!listeler.some((l) => l.id === id)) {
+    return { ok: false, sebep: 'yok', mesaj: 'Liste bulunamadı.' };
+  }
+  const yazildi = await listelerDepo.yaz(
+    listeler.map((l) => (l.id === id ? { ...l, notify: acik } : l)),
+  );
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
+/**
  * Listeye sembol ekler. SINIR LİSTE BAŞINA 8 (`AZAMI_SEMBOL`): bir liste
  * tek bir uç turuna karşılık geliyor ve uç nokta aşımı KIRPMIYOR, 400 ile
  * reddediyor (api/_girdi.js, liste.ts:30-33). Birden çok liste olabilir,
@@ -1053,6 +1086,238 @@ export function evrenSemboller(): { semboller: string[]; budandi: boolean } {
     }
   }
   return { semboller: cikti, budandi };
+}
+
+// ---------------------------------------------------------------------
+//  10.b TEZ DEFTERİ İŞLEMLERİ — kullanıcının KENDİ notları
+// ---------------------------------------------------------------------
+//  NE: web'in `#tab-tez` sekmesinin (`index.html:163`) yazıcıları.
+//  Kayıt şekli ZATEN yukarıda (⑦ `sb:theses`); eksik olan YAZMA
+//  işlemleriydi — defteri okuyan bir native ekran açılamazdı.
+//
+//  ÖLÇÜLDÜ (app.js, salt okuma):
+//   · `TEZ_LS_KEY = 'sb:theses'` app.js:9931 — anahtar BU dosyada da aynı.
+//   · kimlik üretimi app.js:9770 `'t' + Date.now().toString(36) + …`
+//   · bugünün tarihi app.js:9939 `tzToday()` — YEREL takvim günü,
+//     `toISOString()` DEĞİL (o UTC'ye kayar, gece yarısı bir gün şaşırtır).
+//   · dayanak durumu DÖNGÜ: `['ok','watch','bad']` app.js'de sırayla.
+//   · düzenlemede dayanak durumu METİN eşleşiyorsa KORUNUYOR, yeni
+//     dayanak `ok` başlıyor (app.js `prevPill` haritası).
+//   · günlük ve katalizör sayısında web'de SINIR YOK — burada da yok;
+//     uydurma bir sınır kullanıcının notunu sessizce yutardı.
+//
+//  BURADA HESAP YOK: hedef/çıkış fiyatı kullanıcının yazdığı HAM sayı
+//  olarak duruyor. Web o sekmede `(price - stop) / (target - stop)` ve
+//  `(target - price) / price * 100` hesaplıyor; o aritmetik BURAYA VE
+//  NATIVE EKRANA GİRMEDİ (§5.1 ham sayı kuralı). Metin ayrıştırma
+//  (`sayiOku`) hesap değil: kullanıcının yazdığı dizgeyi sayıya çeviriyor.
+//
+//  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
+// ---------------------------------------------------------------------
+
+/** Yerel takvim günü 'YYYY-AA-GG' — app.js:9939 `tzToday` BİREBİR. */
+export function bugunYMD(): string {
+  const d = new Date();
+  return (
+    d.getFullYear() +
+    '-' +
+    String(d.getMonth() + 1).padStart(2, '0') +
+    '-' +
+    String(d.getDate()).padStart(2, '0')
+  );
+}
+
+/** 'her satır bir madde' — app.js `parseLines` BİREBİR. */
+export function metinSatirlari(ham: string): string[] {
+  return String(ham || '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+/** 'Tarih | açıklama' satırları — app.js `parseCats` BİREBİR. */
+export function katalizorSatirlari(ham: string): TezKatalizor[] {
+  return metinSatirlari(ham).map((l) => {
+    const i = l.indexOf('|');
+    return i >= 0
+      ? { date: l.slice(0, i).trim(), text: l.slice(i + 1).trim() }
+      : { date: '', text: l };
+  });
+}
+
+/**
+ * Kullanıcının yazdığı fiyat dizgesi → sayı (app.js `parseNum`
+ * BİREBİR: virgül nokta olur, diğer karakterler düşer). Geçersizse
+ * `null` — **asla `0`**, çünkü `0` geçerli bir fiyat olabilir ve
+ * 'yazmadı' ile 'sıfır yazdı' ayrı şeyler.
+ */
+export function sayiOku(ham: string): number | null {
+  const n = parseFloat(
+    String(ham ?? '')
+      .replace(',', '.')
+      .replace(/[^0-9.\-]/g, ''),
+  );
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Formdan gelen tez girdisi — kimlik/tarih/günlük yazıcının işi. */
+export type TezGirdi = {
+  symbol: string;
+  market: string;
+  name?: string;
+  position: 'long' | 'short';
+  conviction: 'hi' | 'mid' | 'lo';
+  thesis: string;
+  /** Dayanak METİNLERİ; durum yazıcıda atanır/korunur. */
+  pillars: string[];
+  risks: string[];
+  target: number | null;
+  stop: number | null;
+  catalysts: TezKatalizor[];
+};
+
+const TEZ_DURUM: readonly TezDayanak['status'][] = ['ok', 'watch', 'bad'];
+
+export async function tezEkle(girdi: TezGirdi): Promise<YazSonuc> {
+  const sembol = sembolNormal(girdi.symbol);
+  if (!sembol) return { ok: false, sebep: 'bos', mesaj: 'Hisse seçilmedi.' };
+  const cumle = metin(girdi.thesis).trim();
+  if (!cumle) return { ok: false, sebep: 'bos', mesaj: 'Tez cümlesi yazılmadı.' };
+  const tezler = tezlerDepo.al();
+  if (tezler.some((t) => t.symbol === sembol)) {
+    return {
+      ok: false,
+      sebep: 'zaten_var',
+      mesaj: sembol + ' için tez zaten var — onu düzenle.',
+    };
+  }
+  const gun = bugunYMD();
+  const yeni: Tez = {
+    id: kimlikUret('t'),
+    created: gun,
+    updated: gun,
+    symbol: sembol,
+    market: metin(girdi.market) || pazarOf(sembol),
+    name: metin(girdi.name),
+    position: girdi.position === 'short' ? 'short' : 'long',
+    conviction: girdi.conviction,
+    thesis: cumle,
+    pillars: girdi.pillars.map((tx) => ({ text: tx, status: 'ok' as const })),
+    risks: girdi.risks,
+    target: girdi.target,
+    stop: girdi.stop,
+    catalysts: girdi.catalysts,
+    log: [],
+  };
+  // Web `list.unshift(rec)` — en yeni tez başta.
+  const yazildi = await tezlerDepo.yaz([yeni, ...tezler]);
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
+/** Tezi günceller. Hisse DEĞİŞMEZ (web: 'yeni tez aç'). */
+export async function tezGuncelle(id: string, girdi: TezGirdi): Promise<YazSonuc> {
+  const tezler = tezlerDepo.al();
+  const eski = tezler.find((t) => t.id === id);
+  if (!eski) return { ok: false, sebep: 'yok', mesaj: 'Tez bulunamadı.' };
+  const cumle = metin(girdi.thesis).trim();
+  if (!cumle) return { ok: false, sebep: 'bos', mesaj: 'Tez cümlesi yazılmadı.' };
+  // Dayanak durumunu METİN üzerinden koru (app.js `prevPill`).
+  const onceki = new Map(eski.pillars.map((p) => [p.text, p.status]));
+  const yeni: Tez = {
+    ...eski,
+    position: girdi.position === 'short' ? 'short' : 'long',
+    conviction: girdi.conviction,
+    thesis: cumle,
+    pillars: girdi.pillars.map((tx) => ({ text: tx, status: onceki.get(tx) ?? 'ok' })),
+    risks: girdi.risks,
+    target: girdi.target,
+    stop: girdi.stop,
+    catalysts: girdi.catalysts,
+    name: girdi.name != null && metin(girdi.name) ? metin(girdi.name) : eski.name,
+    updated: bugunYMD(),
+  };
+  const yazildi = await tezlerDepo.yaz(tezler.map((t) => (t.id === id ? yeni : t)));
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
+export async function tezSil(id: string): Promise<YazSonuc> {
+  const tezler = tezlerDepo.al();
+  if (!tezler.some((t) => t.id === id)) {
+    return { ok: false, sebep: 'yok', mesaj: 'Tez bulunamadı.' };
+  }
+  const yazildi = await tezlerDepo.yaz(tezler.filter((t) => t.id !== id));
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
+/** Dayanak durumu döngüsü: ok ▸ watch ▸ bad (app.js ile AYNI sıra). */
+export async function tezDayanakDongu(id: string, sira: number): Promise<YazSonuc> {
+  const tezler = tezlerDepo.al();
+  const tez = tezler.find((t) => t.id === id);
+  if (!tez) return { ok: false, sebep: 'yok', mesaj: 'Tez bulunamadı.' };
+  if (sira < 0 || sira >= tez.pillars.length) {
+    return { ok: false, sebep: 'yok', mesaj: 'Dayanak bulunamadı.' };
+  }
+  const pillars = tez.pillars.map((p, i) => {
+    if (i !== sira) return p;
+    const yer = TEZ_DURUM.indexOf(p.status);
+    return { ...p, status: TEZ_DURUM[(yer + 1) % TEZ_DURUM.length] };
+  });
+  const yazildi = await tezlerDepo.yaz(
+    tezler.map((t) => (t.id === id ? { ...t, pillars, updated: bugunYMD() } : t)),
+  );
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
+/**
+ * Günlük satırı ekler (web `.tzu-save`): tarih boşsa BUGÜN, etki
+ * `p|z|n`, not ZORUNLU. `konviksiyon` verilirse tezin konviksiyonu da
+ * güncellenir — web o formda ikisini birlikte yazıyor.
+ */
+export async function tezGunlukEkle(
+  id: string,
+  kayit: { date?: string; imp: string; note: string },
+  konviksiyon?: Tez['conviction'],
+): Promise<YazSonuc> {
+  const not = metin(kayit.note).trim();
+  if (!not) return { ok: false, sebep: 'bos', mesaj: 'Kısa bir not ekle.' };
+  const tezler = tezlerDepo.al();
+  const tez = tezler.find((t) => t.id === id);
+  if (!tez) return { ok: false, sebep: 'yok', mesaj: 'Tez bulunamadı.' };
+  const satir: TezGunluk = {
+    date: metin(kayit.date).trim() || bugunYMD(),
+    imp: metin(kayit.imp) || 'z',
+    note: not,
+  };
+  const yazildi = await tezlerDepo.yaz(
+    tezler.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            log: [satir, ...t.log],
+            conviction: konviksiyon ?? t.conviction,
+            updated: bugunYMD(),
+          }
+        : t,
+    ),
+  );
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
+export async function tezGunlukSil(id: string, sira: number): Promise<YazSonuc> {
+  const tezler = tezlerDepo.al();
+  const tez = tezler.find((t) => t.id === id);
+  if (!tez) return { ok: false, sebep: 'yok', mesaj: 'Tez bulunamadı.' };
+  if (sira < 0 || sira >= tez.log.length) {
+    return { ok: false, sebep: 'yok', mesaj: 'Günlük satırı bulunamadı.' };
+  }
+  const yazildi = await tezlerDepo.yaz(
+    tezler.map((t) =>
+      t.id === id
+        ? { ...t, log: t.log.filter((_, i) => i !== sira), updated: bugunYMD() }
+        : t,
+    ),
+  );
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
 }
 
 // ---------------------------------------------------------------------
@@ -1132,6 +1397,34 @@ export async function gostergeEkle(gosterge: Gosterge): Promise<YazSonuc> {
   return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
 }
 
+/**
+ * İğnelenmiş özel göstergeyi şeritten ÇIKARIR — `sepettenCikar`
+ * (bu dosyanın 13. bölümü) kalıbının aynısı: reddin SEBEBİ taşınıyor,
+ * Türkçe cümleyi YAZICI üretiyor, ekran kendi hata metnini uydurmuyor.
+ *
+ * NEDEN GEREKLİ: `gostergeEkle` vardı, çıkarma YOKTU. Web'de çıkarma
+ * var (`tkRenderPinned` satırındaki `.tk-pin-x` düğmesi kaydı `id` ile
+ * `loadTickers()` listesinden düşürüyor, app.js:2700-2710); sınır 4
+ * (`AZAMI_GOSTERGE`, web `tickerCustomMax()`) olduğu için çıkarma
+ * olmadan dolu şerit KALICI olarak kilitlenirdi.
+ *
+ * HAMLE GÜNLÜĞÜNE DÜŞMEZ — `sepettenCikar`DAN BİLEREK AYRILAN nokta:
+ * web de gösterge iğnelemeyi/kaldırmayı günlüğe YAZMIYOR (`tkAdd` ve
+ * `.tk-pin-x` yolunda `logMove` çağrısı yok; günlük sepet ve portföy
+ * işlemleri için). Şerit bir pozisyon değil, salt görünüm kaydı.
+ *
+ * HESAP YOK: eşik, ağırlık, formül yok — kayıt kimliğine göre düşüyor.
+ */
+export async function gostergeCikar(id: string): Promise<YazSonuc> {
+  const kimlik = metin(id);
+  if (!kimlik) return { ok: false, sebep: 'bos', mesaj: 'Gösterge kimliği gerekli.' };
+  const mevcut = gostergelerDepo.al();
+  const kayit = mevcut.find((g) => g.id === kimlik);
+  if (!kayit) return { ok: false, sebep: 'yok', mesaj: 'Gösterge şeritte bulunamadı.' };
+  const yazildi = await gostergelerDepo.yaz(mevcut.filter((g) => g.id !== kimlik));
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
 /** Hamle günlüğüne satır. Sınır 500 (app.js:2246): en ESKİ satır düşer. */
 export async function hamleEkle(hamle: Omit<Hamle, 'id' | 'ts'> & Partial<Pick<Hamle, 'id' | 'ts'>>): Promise<YazSonuc> {
   const kayit = hamleSuz({
@@ -1157,6 +1450,400 @@ export async function gecmisKaydet(kayit: SepetGecmisKaydi): Promise<YazSonuc> {
   }
   const yazildi = await sepetGecmisDepo.yaz(mevcut.slice(-AZAMI_GECMIS));
   return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
+// ---------------------------------------------------------------------
+//  13. SEPETE YAZMA — ekle · çıkar · nakit ayarla
+// ---------------------------------------------------------------------
+//  NEDEN BURADA: 11. ve 12. bölümler sepeti yalnız OKUYORDU
+//  (`nakitBakiye`, `sepetDepo.al()`). Native'de sepete kalem EKLEMENİN
+//  ya da ÇIKARMANIN hiçbir yolu yoktu — kullanıcı webde kurduğu sepeti
+//  telefonda görüyor, ama dokunamıyordu. Web karşılıkları:
+//  `bmAddHolding` (app.js:3303-3340), `removeBasketHolding`
+//  (app.js:3341-3360), `adjustCash` / `setCash` (app.js:3380-3404).
+//
+//  AĞ YOK — BİLİNÇLİ AYRILIK (web ile aynı DEĞİL, ve nedeni yazılı):
+//  web `bmAddHolding` içinde CANLI fiyat çekiyor (`basketPrice`) ve
+//  `addPrice`, `valTRY`, `pl`, `basketFlow` alanlarını o fiyatla
+//  dolduruyor. Bu dosya ağa ÇIKMAZ (bütün türler salt yerel depo), bu
+//  yüzden o dört alan `null` yazılıyor: ÖLÇÜLMEYEN SAYI BASILMAZ. Fiyat
+//  kullanıcı "Fiyatları ölç" düğmesine bastığında `sepetFiyatlari()`
+//  ucundan geliyor ve `SepetKart` orada gösteriyor. Uydurma bir fiyat
+//  yazmak, hamle günlüğünü ölçülmemiş sayıyla kirletmek olurdu.
+//
+//  HESAP YOK: kur çevirimi yok, toplam yok, kâr/zarar yok. `pl` ve
+//  `valTRY` web'de `toTRY(...)` ile hesaplanıyor; burada `null`.
+//  TEK İSTİSNA nakit: `TRY` bakiyesinde `valTRY` değişim MİKTARININ
+//  KENDİSİ (birim 1, çevirim yok) — başka para biriminde `null`.
+//
+//  HER YAZMA HAMLE GÜNLÜĞÜNE DÜŞER: web her üç işlemde de `logMove`
+//  çağırıyor (app.js:2452). `hamleEkle` bu dosyada zaten vardı ama
+//  ÇAĞIRANI YOKTU; artık üç yazma da oradan geçiyor.
+// ---------------------------------------------------------------------
+
+/**
+ * Sepet kalem sınırı — NATIVE'E ÖZEL, webde KARŞILIĞI YOK.
+ *
+ * ÖLÇÜLDÜ: web `saveBasket` (app.js:2501) sınırsız, `sepetDepo` türü de
+ * sınırsız. Sınırı TÜRE koymak sessiz kırpma olurdu (eski kalem düşer,
+ * kullanıcı farkına varmaz); bu yüzden tür sınırsız KALDI ve sınır
+ * YAZMA fonksiyonunda — dolu sepet GÖRÜNÜR bir ret veriyor
+ * (`sebep:'dolu'`), tıpkı `listeyeEkle`nin `AZAMI_SEMBOL` davranışı gibi.
+ * Sayı telefon belleği ve tek seferde ölçülecek fiyat turu düşünülerek
+ * seçildi; ÖLÇÜLMÜŞ bir eşik değil.
+ */
+export const AZAMI_SEPET = 200;
+
+/** `sepeteEkle` girdisi — kimlik, tarih ve fiyat alanları BURADA YOK. */
+export type SepetGirdi = {
+  cls: VarlikSinifi;
+  symbol: string;
+  name?: string;
+  unit?: string | null;
+  emoji?: string;
+  cgId?: string | null;
+  /** Adet. Pozitif olmak ZORUNDA — `0` kalem eklemek anlamsız. */
+  qty: number;
+  /** Birim maliyet. Kullanıcının girdiği sayı, ölçüm DEĞİL. */
+  cost: number;
+  /** Maliyetin para birimi. Boşsa `'TRY'`. */
+  costCur?: string;
+  /** Fonlarda elle girilen TL fiyat (web: `cls==='fund'?price:null`). */
+  manualPrice?: number | null;
+};
+
+export async function sepeteEkle(girdi: SepetGirdi): Promise<YazSonuc> {
+  const cls = sinifSuz(girdi.cls);
+  if (!cls) return { ok: false, sebep: 'bos', mesaj: 'Varlık sınıfı tanınmadı.' };
+  // NAKİT BU KAPIDAN GİRMEZ: web'de de ayrı kod yolu var (`adjustCash`),
+  // çünkü nakdin adedi BAKİYE ve maliyeti her zaman 1.
+  if (cls === 'cash') {
+    return { ok: false, sebep: 'bos', mesaj: 'Nakit bakiyesi nakit kartından girilir.' };
+  }
+  const symbol = sembolNormal(girdi.symbol);
+  const name = metin(girdi.name) || symbol;
+  if (!symbol && !name) return { ok: false, sebep: 'bos', mesaj: 'Sembol ya da ad gerekli.' };
+
+  const qty = sayiVeyaNull(girdi.qty);
+  if (qty == null || qty <= 0) {
+    return { ok: false, sebep: 'bos', mesaj: 'Adet sıfırdan büyük bir sayı olmalı.' };
+  }
+  const cost = sayiVeyaNull(girdi.cost);
+  if (cost == null || cost < 0) {
+    return { ok: false, sebep: 'bos', mesaj: 'Maliyet bir sayı olmalı.' };
+  }
+
+  const mevcut = sepetDepo.al();
+  if (mevcut.length >= AZAMI_SEPET) {
+    return {
+      ok: false,
+      sebep: 'dolu',
+      mesaj: 'Sepette en çok ' + AZAMI_SEPET + ' kalem olabilir — önce birini çıkar.',
+    };
+  }
+
+  const kalem = sepetSuz({
+    id: kimlikUret('b'),
+    cls,
+    symbol,
+    cgId: girdi.cgId ?? null,
+    name,
+    unit: girdi.unit ?? null,
+    emoji: metin(girdi.emoji),
+    qty,
+    cost,
+    costCur: metin(girdi.costCur).toUpperCase() || 'TRY',
+    addDate: new Date().toISOString(),
+    // AĞ YOK: web burada canlı fiyat yazıyor, biz ÖLÇMEDİK -> `null`.
+    addPrice: null,
+    manualPrice: sayiVeyaNull(girdi.manualPrice),
+  });
+  if (!kalem) return { ok: false, sebep: 'bos', mesaj: 'Sepet kalemi tanınmadı.' };
+
+  const yazildi = await sepetDepo.yaz([...mevcut, kalem]);
+  if (!yazildi) return { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+
+  // GÜNLÜK YAZILAMAZSA EKLEME GERİ ALINMAZ: kalem sepette DURUYOR ve
+  // kullanıcı onu görüyor; sessizce geri almak gördüğü şeyi silmek olurdu.
+  await hamleEkle({
+    type: 'add',
+    cls,
+    symbol,
+    name,
+    emoji: kalem.emoji,
+    qty,
+    price: null,
+    cur: kalem.costCur,
+    valTRY: null,
+    pl: null,
+    holdingId: kalem.id,
+    before: null,
+    basketFlow: null,
+  });
+  return { ok: true };
+}
+
+export async function sepettenCikar(id: string): Promise<YazSonuc> {
+  const kimlik = metin(id);
+  if (!kimlik) return { ok: false, sebep: 'bos', mesaj: 'Kalem kimliği gerekli.' };
+  const mevcut = sepetDepo.al();
+  const kalem = mevcut.find((h) => h.id === kimlik);
+  if (!kalem) return { ok: false, sebep: 'yok', mesaj: 'Kalem sepette bulunamadı.' };
+
+  const yazildi = await sepetDepo.yaz(mevcut.filter((h) => h.id !== kimlik));
+  if (!yazildi) return { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+
+  await hamleEkle({
+    type: 'remove',
+    cls: kalem.cls,
+    symbol: kalem.symbol,
+    name: kalem.name,
+    emoji: kalem.emoji,
+    qty: kalem.qty,
+    // Elle girilen fon fiyatı ÖLÇÜM değil ama KULLANICININ kendi sayısı;
+    // yoksa `null` — ağa çıkıp fiyat ölçmüyoruz.
+    price: kalem.manualPrice,
+    cur: kalem.costCur,
+    valTRY: null,
+    pl: null,
+    holdingId: kalem.id,
+    // `Hamle.before` bu türde `number | null` (webdeki JSON anlık
+    // görüntüsü DEĞİL): çıkarılmadan önceki ADET.
+    before: kalem.qty,
+    basketFlow: null,
+  });
+  return { ok: true };
+}
+
+/**
+ * Nakit bakiyesini HEDEF değere kurar (web: `setCash`, app.js:3404).
+ * Fark `adjustCash` gibi hamle günlüğüne düşer; eksi bakiye yok.
+ */
+export async function nakitAyarla(paraBirimi: string, hedef: number): Promise<YazSonuc> {
+  const pb = metin(paraBirimi).toUpperCase() || 'TRY';
+  const yeni = sayiVeyaNull(hedef);
+  if (yeni == null || yeni < 0) {
+    return { ok: false, sebep: 'bos', mesaj: 'Bakiye sıfır ya da daha büyük bir sayı olmalı.' };
+  }
+
+  const mevcut = sepetDepo.al();
+  const dizin = mevcut.findIndex((h) => h.cls === 'cash' && (h.symbol || 'TRY').toUpperCase() === pb);
+  // `null` = "hiç girilmemiş"; farkı HEDEFİN KENDİSİ yapar, `0`dan
+  // farkını almak girilmemiş bakiyeyi `0` saymak olurdu.
+  const onceki = dizin >= 0 ? mevcut[dizin].qty : null;
+  const fark = yeni - (onceki ?? 0);
+  if (onceki != null && fark === 0) return { ok: true };
+
+  const sonraki = [...mevcut];
+  if (dizin >= 0) {
+    sonraki[dizin] = { ...mevcut[dizin], qty: yeni, cost: 1, costCur: pb };
+  } else {
+    if (mevcut.length >= AZAMI_SEPET) {
+      return {
+        ok: false,
+        sebep: 'dolu',
+        mesaj: 'Sepette en çok ' + AZAMI_SEPET + ' kalem olabilir — önce birini çıkar.',
+      };
+    }
+    const kalem = sepetSuz({
+      id: kimlikUret('c'),
+      cls: 'cash',
+      symbol: pb,
+      cgId: null,
+      // Web `CASH_NAME` ile yalnız TRY/USD adlandırıyor (app.js:3380);
+      // burada para birimi kodu EKLENİYOR, uydurma ad yok.
+      name: 'Nakit ' + pb,
+      unit: null,
+      emoji: '💵',
+      qty: yeni,
+      cost: 1,
+      costCur: pb,
+      addDate: new Date().toISOString(),
+      // Nakdin birim fiyatı KENDİSİ: `1` bir ölçüm değil, tanım.
+      addPrice: 1,
+      manualPrice: null,
+    });
+    if (!kalem) return { ok: false, sebep: 'bos', mesaj: 'Nakit kalemi tanınmadı.' };
+    sonraki.push(kalem);
+  }
+
+  const yazildi = await sepetDepo.yaz(sonraki);
+  if (!yazildi) return { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+
+  await hamleEkle({
+    type: fark >= 0 ? 'add' : 'remove',
+    cls: 'cash',
+    symbol: pb,
+    name: 'Nakit ' + pb,
+    emoji: '💵',
+    qty: Math.abs(fark),
+    price: 1,
+    cur: pb,
+    // TL'de birim 1 olduğu için değişim miktarı TL cinsinden KENDİSİ;
+    // başka para biriminde kur ÖLÇMEDİĞİMİZ için `null`.
+    valTRY: pb === 'TRY' ? Math.abs(fark) : null,
+    pl: null,
+    holdingId: dizin >= 0 ? mevcut[dizin].id : null,
+    before: onceki,
+    basketFlow: null,
+  });
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------
+//  SENKRON AYARI — bildirim evrenini buluta taşıyan paylaşılan kod
+// ---------------------------------------------------------------------
+//  NE: `/api/watchlist` ucunun istediği `code` ve son BAŞARILI yazma anı.
+//  Bu kodu paylaşan tüm cihazlar TEK listeyi görür; telefon bildirimini
+//  atan işçi (`worker/poll.mjs`) de AYNI kodu okur — yani listeye sembol
+//  eklemek/çıkarmak hangi bildirimlerin geldiğini değiştirir.
+//
+//  NEDEN `ANAHTARLAR`IN İÇİNDE DEĞİL: o kümenin başlığı "web ile BİREBİR"
+//  diyor; webde böyle bir kayıt YOK. Web kodu KAYNAĞA GÖMÜLÜ tutuyor
+//  (`app.js:2235 SYNC_CODE = 'atahan-bulten-9f3c'`), gerekçesi kendi
+//  yorumunda yazılı: "kişisel uygulama". Native MAĞAZAYA çıkacak ve
+//  `/api/watchlist` ucunda KİMLİK DOĞRULAMA YOK (§21.3) — gömülü kod her
+//  kuruluma aynı kişinin listesini okutup ÜZERİNE YAZDIRIRDI. Bu yüzden
+//  kod CİHAZDA, kullanıcının kendi yazdığı değer, varsayılanı BOŞ.
+//
+//  BOŞ KOD = SENKRON KAPALI: hiçbir istek atılmaz. "Kapalı" ile
+//  "yazılamadı" ayrı hâller; burada ikisi karıştırılmıyor.
+//
+//  `sonYazma` = ucun döndürdüğü `updatedAt` (UNIX MİLİSANİYE). `null`
+//  "hiç yazılmadı" demek, `0` DEĞİL (sessiz sıfır yasak).
+// ---------------------------------------------------------------------
+
+/** Native'e ÖZEL anahtar — webde karşılığı yok (bkz. yukarıdaki not). */
+export const SENKRON_ANAHTAR = 'sb:senkron';
+
+export type SenkronAyar = {
+  /** `/api/watchlist` paylaşılan sırrı. BOŞ dizgi = senkron kapalı. */
+  kod: string;
+  /** Son başarılı yazmanın ucun bildirdiği anı (ms). `null` = hiç yazılmadı. */
+  sonYazma: number | null;
+};
+
+/**
+ * Kayıt süzgeci. Biçimi BOZUK bir kodu sessizce taşımıyor: atıyor ve
+ * `budandi` ile yüzeye çıkarıyor — yoksa kullanıcı "kod yazılı" sanıp
+ * hiç ulaşmayan bir senkron beklerdi. Biçim ucun kendi regex'i
+ * (`WATCHLIST_CODE_BICIM`, `types.ts` → `api/watchlist.js:31`), burada
+ * yeniden yazılmadı.
+ */
+function senkronSuz(ham: unknown): { deger: SenkronAyar; budandi: boolean } {
+  const bos: SenkronAyar = { kod: '', sonYazma: null };
+  if (!ham || typeof ham !== 'object' || Array.isArray(ham)) {
+    return { deger: bos, budandi: ham != null };
+  }
+  const o = ham as Record<string, unknown>;
+  const hamKod = typeof o.kod === 'string' ? o.kod.trim() : '';
+  const kod = hamKod && WATCHLIST_CODE_BICIM.test(hamKod) ? hamKod : '';
+  const zaman = sayiVeyaNull(o.sonYazma);
+  return { deger: { kod, sonYazma: zaman }, budandi: Boolean(hamKod) && !kod };
+}
+
+export const senkronDepo = turYap<SenkronAyar>(
+  SENKRON_ANAHTAR,
+  () => ({ kod: '', sonYazma: null }),
+  senkronSuz,
+);
+
+/** Kaydı cihazdan okur. `depoBaslat` bunu ÇAĞIRMIYOR (web türü değil). */
+export function senkronYukle(): Promise<SenkronAyar> {
+  return senkronDepo.oku();
+}
+
+export function useSenkron(): SenkronAyar {
+  return useTur(senkronDepo);
+}
+
+export function useSenkronHazir(): boolean {
+  return useTurHazir(senkronDepo);
+}
+
+/**
+ * Kodu yazar. BOŞ dizgi geçerli bir değer: "senkronu kapat" demek.
+ * Kod DEĞİŞTİĞİNDE `sonYazma` sıfırlanıyor (`null`) — eski kodun yazma
+ * anı yeni kodun bulut kaydını anlatmaz.
+ */
+export async function senkronKodYaz(ham: string): Promise<YazSonuc> {
+  const kod = metin(ham).trim();
+  if (kod !== '' && !WATCHLIST_CODE_BICIM.test(kod)) {
+    return {
+      ok: false,
+      sebep: 'bos',
+      mesaj: 'Senkron kodu geçersiz: 4-40 karakter, harf/rakam/alt çizgi/kısa çizgi.',
+    };
+  }
+  const onceki = senkronDepo.al();
+  const sonYazma = kod === onceki.kod ? onceki.sonYazma : null;
+  const yazildi = await senkronDepo.yaz({ kod, sonYazma });
+  return yazildi ? { ok: true } : { ok: false, sebep: 'yazilamadi', mesaj: YAZILAMADI };
+}
+
+/** Ucun döndürdüğü `updatedAt`i saklar. Kodu DEĞİŞTİRMEZ. */
+export async function senkronZamanYaz(zaman: number): Promise<boolean> {
+  if (!Number.isFinite(zaman)) return false;
+  const mevcut = senkronDepo.al();
+  return senkronDepo.yaz({ kod: mevcut.kod, sonYazma: zaman });
+}
+
+export type BildirimEvreni = {
+  /** Uca gidecek kayıtlar. BOŞ dizi = ölçüldü, gönderilecek sembol yok. */
+  kayitlar: { symbol: string; market: 'BIST' | 'US'; query: string }[];
+  /** Bildirimi AÇIK liste sayısı. */
+  liste: number;
+  /** `notify === false` olduğu için atlanan liste sayısı. */
+  kapali: number;
+  /** Aynı sembol+pazar tekrar geçtiği için atlanan kayıt sayısı. */
+  tekrar: number;
+  /** Pazarı BIST/US DIŞINDA olduğu için atlanan kayıt sayısı. */
+  pazarsiz: number;
+};
+
+/**
+ * Bildirim evrenini kurar — webin `collectWatchlistPayload`
+ * (`app.js:2238`) karşılığı: `notify === false` listeler ATLANIYOR,
+ * aynı `market + ':' + symbol` BİR KEZ gidiyor.
+ *
+ * ATLANAN SAYILIYOR, SESSİZ KIRPMA YOK: uç BIST/US dışındaki pazarı
+ * sessizce düşürüyor (`api/watchlist.js` `cleanList`), bu yüzden burada
+ * da düşen kayıt SAYILIP ekrana veriliyor.
+ *
+ * HESAP YOK: sayma işi, eşik/ağırlık/formül değil.
+ */
+export function bildirimEvreni(): BildirimEvreni {
+  const gorulen = new Set<string>();
+  const kayitlar: BildirimEvreni['kayitlar'] = [];
+  let liste = 0;
+  let kapali = 0;
+  let tekrar = 0;
+  let pazarsiz = 0;
+  for (const kayit of listelerDepo.al()) {
+    if (kayit.notify === false) {
+      kapali += 1;
+      continue;
+    }
+    liste += 1;
+    for (const oge of kayit.items) {
+      if (oge.market !== 'BIST' && oge.market !== 'US') {
+        pazarsiz += 1;
+        continue;
+      }
+      const anahtar = oge.market + ':' + oge.symbol;
+      if (gorulen.has(anahtar)) {
+        tekrar += 1;
+        continue;
+      }
+      gorulen.add(anahtar);
+      kayitlar.push({
+        symbol: oge.symbol,
+        market: oge.market,
+        query: oge.query || oge.symbol,
+      });
+    }
+  }
+  return { kayitlar, liste, kapali, tekrar, pazarsiz };
 }
 
 // Bilgi amaçlıdır, yatırım tavsiyesi değildir.

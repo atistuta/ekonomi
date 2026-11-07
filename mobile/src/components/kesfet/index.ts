@@ -33,9 +33,17 @@ export { FirsatlarKart, type FirsatlarKartProps } from './FirsatlarKart';
 // (ÖLÇÜLDÜ 2026-10-29: mobile/src/api içinde bu girdiyi ölçen uç yok).
 // Prop verilmedikçe kart uca gitmez, "ölçemedim" der.
 export { NedenKart, type NedenKartProps } from './NedenKart';
+// `NedenKart`ın ÖLÇÜLMÜŞ GİRDİ besleyicisi: `/api/gundem` →
+// `gundemdenKonseptler` → kart. Kartın kendisi de dışa açık KALIYOR —
+// başka bir girdi kaynağı (sunucu tarafı sabit evren şeridi) geçtiğinde
+// besleyiciyi değiştirmek yetsin.
+export { NedenBesleyici } from './NedenBesleyici';
 // Tek manşet satırı — SALT SUNUM. Bugün'deki 🔭 tematik haber kartı ve
 // Arama'daki 📰 tema haberleri kartı aynı satırı basıyor (2026-10-25).
 export { HaberSatiri, type HaberSatiriProps } from './HaberSatiri';
+// Haber akisinin motor olcumu (`duyarlilik`) — SALT SUNUM. Ayni ucun
+// cevabindan geliyor, bu yuzden manset satirinin yanina konuldu.
+export { DuyarlilikOzeti, type DuyarlilikOzetiProps } from './DuyarlilikOzeti';
 export { RadarKart, type RadarKartProps } from './RadarKart';
 // Sektor dagilimi: /api/yfin -> POST /api/sektor. Medyanlar HAM KESIR
 // gelir; yuzdeye cevirme kartin icinde TEK KEZ yapilir.
@@ -47,3 +55,19 @@ export { TaramaKart, type TaramaKartProps } from './TaramaKart';
 // bağlanmadı (ÖLÇÜLDÜ 2026-10-29: kesfet.tsx `useLocalSearchParams`
 // okumuyor).
 export { TemaKart, type TemaKartProps } from './TemaKart';
+
+// FAZ 3: `/api/kripto` — native'de BUGÜNE KADAR HİÇ çağrılmayan uç
+// (çekici 2026-11-03'te bağlandı, DEVAM.md §20.16). Kimlik kümesi
+// kartın İÇİNDE sabit: bir tarama ya da sıralama DEĞİL.
+export { KriptoKart, type KriptoKartProps } from './KriptoKart';
+// FAZ 3: `/api/metal` — adı yanıltıcı, FİYAT DÖNDÜRMEYEN bir HABER ucu.
+// Kart adı bu yüzden "Maden haberi"; ons altın fiyatı Bugün sekmesindeki
+// çok dönemli değişim kartında (`GC=F`) ölçülüyor.
+export { MadenHaberKart } from './MadenHaberKart';
+
+// FAZ 3: webin `⚡ Momentum girişi` SEKMESİNİN native karşılığı
+// (`index.html:203` `#tab-momentum`). YENİ UÇ YOK, YENİ İSTEK YOK:
+// ekranın hâlihazırdaki `/api/recommend` turunun `plan.momentum`
+// uzvunu okuyor — rejim kararı MOTORUN (`api/_motor.js:981`).
+// Satırları PROP alıyor; kendi `fetch`i yok.
+export { MomentumKart, type MomentumKartProps } from './MomentumKart';

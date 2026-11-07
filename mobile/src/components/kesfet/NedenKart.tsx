@@ -31,8 +31,27 @@
 //  yok (`/api/pulse` makro duruş döndürüyor, konsept/sektör/ısı
 //  döndürmüyor — api/types.ts `PulseResponse`).
 //
-//  Bu yüzden `hareketler`/`gundem` bu kartın PROP'u. Verilmedikçe kart
-//  UCA GİTMEZ ve "ölçemedim" der. Alternatifi girdi UYDURMAKTI: `pct`
+//  ⭐ GÜNCELLEME (2026-11-03): gündem yarısı ARTIK ÖLÇÜLÜYOR. Yukarıdaki
+//  2026-10-29 ölçümü "`mobile/src/api` içinde gündem konsepti döndüren
+//  tek bir çağrı yok" diyordu; o boşluk `/api/gundem` şeridiyle kapandı
+//  (api/_gundem.js → `fetchGundemKonsept`). Çeviri `api/neden.ts`
+//  (`gundemdenKonseptler`) ve besleyici `NedenBesleyici`de.
+//  ENDEKS HAREKETLERİ DE ARTIK ÖLÇÜLÜYOR: `pct` kaynağı zaten vardı
+//  (`/api/chart` → `gunici.dayChg`, dört endeks) ama `notable`
+//  ("belirgin" eşiği) HİÇBİR uçtan gelmiyordu ve uç onu ZORUNLU
+//  istiyordu; web o sayıyı kendi tablosunda tutuyordu (app.js: 1,0 /
+//  0,6 / 0,8 / 0,8) ve istemciye yazmak eşiği ekrana taşımak olurdu.
+//  2026-11-03'te o tablo MOTORA taşındı (`INDEX_ESIK`, motor dilimi
+//  `endeks-esik`) ve `/api/causal` eşiği kendisi okuyor — `notable`
+//  SEÇİMLİK oldu. Böylece native yarı yalnız `kind` + ÖLÇÜLEN `pct`
+//  yollayarak kuruldu (`api/hareket.ts` → `fetchNedenHareketleri`).
+//  `gunici.esik.day` HÂLÂ KULLANILMIYOR: o başka bir eşik (PULSE_TH,
+//  3,0/4,0 — ⚡ ani hareket uyarısı), nedensellik eşiğinin dört-beş
+//  katı; yerine koymak iki farklı ölçümü sessizce takas etmek olurdu.
+//
+//  Bu yüzden `hareketler`/`gundem` bu kartın PROP'u. İKİSİ de
+//  verilmedikçe kart UCA GİTMEZ (uç ikisini de zorunlu istiyor) ama
+//  ARTIK HANGİSİNİN eksik olduğunu AYRI AYRI yazıyor. Alternatifi girdi UYDURMAKTI: `pct`
 //  için fiyattan yüzde hesaplamak (istemcide formül) ve `notable` için
 //  bir eşik yazmak (istemcide eşik) — ikisi de ham sayı kuralının tam
 //  ihlali, üstelik ucu ölçülmemiş girdiyle besleyip ekrana "ölçülmüş"
@@ -90,8 +109,12 @@ const KIND_AD: Record<string, string> = {
 export function NedenKart({ hareketler, gundem }: NedenKartProps) {
   const { colors } = useTheme();
 
-  // Girdi KAYNAĞI yok mu, girdi BOŞ mu — iki ayrı cümle.
-  const sorulmadi = hareketler === undefined || gundem === undefined;
+  // Girdi KAYNAĞI yok mu, girdi BOŞ mu — iki ayrı cümle. Kaynak
+  // sorusu ARTIK GİRDİ BAŞINA: biri ölçülüp öteki ölçülmediğinde
+  // "ikisi de yok" demek, ÖLÇÜLEN yarıyı görmezden gelmek olurdu.
+  const hareketlerSorulmadi = hareketler === undefined;
+  const gundemSorulmadi = gundem === undefined;
+  const sorulmadi = hareketlerSorulmadi || gundemSorulmadi;
   const bosGirdi = !sorulmadi && (!hareketler.length || !gundem.length);
 
   const cagri = useCallback(
@@ -126,9 +149,15 @@ export function NedenKart({ hareketler, gundem }: NedenKartProps) {
         // kaynağı yaratmaz (bkz. OlcemedimKutu sözleşmesi).
         <OlcemedimKutu
           metin={
-            'Bu ölçüm iki ÖLÇÜLMÜŞ girdi istiyor: endeks hareketleri ve gündem konseptleri. ' +
-            'Bu istemcide ikisini ölçen bir uç yok, bu yüzden hizalanma ÖLÇEMEDİM. ' +
-            'Girdiyi uyduran bir kart, ölçülmemiş sayıyı ölçülmüş gibi gösterirdi.'
+            'Bu ölçüm iki ÖLÇÜLMÜŞ girdi istiyor ve uç ikisini de zorunlu tutuyor. ' +
+            (hareketlerSorulmadi
+              ? 'Endeks gün değişimleri ÖLÇÜLMEDİ: dört endeksin dördü de ' +
+                'gerçek zamanlı okunamadı. (Belirginlik eşiği uçta, motor tablosunda.) '
+              : 'Endeks hareketleri ölçüldü (' + (hareketler?.length ?? 0) + ' kalem). ') +
+            (gundemSorulmadi
+              ? 'Gündem konseptleri ÖLÇÜLMEDİ: bu kart girdiyi kendisi üretmiyor. '
+              : 'Gündem konseptleri ölçüldü (' + (gundem?.length ?? 0) + ' konsept). ') +
+            'Eksik yarıyı uyduran bir kart, ölçülmemiş sayıyı ölçülmüş gibi gösterirdi.'
           }
         />
       ) : bosGirdi ? (

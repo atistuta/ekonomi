@@ -55,6 +55,30 @@ export function round6(v) {
   return Math.round(v * 1e6) / 1e6;
 }
 
+/**
+ * Kriterin TEL BİÇİMİ: ham sayı + MAKİNE KODU. Türkçe cümle (`c.note`)
+ * TAŞINMIYOR — §5.1: uçta cümle yok, eşik yok. Cümleyi native
+ * `mobile/src/lib/sozluk.ts` `kod`dan kuruyor; `sayilar` o cümlenin
+ * yerine geçecek ham ölçümler (`birim` bir makine kodudur: TRY/USD).
+ *
+ * `kod` / `sayilar` YOKSA alan HİÇ EKLENMİYOR: "sormadım" (alan yok) ile
+ * "ölçemedim" (`null`) ayrımı telde korunuyor.
+ */
+function kriterTel(c) {
+  const out = { key: c.key, weight: round6(c.weight), score: round6(c.score) };
+  if (c.kod != null) out.kod = c.kod;
+  if (c.sayilar && typeof c.sayilar === 'object') {
+    const s = {};
+    for (const k of Object.keys(c.sayilar)) {
+      const v = c.sayilar[k];
+      if (typeof v === 'string') s[k] = v;
+      else if (typeof v === 'number' && isFinite(v)) s[k] = round6(v);
+    }
+    out.sayilar = s;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------
 //  TA'nın HAM koşusu — getTaScoreFor (app.js:4581) ile BİREBİR aynı yol:
 //  5y/1d sembol mumları + 5y/1d endeks mumları (RAW) → computeVadeScore.
@@ -136,14 +160,15 @@ export async function scoreFaUS(eng, sym, net) {
   let pe = null;
   if (price != null && eps) {
     pe = price / eps;
-    // `note` boş: uç nokta ham sayı döndürür, cümle istemcinin işi.
+    // `note` boş: uç nokta ham sayı + makine kodu döndürür (`faPeCriterion`
+    // `kod`u kendisi takıyor), cümleyi native kuruyor.
     criteria.push(eng.faPeCriterion(pe, ''));
   }
   const fa = eng.computeFaScore(criteria);
   return {
     score: round6(fa.score), present: round6(fa.present), total: round6(fa.total),
     price: round6(price), eps: round6(eps), pe: round6(pe),
-    criteria: criteria.map((c) => ({ key: c.key, weight: round6(c.weight), score: round6(c.score) })),
+    criteria: criteria.map(kriterTel),
   };
 }
 
@@ -163,7 +188,7 @@ export async function scoreFaBIST(eng, sym, maliRaw) {
     score: round6(fa.score), present: round6(fa.present), total: round6(fa.total),
     price: round6(meta && meta.regularMarketPrice),
     years: mali.years,
-    criteria: model.criteria.map((c) => ({ key: c.key, weight: round6(c.weight), score: round6(c.score) })),
+    criteria: model.criteria.map(kriterTel),
   };
 }
 
@@ -251,6 +276,8 @@ function hamYuvarla(v) {
 //      buyZoneProximity    fiyat alım bandına göre nerede
 //      momentumInfo        pahalı ama trend güçlüyse kademeli giriş bölgesi
 //      planRiskReward      kâr-al mesafesi · negatif kırılma katı · R/Ö
+//      atrVolKod           ATR/fiyat oranının ÜÇ KADEMELİ oynaklık sınıfı
+//      atrPlanKod          aynı oranın PLAN/STOP uyarısı — SESSİZ orta bandı
 //  Bu işlev HESAP YAPMIYOR: eşik, çarpan, ATR katsayısı taşımıyor; yalnız
 //  motoru çağırıp sayıyı yuvarlıyor. Bir eşik buraya yazılırsa parite testi
 //  onu GÖRMEZ ve sunucu ile ekran sessizce ayrışır.
@@ -277,6 +304,26 @@ export function planKatmani(eng, r, vade) {
     yakinlik: hamYuvarla(eng.buyZoneProximity(r)),
     momentum: hamYuvarla(eng.momentumInfo(r, vade)),
     riskOdul: hamYuvarla(eng.planRiskReward(r.levels)),
+    // ---- #14: ATR/fiyat oranının İKİ AYRI SORUSU ----
+    //  `seviye.atr` ve `seviye.price` TELDE ZATEN VAR; oran istemcide
+    //  BÖLÜNEBİLİR. Telde duran şey oran değil, oranın SINIFLANDIRILMASI:
+    //  eşikler (2 / 4 ile 1.5 / 4) motorda kalsın diye.
+    //
+    //  NİYE İKİ ALAN: web bu oranı iki yerde hesaplıyor ve iki farklı
+    //  soruya cevap veriyordu — ATR kartı ÜÇ KADEMELİ sınıf + "stop için
+    //  1.5-2 kat" cümlesi basıyor, katalizör satırı ise yalnız uçlarda
+    //  (>=4 / <1.5) konuşup ARADA SUSUYOR. Tek alana indirmek webdeki
+    //  davranışlardan birini sessizce silerdi (ölçüldü 2026-11-03:
+    //  app.js ATR kartı ile fillCatalysts).
+    //
+    //  `oynaklik.kod` null = ATR var, fiyat yok → oran ölçülemedi.
+    //  `atrPlan.kod` null = ÖLÇTÜM, söylenecek bir şey yok (sessiz bant);
+    //  `atrPlan` kendisi null = ölçemedim. İki hal AYRI.
+    //
+    //  `stopKat` SAYI olarak taşınıyor ([1.5, 2]) — o iki sayıyı
+    //  istemciye yazmak istemciye eşik yazmak olurdu (§5.1).
+    oynaklik: hamYuvarla(eng.atrVolKod(r.levels.atr, r.levels.price)),
+    atrPlan: hamYuvarla(eng.atrPlanKod(r.levels.atr, r.levels.price)),
   };
 }
 
@@ -286,9 +333,51 @@ export function planKatmani(eng, r, vade) {
 //  üstüne tek bir alan ekleniyor (`plan`). Böylece /api/recommend'i
 //  tüketen istemci /api/score'un çözücüsünü yeniden kullanabiliyor.
 // ---------------------------------------------------------------------
+// ---------------------------------------------------------------------
+//  FIRSAT KATMANI — motorun URETTIGI firsat siralamasini tele koyar.
+//
+//  Ucu de MOTORDA (app.js -> _motor.js, 2026-10-31/S8-G1):
+//      priceOppAdj   fiyatin uygun alim bandina ATR-olcekli uzakligi -> +-8 puan
+//      oppCombined   teknik skor + fiyat uygunlugu, 2..99 bandina kirpilmis
+//      oppTag        bilesik skorun SABIT KUMELI sinif kodu
+//  Bu islev HESAP YAPMIYOR: esik, carpan, ATR katsayisi, kirpma siniri
+//  tasimiyor. Eskiden ucu de app.js icinde satir ici duruyordu
+//  (`renderOpportunities`), yani web hesapliyor native sayisiz kaliyordu.
+//
+//  `oppTag().txt` BILEREK TELE KONMUYOR: serbest TURKCE metin
+//  ("Guclu Firsat", "Uzak dur"...) — HAM SAYI KURALI (BAGIMLILIK_GRAFIGI
+//  §5.1) yalniz SABIT KUMELI makine kodunu gecirir. `cls` kumesi:
+//  'strong' | 'good' | 'watch' | 'neutral' | 'weak' | 'risk'. Cumleyi
+//  istemci kendi sozlugunden secer.
+//
+//  OLCULMUS SAPMA, SAYIYLA ORTULMEDI: web Firsatlar taraycisi momentumu
+//  HEP 'orta' vadeyle olcuyor (app.js, `momentumInfo(r, 'orta')`); bu
+//  katman cagirinin ISTEDIGI vadeyi kullaniyor — `planKatmani` ile AYNI
+//  vade, boylece tek cevabin icinde iki farkli momentum rejimi olmuyor.
+//
+//  `buyZoneProximity`/`momentumInfo` `planKatmani`de de cagriliyor: ikisi
+//  de `r` uzerinde SAF matematik, AG ISTEGI YOK — tekrar cagri bedeli
+//  olculebilir degil, paylasilan degisken ise iki katmani birbirine
+//  baglardi (biri susunca oteki de susardi).
+//
+//  @returns {object|null} r ya da skor yoksa null ("TA kosmadi", bos kayit degil)
+// ---------------------------------------------------------------------
+export function firsatKatmani(eng, r, vade) {
+  if (!r || r.score == null) return null;
+  const prox = eng.buyZoneProximity(r);
+  const fiyatPuan = eng.priceOppAdj(prox, eng.momentumInfo(r, vade));
+  const bilesik = eng.oppCombined(r.score, fiyatPuan);
+  const etiket = eng.oppTag(bilesik);
+  return {
+    fiyatPuan: hamYuvarla(fiyatPuan),
+    bilesik: hamYuvarla(bilesik),
+    cls: (etiket && etiket.cls) || null,
+  };
+}
+
 export async function recommendOne(eng, row, vade, opt = {}) {
   const { kayit, r } = await kayitHam(eng, row, vade, opt);
-  return { ...kayit, plan: planKatmani(eng, r, vade) };
+  return { ...kayit, plan: planKatmani(eng, r, vade), firsat: firsatKatmani(eng, r, vade) };
 }
 
 // ---------------------------------------------------------------------

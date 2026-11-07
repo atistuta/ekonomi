@@ -38,13 +38,29 @@
 //  yazıyor. `siniflanan < degerlendirilen` ise fark EKSİK ÖLÇÜM olarak
 //  yazılıyor; 12 sembol sınırının dışında kalan sembol sayısı da ekranda.
 //
+//  ── ⚖️ KARŞILAŞTIR KÖPRÜSÜ ────────────────────────────────────────
+//  Her grubun altında bir düğme var: grubun sembolleri `kiyas` yol
+//  parametresiyle (virgülle ayrık) Analiz sekmesine taşınıyor, oradaki
+//  ⚖️ Karşılaştır turu takip listesi yerine O KÜMEYLE koşuyor. Yeni
+//  sekme AÇILMADI (5 menü düzeni), bu kart yeni uç ÇAĞIRMIYOR —
+//  köprünün tüm maliyeti Analiz ekranındaki MEVCUT `/api/compare`
+//  turunun girdisinin değişmesi. Aynı desen Bugün↔Arama `tema`
+//  köprüsünde zaten kullanılıyor.
+//
+//  SINIR SESSİZ KIRPILMIYOR: kıyas ucu bir turda en çok `AZAMI_SEMBOL`
+//  sembol alıyor (fazlasını 400 ile reddediyor). Grup daha büyükse
+//  düğme kaç sembolün taşınacağını ve kaçının DIŞARIDA kalacağını
+//  önceden yazıyor; Analiz ekranı da aynı sayıyı tekrar yazıyor.
+//
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
+import { router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import {
+  AZAMI_SEMBOL,
   fetchSektor,
   fetchYfin,
   useIstek,
@@ -59,14 +75,30 @@ import {
   type SiraKip,
   type YfinKunye,
 } from '@/api';
-import { Card, Durum, Pill, SectorChip, VeriYok } from '@/components';
+import {
+  Card,
+  Dugme,
+  Durum,
+  Katlanir,
+  OlcumBaslik,
+  OlcumSatiri,
+  Pill,
+  SectorChip,
+  VeriYok,
+} from '@/components';
 import { formatOran, formatPercent } from '@/lib/format';
 import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
 
 export type SektorKartProps = {
   /** Gruplanacak semboller — kullanıcının takip listesi. */
   liste: readonly string[];
-  onSembol?: (sym: string) => void;
+  /**
+   * Satıra dokunulunca çağrılır. `pazar` İKİNCİ PARAMETRE (TASARIM
+   * TURU 2): bu satırın pazar kodu uçtan geliyor ve hisse ekranı onu
+   * `.IS` ekini koymak için kullanıyor; düşürülürse BIST sembolü ABD'de
+   * ölçülüyor (ölçüm: `app/hisse/[sembol].tsx` başlığı).
+   */
+  onSembol?: (sym: string, pazar?: string | null) => void;
 };
 
 /**
@@ -128,6 +160,12 @@ function olcumYap(k: YfinKunye): OlcumKayit {
     sector: metin(k.sector),
     industry: metin(k.industry),
     name: metin(k.name),
+    // NEDEN GONDERILIYOR: uc `bizSummary`yi hem SINIFLAMA kademesinde
+    // kullaniyor (`basis: 'biz'`) hem de grup maddesinde GERI YANKILIYOR
+    // (api/_kesif.js:441-467). Gondermezsek ekranda is tanimi HIC
+    // olusamaz - uc onu kendisi uretmiyor, bizim gonderdigimizi
+    // 400 karakterde kirpip geri veriyor.
+    bizSummary: metin(k.bizSummary),
   };
 }
 
@@ -258,40 +296,87 @@ function GrupSatiri({
   onSembol,
 }: {
   grup: SektorGrup;
-  onSembol?: (sym: string) => void;
+  /**
+   * Satıra dokunulunca çağrılır. `pazar` İKİNCİ PARAMETRE (TASARIM
+   * TURU 2): bu satırın pazar kodu uçtan geliyor ve hisse ekranı onu
+   * `.IS` ekini koymak için kullanıyor; düşürülürse BIST sembolü ABD'de
+   * ölçülüyor (ölçüm: `app/hisse/[sembol].tsx` başlığı).
+   */
+  onSembol?: (sym: string, pazar?: string | null) => void;
 }) {
   const { colors } = useTheme();
   // `_other` MOTOR SENTİNELİ, sektör adı değil: olduğu gibi basmak
   // kullanıcıya anlamsız gelir, bu yüzden ne olduğu YAZILIYOR.
   const ad = grup.anahtar === '_other' ? 'Sınıflanamayan' : grup.anahtar;
+  // Kıyasa taşınacak küme: SIRA UCUN, burada yeniden dizilmiyor; yalnız
+  // ucun sözleşme sınırı kadarı alınıyor ve kalanı ekranda yazılıyor.
+  const semboller = grup.hisseler.map((h) => h.sym);
+  const tasinan = semboller.slice(0, AZAMI_SEMBOL);
+  const disarida = semboller.length - tasinan.length;
 
   return (
     <View style={[styles.grup, { borderBottomColor: colors.border }]}>
       <View style={styles.ust}>
         <SectorChip sector={ad} size="sm" />
-        <View style={styles.bosluk} />
-        <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
-          {String(grup.n) + ' hisse'}
-        </Text>
       </View>
 
       {/* MEDYANLAR — ölçülmeyen "—". Büyüme ve marj KESİRDEN yüzdeye
-          TEK KEZ çevrildi; F/K · ileri F/K · PEG çarpansız oran. */}
-      <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
-        {'medyan F/K ' +
-          oran(grup.medPe) +
-          ' · ileri F/K ' +
-          oran(grup.medFpe) +
-          ' · PEG ' +
-          oran(grup.medPeg)}
-      </Text>
-      <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
-        {'medyan büyüme ' + yuzde(grup.medGrowth) + ' · medyan marj ' + yuzde(grup.medMargin)}
-      </Text>
+          TEK KEZ çevrildi; F/K · ileri F/K · PEG çarpansız oran.
+          TASARIM TURU 1: iki sıkış metin satırı yerine ölçüm satırı.
+          Gerekçe: beş medyan grubun BİRİNCİL bilgisi ama ikisi de
+          `type.micro` + `textDim` ile, yani sayfanın en silik puntosuyla
+          basılıyordu; "medyan" kelimesi de üç kez tekrar ediyordu. Kelime
+          ve birim artık bölüm başlığında BİR kez, sayılar sağ sütunda
+          hizalı ve birincil kademede. Hiçbir sayı/biçimleyici değişmedi
+          (`oran` ve `yuzde` aynı). */}
+      <OlcumBaslik baslik="Grup medyanları" birim="F/K · ileri F/K · PEG çarpansız oran" />
+      <OlcumSatiri etiket="F/K" deger={oran(grup.medPe)} />
+      <OlcumSatiri etiket="İleri F/K" deger={oran(grup.medFpe)} />
+      <OlcumSatiri etiket="PEG" deger={oran(grup.medPeg)} />
+      <OlcumBaslik baslik="Grup medyanları" birim="yüzde" />
+      <OlcumSatiri etiket="Büyüme" deger={yuzde(grup.medGrowth)} />
+      <OlcumSatiri etiket="Marj" deger={yuzde(grup.medMargin)} />
 
-      {grup.hisseler.map((h) => (
-        <HisseSatiri key={h.sym} hisse={h} onSembol={onSembol} />
-      ))}
+      {/* TASARIM TURU 1: hisse listesi VARSAYILAN KAPALI. Gerekçe: bir
+          turda 12 sembol gruplara dağılıyor ve her hisse 4-6 satır
+          basıyor; hepsi açıkken ekranda sektör AYRIMI kayboluyordu.
+          Grubun adedi ("n hisse") artık üst satırda DEĞİL kapağın özet
+          satırında — aynı sayı, aynı cümle, tek yerde. */}
+      <Katlanir baslik="Hisseler" ozet={String(grup.n) + ' hisse'}>
+        {grup.hisseler.map((h) => (
+          <HisseSatiri key={h.sym} hisse={h} onSembol={onSembol} />
+        ))}
+      </Katlanir>
+
+      {/* KÖPRÜ: grup → Analiz ▸ ⚖️ Karşılaştır. Parametre VİRGÜLLE
+          AYRIK METİN, çünkü yol parametresi metin taşıyor; karşı taraf
+          aynı ayırıcıyla çözüyor. Buradan AĞ İSTEĞİ ÇIKMIYOR. */}
+      {tasinan.length >= 2 ? (
+        <>
+          <Dugme
+            label={'⚖️ Analiz ▸ Karşılaştır (' + tasinan.length + ' sembol)'}
+            variant="outline"
+            tone="info"
+            size="sm"
+            onPress={() =>
+              router.navigate({ pathname: '/analiz', params: { kiyas: tasinan.join(',') } })
+            }
+          />
+          {disarida > 0 ? (
+            <Text style={[type.micro, { color: colors.textDim }]}>
+              {String(disarida) +
+                ' sembol kıyasa TAŞINMIYOR: kıyas ucu bir turda en çok ' +
+                String(AZAMI_SEMBOL) +
+                ' sembol alıyor.'}
+            </Text>
+          ) : null}
+        </>
+      ) : (
+        // İKİ SEMBOLDEN AZ: kıyas kurulamaz, düğme UMUT VERMİYOR.
+        <Text style={[type.micro, { color: colors.textFaint }]}>
+          Bu grupta kıyaslanacak en az iki sembol yok.
+        </Text>
+      )}
     </View>
   );
 }
@@ -302,12 +387,33 @@ function HisseSatiri({
   onSembol,
 }: {
   hisse: SektorHisse;
-  onSembol?: (sym: string) => void;
+  /**
+   * Satıra dokunulunca çağrılır. `pazar` İKİNCİ PARAMETRE (TASARIM
+   * TURU 2): bu satırın pazar kodu uçtan geliyor ve hisse ekranı onu
+   * `.IS` ekini koymak için kullanıyor; düşürülürse BIST sembolü ABD'de
+   * ölçülüyor (ölçüm: `app/hisse/[sembol].tsx` başlığı).
+   */
+  onSembol?: (sym: string, pazar?: string | null) => void;
 }) {
   const { colors } = useTheme();
   const basis = hisse.basis
     ? (BASIS_METIN[hisse.basis] ?? hisse.basis)
     : 'kademe tutmadı — ÖLÇEMEDİM';
+
+  // KİMLİK ALANLARI (uç bunları gruplandırmaya HİÇ sokmuyor, yalnız
+  // yankılıyor). ÜÇ DAL AYRI: alan gövdede YOK (`undefined`) = uç
+  // göndermedi · `null` = ölçülemedi · metin = basılır. Boş dizgi
+  // UYDURULMUYOR.
+  const ad = typeof hisse.name === 'string' && hisse.name.trim() ? hisse.name.trim() : null;
+  const sanayi =
+    typeof hisse.industry === 'string' && hisse.industry.trim() ? hisse.industry.trim() : null;
+  const isTanimi =
+    typeof hisse.bizSummary === 'string' && hisse.bizSummary.trim()
+      ? hisse.bizSummary.trim()
+      : null;
+  // KIRPMA SESSİZ KALMIYOR: uç 400 karakterde kestiğinde bunu
+  // `bizSummaryKirpik` ile bildiriyor, ekran da yazıyor.
+  const kirpik = hisse.bizSummaryKirpik === true;
 
   const govde = (
     <View style={styles.satir}>
@@ -315,6 +421,11 @@ function HisseSatiri({
         {hisse.sym + '  '}
         <Text style={[type.micro, { color: colors.textFaint }]}>{hisse.market}</Text>
       </Text>
+      {ad || sanayi ? (
+        <Text style={[type.micro, { color: colors.textDim }]}>
+          {(ad ?? '') + (ad && sanayi ? ' · ' : '') + (sanayi ?? '')}
+        </Text>
+      ) : null}
       <Text style={[type.micro, styles.num, { color: colors.textDim }]}>
         {'F/K ' +
           oran(hisse.trailingPE) +
@@ -334,16 +445,48 @@ function HisseSatiri({
     </View>
   );
 
-  if (!onSembol) return govde;
+  // TASARIM TURU 1: iş tanımı VARSAYILAN KAPALI ve BASILABİLİR ALANIN
+  // DIŞINDA. İki gerekçe: (a) her hissenin altında üç satır serbest
+  // metin, listeyi ölçüm listesi olmaktan çıkarıp duvara çeviriyordu;
+  // (b) katlanır kapağı hisse satırının Pressable'ı İÇİNE koymak iç içe
+  // dokunma hedefi olurdu — kapağa basan kullanıcı hisse sayfasına
+  // gidebilirdi. Bu yüzden kapak kardeş düğüm. Kırpma notu SİLİNMEDİ:
+  // kapalı hâlde özet satırında, açık hâlde tam cümle olarak duruyor.
+  const tanimKapagi = isTanimi ? (
+    <Katlanir baslik="İş tanımı" ozet={kirpik ? 'uç 400 karakterde KIRPTI' : 'uç kırpmadı'}>
+      {/* Metin ekranda ÜÇ SATIRA sığdırılıyor (sonunda "…" görünür) ve
+          bunu alttaki not AÇIKÇA yazıyor — kırpmayı sessizce yapmak,
+          kullanıcıya tam metin okuttuğunu söylemek olurdu. */}
+      <Text style={[type.micro, { color: colors.textFaint }]} numberOfLines={3}>
+        {isTanimi}
+      </Text>
+      <Text style={[type.micro, { color: colors.textFaint }]}>
+        {kirpik
+          ? 'İş tanımı: uç metni 400 karakterde KIRPTI; ekranda ayrıca 3 satıra sığdırıldı.'
+          : 'İş tanımı: uç metni kırpmadı; ekranda 3 satıra sığdırıldı.'}
+      </Text>
+    </Katlanir>
+  ) : null;
+
+  if (!onSembol)
+    return (
+      <View style={styles.hisseKabi}>
+        {govde}
+        {tanimKapagi}
+      </View>
+    );
 
   return (
-    <Pressable
-      onPress={() => onSembol(hisse.sym)}
-      accessibilityRole="button"
-      accessibilityLabel={hisse.sym + ' — hisse sayfasına git'}
-      style={({ pressed }) => (pressed ? { backgroundColor: colors.bgPressed } : null)}>
-      {govde}
-    </Pressable>
+    <View style={styles.hisseKabi}>
+      <Pressable
+        onPress={() => onSembol(hisse.sym, hisse.market)}
+        accessibilityRole="button"
+        accessibilityLabel={hisse.sym + ' — hisse sayfasına git'}
+        style={({ pressed }) => (pressed ? { backgroundColor: colors.bgPressed } : null)}>
+        {govde}
+      </Pressable>
+      {tanimKapagi}
+    </View>
   );
 }
 
@@ -394,8 +537,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   ust: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  bosluk: { flex: 1 },
   satir: { gap: space.xxs, paddingVertical: space.xs, paddingLeft: space.sm },
+  // Hisse satırı + (varsa) iş tanımı kapağı tek grup; kapak basılabilir
+  // satırın DIŞINDA (gerekçe HisseSatiri içinde).
+  hisseKabi: { gap: space.xxs },
   num: {
     // Tanım TEK YERDE: theme/typography.ts → `numeric`.
     ...numeric,

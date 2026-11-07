@@ -82,6 +82,25 @@ export function formatScore(value: number | null | undefined): string {
 }
 
 /**
+ * ± YÖNLÜ motor düzeltmesi — fırsat katmanının `fiyatPuan` alanı
+ * (api/_akis.js, motorun `priceOppAdj` çıkışı, ±8 ile sınırlı).
+ *
+ * NİYE AYRI BİÇİMLEYİCİ: `formatScore` işareti basmıyor, oysa burada
+ * yönün KENDİSİ ölçümün yarısı — "+3" ile "−3" zıt iki durum. Eksi
+ * işareti EKRAN EKSİSİ (−), ASCII tiresi değil; `formatPercent` ile aynı
+ * kural. `0` geçerli bir ölçüm (düzeltme yapıldı, sonucu sıfır çıktı) →
+ * işaretsiz "0" basılır; ölçüm YOKSA `formatScore` gibi `EMPTY`.
+ */
+export function formatImzaliSkor(value: number | null | undefined): string {
+  if (!isNum(value)) return EMPTY;
+  const body = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 }).format(
+    Math.abs(value),
+  );
+  const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+  return `${sign}${body}`;
+}
+
+/**
  * 0-1 aralığındaki motor oranı (bütüncüllük direkleri `v`, ağırlık `w`).
  * ÖLÇÜLDÜ (2026-10-18): /api/analyze `direkler[].v` 0,68403 gibi ORAN
  * döndürüyor. Bunu skor gibi yuvarlamak ekranda "1" yazdırırdı — yanlış.

@@ -81,6 +81,12 @@
 //      market TR | US   (varsayılan TR — ölçüm: _haber.js PAZAR_YERELI)
 //      limit  1..25     (varsayılan 10)
 //    Cevap 200: { q, market, limit, maddeler[], adet, sayac, tam, ms, uyari }
+//    SECIMLI: &adaylar=SEMBOL|PAZAR|ad;SEMBOL|PAZAR|ad  (en cok 14)
+//      -> cevapta `tema` KARDES ALANI: { sozcukler[], ilgisiz[],
+//         adaylar: { SEMBOL: [madde sirasi] } }. Hesap MOTORDA
+//         (temaSorguSozcukleri - temaBaslikIlgili - themeNorm -
+//         themeNewsHits). `maddeler` SUZULMEZ; ilgisiz olanin sirasi
+//         bildirilir. Kip (2)/(3) ile birlikte 400 `adaylar_kip`.
 //
 //  ② ÇOKLU SEMBOL (yeni)
 //    GET /api/news?symbols=THYAO,NVDA[&market=BIST][&limit=10]
@@ -145,9 +151,16 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-// Haberin KENDİ taşıyıcısı. `_ag.js` / `_motor.js` / `_ayar.js` İÇE
+// Haberin KENDİ taşıyıcısı.
+//
+// ÖLHÜKMÜ DEĞİŞTİ (2026-10-31/Ş8-G1): bu yorum eskiden "`_motor.js` İÇE
 // ALINMIYOR: bu uç motor kurmuyor, skor okumuyor, sürüm imzası
-// taşımıyor — çünkü manşet metni motorun imzasına bağlı değil.
+// taşımıyor" diyordu. Artık motoru KURUYOR, çünkü haber duyarlılık
+// katmanı (`scoreHeadline` + `sentiAggregate` + `sentiLabel`) motorun
+// sözlüğüne ve eşiklerine bağlı. Manşet METNİ hâlâ motora bağlı
+// değil; o metne verilen PUAN bağlı, bu yüzden cevap `surum` taşıyor.
+// `_ag.js` yalnız motoru kurmak için alınıyor — bu uç motorun hiçbir
+// AĞ çağrısını kullanmıyor, duyarlılık ELDEKİ manşetten hesaplanıyor.
 import {
   haberCek, bosHaberSayac, haberTam,
   AZAMI_MADDE, VARSAYILAN_MADDE, AZAMI_HABER_SORGU, HABER_PAZARLAR,
@@ -160,6 +173,118 @@ import {
 // (gerekçe _girdi.js:155 — kopya yok, ayrışma yok). Bu uç motor kurmuyor,
 // yalnız GİRDİ DOĞRULAMASINI ödünç alıyor.
 import { ayristir, AZAMI_SEMBOL } from './_girdi.js';
+
+import { buildMotor, IMZA } from './_motor.js';
+import { TA_WEIGHTS, TA_BENCHMARK, IMZA_AYAR } from './_ayar.js';
+import { canliAg } from './_ag.js';
+
+// Motor kurulumu `_kesif.js:165` kalibi — YENI kalip uydurulmadi. Kurulum
+// PATLARSA uc 500 donmez: duyarlilik katmani `null` kalir ve manset akisi
+// AYNEN calisir (manset metni motora bagli degil). Bu BILINCLI bir
+// bolunme: haberi gormek skordan daha temel.
+let ENG = null;
+let MOTOR_HATASI = null;
+try {
+  const AG = canliAg({ taWeights: TA_WEIGHTS, taBenchmark: TA_BENCHMARK });
+  ENG = buildMotor(AG.H);
+} catch (e) {
+  MOTOR_HATASI = e;
+}
+
+/** Motor kuruldu mu — test bunu agsiz okuyabiliyor. */
+export function motorHazir() { return !!(ENG && !MOTOR_HATASI); }
+
+// AZAMI_ADAY'IN AYNISI (api/theme.js:224 = 14) ama IMPORT EDILMEDI:
+// `theme.js` modul duzeyinde LLM anahtarini ve hiz sayacini kuruyor;
+// onu buraya ice almak her haber istegine o bedeli odetirdi. Sayi
+// KOPYALANDI ve kapi iki dosyanin esitligini denetliyor.
+export const AZAMI_TEMA_ADAY = 14;
+
+/**
+ * `adaylar=` dizgesini ayristir. BICIM: `SEMBOL|PAZAR|ad` ucluleri,
+ * `;` ile ayrilir. PAZAR bos olabilir.
+ *
+ * NIYE PAZAR AYRI ALAN: `/api/theme` adayi `{symbol:'ASELS',
+ * market:'BIST'}` olarak veriyor - sembolde `.IS` YOK. Pazari
+ * dusurup `.IS` ekini istemciye ektirmek, istemciye kural yazmak
+ * olurdu (SS5.1). Normalizasyonu motor yapiyor (`themeNorm`).
+ *
+ * @returns {{adaylar: object[], hata: string|null}}
+ */
+export function temaAdaylariAyristir(ham) {
+  const metin = String(ham || '').trim();
+  if (!metin) return { adaylar: [], hata: null };
+  const parcalar = metin.split(';').map((p) => p.trim()).filter(Boolean);
+  if (parcalar.length > AZAMI_TEMA_ADAY) return { adaylar: [], hata: 'cok_aday' };
+  const out = [];
+  for (const p of parcalar) {
+    const alan = p.split('|');
+    const sym = String(alan[0] || '').trim().toUpperCase();
+    const pazar = String(alan[1] || '').trim().toUpperCase();
+    const ad = String(alan.slice(2).join('|') || '').trim().slice(0, 80);
+    if (!/^[A-Z0-9.\-]{1,12}$/.test(sym)) return { adaylar: [], hata: 'bad_aday' };
+    if (pazar && pazar !== 'BIST' && pazar !== 'US') return { adaylar: [], hata: 'bad_aday_pazar' };
+    out.push({ ham: sym, pazar: pazar || null, ad: ad || null });
+  }
+  return { adaylar: out, hata: null };
+}
+
+/**
+ * TEMA KATMANI (S8 #8a) - iki kural, ikisi de MOTORDA:
+ *   (1) ILGI SUZGECI (`temaSorguSozcukleri` + `temaBaslikIlgili`):
+ *       Google News RSS, genel bir ifadeye sorgu sozcuklerinin HICBIRI
+ *       gecmeyen basliklarla yanit veriyor (OLCULDU 2026-10-27). Esik
+ *       ">=4 harf" ve durak sozcuk listesi MOTORDA.
+ *   (2) ADAY<->BASLIK ESLESMESI (`themeNewsHits`): sembol kelime-siniri
+ *       ya da ad sozcugu (>=4 harf); tavan motorun kendi `max||4`u -
+ *       BURADA sayi yazilmadi.
+ *
+ * NIYE BU KATMAN DOGDU: `/api/theme` cevabi yalniz
+ * `{symbol, market, name, reason}` tasiyor; hisse<->haber iliskisi
+ * UCTAN GELMIYORDU ve web onu TARAYICIDA kuruyordu. Nativede tema
+ * haberi HIC YOKTU. Yeni uc acilamadi: Vercel Hobby tavani 12
+ * fonksiyon ve dolu - bu yuzden kip (1) genisletildi.
+ *
+ * NIYE `maddeler` SUZULMEDI: mevcut sozlesme bozulurdu (ayni istek
+ * daha az madde donmeye baslardi). Ilgisiz maddelerin SIRA NUMARASI
+ * bildiriliyor, karari istemci veriyor.
+ *
+ * ESLESME DEGERI SIRA DIZISI (madde nesnesi DEGIL): ayni cevabin
+ * `maddeler` dizisine indeks. Govdeyi ikiye katlamiyor ve iki kopyanin
+ * birbirinden kaymasi imkansiz.
+ *
+ * ANAHTAR ISTEMCININ GONDERDIGI HAM SEMBOL: `/api/theme`ten gelen
+ * `candidate.symbol` ne ise o. `yahoo` bicimine cevirmek istemciyi
+ * anahtar uretmeye zorlardi.
+ *
+ * DORT HAL: alan yok = istemci `adaylar=` sormadi - `null` = motor
+ * kurulamadi (OLCEMEDIM) - `adaylar: {}` = aday yoktu - bos dizi `[]`
+ * = OLCTUM, o sembol hicbir baslikta gecmiyor (0 uydurma degil, olcum).
+ *
+ * @returns {object|null}
+ */
+export function temaKatmani(q, maddeler, adaylar) {
+  if (!ENG) return null;
+  const list = Array.isArray(maddeler) ? maddeler : [];
+  const sozcukler = ENG.temaSorguSozcukleri(q);
+  const ilgisiz = [];
+  // Motora SIRA TASIYAN kutular veriliyor: `themeNewsHits` yalniz
+  // `it.title` okuyup NESNENIN KENDISINI donduruyor, biz `_i`yi geri
+  // aliyoruz. Eslesme kurali boylece motorda KALDI, burada kopyasi yok.
+  const ilgili = [];
+  list.forEach((m, i) => {
+    const title = String((m && m.title) || '');
+    if (ENG.temaBaslikIlgili(title, sozcukler)) ilgili.push({ title, _i: i });
+    else ilgisiz.push(i);
+  });
+  const esl = {};
+  for (const a of Array.isArray(adaylar) ? adaylar : []) {
+    const n = ENG.themeNorm(a.ham, a.pazar);
+    const vurus = ENG.themeNewsHits({ base: n.base, name: a.ad }, ilgili);
+    esl[a.ham] = vurus.map((it) => it._i);
+  }
+  return { sozcukler, ilgisiz, adaylar: esl };
+}
 
 export {
   AZAMI_MADDE, VARSAYILAN_MADDE, AZAMI_HABER_SORGU, HABER_PAZARLAR,
@@ -200,6 +325,98 @@ export const eslemeTam = (pazar) =>
 function sayacTopla(hedef, kaynak) {
   for (const k of Object.keys(hedef)) hedef[k] += Number(kaynak?.[k] || 0);
   return hedef;
+}
+
+// Motorun `sentiLabel().label` KAPALI KUMESINI makine koduna cevirir.
+//
+// NIYE VAR (ONCUL DEGISTI 2026-10-31/S8-G1): bu katman eskiden tele
+// yalniz `cls` koyuyordu ('bull'|'neutral'|'bear') ve asagidaki baslik
+// "cumleyi istemci sozlugunden secer" diyordu. OLCULDU ki secemiyor:
+// motorun BES ayri cumlesi UC `cls`e dusuyor — 'Pozitif haber akisi' ile
+// 'Hafif pozitif' ayni 'bull'. Istemci ikisini ayirmak icin 0.35 esigini
+// BILMEK zorunda kalirdi; esik ucta da istemcide de YASAK (HAM SAYI
+// KURALI). Cozum metni gondermek DEGIL: motorun kendi ciktisini SABIT
+// KUMELI bir koda cevirmek. Esik hala YALNIZ motorda.
+//
+// BU BIR ESIK TABLOSU DEGIL: anahtarlar motorun URETTIGI cumleler, sayi
+// yok. Motor cumlesini degistirirse kod `null` olur (uydurma yapmaz) ve
+// uc-test ⑭j bunu AYNI TURDA yakalar — her label'in bir kodu oldugunu
+// motoru CALISTIRARAK olcuyor.
+const DUYARLILIK_KODU = Object.freeze({
+  'Pozitif haber akışı': 'pos_guclu',
+  'Hafif pozitif': 'pos_hafif',
+  'Nötr haber akışı': 'notr',
+  'Hafif negatif': 'neg_hafif',
+  'Negatif haber akışı': 'neg_guclu',
+  'Haber sinyali yok': 'yok',
+});
+
+/** Test bunu agsiz okuyabiliyor — sozlugun KAPALI oldugunu kanitlamak icin. */
+export function duyarlilikKodlari() { return Object.keys(DUYARLILIK_KODU); }
+
+// ---------------------------------------------------------------------
+//  DUYARLILIK KATMANI — motorun URETTIGI haber nabzini tele koyar.
+//
+//  Ucu de MOTORDA (app.js -> _motor.js):
+//      scoreHeadline    SENTI_POS/SENTI_NEG sozluguyle baslik basina +-puan
+//      sentiAggregate   toplami -1..+1 bandina indiren yumusak sikistirma
+//      sentiLabel       bandin SABIT KUMELI sinif kodu
+//  Bu islev HESAP YAPMIYOR: sozluk, sabit 4, esikler (0.35/0.12) hepsi
+//  motorda. YENI AG ISTEGI YOK — ELDEKI manset listesinden hesaplaniyor
+//  (webin de yaptigi sey: app.js da ayni manset listesinden okuyor).
+//
+//  `sentiLabel().label` BILEREK TELE KONMUYOR: serbest TURKCE metin
+//  ("Pozitif haber akisi"...). Gecen IKI SABIT KUME var: `cls`
+//  ('bull'|'neutral'|'bear' — renk icin) ve `kod` (yukaridaki
+//  DUYARLILIK_KODU kumesi — CUMLE icin). Cumleyi istemci `kod`a bakip
+//  kendi sozlugunden secer; `cls` ile secmek BES cumleyi UCE dusururdu.
+//
+//  OLCULMUS SAPMA, SAYIYLA ORTULMEDI: web puani `title + description`
+//  uzerinden hesapliyor; bu tasiyicinin madde alan kumesinde
+//  (`_haber.js MADDE_ALANLARI`) `description` YOK, yalniz `title` var.
+//  Yani ucun puani webin puanindan SAPAR. Alani uydurmak (bos dizge
+//  eklemek) sapmayi gizlerdi; cevap `alan: [...]` ile NEYIN olculdugunu
+//  BILDIRIYOR. Besleme aciklama tasimaya baslarsa duzelecek tek yer
+//  `_haber.js` olur.
+//
+//  `basliklar` madde BASINA ham kutupluluk: `sira` = `maddeler` dizisindeki
+//  indeks, `pol` = scoreHeadline().s. Madde nesnesinin ICINE yazilmadi —
+//  `MADDE_ALANLARI` tasiyicinin sozlesmesi ve sessizce buyumemesi icin
+//  orada yazili. Yalniz SINYAL VEREN basliklar listede (pol !== 0).
+//
+//  @returns {object|null} motor kurulmadiysa null ("olcemedim", sifir degil)
+// ---------------------------------------------------------------------
+export function duyarlilikKatmani(maddeler) {
+  if (!ENG) return null;
+  const list = Array.isArray(maddeler) ? maddeler : [];
+  let ham = 0;
+  let sinyal = 0;
+  const basliklar = [];
+  list.forEach((m, i) => {
+    const r = ENG.scoreHeadline(String((m && m.title) || ''));
+    if (!r.hits) return;
+    ham += r.s;
+    sinyal += r.hits;
+    basliklar.push({ sira: i, pol: round6(r.s) });
+  });
+  const puan = ENG.sentiAggregate(ham, sinyal);
+  const lab = ENG.sentiLabel(puan, sinyal);
+  return {
+    puan: round6(puan),
+    ham: round6(ham),
+    sinyal,
+    basliklar,
+    adet: list.length,
+    cls: (lab && lab.cls) || null,
+    kod: (lab && DUYARLILIK_KODU[lab.label]) || null,
+    alan: ['title'],
+  };
+}
+
+// Kayan nokta gurultusunu dondur (`_akis.js:50` ile ayni gerekce ve ayni
+// esik): 0.1+0.2 gibi toplamlar tele 0.30000000000000004 olarak gitmesin.
+function round6(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 1e6) / 1e6 : v;
 }
 
 // Hata ve eksik cevaplar KISA önbelleklenir (gerekçe: api/analyze.js:225).
@@ -306,6 +523,26 @@ export default async function handler(req, res) {
     limit = n;
   }
 
+  // `adaylar=` YALNIZ kip (1)de anlamli: ilgi suzgeci sorgu
+  // sozcuklerinden cikiyor, kip (2)/(3)te sorgu metni YOK. Sessizce
+  // yoksaymak istemciye istemedigi govdeyi vermek olurdu.
+  const hamAdaylar = String(sorgu.adaylar ?? '').trim();
+  let temaAdaylar = [];
+  if (hamAdaylar) {
+    if (gundem || hamSembol) {
+      kisaOnbellek(res);
+      res.status(400).json({ error: 'adaylar_kip', uyari: UYARI });
+      return;
+    }
+    const ayAday = temaAdaylariAyristir(hamAdaylar);
+    if (ayAday.hata) {
+      kisaOnbellek(res);
+      res.status(400).json({ error: ayAday.hata, azami: AZAMI_TEMA_ADAY, uyari: UYARI });
+      return;
+    }
+    temaAdaylar = ayAday.adaylar;
+  }
+
   const t0 = Date.now();
 
   try {
@@ -333,6 +570,9 @@ export default async function handler(req, res) {
         limit,
         maddeler,
         adet: maddeler.length,
+        duyarlilik: duyarlilikKatmani(maddeler),
+        // Duyarlılık puanı motorun sözlüğüne bağlı -> imza TAŞINIYOR.
+        surum: { motor: IMZA, ayar: IMZA_AYAR },
         // KAYNAK BAŞINA ölçüm: düşen beslemenin ADI gövdede duruyor.
         besleme: g.besleme,
         tekrar: g.tekrar,
@@ -393,6 +633,9 @@ export default async function handler(req, res) {
           // Satırın KENDİ ölçümü: 0 madde + tam:true = "bu hissede haber
           // yok", tam:false = "ölçemedim". İkisi karıştırılmıyor.
           tam: haberTam(it.satirSayac),
+          // SATIRIN KENDİ manşetleri — çoklu kipte birleşik puan tek
+          // hisseyi anlatmaz. Birleşik puan gövde kökünde AYRICA duruyor.
+          duyarlilik: duyarlilikKatmani(it.maddeler),
         });
       }
       const tamCoklu = haberTam(sayac);
@@ -415,6 +658,9 @@ export default async function handler(req, res) {
         maddeler,
         adet: maddeler.length,
         semboller,
+        duyarlilik: duyarlilikKatmani(maddeler),
+        // Duyarlılık puanı motorun sözlüğüne bağlı -> imza TAŞINIYOR.
+        surum: { motor: IMZA, ayar: IMZA_AYAR },
         sayac,
         tam: tamCoklu,
         ms: Date.now() - t0,
@@ -442,6 +688,13 @@ export default async function handler(req, res) {
       limit,
       maddeler,
       adet: maddeler.length,
+      duyarlilik: duyarlilikKatmani(maddeler),
+      // `adaylar=` sorulmadiysa alan HIC KONULMUYOR ("sormadim" ile
+      // "olcemedim" ayri kalsin). Kip (2) ve (3)te de YOK: ikisinde de
+      // serbest metin sorgu YOK, dolayisiyla ilgi suzgeci olculemez.
+      ...(hamAdaylar ? { tema: temaKatmani(q, maddeler, temaAdaylar) } : {}),
+      // Duyarlılık puanı motorun sözlüğüne bağlı -> imza TAŞINIYOR.
+      surum: { motor: IMZA, ayar: IMZA_AYAR },
       sayac,
       tam,
       ms: Date.now() - t0,

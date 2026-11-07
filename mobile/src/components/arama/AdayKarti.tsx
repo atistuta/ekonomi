@@ -59,12 +59,12 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
-import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { fetchArama, useIstek, type AramaAday, type AramaPazar } from '@/api';
 import { Card, Durum, OlcemedimKutu, Pill, VeriYok } from '@/components';
+import { hisseAc } from '@/lib/gezinme';
 import { hitSlopMin, numeric, radius, space, type, useTheme } from '@/theme';
 
 /** Yazma durduktan sonra isteğin atılması için beklenen süre. */
@@ -252,12 +252,10 @@ function AdaySatiri({ aday }: { aday: AramaAday }) {
       // `motorSembol` DOĞRUDAN motorun beklediği yazım: BIST'te
       // 'ASELS.IS', ABD'de 'AAPL'. `/hisse/[sembol]` ekranı `pazar` ile
       // soneki zaten doğru kuruyor (ÖLÇÜLDÜ: o ekran `.IS`i koruyor).
-      onPress={() =>
-        router.push({
-          pathname: '/hisse/[sembol]',
-          params: { sembol: aday.motorSembol as string, pazar: aday.motorPazar ?? '' },
-        })
-      }
+      // TASARIM TURU 2: tek gezinme kalibi (`lib/gezinme.ts`). Eski cagri
+      // pazar bilinmiyorken BOS DIZGE gonderiyordu; kalip bos degeri hic
+      // gondermiyor — "olculmemis" alan uydurulmus '' ile dolmaz.
+      onPress={() => hisseAc(aday.motorSembol as string, aday.motorPazar)}
       accessibilityRole="button"
       accessibilityLabel={
         aday.sembol +
