@@ -3903,3 +3903,30 @@ UYGULANAMIYOR: bildirim KODU gonderildigi icin Apple yetenegi artik
 yapinin ON KOSULU. Ertelenebilen tek kalem Vercel/GitHub `PUSH_SECRET`
 ve APNs ANAHTARI (gercek bildirim gondermek icin); profil yetenegi
 ERTELENEMEZ.
+
+### 45.3 ENGELLEYICI KALKTI · cihaz yapisi HAZIR (OLCULDU 2026-11-08)
+
+Kullanici kendi terminal sekmesinde etkilesimli `eas build` kosup Apple
+girisini yapti. EAS ciktisi:
+- `Synced capabilities: Enabled: Push Notifications` — App ID
+  `com.sabahbulteni.app` icin push yetenegi ACILDI.
+- `Provisioning profile (id: S4264TB2H3) is no longer valid` -> profil
+  YENILENDI: `Updated existing profile: *[expo] com.sabahbulteni.app
+  AdHoc 1793265393019`, cihaz UDID 00008110-000848A614D1401E icinde.
+- Yan tuzak: 'Would you like to set up Push Notifications?' = Yes ile
+  'Generate a new APNs key?' = no birlesimi var olmayan bir P8 dosyasi
+  istiyor ve orada takiliyor. APNs anahtari ERTELENECEKSE ilk soruya
+  **no** demek gerekir.
+- npm onbellegi bozuktu (`ENOENT ... _cacache`), `npm cache verify` ile
+  onarildi (436 bozuk parca atildi). `npx eas-cli@latest` GEREKSIZ:
+  `eas` 20.2.0 kurulu, dogrudan `eas` cagrilir.
+
+**SONUC:** yapi `9d412ef8-7f2e-4c9a-b323-60709e17d815` **FINISHED**.
+IPA: https://expo.dev/artifacts/eas/luopW4EB0SRswvdkIeSI5EH0bX0hkHz4KHHboi7D_54.ipa
+Calisma surumu 1.0.0, kanal `cihaz` — §45'teki OTA grubu
+`0db3bb4f-a63c-460f-87ed-e03e1e8dc9b6` bu yapiya duser.
+
+### OLCULMEDI
+- Uygulama henuz iPhone'a KURULMADI; hicbir ozellik cihazda denenmedi.
+- Bildirim denenmedi: APNs anahtari + Vercel/GitHub `PUSH_SECRET` hala
+  yok (TestFlight adimina ertelendi).
