@@ -1,4 +1,7 @@
 {
   "date": "2026-11-18",
-  "levels": {}
+  "levels": {
+    "BCG.US": 2,
+    "SIRI.US": 1
+  }
 }
