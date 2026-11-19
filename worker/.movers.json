@@ -1,6 +1,13 @@
 {
   "date": "2026-11-19",
   "levels": {
-    "BCG.US": 3
+    "BCG.US": 3,
+    "COP.US": -1,
+    "ANET.US": 1,
+    "OSCR.US": -2,
+    "SN.US": 1,
+    "PODD.US": -1,
+    "QSI.US": 1,
+    "TTWO.US": 2
   }
 }
