@@ -1,18 +1,15 @@
 {
-  "date": "2026-11-20",
+  "date": "2026-11-21",
   "levels": {
-    "BCG.US": -2,
-    "MZTI.US": -1,
-    "OSCR.US": -1,
-    "SN.US": -1,
-    "TOST.US": -2,
-    "NBIX.US": -1,
-    "TTWO.US": -1,
+    "BCG.US": -3,
+    "SIRI.US": -1,
     "KLAC.US": -3,
     "MU.US": -4,
     "GEV.US": -2,
     "ANET.US": -3,
     "PLTR.US": -2,
-    "QSI.US": -4
+    "OSCR.US": -1,
+    "NBIX.US": -1,
+    "QSI.US": -5
   }
 }
