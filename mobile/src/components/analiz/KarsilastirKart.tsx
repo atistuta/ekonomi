@@ -91,9 +91,21 @@ import {
   formatBandUzakligi,
   formatCompact,
   formatOran,
+  formatPercent,
   formatPrice,
   formatScore,
 } from '@/lib/format';
+import {
+  GRAHAM_ALTINDA,
+  GRAHAM_ALT_BASLIK,
+  GRAHAM_BASLIK,
+  GRAHAM_GONDERILMEDI,
+  GRAHAM_NEDEN_ROZET,
+  GRAHAM_OLCULEMEDI,
+  GRAHAM_ROZET,
+  GRAHAM_USTUNDE,
+  GRAHAM_UYARI,
+} from '@/lib/sozluk';
 import type { Tone } from '@/theme';
 import { numeric, space, toneColors, type, useTheme } from '@/theme';
 
@@ -449,6 +461,90 @@ export function KarsilastirKart({
           ) : null}
         </View>
       ) : null}
+      {/* ── 📐 BENJAMIN GRAHAM'S FORMULA ──────────────────────────────
+          WEBDEKİ YER: kıyas ızgarasında "📝 Atahan Notları" satırının
+          ÜSTÜ. NATIVE'DE ATAHAN NOTLARI SATIRI YOK (kart başlığındaki
+          not: `computeCompareVerdict` karar cümlesi de native'de yok —
+          o bir istemci karar kuralı). Bu yüzden "Atahan'ın üstü" burada
+          KARTIN SONU olarak karşılanıyor; uydurma bir Atahan satırı
+          eklemek, webde olmayan bir sıralamayı taklit etmek olurdu.
+
+          FİYAT BELİRTECİ, SKOR DEĞİL: bu blok BİLEŞKE SKORA GİRMİYOR
+          (İçsel Değer/DCF katmanı gibi) — bu yüzden yukarıdaki sıralama
+          tablosunun İÇİNDE bir sütun değil, AYRI bölüm. Sıra motorun:
+          `sira` dizisi olduğu gibi geziliyor, istemci yeniden sıralamaz.
+
+          EK AĞ TURU YOK: `skorlar` haritası zaten elde (`/api/compare`
+          sonuçları); `analiz.graham` oradan okunuyor.
+
+          ÜÇ "YOK" HÂLİ AYRI: alan hiç gelmediyse "uçtan gelmedi",
+          `null` ise "ölçülemedi", `ok:false` ise motorun NEDEN kodu.
+          Hiçbirinde `0` ya da boş bir yüzde basılmıyor. */}
+      {durum === 'veri' && sira.length ? (
+        <View style={[styles.bolum, { borderColor: colors.border }]}>
+          <Text style={[type.smallBold, { color: colors.text }]}>{'📐 ' + GRAHAM_BASLIK}</Text>
+          <Text style={[type.micro, { color: colors.textFaint }]}>{GRAHAM_ALT_BASLIK}</Text>
+
+          <View style={[styles.mBaslik, { borderColor: colors.border }]}>
+            <Text style={[type.micro, styles.gSembol, { color: colors.textDim }]}>SEMBOL</Text>
+            <Text style={[type.micro, styles.gDeger, { color: colors.textDim }]}>DEĞER</Text>
+            <Text style={[type.micro, styles.gKonum, { color: colors.textDim }]}>KONUM</Text>
+          </View>
+
+          {sira.map((k) => {
+            const skor = skorlar.get(k.sym.toUpperCase()) ?? null;
+            const g = skor?.analiz?.graham;
+            // Para birimi pazarın; bilinmiyorsa simge UYDURULMUYOR.
+            const kur = skor?.market === 'BIST' ? 'TRY' : null;
+
+            let deger = EMPTY;
+            let konum = GRAHAM_OLCULEMEDI;
+            let im: string | null = null;
+
+            if (g === undefined) {
+              konum = GRAHAM_GONDERILMEDI;
+            } else if (g === null) {
+              konum = GRAHAM_OLCULEMEDI;
+            } else if (!g.ok) {
+              konum = g.reason ? GRAHAM_NEDEN_ROZET[g.reason] : GRAHAM_OLCULEMEDI;
+            } else {
+              deger = formatPrice(g.value, kur);
+              const fark = g.diffPct;
+              // ALTINDA/ÜSTÜNDE sözcüğü `diffPct`in İŞARETİNDEN geliyor;
+              // sapma ölçülemediyse yalnız motorun rozeti yazılıyor.
+              im = fark == null ? null : fark < 0 ? '▼' : '▲';
+              konum =
+                fark == null
+                  ? GRAHAM_ROZET[g.badge]
+                  : formatPercent(fark, 1) + ' ' + (fark < 0 ? GRAHAM_ALTINDA : GRAHAM_USTUNDE);
+            }
+
+            return (
+              <View key={k.sym} style={[styles.mSatir, { borderColor: colors.border }]}>
+                <Text
+                  style={[type.small, styles.gSembol, { color: colors.text }]}
+                  numberOfLines={1}>
+                  {k.sym}
+                </Text>
+                <Text
+                  style={[type.small, numeric, styles.gDeger, { color: colors.text }]}
+                  numberOfLines={1}>
+                  {deger}
+                </Text>
+                <Text
+                  style={[type.micro, styles.gKonum, { color: colors.textDim }]}
+                  numberOfLines={2}>
+                  {(im ? im + ' ' : '') + konum}
+                </Text>
+              </View>
+            );
+          })}
+
+          <Text style={[type.micro, styles.dipnotMetin, { color: colors.textFaint }]}>
+            {GRAHAM_UYARI}
+          </Text>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -570,6 +666,12 @@ const styles = StyleSheet.create({
   hSayi: { flex: 2, textAlign: 'right' },
   hSira: { flex: 1.2, textAlign: 'right' },
   // Künye tam satır: `flexWrap` ile alt sıraya düşer.
+  // Graham bolumu: SEMBOL / DEGER / KONUM. Sabit oranli esnek
+  // sutunlar — uc sutun oldugu icin yatay kaydirma gerekmiyor.
+  gSembol: { flex: 3, minWidth: 56 },
+  gDeger: { flex: 3, textAlign: 'right', paddingRight: space.sm },
+  gKonum: { flex: 4, textAlign: 'right' },
+  dipnotMetin: { paddingTop: space.sm },
   kunye: { width: '100%' },
   dipnot: {
     flexDirection: 'row',

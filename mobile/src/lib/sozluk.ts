@@ -20,6 +20,8 @@ import type {
   BildirimErrorCode,
   DuyarlilikKod,
   FirsatCls,
+  GrahamNeden,
+  GrahamRozet,
   HareketErrorCode,
   HareketKodu,
   KatalizorTarihTuru,
@@ -426,6 +428,73 @@ export const FA_KRITER_SOZLUK: Record<string, string> = {
   'pe.olculdu': 'Fiyat / kazanç oranı ölçüldü',
   'pe.negatif': 'F/K negatif — zarar eden şirkette oran yorumlanamaz',
 };
+
+
+// ---------------------------------------------------------------------
+//  BENJAMIN GRAHAM FORMULU — BİLEŞKE SKORA DAHİL DEĞİL
+// ---------------------------------------------------------------------
+//  NİYE AYRI: bu katman DCF ile aynı rafı paylaşıyor — SADECE BİLGİ.
+//  Motor (`computeGraham`) değerin kendisini, fark yüzdesini ve rozeti
+//  ÜRETİYOR; burada yalnız kod → cümle eşlemesi var.
+//
+//  SAYI YOK: formulün katsayıları (taban F/K, büyüme çarpanı, Graham
+//  Sayısının sabiti) MOTORDA yaşıyor. Ekrana basılan çarpan ucun
+//  gönderdiği `impliedPE`; etiketi burada, değeri orada.
+//
+//  TON: Graham büyüme formülünü hisse SEÇİMİ aracı olarak önermedi;
+//  cümleler bu yüzden yalnız KONUM bildiriyor ("değerin altında"), ne
+//  yapılacağını söylemiyor.
+
+/** Fiyatın, formülün verdiği değere göre konumu. */
+export const GRAHAM_ROZET_SOZLUK: Record<GrahamRozet, string> = {
+  cheap: 'Fiyat, formülün verdiği değerin altında',
+  fair: 'Fiyat, formülün verdiği değere yakın',
+  expensive: 'Fiyat, formülün verdiği değerin üstünde',
+};
+
+/** Aynı konum, rozet boyunda. */
+export const GRAHAM_ROZET: Record<GrahamRozet, string> = {
+  cheap: 'değerin altında',
+  fair: 'değere yakın',
+  expensive: 'değerin üstünde',
+};
+
+/**
+ * Formülün KURULAMADIĞI haller. HİÇBİRİ HATA DEĞİL — ölçülemeyen
+ * girdi `null` kalır, ekrana `0` BASILMAZ (DEVAM.md: "ölçülmeyen sayı
+ * basılmaz"). Kod sözlükte yoksa cümle de yok.
+ */
+export const GRAHAM_NEDEN_SOZLUK: Record<GrahamNeden, string> = {
+  'no-data': 'Fiyat ya da hisse başına kâr ölçülemedi — formül kurulamadı.',
+  'neg-eps': 'Hisse başına kâr pozitif değil; büyüme formülü bu hisseye uygulanamaz.',
+  'no-growth': 'Beklenen büyüme ölçülemedi — formülün büyüme girdisi yok.',
+};
+
+/** Aynı neden, rozet boyunda. */
+export const GRAHAM_NEDEN_ROZET: Record<GrahamNeden, string> = {
+  'no-data': 'veri yok',
+  'neg-eps': 'HBK pozitif değil',
+  'no-growth': 'büyüme yok',
+};
+
+// Etiketler — hepsi RAKAMSIZ: sayıyı uç gönderir, etiket burada durur.
+export const GRAHAM_BASLIK = "Benjamin Graham's Formula";
+export const GRAHAM_ALT_BASLIK = 'Fiyat belirteci — yalnız bilgi, bileşke skora girmez';
+export const GRAHAM_DEGER_ETIKET = 'Formülün verdiği değer';
+export const GRAHAM_FARK_ETIKET = 'Fiyatın değerden sapması';
+export const GRAHAM_CARPAN_ETIKET = 'Uygulanan F/K çarpanı';
+export const GRAHAM_BUYUME_ETIKET = 'Formülde kullanılan büyüme';
+export const GRAHAM_HAM_BUYUME_ETIKET = 'Ölçülen ham büyüme';
+export const GRAHAM_HBK_ETIKET = 'Hisse başına kâr';
+export const GRAHAM_DDB_ETIKET = 'Hisse başına defter değeri';
+export const GRAHAM_SAYI_ETIKET = 'Graham Sayısı';
+export const GRAHAM_SAYI_NOTU = 'Graham Sayısı AYRI ve daha tutucu bir ölçüt; büyüme formülünün parçası değil.';
+export const GRAHAM_KIRPMA_NOTU = 'Ölçülen büyüme formülün üst sınırına kırpıldı.';
+export const GRAHAM_ALTINDA = 'ALTINDA';
+export const GRAHAM_USTUNDE = 'ÜSTÜNDE';
+export const GRAHAM_OLCULEMEDI = 'Formül bu hisse için kurulamadı.';
+export const GRAHAM_GONDERILMEDI = 'Bu ölçüm uçtan gelmedi.';
+export const GRAHAM_UYARI = 'Graham, büyüme formülünü hisse seçimi aracı olarak önermedi; tek başına karar ölçütü değildir. Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
 
 // ---------------------------------------------------------------------

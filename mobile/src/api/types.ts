@@ -546,9 +546,71 @@ export type Butunculluk = {
   buyumeCls: string | null;
 };
 
+/**
+ * GRAHAM NEDEN KODU — `computeGraham`ın KAPALI kümesi (app.js:5833).
+ *
+ * 'no-data'   = fiyat ya da HBK yok · 'neg-eps' = HBK ≤ 0, büyüme formülü
+ * uygulanamaz · 'no-growth' = beklenen büyüme (g) ölçülemedi.
+ *
+ * NİYE KOD, CÜMLE DEĞİL: Türkçe tek yerde (`lib/sozluk.ts`); uç metin
+ * üretmez (§5.1).
+ */
+export type GrahamNeden = 'no-data' | 'neg-eps' | 'no-growth';
+
+/**
+ * FİYATIN GRAHAM DEĞERİNE GÖRE YERİ — motorun rozeti.
+ * ±%15 bandının KENDİSİ motorda (GRAHAM.BANT); burada eşik YOK.
+ */
+export type GrahamRozet = 'cheap' | 'fair' | 'expensive';
+
+/**
+ * BENJAMIN GRAHAM FORMÜLÜ KATMANI — SADECE BİLGİ.
+ *
+ * ÖNEMLİ: Bu katman bileşke/bütüncül SKORA DAHİL DEĞİL (İçsel Değer
+ * (DCF) katmanı gibi). `graham` alanı `fa` NESNESİNİN İÇİNDE DEĞİL:
+ * `api/_akis.js` onu `kayitHam`da ayırıp `analiz` katmanına koyuyor, böylece
+ * /api/score sözleşmesi (ve parite referansı) kaymıyor.
+ *
+ * V = HBK × (8,5 + 2g) — KATSAYILAR BURADA YOK, motorda. `impliedPE`
+ * (= 8,5 + 2g) telden HAM gelir; istemci çarpmaz, bölmez, kırpmaz.
+ *
+ * ÜÇ HAL AYRI: alanın HİÇ gelmemesi (`undefined`) = "uç bu sürümde
+ * göndermiyor" · `null` = uç gönderdi ama ölçülemedi · `ok: false` =
+ * ölçüldü, formül UYGULANAMADI ve nedeni belli. Üçü AYRI çizilir, 0 basılmaz.
+ *
+ * `gClamped: true` → ham büyüme (`gRaw`) Graham'ın pratik üst/alt sınırına
+ * kırpıldı (`gUsed`); ekran bunu SÖYLEMEK zorunda, sessizce yuvarlamaz.
+ * `grahamNumber` = √(22,5 × HBK × DDB) — AYRI, daha muhafazakâr ölçüt;
+ * DDB yoksa `null` (büyüme formülü yine geçerlidir).
+ */
+export type GrahamOlcum = {
+  ok: true;
+  /** 'US' | 'BIST' — motorun pazar etiketi; `null` = bilinmiyor. */
+  market: string | null;
+  badge: GrahamRozet;
+  /** Graham değeri (V), para birimi pazarın. */
+  value: number | null;
+  /** (fiyat − V) / V × 100. Negatif = değerin ALTINDA. */
+  diffPct: number | null;
+  grahamNumber: number | null;
+  gnDiffPct: number | null;
+  eps: number | null;
+  bvps: number | null;
+  gUsed: number | null;
+  gRaw: number | null;
+  gClamped: boolean;
+  impliedPE: number | null;
+};
+
+export type GrahamYok = { ok: false; reason: GrahamNeden | null };
+
+export type Graham = GrahamOlcum | GrahamYok;
+
 export type Analiz = {
   faKarar: FaKarar | null;
   butunculluk: Butunculluk | null;
+  /** `undefined` = uç göndermedi · `null` = ölçülemedi (api/_akis.js). */
+  graham?: Graham | null;
 };
 
 export type AnalyzeRow = RecommendRow & { analiz: Analiz | null };

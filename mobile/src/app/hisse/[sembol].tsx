@@ -76,6 +76,7 @@ import {
   DegerKart,
   DetayBasligi,
   EtiketSeridi,
+  GrahamKart,
   DetayEylemler,
   HaberKart,
   HareketKart,
@@ -228,6 +229,13 @@ export default function HisseDetayScreen() {
                   sonekini istiyor — `satir.sym` o soneki taşımayabilir
                   (yukarıdaki ".IS GERİ KAZANIMI" notu). */}
               <TemelKart satir={satir} sembol={sembol} />
+              {/* 📐 Benjamin Graham's Formula — FİYAT BELİRTECİ, SKOR
+                  DEĞİL. TemelKart'tan HEMEN SONRA, ÇÜNKÜ aynı temel
+                  veriden (HBK, defter değeri, büyüme) besleniyor; ama
+                  AYRI kart, çünkü bileşke skora GİRMİYOR. Kendi ucu
+                  YOK: `satir.analiz.graham` ekranin elindeki turdan
+                  geliyor (yukarıdaki "NEDEN TEK İSTEK" kuralı). */}
+              <GrahamKart satir={satir} />
               <TezKart satir={satir} />
               <RiskOdulKart satir={satir} />
               {/* ANALYZE TURUNUN DIŞI: kendi ucu, kendi zaman aşımı,

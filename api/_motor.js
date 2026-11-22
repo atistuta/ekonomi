@@ -10,7 +10,7 @@
 //  üretim testi zaten kırmızı yanar. Motor davranışı değişecekse app.js
 //  değişir, sonra bu dosya yeniden üretilir.
 //
-//  Dilimler (33):
+//  Dilimler (35):
 //    util           19 satır
 //    ysym            6 satır
 //    ta           1113 satır
@@ -20,7 +20,9 @@
 //    composite      36 satır
 //    holistic      107 satır
 //    fa-bist       180 satır
+//    bist-val       37 satır
 //    fa-us         316 satır
+//    graham         81 satır
 //    causal         68 satır
 //    makro-faz     117 satır
 //    nabiz-yon      88 satır
@@ -44,13 +46,13 @@
 //    gundem-sozluk  171 satır
 //    gundem-skor   131 satır
 //    endeks-esik     8 satır
-//    TOPLAM       3773 satır
-//  Dışa verilen sembol: 125
+//    TOPLAM       3891 satır
+//  Dışa verilen sembol: 131
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:db1e1ccb5723ec2b';
+export const IMZA = 'sha256:b9f0340362651918';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
@@ -63,7 +65,9 @@ export const DILIMLER = [
   { name: 'composite', lines: 36 },
   { name: 'holistic', lines: 107 },
   { name: 'fa-bist', lines: 180 },
+  { name: 'bist-val', lines: 37 },
   { name: 'fa-us', lines: 316 },
+  { name: 'graham', lines: 81 },
   { name: 'causal', lines: 68 },
   { name: 'makro-faz', lines: 117 },
   { name: 'nabiz-yon', lines: 88 },
@@ -1825,6 +1829,44 @@ const navigator = H.dead("navigator");
   // İş Yatırım şirket kartından piyasa değerini (mnTL) çeker → TL. Sonuç değer bandı için
   // pay sayısı = piyasa değeri / fiyat türetilir (nominal ödenmiş sermayeyle örtüşür, par 1₺).
 
+// ===== dilim: bist-val =====
+  const bistMcapCache = {};
+  async function fetchBistMarketCap(symbol) {
+    if (bistMcapCache[symbol] !== undefined) return bistMcapCache[symbol];
+    let mcap = null;
+    try {
+      const url = `https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/sirket-karti.aspx?hisse=${encodeURIComponent(symbol)}`;
+      const html = await fetchVia(url, { timeout: 15000 });
+      // "Piyasa Değeri 1.733.940,0 mnTL" — Türkçe karakterden bağımsız, ASCII çapa
+      const m = html && html.match(/Piyasa[\s\S]{0,60}?([0-9][0-9.]*,[0-9]+)\s*mnTL/i);
+      if (m) { const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.')); if (isFinite(v) && v > 0) mcap = v * 1e6; }
+    } catch (e) { mcap = null; }
+    bistMcapCache[symbol] = mcap;
+    return mcap;
+  }
+
+  // model.metrics + piyasa değeri → F/K, PD/DD, HBK, pay sayısı (BIST değerleme çekirdeği).
+  // Hem Sonuç değer bandı hem Temel Analiz sekmesi tile'ları bunu kullanır.
+  async function bistValuation(symbol, metrics) {
+    if (!metrics || metrics.price == null || metrics.price <= 0 || metrics.netProfit == null) return null;
+    const mcap = await fetchBistMarketCap(symbol);
+    if (mcap == null || mcap <= 0) return null;
+    const shares = mcap / metrics.price;
+    const eps = metrics.netProfit / shares;
+    const pe = metrics.netProfit !== 0 ? mcap / metrics.netProfit : null;
+    const pb = (metrics.equity != null && metrics.equity !== 0) ? mcap / metrics.equity : null;
+    const gPct = (metrics.revCagr != null) ? metrics.revCagr : metrics.revYoY;
+    const dcfIn = {
+      market: 'BIST', fcf: metrics.freeCF, netDebt: metrics.netDebt,
+      totalDebt: metrics.totalDebt, shares, equityVal: mcap,
+      growth: (gPct != null && isFinite(gPct)) ? gPct / 100 : null
+    };
+    // DDB (defter değeri/pay) — Graham Sayısı için; ölçülemezse null.
+    const bvps = (metrics.equity != null && isFinite(metrics.equity) && shares > 0) ? metrics.equity / shares : null;
+    return { curSym: '₺', eps, pe, pb, bvps, price: metrics.price, mcap, shares, market: 'BIST', dcfIn };
+  }
+
+
 // ===== dilim: fa-us =====
   async function secGet(url, timeout = 12000) {
     const base = window.MY_PROXY;
@@ -2139,6 +2181,88 @@ const navigator = H.dead("navigator");
     const out = { criteria: C, statementTiles, income, incPeriod: fy, fy, bsDate, incBasis, incAsOf, metrics: { ni, rev, eps, fcf, netDebt, totalDebt, ebitda, revCagr, revYoY, equity } };
     secModelCache[symbol] = out;
     return out;
+  }
+
+
+// ===== dilim: graham =====
+  function usDcfIn(sec, price, eps) {
+    const m = sec && sec.metrics; if (!m) return null;
+    const shares = (m.ni != null && eps) ? m.ni / eps : null;
+    const equityVal = (shares != null && price != null) ? shares * price : null;
+    const gPct = (m.revCagr != null) ? m.revCagr : m.revYoY;
+    return {
+      market: 'US', fcf: m.fcf, netDebt: m.netDebt, totalDebt: m.totalDebt,
+      shares, equityVal, growth: (gPct != null && isFinite(gPct)) ? gPct / 100 : null
+    };
+  }
+
+  // ===================== 📐 Benjamin Graham's Formula =====================
+  // ÖNEMLİ: Bu katman SADECE BİLGİdir; bütüncül/bileşke skora DAHİL DEĞİL
+  // (İçsel Değer (DCF) katmanı gibi). Yatırım tavsiyesi değildir.
+  //
+  // ÖLÇÜLDÜ (2026-11-22) — Graham'ın ÜÇ AYRI formülü var, karıştırılmamalı:
+  //  1) Büyüme formülü (The Intelligent Investor, 1962 baskısı, böl. 11):
+  //       V = HBK × (8,5 + 2g)
+  //     g = önümüzdeki 7–10 yıl için BEKLENEN yıllık büyüme, tam sayı yüzde (%7 → 7).
+  //     8,5 = büyümesiz bir şirket için baz F/K çarpanı.
+  //  2) 1974 revizyonu (Eylül 1974): V = HBK × (8,5 + 2g) × 4,4 / Y
+  //     4,4 = revizyon döneminde yüksek kaliteli şirket tahvillerinin ortalama getirisi,
+  //     Y   = güncel AAA şirket tahvili getirisi.
+  //     Y HİÇBİR izinli kaynakta (api/_ag.js IZINLI) ölçülemiyor; 10Y Hazine ile
+  //     ikame etmek Y'yi düşük, V'yi yüksek gösterirdi. Kural: ölçülmeyen sayı
+  //     basılmaz → revizyon UYGULANMAZ, yalnız notta belirtilir.
+  //  3) Graham Sayısı (AYRI, savunmacı yatırımcı için daha muhafazakâr ölçüt):
+  //       √(22,5 × HBK × DDB)   22,5 = 15 (maks F/K) × 1,5 (maks PD/DD)
+  //     22,5 büyüme formülünün PARÇASI DEĞİLDİR.
+  const GRAHAM = Object.freeze({
+    BAZ_FK: 8.5,    // büyümesiz şirket için baz F/K
+    G_CARPAN: 2,    // büyüme çarpanı
+    G_MIN: 0,       // negatif büyüme formülü anlamsızlaştırır → 0'a kırpılır
+    G_MAX: 15,      // Graham'ın pratik üst sınırı; üstü ekstrapolasyon olur
+    SAYI_K: 22.5,   // Graham Sayısı katsayısı (15 × 1,5)
+    BANT: 15,       // ±%15 → "değere yakın" bandı
+  });
+
+  // Saf hesap — HAM SAYI döndürür, metin üretmez.
+  // Girdi: { eps, bvps, growthPct, price, market }
+  function computeGraham(gIn) {
+    if (!gIn) return { ok: false, reason: 'no-data' };
+    const { eps, bvps, growthPct, price, market } = gIn;
+    if (price == null || !isFinite(price) || price <= 0) return { ok: false, reason: 'no-data' };
+    if (eps == null || !isFinite(eps)) return { ok: false, reason: 'no-data' };
+    if (eps <= 0) return { ok: false, reason: 'neg-eps' };
+    if (growthPct == null || !isFinite(growthPct)) return { ok: false, reason: 'no-growth' };
+    const gUsed = Math.max(GRAHAM.G_MIN, Math.min(GRAHAM.G_MAX, growthPct));
+    const value = eps * (GRAHAM.BAZ_FK + GRAHAM.G_CARPAN * gUsed);
+    if (!isFinite(value) || value <= 0) return { ok: false, reason: 'no-data' };
+    const diffPct = (price - value) / value * 100;
+    const badge = diffPct < -GRAHAM.BANT ? 'cheap' : diffPct > GRAHAM.BANT ? 'expensive' : 'fair';
+    const bv = (bvps != null && isFinite(bvps) && bvps > 0) ? bvps : null;
+    const grahamNumber = bv != null ? Math.sqrt(GRAHAM.SAYI_K * eps * bv) : null;
+    const gnDiffPct = grahamNumber != null ? (price - grahamNumber) / grahamNumber * 100 : null;
+    return {
+      ok: true, market: market || null, price, eps, bvps: bv,
+      value, diffPct, badge, grahamNumber, gnDiffPct,
+      gUsed, gRaw: growthPct, gClamped: growthPct !== gUsed,
+      impliedPE: GRAHAM.BAZ_FK + GRAHAM.G_CARPAN * gUsed,
+    };
+  }
+
+  // valuation nesnesinden Graham girdisi kur (BIST + US ortak).
+  // DDB (defter değeri/pay) = fiyat / PD-DD; yoksa null (Graham Sayısı atlanır).
+  function grahamIn(valuation, price) {
+    if (!valuation) return null;
+    const px = (valuation.price != null) ? valuation.price : price;
+    const pb = (valuation.pb != null && isFinite(valuation.pb) && valuation.pb > 0) ? valuation.pb : null;
+    const bvps = (valuation.bvps != null && isFinite(valuation.bvps) && valuation.bvps > 0)
+      ? valuation.bvps
+      : (pb != null && px != null ? px / pb : null);
+    const gFrac = (valuation.dcfIn && valuation.dcfIn.growth != null) ? valuation.dcfIn.growth : null;
+    return {
+      eps: valuation.eps, bvps, price: px,
+      growthPct: (gFrac != null && isFinite(gFrac)) ? gFrac * 100 : null,
+      market: (valuation.dcfIn && valuation.dcfIn.market) || valuation.market || null,
+    };
   }
 
 
@@ -3919,5 +4043,5 @@ const navigator = H.dead("navigator");
   };
 
 
-return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faKriterKod, faKriterIsaretle, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, atrVolKod, atrPlanKod, KAT_TEMETTU_GUN, KAT_TEMETTU_KODLARI, katGunFarki, katTemettuKod, taHamGostergeler, taHamUcGostergeler, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, secGet, secResolveCik, secFetchModel, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, INDEX_ESIK, CYCLE_PHASES, macroGrowth, macroPhase, macroInflPressure, macroRiskPressure, themeHeat, rowExtrema, earnScenario, themeNorm, temaSorguSozcukleri, temaBaslikIlgili, themeMatchNews, themeNewsHits, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance, PULSE_TH, analyzeIntraday, pulseIsSudden, pulseRealityCodes, pulseMakroEtiketKod, pulseMakroYorumKod, TA_HORIZON, BT_CFG, spearmanIC, computeBacktest, shortNum, scoreBand, cryptoCategory, computeCryptoValue, METAL_MACRO_W, computeMetalMacro, SENTI_POS, SENTI_NEG, scoreHeadline, sentiLabel, sentiAggregate, WHY_SERT, WHY_BELIRGIN, WHY_HABER_ESIK, WHY_HAREKET_KODLARI, WHY_YON_KODLARI, WHY_HABER_YON_KODLARI, WHY_UZLASMA_KODLARI, WHY_KUTUP_KODLARI, whyGunlukYuzde, whyHareketKod, whyYonKod, whyHaberYonKod, whyUzlasmaKod, whyKutupKod, oppTag, priceOppAdj, oppCombined, SCAN_PRESETS, scanBlend, scanScore, scanTag, SEK_META, sekMedian, sekClassify, sekSortGroups, SECTORS, SYMBOL_SECTORS, RADAR_THEMES, AGENDA_LEXICON, AGENDA_STOP, AGENDA_VALUE_SECTORS, agendaKwHit, agendaStemHit, agendaAdmit, agendaCleanTitle, agendaScore };
+return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faKriterKod, faKriterIsaretle, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, atrVolKod, atrPlanKod, KAT_TEMETTU_GUN, KAT_TEMETTU_KODLARI, katGunFarki, katTemettuKod, taHamGostergeler, taHamUcGostergeler, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, fetchBistMarketCap, bistValuation, secGet, secResolveCik, secFetchModel, GRAHAM, computeGraham, grahamIn, usDcfIn, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, INDEX_ESIK, CYCLE_PHASES, macroGrowth, macroPhase, macroInflPressure, macroRiskPressure, themeHeat, rowExtrema, earnScenario, themeNorm, temaSorguSozcukleri, temaBaslikIlgili, themeMatchNews, themeNewsHits, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance, PULSE_TH, analyzeIntraday, pulseIsSudden, pulseRealityCodes, pulseMakroEtiketKod, pulseMakroYorumKod, TA_HORIZON, BT_CFG, spearmanIC, computeBacktest, shortNum, scoreBand, cryptoCategory, computeCryptoValue, METAL_MACRO_W, computeMetalMacro, SENTI_POS, SENTI_NEG, scoreHeadline, sentiLabel, sentiAggregate, WHY_SERT, WHY_BELIRGIN, WHY_HABER_ESIK, WHY_HAREKET_KODLARI, WHY_YON_KODLARI, WHY_HABER_YON_KODLARI, WHY_UZLASMA_KODLARI, WHY_KUTUP_KODLARI, whyGunlukYuzde, whyHareketKod, whyYonKod, whyHaberYonKod, whyUzlasmaKod, whyKutupKod, oppTag, priceOppAdj, oppCombined, SCAN_PRESETS, scanBlend, scanScore, scanTag, SEK_META, sekMedian, sekClassify, sekSortGroups, SECTORS, SYMBOL_SECTORS, RADAR_THEMES, AGENDA_LEXICON, AGENDA_STOP, AGENDA_VALUE_SECTORS, agendaKwHit, agendaStemHit, agendaAdmit, agendaCleanTitle, agendaScore };
 }

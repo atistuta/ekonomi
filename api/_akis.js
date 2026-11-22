@@ -79,6 +79,32 @@ function kriterTel(c) {
   return out;
 }
 
+/**
+ * 📐 Graham katmanının TEL BİÇİMİ — yalnız HAM sayı ve SABİT
+ * KÜMELİ makine kodu: `reason` (no-data|neg-eps|no-growth), `badge`
+ * (cheap|fair|expensive), `market` (US|BIST). Biçimlenmiş dize, para
+ * simgesi ve Türkçe cümle TAŞINMIYOR — api/compare.js başlığı:
+ * "cevapta biçimlenmiş tek alan yok". `bistValuation`ın döndürdüğü
+ * `curSym` ('₺') bu BEYAZ LİSTEye GİRMEDİĞİ için tele de çıkmıyor;
+ * biçimleme native'de kalıyor (mobile/src/lib/format.ts).
+ *
+ * Ölçülemeyen alan `null` kalır — 0 BASILMAZ. `ok:false` durumunda
+ * SADECE `reason` taşınır: hesaplanmamış sayıyı tele koymak "ölçtüm"
+ * demek olurdu.
+ */
+function grahamTel(gr) {
+  if (!gr) return null;
+  if (!gr.ok) return { ok: false, reason: gr.reason || null };
+  return {
+    ok: true, market: gr.market || null, badge: gr.badge,
+    value: round6(gr.value), diffPct: round6(gr.diffPct),
+    grahamNumber: round6(gr.grahamNumber), gnDiffPct: round6(gr.gnDiffPct),
+    eps: round6(gr.eps), bvps: round6(gr.bvps),
+    gUsed: round6(gr.gUsed), gRaw: round6(gr.gRaw), gClamped: !!gr.gClamped,
+    impliedPE: round6(gr.impliedPE),
+  };
+}
+
 // ---------------------------------------------------------------------
 //  TA'nın HAM koşusu — getTaScoreFor (app.js:4581) ile BİREBİR aynı yol:
 //  5y/1d sembol mumları + 5y/1d endeks mumları (RAW) → computeVadeScore.
@@ -164,11 +190,30 @@ export async function scoreFaUS(eng, sym, net) {
     // `kod`u kendisi takıyor), cümleyi native kuruyor.
     criteria.push(eng.faPeCriterion(pe, ''));
   }
+  // 📐 Benjamin Graham's Formula — SADECE BİLGİ; FA/TA/bileşke skora DOKUNMAZ.
+  // Formülün tamamı MOTORDA (eng.grahamIn → eng.computeGraham); burada eşik,
+  // katsayı, kırpma YOK — yalnız motorun beklediği `valuation` kabı kuruluyor.
+  // OLCULDU (2026-11-22): sec.metrics = { ni, rev, eps, fcf, netDebt, totalDebt,
+  // ebitda, revCagr, revYoY, equity } (app.js:7135) — `shares` ve `bvps` bu
+  // alanlardan HAM BÖLME ile çıkıyor, yukarıdaki `pe = price / eps` ile aynı cins.
+  // `g` (büyüme) YENİDEN YAZILMIYOR: eng.usDcfIn onu zaten üretiyor — iki
+  // doğruluk kaynağı olmasın.
+  let graham = null;
+  try {
+    const shares = (sec.metrics.ni != null && eps) ? sec.metrics.ni / eps : null;
+    const bvps = (sec.metrics.equity != null && shares != null && shares > 0)
+      ? sec.metrics.equity / shares : null;
+    graham = grahamTel(eng.computeGraham(eng.grahamIn(
+      { eps, bvps, price, market: 'US', dcfIn: eng.usDcfIn(sec, price, eps) }, price)));
+  } catch (e) { graham = null; }
   const fa = eng.computeFaScore(criteria);
   return {
     score: round6(fa.score), present: round6(fa.present), total: round6(fa.total),
     price: round6(price), eps: round6(eps), pe: round6(pe),
     criteria: criteria.map(kriterTel),
+    // `graham` EN SONDA: `kayitHam` onu ayırırken geri kalan alanların
+    // SIRASI (istemci sözleşmesi) harfiyen korunsun.
+    graham,
   };
 }
 
@@ -183,12 +228,22 @@ export async function scoreFaBIST(eng, sym, maliRaw) {
   if (!maliRaw) return { score: null, why: 'mali tablo yok', price: null };
   const mali = eng.parseIsMali(maliRaw);
   const model = eng.bistFundamentalModel(mali, meta);
+  // 📐 Benjamin Graham's Formula — BIST bacağı. `bistValuation` 2026-11-22'de
+  // MOTORA alındı (dilim `bist-val`): HBK, DDB ve büyüme oradan geliyor, burada
+  // formül YOK. Piyasa değeri bir AĞ ayağı gerektirdiği için `try` içinde:
+  // Graham ölçülemezse `null` döner, FA SKORU ETKİLENMEZ.
+  let graham = null;
+  try {
+    const val = await eng.bistValuation(sym, model.metrics);
+    graham = grahamTel(eng.computeGraham(eng.grahamIn(val, val && val.price)));
+  } catch (e) { graham = null; }
   const fa = eng.computeFaScore(model.criteria);
   return {
     score: round6(fa.score), present: round6(fa.present), total: round6(fa.total),
     price: round6(meta && meta.regularMarketPrice),
     years: mali.years,
     criteria: model.criteria.map(kriterTel),
+    graham,
   };
 }
 
@@ -237,9 +292,19 @@ async function kayitHam(eng, row, vade, opt = {}) {
   } else {
     fa = await scoreFaUS(eng, sym, opt.net);
   }
+  // 📐 Graham katmanı `fa`dan AYRILIYOR. NEDENİ ÖLÇÜLDÜ (2026-11-22):
+  // `scoreOne` bu kaydı OLDUĞU GİBİ döndürüyor, tests/run.mjs onu
+  // tests/baseline.json’a koyuyor ve tests/parity.mjs anahtar kümesini
+  // birebir karşılaştırıyor (parity.mjs:56 — yeni anahtar = FARK).
+  // Graham SADECE BİLGİ olduğu için /api/score’un alan kümesini ve parite
+  // referansını kaydırmaya DEĞMEZ: `analiz` katmanında taşınıyor.
+  // (Alternatif baseline’ı `--zorla` ile yenilemekti; "yeni doğru cevap bu"
+  // demek olurdu — skor DEĞİŞMEDİĞİ için yanlış olurdu.)
+  const { graham: grahamHam, ...faTel } = fa;
   return {
-    kayit: { sym, market, ta, fa, composite: composite(eng, fa.score, ta.score) },
+    kayit: { sym, market, ta, fa: faTel, composite: composite(eng, faTel.score, ta.score) },
     r: ham.r || null,
+    graham: grahamHam || null,
   };
 }
 
@@ -441,10 +506,13 @@ export async function recommendOne(eng, row, vade, opt = {}) {
 //  `valuation` SADELEŞTİRİLDİ, KISITLANMADI: motor `valuation`dan yalnız
 //  `.pe` okuyor (_motor.js:1155, tek kullanım). Bu yüzden `{ pe }` geçmek
 //  app.js'in tam `valuation` nesnesini geçmesiyle DAVRANIŞ OLARAK AYNI.
-//  BIST'te `pe` YOK: `scoreFaBIST` üretmiyor, app.js onu `bistValuation`
-//  ile çözüyor ve o işlev `fetchBistMarketCap` (app.js:6008) ayağına
-//  bağlı — motorda değil. Sonuç: BIST'te F/K bazlı değerleme cezası
-//  uygulanmıyor. Bu BİLİNEN bir eksik, sessiz değil.
+//  BIST'te `pe` YOK: `scoreFaBIST` üretmiyor. GÜNCELLENDİ (2026-11-22):
+//  `bistValuation` ve `fetchBistMarketCap` MOTORA alındı (dilim `bist-val`),
+//  yani F/K artık ÖLÇÜLEBİLİR — Graham bacağı onu kullanıyor. Buna
+//  rağmen `valuation.pe` BİLEREK boş bırakıldı: computeHolisticScore onu
+//  OKUYOR, yani eklemek BIST skorlarını KAYDIRIRDI (parite FARK 0 bozulur).
+//  Skoru değiştiren adım ayrı ve AÇIK ONAY ister. Sonuç: BIST'te F/K bazlı
+//  değerleme cezası hâlâ uygulanmıyor — BİLİNEN eksik, sessiz değil.
 //
 //  @param {object} eng   buildMotor(H) çıktısı
 //  @param {object} kayit kayitHam'ın kaydı (fa.score · ta.score · fa.pe)
@@ -453,7 +521,7 @@ export async function recommendOne(eng, row, vade, opt = {}) {
 //                            hesaplanmasın: mum pahalı değil ama çift
 //                            hesap iki doğruluk kaynağı demek)
 // ---------------------------------------------------------------------
-export function analizKatmani(eng, kayit, r, plan) {
+export function analizKatmani(eng, kayit, r, plan, graham) {
   const faScore = (kayit && kayit.fa) ? kayit.fa.score : null;
   const taScore = (kayit && kayit.ta) ? kayit.ta.score : null;
   const pe = (kayit && kayit.fa && kayit.fa.pe != null) ? kayit.fa.pe : null;
@@ -479,6 +547,12 @@ export function analizKatmani(eng, kayit, r, plan) {
       coreSoft: hol.coreSoft,
       buyumeCls: hol.growthNote ? hol.growthNote.cls : null,
     },
+    // 📐 Benjamin Graham's Formula — HAM sayı + makine kodu; SADECE BİLGİ.
+    // `butunculluk` ile YAN YANA duruyor ama onun İÇİNE GİRMİYOR:
+    // computeHolisticScore bu alanların hiçbirini ne okur ne yazar, bu yüzden
+    // bileşke/uygunluk skoru DEĞİŞMEZ (parite FARK 0 bunun kanıtı).
+    // Ölçülemediyse `null` — "hesaplayamadım" ile "sıfır" ayrı şeyler.
+    graham: graham || null,
   };
 }
 
@@ -497,7 +571,7 @@ export function analizKatmani(eng, kayit, r, plan) {
 //  Burada ise `kayitHam` sembol başına BİR kez koşuyor.
 // ---------------------------------------------------------------------
 export async function analyzeOne(eng, row, vade, opt = {}) {
-  const { kayit, r } = await kayitHam(eng, row, vade, opt);
+  const { kayit, r, graham } = await kayitHam(eng, row, vade, opt);
   const plan = planKatmani(eng, r, vade);
-  return { ...kayit, plan, analiz: analizKatmani(eng, kayit, r, plan) };
+  return { ...kayit, plan, analiz: analizKatmani(eng, kayit, r, plan, graham) };
 }

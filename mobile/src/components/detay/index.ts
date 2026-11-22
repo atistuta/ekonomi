@@ -28,6 +28,11 @@ export { DetayEylemler, type DetayEylemlerProps } from './DetayEylemler';
 // Motorun `firsat` etiketi sayfanin baska HICBIR yerinde basilmiyordu
 // (gerekce dosyada). Esik/formul YOK, sayi uretmiyor.
 export { EtiketSeridi, type EtiketSeridiProps } from './EtiketSeridi';
+// ANALYZE TURUNUN İÇİNDE: `analiz.graham` — EK AĞ TURU YOK.
+// AYRI KART, ÇÜNKÜ BİLEŞKE SKORA GİRMİYOR (İçsel Değer/DCF katmanı
+// gibi): TemelKart'ın içine konsa 0-100 temel skoru besliyormuş gibi
+// okunurdu. Katsayılar motorda; kart çarpanı telden HAM alıyor.
+export { GrahamKart, type GrahamKartProps } from './GrahamKart';
 // ANALYZE TURUNUN DIŞI: `/api/news` çoklu-sembol kipi TEK sembolle.
 // Adı `components/bugun/HisseHaberleriKarti` ile karışmasın diye kısa:
 // o kart TAKİP LİSTESİNİ soruyor, bu kart TEK sembolü (gerekçe dosyada).

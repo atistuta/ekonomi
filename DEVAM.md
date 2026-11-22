@@ -945,7 +945,86 @@ one surmemistir - bu uyari karta basiliyor.
 
 ### 17.4 OLCULMEDI / SONRAKI
 - Gercek cihazda/tarayicida GORSEL dogrulama yapilmadi (deploy sonrasi).
-- Native port HENUZ YOK: `mobile/src/components/analiz/KarsilastirKart.tsx`
-  ve `mobile/src/app/hisse/[sembol].tsx`. Uc INCE ISTEMCI kalir: formul,
-  esik, kirpma ve Turkce cumle UCTA OLMAZ; sayilar hazir gelir.
+- Native port TAMAM (bkz. 17.6). Uc INCE ISTEMCI kaldi: formul, esik,
+  kirpma ve rakam UCTA YOK; sayilar hazir gelir.
+- Gercek CIHAZDA Graham karti ve karsilastirma satiri henuz GORULMEDI.
 - 1974 revizyonu: AAA getirisi tasiyan izinli kaynak bulunursa acilabilir.
+
+### 17.5 Graham tel katmani (api/_akis.js) - OLCULDU 2026-11-22
+
+- Dosya: 503 -> 577 satir, saf CRLF (CRLF 577 / LF 577). node --check: GECTI.
+- Eklendi: grahamTel() beyaz liste (kriterTel ardina), scoreFaUS + scoreFaBIST
+  graham bacagi, kayitHam ayirma, analizKatmani(.., graham) 5. parametre.
+- TASARIM KARARI (olculdu): graham `fa` icine KONULMADI. tests/run.mjs:76
+  scoreOne kaydini oldugu gibi baseline.json a koyuyor, parity.mjs:56 anahtar
+  kumesini birebir diff ediyor -> yeni anahtar = FARK. Graham SADECE BILGI
+  oldugu icin /api/score sozlesmesi kaydirilmadi; `analiz` katmaninda tasiniyor.
+- curSym (TL simgesi) beyaz listeye girmedigi icin tele cikmiyor (compare.js
+  basligi: "cevapta bicimlenmis tek alan yok").
+- BIST pe yorumu duzeltildi: bistValuation artik motorda (dilim bist-val), ama
+  valuation.pe BILEREK bos - computeHolisticScore onu okuyor, eklemek skoru
+  kaydirirdi (ayri ve acik onay ister).
+- KOSULDU 2026-11-22 (hepsi YESIL): `node tests/parity.mjs` -> FARK 0, 29
+  karsilastirma noktasi birebir ayni | `node tests/uretim-test.mjs` -> 73
+  denetim gecti (_motor.js <-> app.js, _ayar.js <-> config.js birebir) |
+  `node tests/uc-test.mjs` -> 2489 denetim gecti (yeni (a1b) kapisi dahil).
+- Kapi (5)f GUNCELLENDI: kayit ozlugu artik `fa: faTel`; yeni (a1b) kapisi
+  `const { graham: grahamHam, ...faTel } = fa;` ayristirmasini VE
+  `!/kayit:\s*\{[^}]*graham/` sartini birlikte civiliyor -> satir kalkarsa
+  graham tele sizar ve parity.mjs patlar.
+
+### 17.6 Native port (adim g-iii) - OLCULDU 2026-11-22
+
+- YENI DOSYA `mobile/src/components/detay/GrahamKart.tsx`: 188 satir, 7309
+  bayt, saf LF. Dort yol: `undefined` -> GRAHAM_GONDERILMEDI (OlcemedimKutu),
+  `null` -> GRAHAM_OLCULEMEDI, `ok:false` -> GRAHAM_NEDEN_SOZLUK[reason] +
+  GRAHAM_NEDEN_ROZET pili, `ok:true` -> deger / fark% + yon / uygulanan F/K
+  carpani / kullanilan buyume (+ kirpma notu ve ham buyume satiri) / HBK /
+  DDB + AYRI "Graham Sayisi" bolumu + GRAHAM_UYARI dipnotu.
+- UCTA HESAP YOK, SAYI YOK: 8,5 / 2 / 22,5 hicbir etikette gecmiyor; carpan
+  telden HAM `impliedPE` olarak geliyor, etiket "Uygulanan F/K carpani".
+  Sozluk cumleleri rakamsiz (kapi (19)b ilkesi). Para birimi idiomu
+  `market === 'BIST' ? 'TRY' : null`.
+- `detay/index.ts` (LF): ad ad export + gerekce yorumu. AYRI KART, cunku
+  bileske skora GIRMIYOR (DCF/Icsel Deger katmani gibi); TemelKart'in icine
+  konsa 0-100 temel skoru besliyormus gibi okunurdu.
+- `mobile/src/app/hisse/[sembol].tsx` (LF): `<GrahamKart satir={satir} />`
+  TemelKart'tan HEMEN SONRA (satir 238), import satir 79. EK AG TURU YOK -
+  `satir.analiz.graham` ekranin elindeki turden geliyor.
+- `mobile/src/components/analiz/KarsilastirKart.tsx` (CRLF, 682 satir,
+  29484 bayt, CRLF 682 / LF 682): Graham bolumu kartin EN SONUNA, "Temel
+  metrikler" blogundan sonra. NEDENI: native'de "Atahan Notlari" satiri
+  YOK ve `computeCompareVerdict` cumlesi de YOK (kartin kendi basligi
+  yaziyor). Olmayan bir satirin "ustune" koymak icin uydurma bir Atahan
+  satiri acmak, web'e ait bir siralamayi native'de taklit etmek olurdu;
+  bu yuzden webdeki "Atahan'in hemen ustu" konumu native'de "kartin son
+  bolumu" olarak karsilandi. Her sembol icin SEMBOL - DEGER - KONUM.
+- Mobil typecheck: `cd mobile && node ./node_modules/typescript/bin/tsc
+  --noEmit -p tsconfig.json` -> EXIT=0 (iki kez: mount sonrasi ve
+  karsilastirma eklemesi sonrasi).
+
+### 17.7 ARIZA VE TAM KURTARMA: sozluk.ts sifirlanmasi (kapandi)
+
+- NE OLDU: Graham sozlugunu ekleyen betik `mobile/src/lib/sozluk.ts`'i
+  SIFIRLADI. Sebep: `io.open(P, 'w')` yazmadan ONCE dosyayi kirpar;
+  ardindan gelen `.write()` `UnicodeEncodeError: surrogates not allowed`
+  ile patladi (📐 yanlis sekilde `'\ud83d\udcd0'` tek-surrogate cifti
+  olarak yazilmisti; dogrusu `'\U0001F4D0'`). Dosya 0 baytta kaldi.
+- KURTARMA: `git checkout --` ile geri alindi ve UC BAGIMSIZ kopyayla
+  bayt-bayt ayni oldugu KANITLANDI: (1) HEAD blob'u 34047 bayt / 861 LF,
+  (2) 8 Kasim Expo web sourcemap'i
+  `mobile/dist/_expo/static/js/web/entry-54fd791aea3115603f90744a799369db.js.map`
+  icindeki `sources[418] = '/src/lib/sozluk.ts'` -> `sourcesContent` 34047
+  karakter, (3) `.claude/worktrees/finans-yatirim-profili-214f98/` altindaki
+  14 Kasim kopyasi (34908 bayt = ayni icerik, CRLF). LF'e normalize edildi;
+  `git hash-object` = `7e6b70dbbfdff9f4e9f182213ef8bb6cf85225ba` =
+  `git rev-parse HEAD:mobile/src/lib/sozluk.ts`. HICBIR VERI KAYBI YOK.
+- KURAL (bundan sonra zorunlu): kaynak dosyaya ASLA dogrudan `open(P,'w')`
+  yazilmaz. Once `P + '.tmp'` yazilir, sonra `os.replace(T, P)` yapilir ->
+  kodlama hatasi dosyayi KIRPAMAZ. Agir Turkce/emoji iceren icerik bash
+  heredoc (`<<'TSX'`) ile aynen yazilir, python yalniz EKLEME yapar.
+- Konsol kodlamasi cp1254: 📐 ve -> basilamaz. Her betige
+  `sys.stdout.reconfigure(encoding='utf-8', errors='replace')` eklenir;
+  `python -I` PYTHONIOENCODING'i yok sayar (-I, -E'yi ima eder). Basarili
+  `os.replace` sonrasi print patlamasi dosyanin bozuk oldugunu GOSTERMEZ -
+  dogrulama bayt/satir sayisiyla yapilir, icerigi ekrana basarak degil.

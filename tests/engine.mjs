@@ -81,7 +81,28 @@ export const SLICES = [
   // yani buyume notu sinifi (cls) ayni dilimde olmak zorunda.
   ['holistic', '  function computeHolisticScore(o) {', '  function buildConjunctureNote(o) {'],
   ['fa-bist', '  async function fetchIsYatirimMali(symbol) {', '  const bistMcapCache = {};'],
+  // BIST degerleme cekirdegi (piyasa degeri + F/K, PD/DD, HBK, DDB, pay sayisi).
+  // `fa-bist` diliminin bitis imi tam burada duruyordu: bolge BILEREK disarida
+  // kalmisti. Graham icin ZORUNLU oldu -> OLCULDU (2026-11-22): sirket-karti
+  // URL'si api/_ag.js:202'de ZATEN tanimli, fetchVia motora enjekte ediliyor
+  // (_motor.js:113), bolgede document/innerHTML/localStorage/querySelector YOK.
+  // BIST'te HBK (eps) yalniz piyasa degeri ile turetilebiliyor; bu dilim olmadan
+  // ucun BIST Graham bacagi OLCULEMEZ kalirdi.
+  // SKORA DOKUNMAZ: computeFaScore bu alanlarin hicbirini okumaz.
+  // Bitis imi renderFundamentalBIST'ten ONCE - o DOM yazar.
+  ['bist-val', '  const bistMcapCache = {};', '  async function renderFundamentalBIST(symbol, wrap, req) {'],
   ['fa-us', '  async function secGet(url, timeout = 12000) {', '  // ===== Genel sekmesi ====='],
+  // 📐 Benjamin Graham's Formula + DCF girdi kurucusu (usDcfIn).
+  // OLCULDU (2026-11-22): app.js 5793-5872 bolgesinde document/innerHTML/
+  // fetch/localStorage/querySelector/setDiag YOK - saf girdi-cikti.
+  // OLCULDU: bu bolge HICBIR dilimin icinde degildi (fa-us dilimi 6825->7140),
+  // bu yuzden api/_motor.js'te computeGraham/grahamIn YOKTU ve uc, Graham
+  // sayilarini TASIYAMIYORDU. Native istemci hesap yapmaz (HAM SAYI kurali)
+  // -> formul motora devredildi.
+  // SKORA DOKUNMAZ: Graham katmani DCF gibi SADECE BILGI; computeHolisticScore
+  // onu ne okur ne yazar (parity.mjs FARK 0 kalir).
+  // grahamCardHTML BILEREK DISARIDA: Turkce HTML uretir (bitis imi ondan ONCE).
+  ['graham', '  function usDcfIn(sec, price, eps) {', '  // Sonuç ekranı Graham kartı (geniş). fmtP: para biçimlendirici.'],
   // Nedensellik (📉 Gunun Nedeni) cekirdegi: CAUSAL_INDEX_AFFINITY +
   // causalAlign + computeCausalLinks. OLCULDU (2026-10-18): bu bolgede
   // document/innerHTML/fetch/localStorage YOK — saf, girdi-cikti. DOM'a
@@ -286,7 +307,14 @@ export const EXPORTS = [
   // onu da taHamGostergeler taşıyor (HAM SAYI kuralı).
   'taHamGostergeler', 'taHamUcGostergeler',
   'fetchIsYatirimMali', 'parseIsMali', 'bistFundamentalModel',
+  // BIST degerleme (2026-11-22, Graham icin). `curSym`/`mcap` HAM: uc yalniz
+  // sayi tasir, para simgesi ve bicimleme istemcide kalir.
+  'fetchBistMarketCap', 'bistValuation',
   'secGet', 'secResolveCik', 'secFetchModel',
+  // 📐 Graham katmani (2026-11-22). usDcfIn de disa veriliyor: Graham'in
+  // `g` girdisi (gelir buyumesi) oradan geliyor; uc onu YENIDEN yazmasin.
+  // grahamCardHTML YOK - Turkce HTML uretir, HAM SAYI kuralina aykiri.
+  'GRAHAM', 'computeGraham', 'grahamIn', 'usDcfIn',
   // Nedensellik katmani: 2026-10-18'de /api/causal icin devredildi.
   // SKORA DOKUNMAZ — composite/vade skorunu ne okur ne yazar; yalniz
   // "hangi gundem konsepti bu endeks hareketiyle hizali" korelasyon

@@ -722,9 +722,19 @@ ok('⑤a · AZAMI_SEMBOL /api/score ile aynı', recAzami === AZAMI_SEMBOL && rec
   const fsrc = readFileSync(AKIS_PATH, 'utf8');
 
   // (a1) kaydın ÇEKİRDEK alan kümesi — `kayitHam`ın nesne özlüğü.
+  // GÜNCELLENDİ 2026-11-22: Graham katmanı `fa`dan AYRILIYOR — `graham`
+  // SADECE BİLGİ ve /api/score sözleşmesine GİRMİYOR (parite referansı
+  // kaymıyor), bu yüzden özlük `fa: faTel` oldu. İSTEMCİNİN GÖRDÜĞÜ alan
+  // kümesi DEĞİŞMEDİ: `faTel` = `fa` eksi `graham`. Ayırmanın kendisi de
+  // (a1b)'de çivili — satır kalkarsa `graham` tele sızar ve parite patlar.
   ok('⑤f · kayıt çekirdeği ÇİVİLİ: { sym, market, ta, fa, composite }',
-    /kayit:\s*\{\s*sym,\s*market,\s*ta,\s*fa,\s*composite:\s*composite\(eng,\s*fa\.score,\s*ta\.score\)\s*\}/.test(fsrc),
+    /kayit:\s*\{\s*sym,\s*market,\s*ta,\s*fa:\s*faTel,\s*composite:\s*composite\(eng,\s*faTel\.score,\s*ta\.score\)\s*\}/.test(fsrc),
     'kayitHam nesne özlüğü yerinde');
+  // (a1b) Graham AYRIŞTIRMASI çivili: `graham` kayda SIZMIYOR.
+  ok('⑤f · `graham` `fa`dan ayrılıyor (kayda sızmıyor)',
+    /const\s*\{\s*graham:\s*grahamHam,\s*\.\.\.faTel\s*\}\s*=\s*fa;/.test(fsrc)
+    && !/kayit:\s*\{[^}]*graham/.test(fsrc),
+    'kayitHam ayrıştırması yerinde');
   // (a2) öneri kaydı ÇEKİRDEK + İKİ katman, FAZLASI YOK. Üçüncü bir katman
   //      eklenirse bu denetim PATLAR — istenen davranış: yeni alan kendi
   //      kapısını yazarak doğsun, sessizce değil.
