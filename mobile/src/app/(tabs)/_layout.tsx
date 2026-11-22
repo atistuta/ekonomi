@@ -1,13 +1,20 @@
 // =====================================================================
 //  5 SEKME — web menüsüyle BİREBİR aynı sıra         (FAZ 1 / native)
 // ---------------------------------------------------------------------
-//  NE: Alt sekme çubuğu. Sıra ve adlar `index.html`'deki üst menüden
-//  AYNEN alındı: Listeler, Bugün, Keşfet, Analiz, Arama.
+//  NE: Alt sekme çubuğu. Sıra `index.html`'deki üst menüden AYNEN
+//  alındı: Evren, Bugün, Keşfet, Analiz, Arama.
 //
 //  NEDEN BİREBİR: ürün kuralı "5 menü düzeni korunur". Kullanıcı aynı
 //  işi web'de 3. sekmede yapıyorsa telefonda da 3. sekmede yapmalı;
 //  sıra değişirse kas hafızası bozulur ve "yeni uygulama öğrenme"
-//  hissi doğar. Sıra ve adlar DEĞİŞMEDİ.
+//  hissi doğar. SIRA DEĞİŞMEDİ, sekme SAYISI değişmedi.
+//
+//  TEK AD DEĞİŞİKLİĞİ (PROcess, 2026-11-15): 1. sekme "Listeler" →
+//  "Evren". Gerekçe ÜRÜN tanımı: kullanıcı adlandırılmış listelerden
+//  KENDİ hisse evrenini kuruyor ve ekranın işi o evren (PROcess.txt
+//  satır 1: "evren sekmesi olacak ve onun altında da farklı farklı
+//  listeler olacak"). Rota adı (`index`) ve sekme sırası DOKUNULMADI —
+//  derin bağlantılar ve kas hafızası korunuyor.
 //
 //  NEDEN `expo-router/js-tabs`: kökten `import { Tabs } from
 //  'expo-router'` bu sürümde KULLANIM DIŞI (ÖLÇÜLDÜ: exports.d.ts:41
@@ -57,7 +64,7 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: colors.bg },
-        tabBarActiveTintColor: colors.gold,
+        tabBarActiveTintColor: colors.vurgu,
         tabBarInactiveTintColor: colors.textDim,
         tabBarStyle: {
           backgroundColor: colors.bgSoft,
@@ -71,36 +78,36 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Listeler',
-          tabBarIcon: ({ color }) => ikonCiz('listeler', color, colors.gold),
+          title: 'Evren',
+          tabBarIcon: ({ color }) => ikonCiz('listeler', color, colors.vurgu),
         }}
       />
       <Tabs.Screen
         name="bugun"
         options={{
           title: 'Bugün',
-          tabBarIcon: ({ color }) => ikonCiz('bugun', color, colors.gold),
+          tabBarIcon: ({ color }) => ikonCiz('bugun', color, colors.vurgu),
         }}
       />
       <Tabs.Screen
         name="kesfet"
         options={{
           title: 'Keşfet',
-          tabBarIcon: ({ color }) => ikonCiz('kesfet', color, colors.gold),
+          tabBarIcon: ({ color }) => ikonCiz('kesfet', color, colors.vurgu),
         }}
       />
       <Tabs.Screen
         name="analiz"
         options={{
           title: 'Analiz',
-          tabBarIcon: ({ color }) => ikonCiz('analiz', color, colors.gold),
+          tabBarIcon: ({ color }) => ikonCiz('analiz', color, colors.vurgu),
         }}
       />
       <Tabs.Screen
         name="arama"
         options={{
           title: 'Arama',
-          tabBarIcon: ({ color }) => ikonCiz('arama', color, colors.gold),
+          tabBarIcon: ({ color }) => ikonCiz('arama', color, colors.vurgu),
         }}
       />
     </Tabs>

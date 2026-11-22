@@ -192,6 +192,11 @@ import * as METAL from '../api/_metal.js';
 // YEDIYE cikti. Ayni gerekce: liste `proxy.js`in tablosundan okundugu icin
 // ice aktarma eklenmezse `MOD[r]` tanimsiz kalir ve TAKIM COKER.
 import * as NEDEN from '../api/_neden.js';
+// `_sahipler.js` bu tur acildi (Sahipler sekmesi: Kurumsal/Icerideki/
+// Politikacilar). Rota kumesi ONDAN ON BIRE cikti. Ayni gerekce: liste
+// `proxy.js`in tablosundan okundugu icin ice aktarma eklenmezse
+// `MOD[r]` tanimsiz kalir ve TAKIM COKER.
+import * as SAHIPLER from '../api/_sahipler.js';
 // `_katalizor.js` bu tur acildi (Katalizor/Risk -> yaklasan temettu):
 // rota kumesi YEDIDEN SEKIZE cikti. Ayni gerekce: liste `proxy.js`in
 // tablosundan okundugu icin ice aktarma eklenmezse `MOD[r]` tanimsiz
@@ -6113,6 +6118,7 @@ bolum('⑰ /api/degisim · gundem · iceriden · kripto · kur · metal · neden
   const KATALIZOR_PATH = path.join(ROOT, 'api', '_katalizor.js');
   const MALI_PATH = path.join(ROOT, 'api', '_mali.js');
   const HAREKET_PATH = path.join(ROOT, 'api', '_hareket.js');
+  const SAHIPLER_PATH = path.join(ROOT, 'api', '_sahipler.js');
   const kaynaklar = {
     degisim: readFileSync(DEGISIM_PATH, 'utf8'),
     gundem: readFileSync(GUNDEM_PATH, 'utf8'),
@@ -6124,6 +6130,7 @@ bolum('⑰ /api/degisim · gundem · iceriden · kripto · kur · metal · neden
     katalizor: readFileSync(KATALIZOR_PATH, 'utf8'),
     mali: readFileSync(MALI_PATH, 'utf8'),
     hareket: readFileSync(HAREKET_PATH, 'utf8'),
+    sahipler: readFileSync(SAHIPLER_PATH, 'utf8'),
   };
   // Yorumları SÜZ: aşağıdaki sızıntı kapıları GÖVDEYE bakıyor, nota değil
   // (⑯k ile aynı kalıp — iki ayrı süzgeç biçimi uydurulmadı).
@@ -6137,17 +6144,18 @@ bolum('⑰ /api/degisim · gundem · iceriden · kripto · kur · metal · neden
     degisim: DEGISIM, gundem: GUNDEM, iceriden: ICERIDEN,
     kripto: KRIPTO, kur: KUR, metal: METAL, neden: NEDEN,
     katalizor: KATALIZOR, mali: MALI, hareket: HAREKET,
+    sahipler: SAHIPLER,
   };
   const YOL = {
     degisim: DEGISIM_PATH, gundem: GUNDEM_PATH, iceriden: ICERIDEN_PATH,
     kripto: KRIPTO_PATH, kur: KUR_PATH, metal: METAL_PATH,
     neden: NEDEN_PATH, katalizor: KATALIZOR_PATH, mali: MALI_PATH,
-    hareket: HAREKET_PATH,
+    hareket: HAREKET_PATH, sahipler: SAHIPLER_PATH,
   };
 
   // --- ⑰a yüzey --------------------------------------------------------
-  ok('⑰a · TASIYICI_ROTALARI on rota ilan ediyor (proxy.js tablosundan)',
-    TASIYICI_ROTALARI.join(',') === 'degisim,gundem,hareket,iceriden,katalizor,kripto,kur,mali,metal,neden',
+  ok('⑰a · TASIYICI_ROTALARI on bir rota ilan ediyor (proxy.js tablosundan)',
+    TASIYICI_ROTALARI.join(',') === 'degisim,gundem,hareket,iceriden,katalizor,kripto,kur,mali,metal,neden,sahipler',
     TASIYICI_ROTALARI.join(','));
   ok('⑰a · TASIYICI_ROTALARI dondurulmuş (tablo çalışma anında değişmez)',
     Object.isFrozen(TASIYICI_ROTALARI));
@@ -6171,8 +6179,8 @@ bolum('⑰ /api/degisim · gundem · iceriden · kripto · kur · metal · neden
       .filter((f) => f.endsWith('.js') && !f.startsWith('_'));
     ok('⑰b · KİLİT · `api/*.js` uç dosyası sayısı hâlâ 12 (Hobby tavanı)',
       dosyalar17.length === 12, `${dosyalar17.length}: ${dosyalar17.join(',')}`);
-    ok('⑰b · ON uç için YENİ uç dosyası YOK (hepsi `_` önekli MODÜL)',
-      !dosyalar17.some((f) => /degisim|gundem|hareket|iceriden|katalizor|kripto|kur|mali|metal|neden/.test(f)),
+    ok('⑰b · ON BİR uç için YENİ uç dosyası YOK (hepsi `_` önekli MODÜL)',
+      !dosyalar17.some((f) => /degisim|gundem|hareket|iceriden|katalizor|kripto|kur|mali|metal|neden|sahipler/.test(f)),
       dosyalar17.join(','));
     for (const r of TASIYICI_ROTALARI) {
       ok(`⑰b · \`api/_${r}.js\` gerçekten \`_\` önekli`,
@@ -6188,11 +6196,11 @@ bolum('⑰ /api/degisim · gundem · iceriden · kripto · kur · metal · neden
         proxyS17.includes(`import('./_${r}.js')`), 'literal');
     }
     ok('⑰b · proxy.js rota adını ELLE `if` olarak yazmıyor (tablo tek kaynak)',
-      !/=== 'degisim'|=== 'gundem'|=== 'hareket'|=== 'iceriden'|=== 'katalizor'|=== 'kripto'|=== 'kur'|=== 'mali'|=== 'metal'|=== 'neden'/
+      !/=== 'degisim'|=== 'gundem'|=== 'hareket'|=== 'iceriden'|=== 'katalizor'|=== 'kripto'|=== 'kur'|=== 'mali'|=== 'metal'|=== 'neden'|=== 'sahipler'/
         .test(proxyS17), 'temiz');
     ok('⑰b · `functions` bloğuna YENİ kalem girmedi (onu proxy bütçesinde)',
       !Object.keys(vercel17.functions || {})
-        .some((k) => /degisim|gundem|hareket|iceriden|katalizor|kripto|kur|mali|metal|neden/.test(k)),
+        .some((k) => /degisim|gundem|hareket|iceriden|katalizor|kripto|kur|mali|metal|neden|sahipler/.test(k)),
       Object.keys(vercel17.functions || {}).join(','));
   }
 
@@ -6251,6 +6259,7 @@ bolum('⑰ /api/degisim · gundem · iceriden · kripto · kur · metal · neden
       iceriden: MOD.iceriden.HANDLERLAR.iceriden,
       metal: MOD.metal.HANDLERLAR.metal,
       neden: MOD.neden.HANDLERLAR.neden,
+      sahipler: MOD.sahipler.HANDLERLAR.sahipler,
       katalizor: MOD.katalizor.HANDLERLAR.katalizor,
       mali: MOD.mali.HANDLERLAR.mali,
       hareket: MOD.hareket.HANDLERLAR.hareket,

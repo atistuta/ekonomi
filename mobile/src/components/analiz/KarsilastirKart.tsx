@@ -331,7 +331,7 @@ export function KarsilastirKart({
                 karıştırmak olurdu. */}
             {(veri?.atlanan?.length ?? 0) > 0 ? (
               <View style={styles.dipnot}>
-                <Pill label="ölçülmedi" tone="gold" glyph={null} size="sm" />
+                <Pill label="ölçülmedi" tone="vurgu" glyph={null} size="sm" />
                 <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                   {(veri?.atlanan ?? []).join(', ') +
                     ' — zaman bütçesi dolduğu için bu turda hiç ölçülmedi.'}
@@ -440,7 +440,7 @@ export function KarsilastirKart({
 
           {olculemeyenKunye.length ? (
             <View style={styles.dipnot}>
-              <Pill label="ölçemedim" tone="gold" glyph={null} size="sm" />
+              <Pill label="ölçemedim" tone="vurgu" glyph={null} size="sm" />
               <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                 {olculemeyenKunye.join(', ') +
                   ' — künye turu düştü, bu sembolün temel alanları ölçülemedi.'}
@@ -501,7 +501,7 @@ function Satir({ kayit, skor }: { kayit: SiraKayit; skor: AnalyzeRow | null }) {
       <Text style={[type.small, numeric, styles.hSayi, { color: colors.textDim }]}>
         {formatScore(faSkor)}
       </Text>
-      <Text style={[type.smallBold, numeric, styles.hSira, { color: colors.gold }]}>
+      <Text style={[type.smallBold, numeric, styles.hSira, { color: colors.vurgu }]}>
         {String(kayit.sira)}
       </Text>
 

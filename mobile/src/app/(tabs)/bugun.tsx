@@ -669,7 +669,7 @@ function MakroNabizKarti() {
           {veri.gerceklik.celiski.length ? (
             <>
               <View style={styles.ust}>
-                <Pill label="yön teyit edilmedi" tone="gold" glyph={null} size="sm" />
+                <Pill label="yön teyit edilmedi" tone="vurgu" glyph={null} size="sm" />
                 <Text style={[type.small, { color: colors.text, flex: 1 }]}>
                   {'Duruş haber METNİNDEN geliyor; ölçülen fiyat onu onaylamadı.'}
                 </Text>

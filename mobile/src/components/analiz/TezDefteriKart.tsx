@@ -68,12 +68,12 @@ export type TezDefteriKartProps = {
   onerilenSembol?: string;
 };
 
-type Ton = 'positive' | 'negative' | 'neutral' | 'gold' | 'info';
+type Ton = 'positive' | 'negative' | 'neutral' | 'vurgu' | 'info';
 
 /** Dayanak durumunun düz-dil karşılığı — renk tek ayırt edici değil. */
 const DAYANAK_SOZ: Record<Tez['pillars'][number]['status'], { soz: string; ton: Ton }> = {
   ok: { soz: 'sağlam', ton: 'positive' },
-  watch: { soz: 'izlemede', ton: 'gold' },
+  watch: { soz: 'izlemede', ton: 'vurgu' },
   bad: { soz: 'bozuldu', ton: 'negative' },
 };
 
@@ -606,7 +606,7 @@ function TezBlogu({ tez, onDuzenle }: { tez: Tez; onDuzenle: () => void }) {
             />
           </View>
           {silSoruldu ? (
-            <Text style={[type.micro, { color: colors.gold }]}>
+            <Text style={[type.micro, { color: colors.vurgu }]}>
               {tez.symbol + ' tezi ve günlüğü silinecek. Onaylamak için düğmeye yeniden bas.'}
             </Text>
           ) : null}

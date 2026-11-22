@@ -180,6 +180,30 @@ async function getCrumb(force) {
   return CRUMB;
 }
 
+// Ham quoteSummary cekici — MODULES listesi DISINDAKI moduller icin.
+// NEDEN BURADA: crumb+cookie el sikismasi ve 30 dk'lik CRUMB onbellegi bu
+// dosyanin modul duzeyinde yasiyor. Ikinci bir dosyada ikinci bir el sikismasi
+// kurmak Yahoo'ya iki kat istek demek olurdu (ucuncu taraflara tekrar firtinasi
+// yok kurali). Cagiran taraf HAM JSON alir; yorum/esik/metin BURADA YOK.
+// 401 -> crumb bayatlamis demektir; tek seferlik tazeleyip bir kez yineliyoruz
+// (fetchOne ile ayni kalip).
+export async function quoteSummaryHam(sym, modules) {
+  const cek = async (ck) => {
+    const u = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(sym)}`
+            + `?modules=${encodeURIComponent(modules)}&crumb=${encodeURIComponent(ck.crumb)}`;
+    const r = await fetch(u, { headers: { 'User-Agent': UA, 'Cookie': ck.cookie } });
+    if (r.status === 401) { const e = new Error('401'); e.needCrumb = true; throw e; }
+    const j = await r.json().catch(() => null);
+    return j?.quoteSummary?.result?.[0] || null;
+  };
+  try {
+    return await cek(await getCrumb(false));
+  } catch (e) {
+    if (!e || !e.needCrumb) throw e;
+    return await cek(await getCrumb(true));
+  }
+}
+
 const num = (o) => (o && typeof o.raw === 'number') ? o.raw : null;
 
 // calendarEvents + earningsTrend → sonraki bilanço tarihi + analist konsensüsü.
@@ -243,6 +267,26 @@ async function fetchOne(sym, ck, deep) {
     revenueGrowth: num(fd.revenueGrowth),
     earningsGrowth: num(fd.earningsGrowth),
     debtToEquity: num(fd.debtToEquity),
+    // --- ANALIST HEDEF FIYATI (Wall Street) ---
+    // Modul (`financialData`) ZATEN isteniyordu (MODULES, bu dosyanin
+    // basi), bu dort alan okunmuyordu: EK ust-kaynak istegi YOK, ayni
+    // govdeden geliyor, yeni fonksiyon da acilmadi (Vercel 12 fonksiyon
+    // tavani).
+    // HAM FIYAT, `currency` biriminde — `price` ile AYNI olcek.
+    // HEDEFE UZAKLIK BURADA HESAPLANMIYOR: o bir turetme
+    // ((hedef-fiyat)/fiyat) ve karar degeri tasir; uc iki ham sayiyi
+    // dondurur, oran istemcide bicimlenir (ham sayi kurali).
+    // SKORA GIRMEZ: temel skorun 17 kriteri `app.js` motorunda yazili;
+    // analist hedefi o kumede YOK ve buraya eklenmesi skoru kaydirirdi.
+    // TAVSIYE ALANI BILEREK ALINMADI: Yahoo ayni govdede
+    // `recommendationKey` ('buy'/'hold') tasiyor. Onu basmak ucuncu bir
+    // tarafin AL/SAT yargisini uygulamanin sesiyle tekrar etmek olurdu —
+    // uygulama bilgi araci, tavsiye vermiyor. Hedef fiyat ve analist
+    // SAYISI olcum; 'al' kelimesi karar.
+    targetMeanPrice: num(fd.targetMeanPrice),       // analist ortalamasi, currency birimi
+    targetHighPrice: num(fd.targetHighPrice),       // en yuksek hedef
+    targetLowPrice: num(fd.targetLowPrice),         // en dusuk hedef
+    numberOfAnalystOpinions: num(fd.numberOfAnalystOpinions), // ADET (kac analist)
     dividendYield: num(sd.dividendYield),
     // --- TEMETTÜ ALANLARI ---
     // Moduller (summaryDetail / defaultKeyStatistics / calendarEvents) zaten ISTENIYORDU

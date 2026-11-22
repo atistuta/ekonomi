@@ -77,7 +77,7 @@ export function ListelerKart() {
           </Text>
         )}
         {evren && evren.budandi ? (
-          <Text style={[type.micro, { color: colors.gold }]}>
+          <Text style={[type.micro, { color: colors.vurgu }]}>
             Evren 8 sembolde kesildi: motor tek turda en çok 8 sembol ölçüyor, sonrası evrene
             katılmadı.
           </Text>

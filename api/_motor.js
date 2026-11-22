@@ -50,7 +50,7 @@
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:4dc3809a91adbc51';
+export const IMZA = 'sha256:db1e1ccb5723ec2b';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
@@ -2136,7 +2136,7 @@ const navigator = H.dead("navigator");
     const incAsOf = (revT && revT.asOf) || (niT && niT.asOf) || null;
     const fy = incAsOf ? incBasis + ' · ' + fmtDate(incAsOf) : (assetsS[0] ? new Date(assetsS[0].end).getFullYear() : '');
     const bsDate = assetsS[0] ? fmtDate(assetsS[0].end) : '';
-    const out = { criteria: C, statementTiles, income, incPeriod: fy, fy, bsDate, incBasis, incAsOf, metrics: { ni, rev, eps, fcf, netDebt, totalDebt, ebitda, revCagr, revYoY } };
+    const out = { criteria: C, statementTiles, income, incPeriod: fy, fy, bsDate, incBasis, incAsOf, metrics: { ni, rev, eps, fcf, netDebt, totalDebt, ebitda, revCagr, revYoY, equity } };
     secModelCache[symbol] = out;
     return out;
   }

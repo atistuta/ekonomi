@@ -48,7 +48,7 @@ export type ScoreGaugeProps = {
  */
 function visualTone(score: number): Tone {
   if (score >= 65) return 'positive';
-  if (score >= 45) return 'gold';
+  if (score >= 45) return 'vurgu';
   return 'negative';
 }
 

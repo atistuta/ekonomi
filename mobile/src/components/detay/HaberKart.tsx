@@ -119,7 +119,7 @@ export function HaberKart({ sembol, market, limit }: HaberKartProps) {
           ikisi de UÇTAN (`tam` / `adet`). */}
       {durum === 'veri' && satir && !satir.tam ? (
         <View style={styles.not}>
-          <Pill label="ölçemedim" tone="gold" glyph={null} size="sm" />
+          <Pill label="ölçemedim" tone="vurgu" glyph={null} size="sm" />
           <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
             {'Bu sembolün beslemesi okunamadı — “haber yok” DENMİYOR, ölçüm eksik kaldı.'}
           </Text>

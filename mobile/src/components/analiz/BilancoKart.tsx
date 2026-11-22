@@ -209,7 +209,7 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
                     ]}>
                     <Pill
                       label={(aktif ? '• ' : '') + s.etiket + ' (' + String(adet) + ')'}
-                      tone={aktif ? 'gold' : 'neutral'}
+                      tone={aktif ? 'vurgu' : 'neutral'}
                       variant={aktif ? 'soft' : 'outline'}
                       glyph={null}
                       size="sm"
@@ -230,7 +230,7 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
 
             {asim > 0 ? (
               <View style={styles.dipnot}>
-                <Pill label="sorulmadı" tone="gold" glyph={null} size="sm" />
+                <Pill label="sorulmadı" tone="vurgu" glyph={null} size="sm" />
                 <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                   {'Künye ucu en çok ' +
                     String(YFIN_AZAMI_SEMBOL) +
@@ -292,7 +292,7 @@ export function BilancoKart({ veri, durum, hata, yenile, semboller = [] }: Bilan
 
             {olculemeyen.length ? (
               <View style={styles.dipnot}>
-                <Pill label="ölçemedim" tone="gold" glyph={null} size="sm" />
+                <Pill label="ölçemedim" tone="vurgu" glyph={null} size="sm" />
                 <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                   {olculemeyen.join(', ') + ' — künye turu düştü, bu sembol ölçülemedi.'}
                 </Text>
@@ -381,7 +381,7 @@ function TakvimSatiri({
             style={[
               tarihVar ? type.bodyBold : type.micro,
               tarihVar ? numeric : null,
-              { color: tarihVar ? colors.gold : colors.textDim },
+              { color: tarihVar ? colors.vurgu : colors.textDim },
             ]}>
             {tarih}
           </Text>
@@ -391,7 +391,7 @@ function TakvimSatiri({
           {!tarihVar ? (
             <Pill label="tarih yok" tone="neutral" glyph={null} size="sm" />
           ) : e.estimate ? (
-            <Pill label="tarih tahmini" tone="gold" glyph={null} size="sm" />
+            <Pill label="tarih tahmini" tone="vurgu" glyph={null} size="sm" />
           ) : (
             <Pill label="tarih kesin" tone="neutral" glyph={null} size="sm" />
           )}

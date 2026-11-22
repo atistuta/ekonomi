@@ -270,7 +270,7 @@ export function SepetKart() {
                 ) : null}
 
                 {sonuc.olculemedi.length ? (
-                  <Text style={[type.micro, { color: colors.gold }]}>
+                  <Text style={[type.micro, { color: colors.vurgu }]}>
                     {sonuc.olculemedi.length +
                       ' kaydın fiyatı SORULDU ama ölçülemedi (uç fiyat döndürmedi).'}
                   </Text>

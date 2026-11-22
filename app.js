@@ -4045,10 +4045,11 @@
     { key: 'fib',    label: 'Fibonacci', sw: '#f4b400', fib: true },
     { key: 'buyzone', label: 'Uygun alım bölgesi', sw: 'rgba(34,211,154,0.9)', zone: true },
     { key: 'srzones', label: 'S/R Bölgeleri', sw: 'rgba(34,211,154,0.9)', sw2: 'rgba(255,94,126,0.9)', srzone: true },
+    { key: 'hacim',  label: 'Alım-Satım Hacmi', sw: 'rgba(34,211,154,0.8)', sw2: 'rgba(255,94,126,0.8)', lines: ['hacim'] },
   ];
   function loadTAIndVis() {
     // Varsayılan sade grafik: yalnız SMA50 + SMA200 açık, gerisi kapalı.
-    const def = { ema20: false, sma50: true, sma200: true, boll: false, ichi: false, fib: false, buyzone: false, srzones: false };
+    const def = { ema20: false, sma50: true, sma200: true, boll: false, ichi: false, fib: false, buyzone: false, srzones: false, hacim: true };
     try { const raw = localStorage.getItem(TA_IND_LS); if (raw) return Object.assign(def, JSON.parse(raw)); } catch (_) {}
     return def;
   }
@@ -4251,6 +4252,30 @@
     });
     candleSeries.setData(candles);
     taCandleSeries = candleSeries;
+
+    // Alım-Satım hacmi — mum gövdesinin yönüne göre renklenen histogram.
+    // Kendi fiyat ölçeğinde (overlay) ve grafiğin alt %22'sinde durur; mum ölçeğini
+    // ezmesin diye ayrı priceScaleId kullanılır. Hacim gelmeyen barlar çizilmez (null ≠ 0).
+    try {
+      const volData = candles
+        .map(c => (c.volume == null || !isFinite(c.volume)) ? null : {
+          time: c.time,
+          value: c.volume,
+          color: c.close >= c.open ? 'rgba(34,211,154,0.55)' : 'rgba(255,94,126,0.55)',
+        })
+        .filter(Boolean);
+      if (volData.length) {
+        const volSeries = chart.addHistogramSeries({
+          priceScaleId: 'hacim',
+          priceFormat: { type: 'volume' },
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        volSeries.setData(volData);
+        chart.priceScale('hacim').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } });
+        taSeries.hacim = volSeries;
+      }
+    } catch (e) { /* hacim serisi kurulamazsa grafik yine de çalışır */ }
 
     // Fibonacci geri çekilme seviyeleri — tanımları sakla; göster/gizle görünürlükte kurulur.
     taFibLines = [];
@@ -5096,6 +5121,10 @@
   // İçeriden işlemler paneli placeholder'ı — async doldurulur (fillInsider). BİLGİ amaçlıdır,
   // temel skora DAHİL DEĞİLDİR (kullanıcı tercihi: sadece bilgi paneli).
   const INSIDER_SLOT = `<div id="faInsider" class="fa-insider-wrap"><div class="fa-comp-loading">🏛️ İçeriden işlemler yükleniyor…</div></div>`;
+  // Sahipler paneli placeholder'ı — async doldurulur (fillSahipler). UÇ: /api/sahipler
+  // (api/_sahipler.js). Bu panel de BİLGİ amacınadır, temel skora DAHİL DEĞİLDİR:
+  // sahiplik tabloları çeyreklik bildirimlere dayanır ve gecikmelidir.
+  const SAHIPLER_SLOT = `<div id="faSahipler" class="fa-insider-wrap"><div class="fa-comp-loading">👥 Sahipler yükleniyor…</div></div>`;
 
   async function getTaScoreFor(symbol, market, vade) {
     const cfg = (window.TA_WEIGHTS || {})[vade];
@@ -5176,6 +5205,156 @@
   // al-sat sinyali DEĞİL. Kullanıcı tercihi (2026-08-15): yalnız bilgi, skoru etkilemez.
   const INSIDER_KW = ['PAY ALIM', 'PAY SATIŞ', 'PAY SATIS', 'GERİ ALIM', 'GERI ALIM', 'PAYLARIN', 'PAY GERİ', 'İKTİSAP', 'IKTISAP', 'ELDEN ÇIKAR', 'ELDEN CIKAR', 'ORTAKLIK PAY', 'YÖNETİCİ', 'YONETICI'];
   let insiderCache = {};
+
+  // ===== SAHIPLER (Politikacılar · İçeridekiler · Kurumsal) ==================
+  // Perplexity Finance'in "Holders" sekmesinin karşılığı. UÇ: /api/sahipler.
+  // UÇTA EŞİK YOK: uç işlemleri yalnız dolar değerine göre sıralar; "bariz
+  // miktar" kararı SUNUM katmanında veriliyor (ilk ISLEM_UST satır gösterilir).
+  // POLİTİKACILAR: çalışan ücretsiz kaynak ÖLÇÜLEMEDİ (stock-watcher S3 kovaları
+  // 403, resmî House Clerk dizini sembol/tutar TAŞIMIYOR, Perplexity ücretli
+  // Unusual Whales kullanıyor, STOCK Act bildirimleri TUTAR ARALIĞI veriyor).
+  // Bu yüzden bölüm boş sayı BASMAZ — durumu açıkça SÖYLER.
+  const SAHIPLER_BASE = (window.MY_PROXY || '').replace(/\/api\/proxy.*$/, '') + '/api/sahipler' || '/api/sahipler';
+  const SAHIPLER_UST = 10;   // kurumsal / fon / içerideki listelerinde satır sayısı
+  const ISLEM_UST = 8;       // dolar sırasındaki ilk N işlem
+  let sahiplerCache = {};
+
+  const sahLot = (n) => (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+  const sahPct = (n) => (n == null || isNaN(n)) ? '—' : (n * 100).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + '%';
+  const sahTarih = (sn) => {
+    if (sn == null || isNaN(sn)) return '';
+    const d = new Date(sn * 1000);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const sahKacis = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  function sahiplerShell(body) {
+    return `<div class="fa-insider"><div class="fa-sec-head fa-ins-head">👥 Sahipler</div>${body || ''}` +
+      `<p class="hint ta-disclaimer">Bilgi amaçlıdır — sahiplik tabloları çeyreklik bildirimlere dayanır ve <b>gecikmelidir</b>; <b>temel skora dahil edilmez</b>. Yatırım tavsiyesi değildir.</p>` +
+      `</div>`;
+  }
+
+  // Kurumsal / fon / politikacı satırı: ad + lot + dolar + pay yüzdesi.
+  function sahSatirlar(liste) {
+    return (liste || []).slice(0, SAHIPLER_UST).map((x) => {
+      const et = [];
+      if (x.lot != null) et.push(`<span class="ins-tag">${sahLot(x.lot)} lot</span>`);
+      if (x.deger != null) et.push(`<span class="ins-tag">${fmtUSD(x.deger)}</span>`);
+      if (x.yuzde != null) et.push(`<span class="ins-tag">${sahPct(x.yuzde)} pay</span>`);
+      if (x.yuzdeDegisim != null && x.yuzdeDegisim !== 0) {
+        const art = x.yuzdeDegisim > 0;
+        et.push(`<span class="ins-tag ${art ? 'ins-b' : 'ins-s'}">${art ? '▲' : '▼'} ${sahPct(Math.abs(x.yuzdeDegisim))}</span>`);
+      }
+      const t = sahTarih(x.tarih);
+      return `<div class="ins-row"><div class="ins-meta">` +
+        (t ? `<span class="ins-date">${t}</span>` : '') +
+        `<span class="ins-owner">${sahKacis(x.ad)}</span></div>` +
+        `<div class="ins-acts">${et.join('')}</div></div>`;
+    }).join('');
+  }
+
+  // İçerideki pozisyonları: ad + görev + elde tutulan lot.
+  function sahIceriSatirlar(liste) {
+    return (liste || []).slice(0, SAHIPLER_UST).map((x) => {
+      const et = [];
+      if (x.lot != null) et.push(`<span class="ins-tag">${sahLot(x.lot)} lot</span>`);
+      const t = sahTarih(x.tarih);
+      return `<div class="ins-row"><div class="ins-meta">` +
+        (t ? `<span class="ins-date">${t}</span>` : '') +
+        `<span class="ins-owner">${sahKacis(x.ad)}${x.iliski ? ` <em>· ${sahKacis(x.iliski)}</em>` : ''}</span></div>` +
+        `<div class="ins-acts">${et.join('')}</div></div>`;
+    }).join('');
+  }
+
+  // Son işlemler: ucun DOLAR SIRASINDA verdiği listenin ilk ISLEM_UST satırı.
+  function sahIslemSatirlar(liste) {
+    return (liste || []).slice(0, ISLEM_UST).map((x) => {
+      const satis = x.yonKod === 'satis', alis = x.yonKod === 'alis';
+      const sinif = satis ? 'ins-s' : (alis ? 'ins-b' : '');
+      const parca = [satis ? 'SATIM' : (alis ? 'ALIM' : 'İŞLEM')];
+      if (x.lot != null) parca.push(sahLot(x.lot) + ' lot');
+      if (x.deger != null) parca.push('~' + fmtUSD(x.deger));
+      const t = sahTarih(x.tarih);
+      return `<div class="ins-row"><div class="ins-meta">` +
+        (t ? `<span class="ins-date">${t}</span>` : '') +
+        `<span class="ins-owner">${sahKacis(x.ad)}${x.iliski ? ` <em>· ${sahKacis(x.iliski)}</em>` : ''}</span></div>` +
+        `<div class="ins-acts"><span class="ins-tag ${sinif}">${parca.join(' · ')}</span></div></div>`;
+    }).join('');
+  }
+
+  function sahBolum(baslik, icerik, bosMetin) {
+    return `<div class="fa-sec-head" style="margin-top:14px">${baslik}</div>` +
+      (icerik ? `<div class="ins-list">${icerik}</div>` : `<p class="ins-note-hint">${bosMetin}</p>`);
+  }
+
+  function sahiplerGovde(d) {
+    let html = '';
+    if (d.ozet && (d.ozet.kurumsalYuzde != null || d.ozet.icerideYuzde != null)) {
+      const p = [];
+      if (d.ozet.kurumsalYuzde != null) p.push(`Kurumsal: <b>${sahPct(d.ozet.kurumsalYuzde)}</b>`);
+      if (d.ozet.icerideYuzde != null) p.push(`İçeridekiler: <b>${sahPct(d.ozet.icerideYuzde)}</b>`);
+      if (d.ozet.kurumsalAdet != null) p.push(`${sahLot(d.ozet.kurumsalAdet)} kurum`);
+      html += `<div class="ins-summary ins-neu">${p.join(' · ')}</div>`;
+    }
+
+    // (1) POLİTİKACILAR
+    html += sahBolum('🏛️ Politikacılar',
+      d.politikacilar ? sahSatirlar(d.politikacilar) : '',
+      'Politikacı pozisyonları için <b>açık ve çalışan bir veri kaynağı bulunamadı</b>: ABD Kongre bildirimleri (STOCK Act) yalnız <b>tutar aralığı</b> açıklar — kesin lot/dolar değil; resmî House Clerk dizini sembol ve tutar taşımaz; ücretsiz aynalar kapanmış durumda. Ölçülmeyen sayı basılmaz — bu bölüm lisanslı bir kaynak bağlandığında dolacak.');
+
+    // (2) İÇERİDEKİLER
+    // BIST'te Yahoo kişi bazında liste VERMİYOR (ölçüldü: THYAO/ASELS/GARAN →
+    // özet var, liste null). Boş bölüm basmak yerine kullanıcıyı aynı sayfadaki
+    // KAP panelini gösterir; sayı UYDURULMAZ.
+    html += sahBolum('🧑‍💼 İçeridekiler',
+      sahIceriSatirlar(d.iceridekiler),
+      d.pazar === 'BIST'
+        ? 'Bu kaynak BIST için kişi bazında içerideki pozisyon listesi vermiyor — BIST pay alım-satım bildirimleri yukarıdaki <b>İçeriden işlemler</b> panelinde (KAP) yer alıyor.'
+        : 'İçerideki pozisyon bildirimi bulunamadı.');
+    if (d.netAktivite && (d.netAktivite.alisLot != null || d.netAktivite.satisLot != null)) {
+      const n = d.netAktivite;
+      html += `<p class="ins-note-hint">Son ${n.donemKod === '6m' ? '6 ay' : sahKacis(n.donemKod)}: ` +
+        `alım ${n.alisAdet == null ? '—' : n.alisAdet} işlem / ${sahLot(n.alisLot)} lot · ` +
+        `satım ${n.satisAdet == null ? '—' : n.satisAdet} işlem / ${sahLot(n.satisLot)} lot</p>`;
+    }
+    html += sahBolum('💸 Son dikkat çeken alım-satımlar (dolar büyüklüğüne göre)',
+      sahIslemSatirlar(d.islemler),
+      d.pazar === 'BIST'
+        ? 'Bu kaynak BIST için işlem dökümü vermiyor — KAP bildirimleri için yukarıdaki panele bak.'
+        : 'Yakın dönemde bildirilmiş içeriden işlem bulunamadı.');
+
+    // (3) KURUMSAL
+    html += sahBolum('🏦 En büyük 10 hissedar (kurumsal)',
+      sahSatirlar(d.kurumsal),
+      'Kurumsal sahiplik tablosu bulunamadı.');
+    html += sahBolum('📦 En büyük 10 fon',
+      sahSatirlar(d.fonlar),
+      'Fon sahiplik tablosu bulunamadı.');
+    return html;
+  }
+
+  async function fillSahipler(symbol, market, req) {
+    const box = document.getElementById('faSahipler');
+    if (!box) return;
+    const ck = market + ':' + symbol;
+    let html;
+    try {
+      if (!sahiplerCache[ck]) {
+        const u = `${SAHIPLER_BASE}?symbol=${encodeURIComponent(symbol)}&market=${encodeURIComponent(market)}`;
+        const r = await fetch(u);
+        const d = await r.json();
+        if (!r.ok || !d || d.error) throw new Error((d && d.error) || ('HTTP ' + r.status));
+        sahiplerCache[ck] = sahiplerShell(sahiplerGovde(d));
+      }
+      html = sahiplerCache[ck];
+    } catch (e) {
+      html = sahiplerShell(`<p class="fa-desc">Sahiplik verisi şu an alınamadı (kaynak geçici sorunu). ↻ ile tekrar deneyebilirsin.</p>`);
+    }
+    if (req != null && typeof faAlive === 'function' && !faAlive(req)) return;
+    const cur = document.getElementById('faSahipler');
+    if (cur) cur.innerHTML = html;
+  }
 
   function insiderShell(title, body, note) {
     return `<div class="fa-insider"><div class="fa-sec-head fa-ins-head">🏛️ ${title}</div>${body || ''}` +
@@ -5622,6 +5801,114 @@
     };
   }
 
+  // ===================== 📐 Benjamin Graham's Formula =====================
+  // ÖNEMLİ: Bu katman SADECE BİLGİdir; bütüncül/bileşke skora DAHİL DEĞİL
+  // (İçsel Değer (DCF) katmanı gibi). Yatırım tavsiyesi değildir.
+  //
+  // ÖLÇÜLDÜ (2026-11-22) — Graham'ın ÜÇ AYRI formülü var, karıştırılmamalı:
+  //  1) Büyüme formülü (The Intelligent Investor, 1962 baskısı, böl. 11):
+  //       V = HBK × (8,5 + 2g)
+  //     g = önümüzdeki 7–10 yıl için BEKLENEN yıllık büyüme, tam sayı yüzde (%7 → 7).
+  //     8,5 = büyümesiz bir şirket için baz F/K çarpanı.
+  //  2) 1974 revizyonu (Eylül 1974): V = HBK × (8,5 + 2g) × 4,4 / Y
+  //     4,4 = revizyon döneminde yüksek kaliteli şirket tahvillerinin ortalama getirisi,
+  //     Y   = güncel AAA şirket tahvili getirisi.
+  //     Y HİÇBİR izinli kaynakta (api/_ag.js IZINLI) ölçülemiyor; 10Y Hazine ile
+  //     ikame etmek Y'yi düşük, V'yi yüksek gösterirdi. Kural: ölçülmeyen sayı
+  //     basılmaz → revizyon UYGULANMAZ, yalnız notta belirtilir.
+  //  3) Graham Sayısı (AYRI, savunmacı yatırımcı için daha muhafazakâr ölçüt):
+  //       √(22,5 × HBK × DDB)   22,5 = 15 (maks F/K) × 1,5 (maks PD/DD)
+  //     22,5 büyüme formülünün PARÇASI DEĞİLDİR.
+  const GRAHAM = Object.freeze({
+    BAZ_FK: 8.5,    // büyümesiz şirket için baz F/K
+    G_CARPAN: 2,    // büyüme çarpanı
+    G_MIN: 0,       // negatif büyüme formülü anlamsızlaştırır → 0'a kırpılır
+    G_MAX: 15,      // Graham'ın pratik üst sınırı; üstü ekstrapolasyon olur
+    SAYI_K: 22.5,   // Graham Sayısı katsayısı (15 × 1,5)
+    BANT: 15,       // ±%15 → "değere yakın" bandı
+  });
+
+  // Saf hesap — HAM SAYI döndürür, metin üretmez.
+  // Girdi: { eps, bvps, growthPct, price, market }
+  function computeGraham(gIn) {
+    if (!gIn) return { ok: false, reason: 'no-data' };
+    const { eps, bvps, growthPct, price, market } = gIn;
+    if (price == null || !isFinite(price) || price <= 0) return { ok: false, reason: 'no-data' };
+    if (eps == null || !isFinite(eps)) return { ok: false, reason: 'no-data' };
+    if (eps <= 0) return { ok: false, reason: 'neg-eps' };
+    if (growthPct == null || !isFinite(growthPct)) return { ok: false, reason: 'no-growth' };
+    const gUsed = Math.max(GRAHAM.G_MIN, Math.min(GRAHAM.G_MAX, growthPct));
+    const value = eps * (GRAHAM.BAZ_FK + GRAHAM.G_CARPAN * gUsed);
+    if (!isFinite(value) || value <= 0) return { ok: false, reason: 'no-data' };
+    const diffPct = (price - value) / value * 100;
+    const badge = diffPct < -GRAHAM.BANT ? 'cheap' : diffPct > GRAHAM.BANT ? 'expensive' : 'fair';
+    const bv = (bvps != null && isFinite(bvps) && bvps > 0) ? bvps : null;
+    const grahamNumber = bv != null ? Math.sqrt(GRAHAM.SAYI_K * eps * bv) : null;
+    const gnDiffPct = grahamNumber != null ? (price - grahamNumber) / grahamNumber * 100 : null;
+    return {
+      ok: true, market: market || null, price, eps, bvps: bv,
+      value, diffPct, badge, grahamNumber, gnDiffPct,
+      gUsed, gRaw: growthPct, gClamped: growthPct !== gUsed,
+      impliedPE: GRAHAM.BAZ_FK + GRAHAM.G_CARPAN * gUsed,
+    };
+  }
+
+  // valuation nesnesinden Graham girdisi kur (BIST + US ortak).
+  // DDB (defter değeri/pay) = fiyat / PD-DD; yoksa null (Graham Sayısı atlanır).
+  function grahamIn(valuation, price) {
+    if (!valuation) return null;
+    const px = (valuation.price != null) ? valuation.price : price;
+    const pb = (valuation.pb != null && isFinite(valuation.pb) && valuation.pb > 0) ? valuation.pb : null;
+    const bvps = (valuation.bvps != null && isFinite(valuation.bvps) && valuation.bvps > 0)
+      ? valuation.bvps
+      : (pb != null && px != null ? px / pb : null);
+    const gFrac = (valuation.dcfIn && valuation.dcfIn.growth != null) ? valuation.dcfIn.growth : null;
+    return {
+      eps: valuation.eps, bvps, price: px,
+      growthPct: (gFrac != null && isFinite(gFrac)) ? gFrac * 100 : null,
+      market: (valuation.dcfIn && valuation.dcfIn.market) || valuation.market || null,
+    };
+  }
+
+  // Sonuç ekranı Graham kartı (geniş). fmtP: para biçimlendirici.
+  function grahamCardHTML(gr, fmtP) {
+    if (!gr) return '';
+    if (!gr.ok) {
+      const msg = gr.reason === 'neg-eps'
+        ? 'Son 12 ayda <b>hisse başına kazanç negatif</b> — Graham formülü uygulanamaz (formül pozitif HBK ister).'
+        : gr.reason === 'no-growth'
+          ? 'Büyüme oranı (g) çözülemedi — Graham formülü hesaplanamadı.'
+          : 'Graham formülü için yeterli veri yok (HBK veya fiyat çözülemedi).';
+      return `<div class="rp-grm na"><div class="grm-head"><span>📐 Benjamin Graham's Formula</span></div><div class="grm-na">${msg}</div></div>`;
+    }
+    const bcls = gr.badge === 'cheap' ? 'bull' : gr.badge === 'expensive' ? 'bear' : 'neutral';
+    const blbl = gr.badge === 'cheap' ? 'Değerin altında' : gr.badge === 'expensive' ? 'Değerin üstünde' : 'Değere yakın';
+    const d = gr.diffPct;
+    const yon = d < 0 ? 'ALTINDA' : 'ÜSTÜNDE';
+    const dCls = d < 0 ? 'up' : 'dn';
+    const gnTxt = (gr.grahamNumber != null && gr.gnDiffPct != null)
+      ? `<div class="grm-gn">Graham Sayısı <em>√(22,5 × HBK × DDB)</em>: <b>${fmtP(gr.grahamNumber)}</b> — fiyat bunun <b class="${gr.gnDiffPct < 0 ? 'up' : 'dn'}">%${Math.abs(Math.round(gr.gnDiffPct))} ${gr.gnDiffPct < 0 ? 'ALTINDA' : 'ÜSTÜNDE'}</b></div>`
+      : '<div class="grm-gn na">Graham Sayısı için defter değeri/pay (DDB) çözülemedi.</div>';
+    return `
+    <div class="rp-grm ${bcls}">
+      <div class="grm-head"><span>📐 Benjamin Graham's Formula</span><span class="grm-badge ${bcls}">${blbl}</span></div>
+      <div class="grm-val">Graham değeri: <b>${fmtP(gr.value)}</b> <em>(HBK ${fmtP(gr.eps)} × [8,5 + 2×${gr.gUsed.toFixed(1)}] = ${gr.impliedPE.toFixed(1)}× HBK)</em></div>
+      <div class="grm-diff">Güncel fiyat, Graham değerinin <b class="${dCls}">%${Math.abs(Math.round(d))} ${yon}</b> <span class="grm-price">(fiyat: ${fmtP(gr.price)})</span></div>
+      ${gnTxt}
+      <details class="grm-why"><summary>Formül &amp; varsayımlar</summary>
+        <div class="grm-assum">
+          <div>Büyüme formülü: <b>V = HBK × (8,5 + 2g)</b> — 8,5 büyümesiz şirketin baz F/K'sı, g yıllık büyüme yüzdesi.</div>
+          <div>Kullanılan g: <b>%${gr.gUsed.toFixed(1)}</b>${gr.gClamped ? ` <em>(ham %${gr.gRaw.toFixed(1)} → 0–15 aralığına kırpıldı)</em>` : ''}</div>
+          <div class="grm-proxy">Burada g, <b>geçmiş gelir büyümesi</b> (3Y BYBO, yoksa yıllık değişim) ile temsil edilir; Graham'ın istediği 7–10 yıllık <i>beklenen</i> büyüme DEĞİLDİR.</div>
+          ${gr.bvps != null ? `<div>Graham Sayısı: <b>√(22,5 × HBK × DDB)</b> — DDB (defter değeri/pay) ${fmtP(gr.bvps)}; 22,5 = 15 (maks F/K) × 1,5 (maks PD/DD). Büyüme formülünün parçası değildir.</div>` : ''}
+          <div class="grm-method">1974 revizyonu <b>V = HBK × (8,5 + 2g) × 4,4 / Y</b> (Y = güncel AAA şirket tahvili getirisi) UYGULANMADI: Y izinli veri kaynaklarında ölçülemiyor, ölçülmeyen sayı basılmaz.</div>
+        </div>
+      </details>
+      ${gr.market === 'BIST' ? '<div class="grm-infl">⚠️ BIST: sabit 8,5 baz çarpan düşük faizli tahvil ortamını varsayar; yüksek enflasyon/faizli TL ortamında Graham değerini olduğundan yüksek gösterir.</div>' : ''}
+      <div class="grm-disc">Graham bu büyüme formülünü hisse <b>seçme</b> aracı olarak sunmamıştır; kaba bir çapraz kontroldür. <b>SADECE BİLGİ</b> — bütüncül/bileşke skora DAHİL DEĞİLDİR. Bilgi amaçlıdır, yatırım tavsiyesi değildir.</div>
+    </div>`;
+  }
+
   // 🧭 Bütüncül Uygunluk Notu (0–10) — Sonuç ekranı + Karşılaştır ekranı ORTAK motoru.
   // Onaylı ağırlıklar: FA %25, TA %25, değerleme/alım-bandı %15, gündem %10, sektör %10, makro %10, jeopolitik %5.
   // Girdiler cache'li/ucuz kaynaklardan gelir; eksik olan bileşen nötr (0.5) kabul edilir ve "güven" düşer.
@@ -6012,6 +6299,10 @@
     const dcf = computeDCF(valuation && valuation.dcfIn, daily.map((c) => c.close), dcfPrice);
     const dcfHTML = dcfCardHTML(dcf, fmtP);
 
+    // 📐 Benjamin Graham's Formula — SADECE BİLGİ; bileşke skora dahil değil.
+    const graham = computeGraham(grahamIn(valuation, dcfPrice));
+    const grahamHTML = grahamCardHTML(graham, fmtP);
+
     box.innerHTML = `
       <div class="rp">
         ${holisticHTML}
@@ -6019,6 +6310,7 @@
         ${compHTML}
         <div class="rp-cards">${cards || '<div class="empty">Vade bazlı seviye hesaplanamadı.</div>'}</div>
         ${valHTML}
+        ${grahamHTML}
         ${dcfHTML}
         <div class="rp-cat" id="rpCat"></div>
         <div class="rp-disc">Bölgeler gerçek fiyat yapısına (hacim profili, Fibonacci, Bollinger, hareketli ortalamalar) + vadeye özel ATR bandına dayanır; kesin tepe/dip ya da tarih tahmini <b>değildir</b>. Çıkış bir plandır (bölge + stop + trend tetiği), kehanet değil. Yatırım tavsiyesi değildir.</div>
@@ -6208,10 +6500,11 @@
         `<div class="fa-sec-head" style="margin-top:18px">📊 Mali Tablolar — Gelir tablosu ${sec.fy} · bilanço ${sec.bsDate} · Kaynak: SEC EDGAR (10-K + son 10-Q)</div>` +
         `<div class="fa-tiles">${sec.statementTiles.map(t => `<div class="fa-tile"><span class="fa-lbl">${t.label}</span><span class="fa-val">${t.val}</span></div>`).join('')}</div>`;
       const disc = `<p class="hint ta-disclaimer">Skor: gerçek mali tablolar (SEC EDGAR — gelir/nakit akışı son 12 ay TTM, bilanço en güncel çeyrek) + değerleme (canlı fiyat / TTM HBK). FAVÖK = Faaliyet Kârı + Amortisman. Temel analiz uzun vadelidir; teknik + haber akışıyla birlikte değerlendir. Yatırım tavsiyesi değildir. · <a href="${secLink}" target="_blank" rel="noopener">SEC EDGAR ↗</a></p>`;
-      renderFaScored(wrap, symbol, 'US', tiles, criteria, 'SEC EDGAR (TTM + son çeyrek)', COMPOSITE_SLOT + INSIDER_SLOT + stmtSection + disc);
+      renderFaScored(wrap, symbol, 'US', tiles, criteria, 'SEC EDGAR (TTM + son çeyrek)', COMPOSITE_SLOT + INSIDER_SLOT + SAHIPLER_SLOT + stmtSection + disc);
       const full = computeFaScore(criteria);
       if (full.score != null) fillComposite(symbol, 'US', full.score, req);
       fillInsider(symbol, 'US', req);
+      fillSahipler(symbol, 'US', req);
       return;
     }
 
@@ -6452,7 +6745,9 @@
       totalDebt: metrics.totalDebt, shares, equityVal: mcap,
       growth: (gPct != null && isFinite(gPct)) ? gPct / 100 : null
     };
-    return { curSym: '₺', eps, pe, pb, price: metrics.price, mcap, shares, market: 'BIST', dcfIn };
+    // DDB (defter değeri/pay) — Graham Sayısı için; ölçülemezse null.
+    const bvps = (metrics.equity != null && isFinite(metrics.equity) && shares > 0) ? metrics.equity / shares : null;
+    return { curSym: '₺', eps, pe, pb, bvps, price: metrics.price, mcap, shares, market: 'BIST', dcfIn };
   }
 
   async function renderFundamentalBIST(symbol, wrap, req) {
@@ -6486,13 +6781,14 @@
         valDesc = `Değerleme: F/K ${val.pe == null ? '—' : (val.pe < 0 ? 'negatif (zarar)' : val.pe.toFixed(1))}, PD/DD ${val.pb == null ? '—' : val.pb.toFixed(2)} — piyasa değeri (İş Yatırım şirket kartı) ÷ net kâr / özsermaye. ⚠ Yüksek enflasyonda nominal net kâr (TMS 29) F/K'yı reel değerden saptırabilir; PD/DD defter değerine dayandığı için daha dengeli okunur.`;
       }
       const extra =
-        COMPOSITE_SLOT + INSIDER_SLOT +
+        COMPOSITE_SLOT + INSIDER_SLOT + SAHIPLER_SLOT +
         `<p class="fa-desc">Mali tablolar İş Yatırım'dan (TFRS, ${mali.years[0]} yıllık) çekilir; skor bu kalemlerden hesaplanır. ${valDesc} Yüksek enflasyon ortamında nominal büyüme/ROE rakamları reel performanstan sapabilir.</p>` +
         `<p class="hint ta-disclaimer">Kaynak: <a href="${cardLink}" target="_blank" rel="noopener">İş Yatırım — ${symbol} ↗</a> · Temel analiz uzun vadelidir; teknik analiz ve haber akışıyla birlikte değerlendir. Yatırım tavsiyesi değildir.</p>`;
       renderFaScored(wrap, symbol, 'BIST', tiles, model.criteria, 'İş Yatırım (TFRS)', extra);
       const fa = computeFaScore(model.criteria);
       if (fa.score != null) fillComposite(symbol, 'BIST', fa.score, req);
       fillInsider(symbol, 'BIST', req);
+      fillSahipler(symbol, 'BIST', req);
       return;
     }
 
@@ -6836,7 +7132,7 @@
     const incAsOf = (revT && revT.asOf) || (niT && niT.asOf) || null;
     const fy = incAsOf ? incBasis + ' · ' + fmtDate(incAsOf) : (assetsS[0] ? new Date(assetsS[0].end).getFullYear() : '');
     const bsDate = assetsS[0] ? fmtDate(assetsS[0].end) : '';
-    const out = { criteria: C, statementTiles, income, incPeriod: fy, fy, bsDate, incBasis, incAsOf, metrics: { ni, rev, eps, fcf, netDebt, totalDebt, ebitda, revCagr, revYoY } };
+    const out = { criteria: C, statementTiles, income, incPeriod: fy, fy, bsDate, incBasis, incAsOf, metrics: { ni, rev, eps, fcf, netDebt, totalDebt, ebitda, revCagr, revYoY, equity } };
     secModelCache[symbol] = out;
     return out;
   }
@@ -8087,7 +8383,13 @@
               ? `F/K negatif — son 12 ayda (TTM) zarar (HBK ${eps.toFixed(2)}).`
               : `F/K ${pe.toFixed(1)} (canlı fiyat / TTM HBK).`));
           }
-          if (eps != null) valuation = { curSym: '$', eps, pe, price, dcfIn: usDcfIn(sec, price, eps) };
+          if (eps != null) {
+            // DDB (defter değeri/pay) — Graham Sayısı için; pay sayısı = net kâr / HBK.
+            const uShares = (ni != null && eps) ? ni / eps : null;
+            const uEq = sec.metrics.equity;
+            const bvps = (uEq != null && isFinite(uEq) && uShares != null && uShares > 0) ? uEq / uShares : null;
+            valuation = { curSym: '$', eps, pe, bvps, price, market: 'US', dcfIn: usDcfIn(sec, price, eps) };
+          }
           tiles = [
             { label: 'Son Fiyat', val: price != null ? '$' + price.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : '—' },
             { label: 'Piyasa Değeri', val: fmtUSD(mcap) },
@@ -12926,6 +13228,7 @@
   let comparePickerOpen = false;
   let compareDcfOpen = false; // İçsel Değer (DCF) satırı varsayılan KAPALI; başlığa tıklayınca açılır.
   let compareAtahanOpen = false; // 📝 Atahan Notları satırı varsayılan KAPALI; başlığa tıklayınca açılır.
+  let compareGrahamOpen = false; // 📐 Benjamin Graham's Formula satırı varsayılan KAPALI; başlığa tıklayınca açılır.
 
   const YFIN_BASE = (window.MY_PROXY || '').replace(/\/api\/proxy.*$/, '') + '/api/yfin' || '/api/yfin';
   const yahooSym = (symbol, market) => market === 'BIST' ? symbol + '.IS' : symbol;
@@ -13368,6 +13671,8 @@
         // 🧮 İçsel Değer (DCF) — SADECE BİLGİ; bileşke/uygunluk skoruna dahil değil.
         const dcf = computeDCF(fam.valuation && fam.valuation.dcfIn, daily.map((c) => c.close),
           (fam.valuation && fam.valuation.price != null) ? fam.valuation.price : L.price);
+        // 📐 Benjamin Graham's Formula — SADECE BİLGİ; bileşke/uygunluk skoruna dahil değil.
+        const graham = computeGraham(grahamIn(fam.valuation, L.price));
         // Alım sırası (ranking) için sayısal alım bandı + fiyat: bandın neresindeyiz?
         const buyLo = (bz && bz[0] != null) ? bz[0] : null;
         const buyHi = (bz && bz[1] != null) ? bz[1] : (bz && bz[0] != null ? bz[0] : null);
@@ -13393,6 +13698,10 @@
                 dcfOk: dcf.ok, dcfReason: dcf.reason, dcfBadge: dcf.badge, dcfUp: dcf.upside,
                 dcfRange: dcf.ok ? `${fmtP(dcf.lo)} – ${fmtP(dcf.hi)}` : null,
                 dcfBase: dcf.ok ? fmtP(dcf.base) : null,
+                grahamOk: graham.ok, grahamReason: graham.reason, grahamBadge: graham.badge,
+                grahamDiff: graham.ok ? graham.diffPct : null,
+                grahamVal: graham.ok ? fmtP(graham.value) : null,
+                grahamNum: (graham.ok && graham.grahamNumber != null) ? fmtP(graham.grahamNumber) : null,
                 conjChips: conj.chips, conjEmoji: conj.stanceEmoji, conjCls: conj.stanceCls, atahan };
       }
     } catch (_) { out = { ok: false }; }
@@ -13521,7 +13830,7 @@
     } else {
       const metrics = items.map((it) => { const m = compareMem.get(it.market + ':' + it.symbol); return (m && m.ok) ? m : null; });
       const cols = `170px repeat(${items.length}, 148px)`;
-      let g = `<div class="compare-grid${compareDcfOpen ? ' dcf-open' : ''}${compareAtahanOpen ? ' atahan-open' : ''}" style="grid-template-columns:${cols}">`;
+      let g = `<div class="compare-grid${compareDcfOpen ? ' dcf-open' : ''}${compareAtahanOpen ? ' atahan-open' : ''}${compareGrahamOpen ? ' graham-open' : ''}" style="grid-template-columns:${cols}">`;
       // Başlık satırı
       g += '<div class="compare-cell compare-corner cmp-c0">Metrik</div>';
       items.forEach((it, ci) => {
@@ -13749,6 +14058,25 @@
 
       // --- 📝 Atahan Notları (aç/kapa) — 5 yıllık gelir/kâr, F/K & İleri F/K, ileriye dönük
       //     getiri beklentisi, enflasyona-karşı-gelir ve son bilanço. SADECE BİLGİ; skora dahil değil. ---
+      // 📐 Benjamin Graham's Formula — SADECE BİLGİ; puana dahil değil. Graham değerine göre en düşük fiyat vurgulanır.
+      let grmBestVal = Infinity, grmBestIdx = -1;
+      verds.forEach((v, i) => { if (v && v.ok && v.grahamOk && v.grahamDiff != null && v.grahamDiff < grmBestVal) { grmBestVal = v.grahamDiff; grmBestIdx = i; } });
+      g += '<div class="compare-cell compare-mlabel cmp-c0 cmp-mlbl2 cmp-grm-toggle" role="button" tabindex="0" title="Benjamin Graham\'ın büyüme formülü: V = HBK × (8,5 + 2g). 8,5 büyümesiz şirketin baz F/K\'sı, g yıllık büyüme yüzdesi (burada geçmiş gelir büyümesi ile temsil edilir, 0–15 aralığına kırpılır). Güncel fiyatın bu değerin % kaç altında/üstünde olduğunu gösterir. HBK≤0 hisselerde uygulanamaz. 1974 revizyonu (× 4,4 / Y) UYGULANMADI: Y (AAA şirket tahvili getirisi) izinli kaynaklarda ölçülemiyor. SADECE BİLGİ; bileşke/uygunluk skoruna DAHİL DEĞİLDİR. Aç/kapa için tıkla. Yatırım tavsiyesi değildir."><span class="cml-t"><span class="cmp-grm-caret">▸</span> 📐 Benjamin Graham\'s Formula</span><span class="cml-s cmp-grm-sub">· HBK × (8,5 + 2g) · tıkla → aç</span></div>';
+      verds.forEach((v, ci) => {
+        const hint = '<span class="cvd-collapsed">•••</span>';
+        if (v === undefined) { g += `<div class="compare-cell cmp-vgrm">${hint}<span class="cvd-body">…</span></div>`; return; }
+        if (!v || !v.ok || !v.grahamOk) {
+          const na = (v && v.grahamReason === 'neg-eps') ? 'HBK≤0 · uygulanamaz'
+            : (v && v.grahamReason === 'no-growth') ? 'büyüme (g) yok' : 'veri yok';
+          g += `<div class="compare-cell cmp-vgrm">${hint}<span class="cvd-body"><span class="cvd-na">${na}</span></span></div>`; return;
+        }
+        const cls = v.grahamBadge === 'cheap' ? 'up' : v.grahamBadge === 'expensive' ? 'dn' : 'mid';
+        const blbl = v.grahamBadge === 'cheap' ? 'Değerin altında' : v.grahamBadge === 'expensive' ? 'Değerin üstünde' : 'Değere yakın';
+        const d = v.grahamDiff;
+        const dTxt = d == null ? '—' : `${d < 0 ? '▼' : '▲'} %${Math.abs(Math.round(d))} ${d < 0 ? 'ALTINDA' : 'ÜSTÜNDE'}`;
+        const best = (ci === grmBestIdx && d != null && d < 0) ? ' cmp-best' : '';
+        g += `<div class="compare-cell cmp-vgrm${best}">${hint}<span class="cvd-body"><span class="cvd-val">${v.grahamVal}</span><span class="cvd-up ${cls}">${dTxt} · ${blbl}</span>${v.grahamNum ? `<span class="cvd-gn">Graham Sayısı ${v.grahamNum}</span>` : ''}</span></div>`;
+      });
       g += '<div class="compare-cell compare-mlabel cmp-c0 cmp-mlbl2 cmp-atahan-toggle" role="button" tabindex="0" title="📝 Atahan Notları — 5 yıllık gelir tablosu, F/K & İleri F/K, ileriye dönük kâr-artış beklentisi, gelirin enflasyona karşı reel büyüyüp büyümediği ve son açıklanan bilanço çıktıları. SADECE BİLGİ; skora/bileşkeye DAHİL DEĞİLDİR. Aç/kapa için tıkla. Yatırım tavsiyesi değildir."><span class="cml-t"><span class="cmp-atahan-caret">▸</span> 📝 Atahan Notları</span><span class="cml-s cmp-atahan-sub">· 5Y gelir/kâr · F/K · bilanço · tıkla → aç</span></div>';
       verds.forEach((v) => {
         const wrapOpen = '<div class="compare-cell cmp-vatahan"><span class="cvd-collapsed">•••</span><span class="cvd-body">';
@@ -13864,6 +14192,21 @@
       };
       atahanToggle.addEventListener('click', flipA);
       atahanToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipA(); } });
+    }
+    // 📐 Benjamin Graham's Formula satırını aç/kapa — tam yeniden çizim yapmadan (durum korunur).
+    const grmToggle = wrap.querySelector('.cmp-grm-toggle');
+    if (grmToggle) {
+      const flipG = () => {
+        compareGrahamOpen = !compareGrahamOpen;
+        const grid = wrap.querySelector('.compare-grid');
+        if (grid) grid.classList.toggle('graham-open', compareGrahamOpen);
+        const caret = grmToggle.querySelector('.cmp-grm-caret');
+        if (caret) caret.textContent = compareGrahamOpen ? '▾' : '▸';
+        const sub = grmToggle.querySelector('.cmp-grm-sub');
+        if (sub) sub.textContent = compareGrahamOpen ? '· HBK × (8,5 + 2g) · tıkla → kapat' : '· HBK × (8,5 + 2g) · tıkla → aç';
+      };
+      grmToggle.addEventListener('click', flipG);
+      grmToggle.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipG(); } });
     }
     renderComparePicker();
   }

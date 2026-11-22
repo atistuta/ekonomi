@@ -23,10 +23,16 @@ export { DetayBasligi, type DetayBasligiProps } from './DetayBasligi';
 // YAZMA EYLEMLERI: takip listesine ve kiyas setine ekleme. Kiyas
 // setini kuracak BASKA bir yuzey yoktu (gerekce dosyada).
 export { DetayEylemler, type DetayEylemlerProps } from './DetayEylemler';
+// PROcess: tasarim dilindeki "akilli etiket satiri". ANALYZE TURUNUN
+// ICINDE: ekranin elindeki `AnalyzeRow`dan okuyor, EK AG TURU YOK.
+// Motorun `firsat` etiketi sayfanin baska HICBIR yerinde basilmiyordu
+// (gerekce dosyada). Esik/formul YOK, sayi uretmiyor.
+export { EtiketSeridi, type EtiketSeridiProps } from './EtiketSeridi';
 // ANALYZE TURUNUN DIŞI: `/api/news` çoklu-sembol kipi TEK sembolle.
 // Adı `components/bugun/HisseHaberleriKarti` ile karışmasın diye kısa:
 // o kart TAKİP LİSTESİNİ soruyor, bu kart TEK sembolü (gerekçe dosyada).
-export { HaberKart, type HaberKartProps } from './HaberKart';
+export { HaberKart, type HaberKartProps } from './HaberKart';
+
 // NEDEN HAREKET EDIYOR: `/api/neden`. Webin ayni adli bolumu
 // (`fillSpWhy`) TARAYICIDA hesapliyordu; karar motora, hesap uca
 // tasindi. Ad `HareketKart`, cunku `components/kesfet/NedenKart`
@@ -43,6 +49,11 @@ export { IceridenKart, type IceridenKartProps } from './IceridenKart';
 // `RiskOdulKart`ta, ham temettu kunyesi `TemettuKart`ta; ucu de ayri
 // (gerekce dosyada). SKORA GIRMEZ.
 export { KatalizorKart, type KatalizorKartProps } from './KatalizorKart';
+// PROcess: tasarim dilindeki "rejim grafigi". ANALYZE TURUNUN DISI:
+// her pencere AYRI bir `/api/score` turu ve tur DUGMEYLE atiliyor
+// (gerekcesi dosyada). Teknik skoru vadeye gore yan yana basiyor;
+// motorun sayisina DOKUNMUYOR.
+export { RejimKart, type RejimKartProps } from './RejimKart';
 export { RiskOdulKart, type RiskOdulKartProps } from './RiskOdulKart';
 export { Satir, type SatirProps } from './Satir';
 // SIRKET PROFILI: `/api/yfin` kunyesindeki `bizSummary`/`sector`/

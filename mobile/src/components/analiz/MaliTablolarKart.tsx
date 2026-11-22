@@ -129,7 +129,7 @@ function Govde({ g }: { g: MaliResponse }) {
       </Text>
 
       {!g.tam ? (
-        <Text style={[type.micro, { color: colors.gold }]}>
+        <Text style={[type.micro, { color: colors.vurgu }]}>
           {'Üst kaynak EKSİK okundu — ' +
             String(g.sayac.hata) +
             ' hata · ' +

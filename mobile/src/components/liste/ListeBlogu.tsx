@@ -230,8 +230,8 @@ export function ListeBlogu({ kayit, varsayilan = false }: ListeBloguProps) {
               value={evreneDahil}
               onValueChange={(v) => yaz(listeEvreneAl(kayit.id, v))}
               accessibilityLabel={'Evrene dahil: ' + (evreneDahil ? 'açık' : 'kapalı')}
-              trackColor={{ true: colors.goldSoft, false: colors.neutralSoft }}
-              thumbColor={evreneDahil ? colors.gold : colors.textFaint}
+              trackColor={{ true: colors.vurguSoft, false: colors.neutralSoft }}
+              thumbColor={evreneDahil ? colors.vurgu : colors.textFaint}
             />
           </View>
 
@@ -258,8 +258,8 @@ export function ListeBlogu({ kayit, varsayilan = false }: ListeBloguProps) {
               value={bildirimAcik}
               onValueChange={(v) => yaz(listeBildirimAyarla(kayit.id, v))}
               accessibilityLabel={'Bildirim: ' + (bildirimAcik ? 'açık' : 'kapalı')}
-              trackColor={{ true: colors.goldSoft, false: colors.neutralSoft }}
-              thumbColor={bildirimAcik ? colors.gold : colors.textFaint}
+              trackColor={{ true: colors.vurguSoft, false: colors.neutralSoft }}
+              thumbColor={bildirimAcik ? colors.vurgu : colors.textFaint}
             />
           </View>
 
@@ -301,7 +301,7 @@ export function ListeBlogu({ kayit, varsayilan = false }: ListeBloguProps) {
             />
           </View>
           {silSoruldu ? (
-            <Text style={[type.micro, { color: colors.gold }]}>
+            <Text style={[type.micro, { color: colors.vurgu }]}>
               {varsayilan
                 ? '"' +
                   kayit.name +
@@ -446,7 +446,7 @@ export function ListeBlogu({ kayit, varsayilan = false }: ListeBloguProps) {
               ) : null}
               {durum === 'veri' && veri ? <OlcumEksikRozet kaynak={veri} /> : null}
               {durum === 'veri' && veri && veri.atlanan.length ? (
-                <Text style={[type.micro, { color: colors.gold }]}>
+                <Text style={[type.micro, { color: colors.vurgu }]}>
                   {'Zaman bütçesi doldu, ölçülmeyenler: ' + veri.atlanan.join(', ')}
                 </Text>
               ) : null}

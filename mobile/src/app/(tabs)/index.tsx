@@ -1,6 +1,11 @@
 // =====================================================================
-//  LİSTELER — 1. sekme, MOTORA BAĞLI                  (FAZ 2 / native)
+//  EVREN — 1. sekme, MOTORA BAĞLI                     (FAZ 2 / native)
 // ---------------------------------------------------------------------
+//  AD (PROcess, 2026-11-15): sekme "Listeler" iken "Evren" oldu. Rota
+//  adı (`index`) ve sekme sırası DEĞİŞMEDİ; değişen yalnız kullanıcının
+//  gördüğü ad, çünkü ekranın işi adlandırılmış listelerden kurulan
+//  HİSSE EVRENİ (PROcess.txt satır 1).
+//
 //  NE: takip listesindeki semboller için /api/recommend turu: fiyat,
 //  bileşke skor, motorun bandı ve alım bandına yakınlık.
 //
@@ -33,6 +38,10 @@
 //  1) Kullanıcının kendi listesinin ölçümü (tek `FlatList`, tek tur)
 //  2) Liste yönetimi (Listeler kartı)
 //  3) Künye/saklama açıklaması — "nerede saklanıyor" kartı en sonda
+//  PROcess eklemeleri aynı kurala uyuyor: 🔭 tema araması ve 🌍 gündem
+//  anahtarı (2) grubunda — ikisi de EVREN KURMA yüzeyi —, profil özeti
+//  ise bir AYAR künyesi olduğu için (3) grubunda, saklama kartının
+//  yanında.
 //  ÖLÇÜLDÜ 2026-10-31: bu sekme kurala ZATEN UYUYOR; hiçbir kart
 //  taşınmadı, yalnız kural yazıya geçti. Tek pull-to-refresh yüzeyi
 //  burada (`RefreshControl`) — sıralama turunda kaydırıcıya
@@ -53,6 +62,7 @@ import {
   useListe,
   type RecommendRow,
 } from '@/api';
+import { profilVade, profilYukle, useProfil } from '@/api/depo';
 import { getSupabase } from '@/api/supabase';
 import {
   Card,
@@ -64,7 +74,10 @@ import {
   TickerRow,
   VeriYok,
 } from '@/components';
-import { BildirimKart, ListelerKart } from '@/components/liste';
+import { ProfilKart } from '@/components/anket';
+import { TemaKart } from '@/components/kesfet';
+import { BildirimKart, GundemKart, ListelerKart } from '@/components/liste';
+import { ANKET_TEMA_CIPLERI } from '@/lib/anket';
 import { formatPrice, formatScore } from '@/lib/format';
 import { hisseAc } from '@/lib/gezinme';
 import { depoCalisiyorMu } from '@/lib/kalici';
@@ -78,10 +91,17 @@ const YAKINLIK_METIN: Record<string, string> = {
   far: 'bandın uzağında',
 };
 
-export default function ListelerScreen() {
+export default function EvrenScreen() {
   const { colors } = useTheme();
   const liste = useListe();
   const hazir = useHazir();
+  // Anket kaydı YALNIZ EKRAN AYARI: hangi vade penceresi önce açılır,
+  // tema aramasında hangi kısayollar önerilir. Skora, eşiğe, ağırlığa
+  // GİRMEZ — motor bu kaydı hiç görmüyor (depo.ts §11).
+  const profil = useProfil();
+  useEffect(() => {
+    void profilYukle();
+  }, []);
   const senkron = getSupabase();
   // Depo GERÇEKTEN yazıp okuyabiliyor mu? İddia değil, ölçüm: özel
   // pencerede / kota dolu cihazda kalıcılık olmaz ve kullanıcı bunu
@@ -97,11 +117,15 @@ export default function ListelerScreen() {
     };
   }, []);
 
+  // Vade motorun DÖRT penceresinden biri; anket yanıtı hangisinin önce
+  // açıldığını söylüyor. Yanıt yoksa `profilVade` motorun varsayılanını
+  // ('orta') veriyor — uydurma bir pencere seçilmiyor.
+  const vade = profilVade(profil);
   const cagri = useCallback(
-    (signal: AbortSignal) => fetchRecommend(liste, { vade: 'orta', signal }),
-    [liste],
+    (signal: AbortSignal) => fetchRecommend(liste, { vade, signal }),
+    [liste, vade],
   );
-  const { durum, veri, hata, yenile, taze } = useIstek(cagri, liste.join(','), {
+  const { durum, veri, hata, yenile, taze } = useIstek(cagri, liste.join(',') + ':' + vade, {
     // `hazir`: depo okuması bitmeden motora gitmeyiz (bkz. api/liste.ts).
     etkin: hazir && liste.length > 0,
   });
@@ -110,8 +134,8 @@ export default function ListelerScreen() {
 
   return (
     <ScreenShell
-      title="Listeler"
-      subtitle="Takip ettiğin hisseler — her sayı motor API'den gelir."
+      title="Evren"
+      subtitle="Listelerinden kurulan hisse evreni — her sayı motor API'den gelir."
       scroll={false}
       note={
         kayitBudandiMi()
@@ -127,7 +151,7 @@ export default function ListelerScreen() {
           <RefreshControl
             refreshing={taze && durum === 'veri'}
             onRefresh={yenile}
-            tintColor={colors.gold}
+            tintColor={colors.vurgu}
           />
         }
         ListHeaderComponent={
@@ -150,7 +174,7 @@ export default function ListelerScreen() {
                     açıyor. */}
                 <OlcumEksikRozet kaynak={veri} />
                 {veri.atlanan.length ? (
-                  <Text style={[type.micro, { color: colors.gold }]}>
+                  <Text style={[type.micro, { color: colors.vurgu }]}>
                     {'Zaman bütçesi doldu, ölçülmeyenler: ' + veri.atlanan.join(', ')}
                   </Text>
                 ) : null}
@@ -181,6 +205,24 @@ export default function ListelerScreen() {
                 Aynı `sb:lists` kaydını yazıyor, ikinci kayıt açmıyor. */}
             <ListelerKart />
 
+            {/* PROcess: evreni KURMA yüzeyi — serbest metinle tema
+                araması (`/api/theme`). Keşfet'teki kartın AYNISI, yeni
+                uç yok, ikinci istek deseni yok; buraya kondu çünkü
+                adayları listeye eklemek bu sekmenin işi. Kısayol
+                çipleri anket yanıtından geliyor; yanıt yoksa anketin
+                hazır çipleri basılıyor (kapalı küme değil, uç serbest
+                metin alıyor). */}
+            <TemaKart
+              cipler={profil.temalar.length ? profil.temalar : ANKET_TEMA_CIPLERI}
+              onSembol={(sym, pazar) => hisseAc(sym, pazar ?? null)}
+            />
+
+            {/* PROcess: 🌍 dünya gündemi anahtarı. Liste başına zil
+                bayrağından AYRI (o PUSH evrenini kuruyor); bu satır
+                hiçbir listeye bağlı değil. Ucun konu başına tercihi
+                OLMADIĞINI kart kendi içinde yazıyor. */}
+            <GundemKart />
+
             {/* ŞERİT B: telefon bildiriminin CİHAZ yüzeyi. `SenkronKart`
                 LİSTELERİ buluta taşıyor (o kart `ListelerKart`ın en
                 altında duruyor, ölçüldü: ListelerKart.tsx:109), bu kart
@@ -189,6 +231,10 @@ export default function ListelerScreen() {
                 `ListelerKart`ın ARDINA, yani senkron kartının yanına
                 kondu. YENİ SEKME AÇILMADI. */}
             <BildirimKart />
+
+            {/* PROcess: hangi ayarın NEREDEN geldiği + anketi geri alma
+                yolu. Künye grubunda, saklama kartının yanında. */}
+            <ProfilKart />
 
             <Card title="Liste nerede saklanıyor?">
               <Text style={[type.small, { color: colors.textDim }]}>

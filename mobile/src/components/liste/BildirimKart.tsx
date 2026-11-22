@@ -186,7 +186,7 @@ export function BildirimKart() {
 
         {/* ③ SENKRON KODU ÖN KOŞUL. */}
         {!kodVar ? (
-          <Text style={[type.micro, { color: colors.gold }]}>
+          <Text style={[type.micro, { color: colors.vurgu }]}>
             {'Önce ☁️ Bildirim senkronu kartından senkron kodunu girmen gerekiyor; ' +
               'kod olmadan bu cihaz kaydedilemiyor.'}
           </Text>

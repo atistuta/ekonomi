@@ -178,7 +178,7 @@ export function HisseHaberleriKarti({ limit }: HisseHaberleriKartiProps) {
                 label={kod + ' · ' + (s.tam ? String(s.adet) : '—')}
                 variant={aktif ? 'solid' : 'outline'}
                 size="sm"
-                tone={s.tam ? 'neutral' : 'gold'}
+                tone={s.tam ? 'neutral' : 'vurgu'}
                 onPress={() => setSecili(aktif ? null : kod)}
               />
             );
@@ -193,7 +193,7 @@ export function HisseHaberleriKarti({ limit }: HisseHaberleriKartiProps) {
         <View style={styles.notlar}>
           {satirlar.filter((s) => !s.tam).length ? (
             <View style={styles.not}>
-              <Pill label="ölçemedim" tone="gold" glyph={null} size="sm" />
+              <Pill label="ölçemedim" tone="vurgu" glyph={null} size="sm" />
               <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                 {'Beslemesi okunamayan sembol: ' +
                   satirlar.filter((s) => !s.tam).map((s) => s.symbol).join(', ') +

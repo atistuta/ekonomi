@@ -525,7 +525,7 @@ function KapsamCipi({
       ]}>
       <Pill
         label={(aktif ? '• ' : '') + etiket}
-        tone={aktif ? 'gold' : 'neutral'}
+        tone={aktif ? 'vurgu' : 'neutral'}
         variant={aktif ? 'soft' : 'outline'}
         glyph={null}
         size="sm"

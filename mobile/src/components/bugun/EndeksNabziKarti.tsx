@@ -339,7 +339,7 @@ function EndeksSatiri({ tanim, olcum }: { tanim: EndeksTanim; olcum: EndeksOlcum
 
       <View style={styles.sag}>
         {!tanim.destekli || istekHatasi || !veri || yuzde == null ? (
-          <Pill label="ölçülemedi" tone="gold" glyph={null} size="sm" />
+          <Pill label="ölçülemedi" tone="vurgu" glyph={null} size="sm" />
         ) : (
           <>
             {/* Yön RENKLE DEĞİL okla da: `signalOf` ikisini birlikte

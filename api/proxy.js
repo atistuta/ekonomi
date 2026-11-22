@@ -127,6 +127,12 @@ const TASIYICILAR = Object.freeze({
   // TARAYICIDA hesapliyordu; native istemci hesap YAPMAZ, karar uca
   // tasindi. Belirtec yine LITERAL.
   neden:   () => import('./_neden.js'),
+  // `sahipler` bu tur acildi (Sahipler sekmesi: Kurumsal / Icerideki /
+  // Politikacilar). Yahoo quoteSummary alti modulu TEK istekte veriyor;
+  // crumb+cookie el sikismasi _yfin.js'de yasadigi icin oradan
+  // quoteSummaryHam ile ikinci el sikisma ACILMADI. 13. uc dosyasi
+  // ACILMADI (Hobby tavani 12). Belirtec yine LITERAL.
+  sahipler: () => import('./_sahipler.js'),
 });
 export const TASIYICI_ROTALARI = Object.freeze(Object.keys(TASIYICILAR));
 

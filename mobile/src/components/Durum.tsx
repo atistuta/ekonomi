@@ -179,7 +179,7 @@ function Kutu({ kartsiz, children }: { kartsiz: boolean; children?: ReactNode })
  */
 function hataTonu(hata: ApiError | null): {
   etiket: string;
-  ton: 'neutral' | 'gold' | 'info';
+  ton: 'neutral' | 'vurgu' | 'info';
   altMetin: string | null;
   tekrar: boolean;
 } {
@@ -203,7 +203,7 @@ function hataTonu(hata: ApiError | null): {
   // 'unmeasured' (ve tür bilinmiyorsa en güvenli varsayım: ölçemedik).
   return {
     etiket: 'ölçemedim',
-    ton: 'gold',
+    ton: 'vurgu',
     altMetin:
       hata?.status == null
         ? // `fetch` hiç cevap almadı. Hangisi olduğunu ÖLÇMEDİK: cihazda
@@ -274,7 +274,7 @@ export function OlcemedimKutu({ metin, yenile, kartsiz = true }: OlcemedimKutuPr
   return (
     <Kutu kartsiz={kartsiz}>
       <View style={styles.basliksatir}>
-        <Pill label="ölçemedim" tone="gold" glyph={null} size="sm" />
+        <Pill label="ölçemedim" tone="vurgu" glyph={null} size="sm" />
       </View>
       <Text style={[type.small, { color: colors.text, marginTop: space.sm }]}>{metin}</Text>
       {yenile ? (
@@ -350,7 +350,7 @@ export function OlcumEksikRozet({ kaynak }: OlcumNotuProps) {
 
   return (
     <View style={[styles.rozet, { borderColor: colors.border }]}>
-      <Pill label="ölçüm eksik" tone="gold" glyph={null} size="sm" />
+      <Pill label="ölçüm eksik" tone="vurgu" glyph={null} size="sm" />
       <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>{cumleler.join(' ')}</Text>
     </View>
   );
@@ -381,7 +381,7 @@ export function HaberOlcumEksikRozet({ kaynak }: HaberOlcumNotuProps) {
 
   return (
     <View style={[styles.rozet, { borderColor: colors.border }]}>
-      <Pill label="ölçüm eksik" tone="gold" glyph={null} size="sm" />
+      <Pill label="ölçüm eksik" tone="vurgu" glyph={null} size="sm" />
       <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>{cumleler.join(' ')}</Text>
     </View>
   );

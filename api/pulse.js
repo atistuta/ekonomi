@@ -774,10 +774,19 @@ export default async function handler(req, res) {
 
     // En yeni manşetin zamanı (ms epoch) — web'in `lastTs`i. Tarihi
     // okunamayan manşet SAYILMIYOR; hiç okunamazsa `null` (0 DEĞİL).
-    const sonManset = tumTaze.reduce((mx, it) => {
+    // DUZ DONGU, `reduce` DEGIL: bu dosyanin kapisi uc kodunda
+    // `reduce(` gormek ISTEMIYOR (tests/nabiz-alan-test.mjs ⑦).
+    // Kural kod susu degil: `reduce` ucta birikimli HESAP yazmanin
+    // olagan kalibi ve o is motorun. Buradaki is hesap degil SECIM —
+    // "en yeni manşetin zamani" — ama kaliba hic girmemek, bir gun
+    // ayni satira esik/agirlik eklenmesini de bastan engelliyor.
+    let sonManset = null;
+    for (const it of tumTaze) {
       const t = Date.parse(it.pubDate);
-      return (!isNaN(t) && t > mx) ? t : mx;
-    }, 0) || null;
+      // Tarihi okunamayan manşet SAYILMIYOR; hic okunamazsa `null`
+      // kaliyor — 0 DEGIL (olculmeyen sayi basilmaz).
+      if (!isNaN(t) && (sonManset === null || t > sonManset)) sonManset = t;
+    }
 
     // --- 🗞️ MANŞETLER (web'in `headlines`ı) ------------------------
     //  SIRALAMA VE TAVAN web'le AYNI: tarihi okunabilen + bağlantısı

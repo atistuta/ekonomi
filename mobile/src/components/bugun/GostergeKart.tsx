@@ -123,7 +123,7 @@ export function GostergeKart() {
                 label={VARLIK_SINIFI_SOZLUK[v]}
                 size="sm"
                 variant={v === cls ? 'solid' : 'outline'}
-                tone={v === cls ? 'gold' : 'neutral'}
+                tone={v === cls ? 'vurgu' : 'neutral'}
                 onPress={() => {
                   setCls(v);
                   temizle();

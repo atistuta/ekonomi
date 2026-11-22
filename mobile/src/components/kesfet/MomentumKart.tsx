@@ -260,7 +260,7 @@ function MomentumSatiri({
         <Pill label="rejim açık" tone="neutral" variant="outline" glyph={null} size="sm" />
         <View style={styles.bosluk} />
         {/* Etiket metinle yazılı ki sayı tek başına anlamsız kalmasın. */}
-        <Text style={[type.smallBold, styles.num, { color: colors.gold }]}>
+        <Text style={[type.smallBold, styles.num, { color: colors.vurgu }]}>
           {'ADX ' + (adx === null ? EMPTY : formatOran(adx, 1))}
         </Text>
       </View>

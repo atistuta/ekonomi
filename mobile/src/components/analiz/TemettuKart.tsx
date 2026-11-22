@@ -192,7 +192,7 @@ export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: Temet
                     ]}>
                     <Pill
                       label={(aktif ? '• ' : '') + s.etiket + ' (' + String(adet) + ')'}
-                      tone={aktif ? 'gold' : 'neutral'}
+                      tone={aktif ? 'vurgu' : 'neutral'}
                       variant={aktif ? 'soft' : 'outline'}
                       glyph={null}
                       size="sm"
@@ -212,7 +212,7 @@ export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: Temet
 
             {asim > 0 ? (
               <View style={styles.dipnot}>
-                <Pill label="sorulmadı" tone="gold" glyph={null} size="sm" />
+                <Pill label="sorulmadı" tone="vurgu" glyph={null} size="sm" />
                 <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                   {'Künye ucu en çok ' +
                     String(YFIN_AZAMI_SEMBOL) +
@@ -273,7 +273,7 @@ export function TemettuKart({ veri, durum, hata, yenile, semboller = [] }: Temet
 
             {olculemeyen.length ? (
               <View style={styles.dipnot}>
-                <Pill label="ölçemedim" tone="gold" glyph={null} size="sm" />
+                <Pill label="ölçemedim" tone="vurgu" glyph={null} size="sm" />
                 <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                   {olculemeyen.join(', ') + ' — künye turu düştü, bu sembol ölçülemedi.'}
                 </Text>
@@ -338,7 +338,7 @@ function VerimSatiri({ kunye }: { kunye: YfinKunye }) {
       </View>
       <View style={styles.sag}>
         {verim == null ? (
-          <Pill label="ölçülemedi" tone="gold" glyph={null} size="sm" />
+          <Pill label="ölçülemedi" tone="vurgu" glyph={null} size="sm" />
         ) : (
           <Text style={[type.bodyBold, numeric, { color: colors.text }]}>
             {formatOran(verim, 4)}

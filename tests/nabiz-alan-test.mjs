@@ -212,7 +212,18 @@ ok('sektorler dizi (makine kodu)', Array.isArray(sifirRes.govde.konjonktur.sekto
 
 // =========================================================================
 bolum('④ Gövde alan listesi SABİT — hiçbir alan kaybolmadı/adı değişmedi');
-const BEKLENEN = 'degerlendirilen,durus,eksik,haberler,kaynak,konjonktur,ms,pencere,surum,taze,uyari';
+// ALAN LISTESI NEDEN BUYUDU: gundem zenginlestirmesi (`gerceklik`,
+// `yorum`, `etiketler`, `mansetler`, `sonManset`, `taze2g`, `varMi` ve
+// ikisinin "sormadim" ikizleri `eksikGerceklik`/`eksikYorum`) BILEREK
+// eklendi; hepsi ucun kendi govdesinde ZATEN olculuyor. Liste yine
+// SABIT: buraya yazilmayan bir alan cikarsa kapi dusuyor — amac
+// alanlarin sessizce dogmasini/adinin degismesini yakalamak.
+const BEKLENEN = [
+  'degerlendirilen', 'durus', 'eksik', 'eksikGerceklik', 'eksikYorum',
+  'etiketler', 'gerceklik', 'haberler', 'kaynak', 'konjonktur',
+  'mansetler', 'ms', 'pencere', 'sonManset', 'surum', 'taze', 'taze2g',
+  'uyari', 'varMi', 'yorum',
+].join(',');
 ok('gövde anahtarları birebir', anahtarlar(sifirRes.govde) === BEKLENEN, anahtarlar(sifirRes.govde));
 ok('eksik yolunda da aynı anahtarlar', anahtarlar(eksikRes.govde) === BEKLENEN, anahtarlar(eksikRes.govde));
 ok('durus anahtarları',

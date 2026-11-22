@@ -20,7 +20,7 @@
 import type { ColorTokens } from './colors';
 
 /** Anlamsal ton. Gerçek renk `toneColors()` ile çözülür. */
-export type Tone = 'positive' | 'negative' | 'neutral' | 'gold' | 'info';
+export type Tone = 'positive' | 'negative' | 'neutral' | 'vurgu' | 'info';
 
 export type Signal = {
   tone: Tone;
@@ -62,8 +62,8 @@ export function toneColors(colors: ColorTokens, tone: Tone): { fg: string; bg: s
       return { fg: colors.positive, bg: colors.positiveSoft };
     case 'negative':
       return { fg: colors.negative, bg: colors.negativeSoft };
-    case 'gold':
-      return { fg: colors.gold, bg: colors.goldSoft };
+    case 'vurgu':
+      return { fg: colors.vurgu, bg: colors.vurguSoft };
     case 'info':
       return { fg: colors.info, bg: colors.infoSoft };
     case 'neutral':

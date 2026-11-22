@@ -299,7 +299,7 @@ export default function AnalizScreen() {
               label={s}
               size="sm"
               variant={s === sembol ? 'solid' : 'outline'}
-              tone={s === sembol ? 'gold' : 'neutral'}
+              tone={s === sembol ? 'vurgu' : 'neutral'}
               onPress={() => setSecili(s)}
             />
           ))}
@@ -425,7 +425,7 @@ export default function AnalizScreen() {
               subtitle="0-10 · motorun hesabı, istemci yeniden toplamaz"
               right={
                 satir.analiz?.faKarar ? (
-                  <Pill label={satir.analiz.faKarar.label} tone="gold" glyph={null} size="sm" />
+                  <Pill label={satir.analiz.faKarar.label} tone="vurgu" glyph={null} size="sm" />
                 ) : null
               }>
               <Text style={[type.display, { color: colors.text }]}>

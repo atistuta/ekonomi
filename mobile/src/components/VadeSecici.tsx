@@ -18,7 +18,7 @@
 //  dizisiyle AYNI sırada. `Record<Vade, string>` olduğu için motor
 //  yeni bir vade eklerse `tsc` kırılır — sessizce eksik kalmaz.
 //
-//  SEÇİM GÖRÜNÜR VE DUYULUR: seçili düğme `solid` + `gold`, ötekiler
+//  SEÇİM GÖRÜNÜR VE DUYULUR: seçili düğme `solid` + `vurgu`, ötekiler
 //  `outline` + `neutral`. `Dugme` dokunma hedefi/erişilebilirlik
 //  kuralını zaten taşıyor; burada ikinci bir Pressable tanımı YOK.
 //
@@ -60,7 +60,7 @@ export function VadeSecici({ deger, onDegis }: VadeSeciciProps) {
             label={VADE_SOZLUK[v]}
             size="sm"
             variant={v === deger ? 'solid' : 'outline'}
-            tone={v === deger ? 'gold' : 'neutral'}
+            tone={v === deger ? 'vurgu' : 'neutral'}
             onPress={() => onDegis(v)}
           />
         ))}

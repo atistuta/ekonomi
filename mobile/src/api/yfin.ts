@@ -250,6 +250,31 @@ export type YfinKunye = {
    */
   fiftyTwoWeekHigh?: number | null;
   fiftyTwoWeekLow?: number | null;
+
+  /**
+   * ANALIST HEDEF FIYATI (Wall Street) — **PARA**, birimi `currency`,
+   * yani `price` ile AYNI olcek (api/_yfin.js, `financialData` blogu).
+   * O modul ucta ZATEN isteniyordu; bu dort alan okunmuyordu — EK bir
+   * yukari istek YOK.
+   *
+   * ⚠️ HEDEFE UZAKLIK HESAPLANMAZ: `(hedef - fiyat) / fiyat` bir TUREV
+   * ve karar degeri tasir. Ne uc ne istemci uretir; ekran hedefi ve
+   * fiyati AYRI AYRI basar (52 hafta bandindaki ayni kural).
+   *
+   * ⚠️ SKORA GIRMEZ: temel skorun 17 olcutu motorda yazili, analist
+   * hedefi o kumede YOK. Bu alanlar yalniz GOSTERILIR.
+   *
+   * TAVSIYE ALANI BILEREK ALINMADI: Yahoo ayni govdede
+   * `recommendationKey` ('buy'/'hold') tasiyor. Onu basmak ucuncu bir
+   * tarafin AL/SAT yargisini uygulamanin sesiyle tekrarlamak olurdu —
+   * uygulama bilgi araci. Hedef fiyat ve analist SAYISI olcum;
+   * 'al' kelimesi karar.
+   */
+  targetMeanPrice?: number | null;
+  targetHighPrice?: number | null;
+  targetLowPrice?: number | null;
+  /** Hedefi veren analist ADEDI — para degil, SAYI. */
+  numberOfAnalystOpinions?: number | null;
 };
 
 /**

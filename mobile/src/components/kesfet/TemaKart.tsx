@@ -64,6 +64,8 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import {
   AZAMI_SORGU,
+  ekle,
+  useListe,
   VARSAYILAN_HABER_PAZAR,
   fetchNews,
   fetchTheme,
@@ -94,6 +96,15 @@ export type TemaKartProps = {
   onSembol?: (sym: string, pazar?: string | null) => void;
   /** Açılışta alana düşen tema. Verilmezse alan boş ve ölçüm İSTENMEZ. */
   baslangicSorgu?: string;
+  /**
+   * KISAYOL ÇİPLERİ (PROcess). Verilmezse çip satırı HİÇ basılmaz —
+   * mevcut çağıranların görüntüsü değişmiyor.
+   *
+   * NEDEN KAPALI KÜME DEĞİL: uç serbest METİN alıyor; çip yalnız
+   * yazmayı kısaltıyor. Çipe basmak alanı DOLDURUR ve ölçümü başlatır;
+   * kullanıcının sormadığı bir tema kendiliğinden ölçülmez.
+   */
+  cipler?: readonly string[];
 };
 
 /**
@@ -110,7 +121,7 @@ function pazarAdi(m: Market | string): string {
   return PAZAR_AD[m as Market] ?? m;
 }
 
-export function TemaKart({ onSembol, baslangicSorgu }: TemaKartProps) {
+export function TemaKart({ onSembol, baslangicSorgu, cipler }: TemaKartProps) {
   const { colors } = useTheme();
   const bas = (baslangicSorgu ?? '').trim().slice(0, AZAMI_SORGU);
   const [metin, setMetin] = useState(bas);
@@ -177,6 +188,32 @@ export function TemaKart({ onSembol, baslangicSorgu }: TemaKartProps) {
           },
         ]}
       />
+      {/* Kısayol çipleri: yalnız alanı doldurup ölçümü başlatıyor. */}
+      {cipler && cipler.length ? (
+        <View style={styles.cipler}>
+          {cipler.map((c) => (
+            <Pressable
+              key={c}
+              onPress={() => {
+                const t = c.trim().slice(0, AZAMI_SORGU);
+                setMetin(t);
+                setSorgu(t);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={'Tema kısayolu: ' + c}
+              style={({ pressed }) => [
+                styles.cip,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: pressed ? colors.bgPressed : colors.bgElevated,
+                },
+              ]}>
+              <Text style={[type.small, { color: colors.text }]}>{c}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
       <Dugme
         label="Tema ara"
         variant="outline"
@@ -278,6 +315,27 @@ function AdaySatiri({
   kanitHata?: boolean;
 }) {
   const { colors } = useTheme();
+  // TEK DOKUNUSLA TAKIBE ALMA: kesif bir ADAY uretiyor, ama o aday
+  // olculmeye baslamiyor — motor YALNIZ takip listesindeki sembolleri
+  // koşturuyor. Eskiden kullanici sembolu AKILDA TUTUP Arama sekmesine
+  // gidip elle yazmak zorundaydi; kesif ile olcum arasindaki kopru
+  // YOKTU. (Ayni dugme Arama sekmesinin tematik kartinda VARDI,
+  // `(tabs)/arama.tsx:344` — Kesfet'teki bu zengin kartta yoktu.)
+  //
+  // SINIR VE MESAJ DEPODAN: `ekle()` hem azami sembol tavanini hem
+  // "zaten var" halini kendi cumlesiyle donduruyor; burada esik
+  // YAZILMIYOR, sayi tutulmuyor.
+  //
+  // NEDEN "LISTEYE", "EVRENE" DEGIL: iki AYRI kayit var — ekranlarin
+  // olctugu TAKIP LISTESI (`liste.ts`) ve bildirim evrenini kuran ADLI
+  // LISTELER (`depo.ts listelerDepo`, `inUniverse` kutucugu orada).
+  // Buradaki dokunus birincisine yaziyor; dugmeye "Evrene ekle"
+  // demek kullaniciya bildirim evrenine girdigini soylemek olurdu.
+  // Adli listeye ekleme bir SECIM gerektiriyor (hangi liste?), yani
+  // tek dokunus degil — o is Listeler ekraninda duruyor.
+  const takipListesi = useListe();
+  const [eklendi, setEklendi] = useState<string | null>(null);
+  const listede = takipListesi.includes(aday.symbol);
 
   // Anahtar İSTEMCİNİN GÖNDERDİĞİ HAM SEMBOL (uç sözleşmesi:
   // api/news.js `temaKatmani`) — `/api/theme`ten gelen `symbol` ne ise o.
@@ -294,7 +352,26 @@ function AdaySatiri({
         </Text>
         <View style={styles.bosluk} />
         <Pill label={pazarAdi(aday.market)} tone="neutral" variant="outline" glyph={null} size="sm" />
+        {/* SATIRIN KENDI DOKUNUSUNU YEMEZ: ic Pressable sorumluluğu
+            aliyor, yani dugmeye basmak hisse sayfasini ACMIYOR. */}
+        <Dugme
+          label={listede ? 'Listede' : 'Listeye ekle'}
+          size="sm"
+          variant="outline"
+          tone={listede ? 'neutral' : 'vurgu'}
+          disabled={listede}
+          onPress={() => {
+            const sonuc = ekle(aday.symbol);
+            // DURUST GERI BILDIRIM: yazilamadiysa depo'nun cumlesi
+            // basiliyor; "eklendi" yalniz gercekten yazilinca cikiyor.
+            setEklendi(sonuc.ok ? sonuc.sembol + ' listeye eklendi.' : sonuc.mesaj);
+          }}
+        />
       </View>
+
+      {eklendi ? (
+        <Text style={[type.micro, { color: colors.textDim }]}>{eklendi}</Text>
+      ) : null}
 
       {aday.name ? (
         <Text style={[type.micro, { color: colors.textDim }]} numberOfLines={2}>
@@ -361,5 +438,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     paddingVertical: space.sm,
     marginBottom: space.sm,
+  },
+  cipler: { flexDirection: 'row', flexWrap: 'wrap', gap: space.xs, marginBottom: space.sm },
+  cip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
   },
 });

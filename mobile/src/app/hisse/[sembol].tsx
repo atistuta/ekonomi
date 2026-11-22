@@ -75,11 +75,13 @@ import {
   BacktestKart,
   DegerKart,
   DetayBasligi,
+  EtiketSeridi,
   DetayEylemler,
   HaberKart,
   HareketKart,
   IceridenKart,
   KatalizorKart,
+  RejimKart,
   SirketKart,
   RiskOdulKart,
   TeknikKart,
@@ -186,6 +188,11 @@ export default function HisseDetayScreen() {
           {satir ? (
             <>
               <DetayBasligi satir={satir} />
+              {/* AKILLI ETIKET SATIRI — basligin HEMEN altinda, cunku
+                  sayfanin ilk ekraninda "motor bu hissede ne diyor"
+                  cevabini veriyor. EK AG TURU YOK: ayni `satir`.
+                  Rozet cikmazsa serit kendini CIZMIYOR. */}
+              <EtiketSeridi satir={satir} />
               {/* YAZMA EYLEMLERI: webde hisse sayfasinin ust
                   seridinde ikisi de var. Native'de listeye ekleme
                   YALNIZ Arama sekmesindeydi, kiyas setine ekleme
@@ -201,6 +208,21 @@ export default function HisseDetayScreen() {
                   calisiyor ve kart ters pazar denemesi YAPMIYOR. */}
               <SirketKart sembol={sembol} />
               <TeknikKart satir={satir} />
+              {/* ANALYZE TURUNUN DISI (PROcess): ayni sembolun KISA /
+                  ORTA / UZUN penceresindeki teknik skoru yan yana.
+                  TEKNIK KARTIN HEMEN ALTINDA: ust kart SECILI vadenin
+                  dokumu, bu kart ayni olcumun vadeye gore degisimi.
+                  Tur DUGMEYLE atiliyor (her pencere ayri bir
+                  `/api/score` turu); secili pencere yeniden
+                  SORULMUYOR, elde duran kayit veriliyor. Sembol
+                  `satir.sym` DEGIL ekranin cozdugu `sembol`: BIST'te
+                  `.IS` soneki gerekiyor (yukaridaki not). */}
+              <RejimKart
+                sembol={sembol}
+                market={satir.market}
+                seciliVade={vade}
+                satir={satir}
+              />
               {/* `sembol` AYRICA VERİLİYOR: kart piyasa değeri için
                   künye ucuna kendi turunu atıyor ve o uç BIST'te `.IS`
                   sonekini istiyor — `satir.sym` o soneki taşımayabilir

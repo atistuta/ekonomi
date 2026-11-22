@@ -44,13 +44,17 @@ export type ColorTokens = {
   textDim: string;
   /** Üçüncül metin — ipucu, dipnot. */
   textFaint: string;
-  /** Koyu zemin üstünde değil, ALTIN/renkli dolgu üstünde duran metin. */
+  /** Koyu zemin üstünde değil, VURGU/renkli dolgu üstünde duran metin. */
   textOnAccent: string;
 
-  /** Marka vurgusu — altın. */
-  gold: string;
-  /** Altının zemin tonu (pill arka planı). */
-  goldSoft: string;
+  /**
+   * Marka vurgusu — MAVİ (PROcess, 2026-11-15). Eskiden altındı; jeton adı
+   * da `gold` -> `vurgu` oldu, çünkü motorun `kind: 'gold'` kodu ALTIN
+   * MADENİNİ anlatıyor ve iki "gold" aynı dosyada karışıyordu.
+   */
+  vurgu: string;
+  /** Vurgunun zemin tonu (pill arka planı). */
+  vurguSoft: string;
 
   /** Pozitif sinyal — yeşil. */
   positive: string;
@@ -93,8 +97,8 @@ export const darkColors: ColorTokens = {
   textFaint: '#5D6881',
   textOnAccent: '#0F1522',
 
-  gold: '#D4A24E',
-  goldSoft: 'rgba(212, 162, 78, 0.15)',
+  vurgu: '#4C8DFF',
+  vurguSoft: 'rgba(76, 141, 255, 0.16)',
 
   positive: '#3FBF8F',
   positiveSoft: 'rgba(63, 191, 143, 0.15)',
@@ -132,8 +136,8 @@ export const lightColors: ColorTokens = {
   textFaint: '#7C879E',
   textOnAccent: '#FFFFFF',
 
-  gold: '#9C6F1E',
-  goldSoft: 'rgba(156, 111, 30, 0.12)',
+  vurgu: '#1D4ED8',
+  vurguSoft: 'rgba(29, 78, 216, 0.12)',
 
   positive: '#0D7F5C',
   positiveSoft: 'rgba(13, 127, 92, 0.12)',

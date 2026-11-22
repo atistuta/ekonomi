@@ -128,7 +128,7 @@ export function MetalKart({ veri, durum, hata, yenile }: MetalKartProps) {
 
             {olculemeyen.length ? (
               <View style={styles.dipnot}>
-                <Pill label="ölçemedim" tone="gold" glyph={null} size="sm" />
+                <Pill label="ölçemedim" tone="vurgu" glyph={null} size="sm" />
                 <Text style={[type.micro, { color: colors.textDim, flex: 1 }]}>
                   {olculemeyen.join(', ') + ' — künye turu düştü, bu sembol ölçülemedi.'}
                 </Text>
@@ -174,7 +174,7 @@ function MetalSatiri({ kunye }: { kunye: YfinKunye }) {
               {formatPrice(kunye.price, kur)}
             </Text>
           ) : (
-            <Pill label="fiyat ölçülmedi" tone="gold" glyph={null} size="sm" />
+            <Pill label="fiyat ölçülmedi" tone="vurgu" glyph={null} size="sm" />
           )}
         </View>
       </View>

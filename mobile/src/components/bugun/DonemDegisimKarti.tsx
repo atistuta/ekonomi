@@ -162,7 +162,7 @@ function SembolBlogu({
         <View style={styles.bosluk} />
         {/* Gecikme RENKLE DEĞİL metinle: uç `gecikmeli` diyorsa yazıyoruz. */}
         {satir.gecikmeli ? (
-          <Pill label="gecikmeli" tone="gold" variant="outline" glyph={null} size="sm" />
+          <Pill label="gecikmeli" tone="vurgu" variant="outline" glyph={null} size="sm" />
         ) : null}
         {satir.ok === false ? (
           <Pill label="ölçülemedi" tone="neutral" variant="outline" glyph={null} size="sm" />

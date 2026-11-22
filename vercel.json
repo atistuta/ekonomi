@@ -40,7 +40,8 @@
     { "source": "/api/mali",     "destination": "/api/proxy?__rota=mali" },
     { "source": "/api/metal",    "destination": "/api/proxy?__rota=metal" },
     { "source": "/api/neden",    "destination": "/api/proxy?__rota=neden" },
-    { "source": "/api/katalizor", "destination": "/api/proxy?__rota=katalizor" }
+    { "source": "/api/katalizor", "destination": "/api/proxy?__rota=katalizor" },
+    { "source": "/api/sahipler", "destination": "/api/proxy?__rota=sahipler" }
   ],
   "regions": ["fra1"],
   "headers": [

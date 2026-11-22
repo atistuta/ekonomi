@@ -220,6 +220,36 @@ export function TemelKart({ satir, sembol }: TemelKartProps) {
     kunyeKayit?.ok && typeof kunyeKayit.fiftyTwoWeekLow === 'number'
       ? kunyeKayit.fiftyTwoWeekLow
       : null;
+  // WALL STREET HEDEF FİYATI — YİNE AYNI künye turundan (ek ağ turu
+  // AÇILMADI; `financialData` bloğu `deep:false` cevabında zaten vardı,
+  // dört alan yalnız OKUNMUYORDU — api/_yfin.js'teki not).
+  // ⚠️ HEDEFE UZAKLIK TÜRETİLMİYOR: `(hedef - fiyat) / fiyat` bir türev
+  // oran ve KARAR değeri taşır; 52 hafta bandındaki kuralın aynısı.
+  // ⚠️ SKORA GİRMEZ: temel skorun kriter kümesi yukarıdaki `FA_ETIKET`
+  // listesi; analist hedefi o kümede YOK. Burada yalnız GÖSTERİLİYOR.
+  // ⚠️ ANALİST TAVSİYESİ (`recommendationKey`) UÇTA DA ALINMADI: üçüncü
+  // bir tarafın AL/SAT yargısını uygulamanın sesiyle tekrarlamak olurdu.
+  // Hedef fiyat ve analist SAYISI ölçüm; 'al' kelimesi karar.
+  const hedefOrta =
+    kunyeKayit?.ok && typeof kunyeKayit.targetMeanPrice === 'number'
+      ? kunyeKayit.targetMeanPrice
+      : null;
+  const hedefTepe =
+    kunyeKayit?.ok && typeof kunyeKayit.targetHighPrice === 'number'
+      ? kunyeKayit.targetHighPrice
+      : null;
+  const hedefDip =
+    kunyeKayit?.ok && typeof kunyeKayit.targetLowPrice === 'number'
+      ? kunyeKayit.targetLowPrice
+      : null;
+  // ADET — para DEĞİL; `formatPrice` ile basmak ona para birimi
+  // takardı. Kaç analist ölçtüğü, hedefin ne kadar temsil ettiğini
+  // söyleyen tek ölçü: 1 analistin hedefi ile 42 analistin ortalaması
+  // aynı şey değil ve bunu EKRAN söylemezse kullanıcı bilmiyor.
+  const analistAdet =
+    kunyeKayit?.ok && typeof kunyeKayit.numberOfAnalystOpinions === 'number'
+      ? kunyeKayit.numberOfAnalystOpinions
+      : null;
   // ÜÇ DAL AYRI: tur sürüyor · alan gövdede HİÇ YOK (eski uç, "sorulmadı")
   // · alan var ama `null`/sayı değil ("ölçemedi").
   // TASARIM TURU 1: DÖRDÜNCÜ dal (ölçüm başarılı) artık `null` dönüyor,
@@ -234,6 +264,23 @@ export function TemelKart({ satir, sembol }: TemelKartProps) {
     if (kunye.durum !== 'veri') return 'künye turu sürüyor';
     if (kunyeKayit === null || !(anahtar in kunyeKayit)) return 'uç bu alanı GÖNDERMEDİ';
     if (deger === null) return 'künye ölçemedi — türetilmiyor';
+    return null;
+  }
+
+  // Hedef alanlarının üç dalı haftaNot ile AYNI mantık ama ANAHTAR
+  // KÜMESİ başka; tek bir birleşik imza yazmak iki ölçüm kümesini tek
+  // yere bağlardı (biri `summaryDetail`, öteki `financialData`).
+  function hedefNot(
+    deger: number | null,
+    anahtar:
+      | 'targetMeanPrice'
+      | 'targetHighPrice'
+      | 'targetLowPrice'
+      | 'numberOfAnalystOpinions',
+  ): string | null {
+    if (kunye.durum !== 'veri') return 'künye turu sürüyor';
+    if (kunyeKayit === null || !(anahtar in kunyeKayit)) return 'uç bu alanı GÖNDERMEDİ';
+    if (deger === null) return 'analist kapsamı yok';
     return null;
   }
 
@@ -324,6 +371,49 @@ export function TemelKart({ satir, sembol }: TemelKartProps) {
         ) : null}
       </View>
 
+      {/* WALL STREET HEDEF FİYATI — tasarım dilindeki "analist hedefi"
+          şeridi. 52 hafta bölümüyle aynı düzen: ortak pencere (12 ay),
+          ortak birim (PARA), ortak kaynak (künye ucu). AYRI BÖLÜM,
+          çünkü 52 hafta OLMUŞ fiyatı, bu bölüm analist BEKLENTİSİNİ
+          söylüyor — ikisini tek ızgaraya koymak ölçülen ile beklenen
+          sayıyı aynı kefeye atmak olurdu. */}
+      <View style={styles.hafta}>
+        <OlcumBaslik
+          baslik="Analist hedef fiyatı (12 ay)"
+          birim="PARA"
+          not="künye ucundan — beklenti, ölçüm değil"
+        />
+        <View style={styles.kiremitler}>
+          <Kiremit
+            etiket="Hedef Ortalama"
+            deger={hedefOrta === null ? EMPTY : formatPrice(hedefOrta, piyasaKur)}
+            not={hedefNot(hedefOrta, 'targetMeanPrice')}
+          />
+          <Kiremit
+            etiket="Hedef Tepe"
+            deger={hedefTepe === null ? EMPTY : formatPrice(hedefTepe, piyasaKur)}
+            not={hedefNot(hedefTepe, 'targetHighPrice')}
+          />
+          <Kiremit
+            etiket="Hedef Dip"
+            deger={hedefDip === null ? EMPTY : formatPrice(hedefDip, piyasaKur)}
+            not={hedefNot(hedefDip, 'targetLowPrice')}
+          />
+          <Kiremit
+            etiket="Analist Sayısı"
+            deger={analistAdet === null ? EMPTY : formatCompact(analistAdet)}
+            not={hedefNot(analistAdet, 'numberOfAnalystOpinions')}
+          />
+        </View>
+        {hedefOrta !== null || hedefTepe !== null || hedefDip !== null ? (
+          <Text style={[type.micro, { color: colors.textFaint }]}>
+            Fiyatın hedefe uzaklığı HESAPLANMADI — o bir türev oran. Hedef
+            fiyat analistlerin beklentisi; temel skora GİRMİYOR ve tavsiye
+            değildir.
+          </Text>
+        ) : null}
+      </View>
+
       {kriterler.length ? (
         // TASARIM TURU 1: kriter listesi katlanır ve VARSAYILAN AÇIK —
         // temel skorun "neden" cevabı bu liste; ham künye değil. "/100"
@@ -364,7 +454,7 @@ export function TemelKart({ satir, sembol }: TemelKartProps) {
                     `score === null` olan kriter skora hiç girmiyor
                     (api/_motor.js computeFaScore `c.score != null`). */}
                 {olculdu ? null : (
-                  <Pill label="ölçülemedi" tone="gold" glyph={null} size="sm" />
+                  <Pill label="ölçülemedi" tone="vurgu" glyph={null} size="sm" />
                 )}
               </View>
             );

@@ -32,7 +32,7 @@ export type DugmeProps = {
 export function Dugme({
   label,
   onPress,
-  tone = 'gold',
+  tone = 'vurgu',
   variant = 'solid',
   size = 'md',
   disabled = false,

@@ -111,6 +111,14 @@ export const ANAHTARLAR = {
    * yüzden satırın eklenmesi web türlerinin yüklenmesini etkilemiyor.
    */
   push: 'sb:push',
+  /**
+   * NATIVE'E ÖZEL — webde karşılığı YOK (`push` ile aynı istisna).
+   * Kullanıcının anket yanıtları. Bu kayıt EKRAN AYARIDIR: hangi vadenin
+   * önce açılacağı, hangi tema çiplerinin önerileceği, hangi bildirim
+   * kutusunun işaretli geleceği. Skora, eşiğe, ağırlığa ASLA girmez —
+   * motor bu kaydı görmez (ölçüldü: uca hiçbir profil alanı gitmiyor).
+   */
+  profil: 'sb:profil',
 } as const;
 
 /** Bu katmanın şema sürümü. Web'in kayıt ŞEKLİ değişmez (başlık notu). */
@@ -2040,6 +2048,192 @@ export async function pushJetonYaz(
     platform: metin(platform).trim() || null,
     ts: ts == null || ts.trim() === '' ? null : ts.trim(),
   });
+}
+
+// ---------------------------------------------------------------------
+//  11. YATIRIM PROFİLİ (ANKET) — yalnız EKRAN AYARI
+// ---------------------------------------------------------------------
+//  NE: açılıştaki yedi soruluk anketin yanıtları. `pushDurum` ile aynı
+//  kalıp: nesne türü, kendi süzgeci, kendi kancaları.
+//
+//  NEDEN MOTORA GİTMİYOR (DEĞİŞMEZ KURAL): kişiselleştirilmiş yatırım
+//  tavsiyesi YASAK ve bu depo "native'de skor/gösterge matematiği yok"
+//  kuralıyla çalışıyor. Profil yalnız GÖRÜNÜMÜ ayarlar:
+//    • `vade`   → hangi vade penceresi önce açılır
+//    • `temalar`→ tema aramasında hangi çipler önerilir
+//    • `bildirimler` → hangi bildirim kutusu işaretli gelir
+//  Skorun sayısı profille KAYMAZ; aynı sembol iki farklı profilde
+//  AYNI bileşkeyi verir.
+//
+//  NEDEN `atlandi` AYRI BİR ALAN: "yanıtlamadı" ile "yanıtladı ama boş
+//  bıraktı" aynı şey değil. Anket atlanırsa bir daha açılmaz ama
+//  profil YOK sayılır — ölçülmeyen şey varsayılmaz.
+// ---------------------------------------------------------------------
+
+export type ProfilVade = 'gunici' | 'kisa' | 'orta' | 'uzun';
+export type ProfilDeneyim = 'yeni' | 'orta' | 'deneyimli';
+export type ProfilDusus = 'hepsi' | 'birKismi' | 'beklerim' | 'eklerim';
+export type ProfilTakip = 'gunluk' | 'haftalik' | 'aylik';
+export type ProfilPazar = 'bist' | 'abd' | 'kripto' | 'metal';
+export type ProfilBildirim = 'liste' | 'gundem';
+
+export type Profil = {
+  /** Kayıt şeması sürümü. Soru kümesi değişirse artar. */
+  surum: number;
+  /** Anket sonuna kadar gidildi mi? */
+  tamamlandi: boolean;
+  /** "Atla" ile kapatıldı mı? (tamamlandı ile aynı anda true olmaz) */
+  atlandi: boolean;
+  /** Yanıt anı — ÇAĞIRAN verir (cihaz saati), depo üretmez. */
+  ts: string | null;
+  deneyim: ProfilDeneyim | null;
+  vade: ProfilVade | null;
+  dusus: ProfilDusus | null;
+  takip: ProfilTakip | null;
+  pazarlar: ProfilPazar[];
+  /** Tema/sektör etiketleri — SÖZLÜK, eşik değil. */
+  temalar: string[];
+  bildirimler: ProfilBildirim[];
+};
+
+export const PROFIL_SURUM = 1;
+
+const PROFIL_BOS: Profil = {
+  surum: PROFIL_SURUM,
+  tamamlandi: false,
+  atlandi: false,
+  ts: null,
+  deneyim: null,
+  vade: null,
+  dusus: null,
+  takip: null,
+  pazarlar: [],
+  temalar: [],
+  bildirimler: [],
+};
+
+const PROFIL_VADELER: readonly ProfilVade[] = ['gunici', 'kisa', 'orta', 'uzun'];
+const PROFIL_DENEYIMLER: readonly ProfilDeneyim[] = ['yeni', 'orta', 'deneyimli'];
+const PROFIL_DUSUSLER: readonly ProfilDusus[] = ['hepsi', 'birKismi', 'beklerim', 'eklerim'];
+const PROFIL_TAKIPLER: readonly ProfilTakip[] = ['gunluk', 'haftalik', 'aylik'];
+const PROFIL_PAZARLAR: readonly ProfilPazar[] = ['bist', 'abd', 'kripto', 'metal'];
+const PROFIL_BILDIRIMLER: readonly ProfilBildirim[] = ['liste', 'gundem'];
+
+/** Kümeye ait mi? Değilse `null` — uydurulmuş varsayılan YOK. */
+function kumeden<T extends string>(ham: unknown, kume: readonly T[]): T | null {
+  if (typeof ham !== 'string') return null;
+  return (kume as readonly string[]).includes(ham) ? (ham as T) : null;
+}
+
+/** Kümeye ait metinlerin tekilleştirilmiş dizisi. */
+function kumeDizi<T extends string>(ham: unknown, kume: readonly T[]): T[] {
+  if (!Array.isArray(ham)) return [];
+  const cikti: T[] = [];
+  for (const x of ham) {
+    const v = kumeden(x, kume);
+    if (v != null && !cikti.includes(v)) cikti.push(v);
+  }
+  return cikti;
+}
+
+function profilSuz(ham: unknown): { deger: Profil; budandi: boolean } {
+  if (!nesneMi(ham)) {
+    return { deger: { ...PROFIL_BOS }, budandi: ham != null };
+  }
+  const o = ham as Record<string, unknown>;
+  const deneyim = kumeden(o.deneyim, PROFIL_DENEYIMLER);
+  const vade = kumeden(o.vade, PROFIL_VADELER);
+  const dusus = kumeden(o.dusus, PROFIL_DUSUSLER);
+  const takip = kumeden(o.takip, PROFIL_TAKIPLER);
+  const pazarlar = kumeDizi(o.pazarlar, PROFIL_PAZARLAR);
+  const bildirimler = kumeDizi(o.bildirimler, PROFIL_BILDIRIMLER);
+  const temalar = Array.isArray(o.temalar)
+    ? o.temalar
+        .filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+        .map((x) => x.trim())
+        .filter((x, i, d) => d.indexOf(x) === i)
+    : [];
+  const hamTs = typeof o.ts === 'string' ? o.ts.trim() : '';
+  const budandi =
+    (o.deneyim != null && deneyim == null) ||
+    (o.vade != null && vade == null) ||
+    (o.dusus != null && dusus == null) ||
+    (o.takip != null && takip == null) ||
+    (Array.isArray(o.pazarlar) && o.pazarlar.length !== pazarlar.length) ||
+    (Array.isArray(o.temalar) && o.temalar.length !== temalar.length) ||
+    (Array.isArray(o.bildirimler) && o.bildirimler.length !== bildirimler.length);
+  return {
+    deger: {
+      surum: typeof o.surum === 'number' && Number.isFinite(o.surum) ? o.surum : PROFIL_SURUM,
+      tamamlandi: o.tamamlandi === true,
+      atlandi: o.atlandi === true,
+      ts: hamTs === '' ? null : hamTs,
+      deneyim,
+      vade,
+      dusus,
+      takip,
+      pazarlar,
+      temalar,
+      bildirimler,
+    },
+    budandi,
+  };
+}
+
+export const profilDepo = turYap<Profil>(
+  ANAHTARLAR.profil,
+  () => ({ ...PROFIL_BOS }),
+  profilSuz,
+);
+
+/** Kaydı cihazdan okur. `depoBaslat` ÇAĞIRMIYOR (web türü değil). */
+export function profilYukle(): Promise<Profil> {
+  return profilDepo.oku();
+}
+
+export function useProfil(): Profil {
+  return useTur(profilDepo);
+}
+
+export function useProfilHazir(): boolean {
+  return useTurHazir(profilDepo);
+}
+
+/**
+ * Anket ekranı daha önce karara bağlandı mı? `false` = ne tamamlandı
+ * ne atlandı → açılışta anket gösterilir.
+ */
+export function profilKararVerildiMi(p: Profil): boolean {
+  return p.tamamlandi || p.atlandi;
+}
+
+/** Tüm yanıtları yazar. `ts` ÇAĞIRANDAN gelir (cihaz saati). */
+export function profilYaz(yanitlar: Partial<Profil>, ts: string | null): Promise<boolean> {
+  const mevcut = profilDepo.al();
+  return profilDepo.yaz({
+    ...mevcut,
+    ...yanitlar,
+    surum: PROFIL_SURUM,
+    ts,
+  });
+}
+
+/** "Atla" — kayıt açılır ama hiçbir yanıt varsayılmaz. */
+export function profilAtla(ts: string | null): Promise<boolean> {
+  return profilDepo.yaz({ ...PROFIL_BOS, atlandi: true, ts });
+}
+
+/** Anketi yeniden açmak için kaydı siler. */
+export function profilSifirla(): Promise<boolean> {
+  return profilDepo.temizle();
+}
+
+/**
+ * Ekranın açılış vadesi. Profil yoksa motorun native varsayılanı
+ * (`orta`) — uydurma değil, bugün zaten kullanılan değer.
+ */
+export function profilVade(p: Profil): ProfilVade {
+  return p.vade ?? 'orta';
 }
 
 // Bilgi amaçlıdır, yatırım tavsiyesi değildir.

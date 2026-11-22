@@ -181,7 +181,7 @@ export function PiyasaGundemiKarti({ limit }: PiyasaGundemiKartiProps) {
             <View key={b.ad + '#' + String(i)} style={styles.kaynakSatir}>
               <Pill
                 label={b.durum === 'ok' ? 'okundu' : 'ölçemedim'}
-                tone={b.durum === 'ok' ? 'neutral' : 'gold'}
+                tone={b.durum === 'ok' ? 'neutral' : 'vurgu'}
                 glyph={null}
                 size="sm"
               />
@@ -281,7 +281,7 @@ function YerelCipi({
       ]}>
       <Pill
         label={(aktif ? '• ' : '') + etiket}
-        tone={aktif ? 'gold' : 'neutral'}
+        tone={aktif ? 'vurgu' : 'neutral'}
         variant={aktif ? 'soft' : 'outline'}
         glyph={null}
         size="sm"

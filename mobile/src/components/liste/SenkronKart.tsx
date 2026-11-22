@@ -218,7 +218,7 @@ export function SenkronKart() {
           </Text>
         ) : null}
         {evren.pazarsiz ? (
-          <Text style={[type.micro, { color: colors.gold }]}>
+          <Text style={[type.micro, { color: colors.vurgu }]}>
             {evren.pazarsiz + ' kayıt BIST/US dışında bir pazarda — uç bunları kabul etmiyor.'}
           </Text>
         ) : null}
@@ -276,7 +276,7 @@ export function SenkronKart() {
         </View>
 
         {aktarOnay ? (
-          <Text style={[type.micro, { color: colors.gold }]}>
+          <Text style={[type.micro, { color: colors.vurgu }]}>
             {'Buluttaki listeler bu cihaza alınacak: aynı listeler güncellenecek, ' +
               'yalnız bu cihazda olan listeler korunacak. Onaylamak için tekrar bas.'}
           </Text>

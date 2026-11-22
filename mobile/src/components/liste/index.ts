@@ -32,3 +32,7 @@ export { HamleKart, type HamleKartProps } from './HamleKart';
 // jeton da uygulamadan hiç istenmiyordu. Eksik olan ekran, veri değil.
 // Yeni SEKME açılmadı, 5'li menü değişmedi.
 export { BildirimKart, type BildirimKartProps } from './BildirimKart';
+// PROcess: Evren sekmesinin 🌍 gündem anahtarı. Liste başına `notify`
+// bayrağından AYRI — dünya gündemi hiçbir listeye bağlı değil. Uç konu
+// başına tercih taşımıyor, kart bunu YAZIYOR (gerekçe dosyanın başında).
+export { GundemKart, type GundemKartProps } from './GundemKart';

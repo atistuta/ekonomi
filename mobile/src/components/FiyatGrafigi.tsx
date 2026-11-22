@@ -515,7 +515,7 @@ export function FiyatGrafigi({
           label={a}
           size="sm"
           variant={a === aralik ? 'solid' : 'outline'}
-          tone={a === aralik ? 'gold' : 'neutral'}
+          tone={a === aralik ? 'vurgu' : 'neutral'}
           onPress={() => onAralik(a)}
         />
       ))}
@@ -569,7 +569,7 @@ export function FiyatGrafigi({
         <>
           {olcumEksik(veri) ? (
             <View style={styles.rozet}>
-              <Pill label="ölçüm eksik" tone="gold" glyph={null} size="sm" />
+              <Pill label="ölçüm eksik" tone="vurgu" glyph={null} size="sm" />
               <Text style={[type.micro, { color: colors.textFaint, flex: 1 }]}>
                 Seri eksik tamamlandı — grafik bu turda gelen mumları gösteriyor.
               </Text>

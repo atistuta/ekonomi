@@ -254,7 +254,7 @@ function FirsatSatiri({
         <View style={styles.bosluk} />
         {/* Oranın kendisi: etiket metinle yazılı ki rozet rengi tek
             taşıyıcı olmasın. */}
-        <Text style={[type.smallBold, styles.num, { color: colors.gold }]}>
+        <Text style={[type.smallBold, styles.num, { color: colors.vurgu }]}>
           {'rr ' + (rr === null ? EMPTY : formatOran(rr))}
         </Text>
       </View>
