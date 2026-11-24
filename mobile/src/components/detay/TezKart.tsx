@@ -30,6 +30,14 @@
 //  BURADA HESAP YOK: direk değerleri ağırlıkla çarpılıp `skor10`
 //  yeniden kurulmaz (toplama MOTORDA — types.ts Direk notu).
 //
+//  NİYE 1-100 SAYISI BURADA BASILABİLİYOR: `analiz.overall.skor` motorun
+//  KENDİ ürettiği AYRI bir ölçüm (`computeOverall100`) — `skor10`un 10 ile
+//  çarpılmış hali DEĞİL. Yukarıdaki yasak ÇEVİRMEYE, bu satir motorun
+//  GÖNDERDİĞİNİ basmaya dair; ikisi çatışmıyor. İki skor AYRI SATIRDA ve
+//  her biri kendi ölçeğiyle ("/ 100", "/ 10") yazılıyor ki tek ölçek
+//  sanılmasın. Bileşen dökümü de uçtan HAZIR gelir; istemci üç terimi
+//  toplayıp skoru doğrulamaz (toplama MOTORDA).
+//
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // =====================================================================
 
@@ -38,7 +46,21 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Satir } from './Satir';
 import type { AnalyzeRow } from '@/api';
 import { Card, OlcemedimKutu, Pill, VeriYok } from '@/components';
-import { EMPTY, formatOran } from '@/lib/format';
+import { EMPTY, formatImzaliOran, formatOran, formatScore } from '@/lib/format';
+import {
+  OVERALL_ALT_BASLIK,
+  OVERALL_BANT_SOZLUK,
+  OVERALL_EKSIK_NOTU,
+  OVERALL_GRAHAM_ETIKET,
+  OVERALL_GUVEN_SOZLUK,
+  OVERALL_HABER_ETIKET,
+  OVERALL_KIRPMA_NOTU,
+  OVERALL_OLCEK,
+  OVERALL_OLCULEMEDI,
+  OVERALL_TABAN_ETIKET,
+  OVERALL_TABAN_NOTU,
+  OVERALL_UYARI,
+} from '@/lib/sozluk';
 import { numeric, space, type, useTheme } from '@/theme';
 
 /**
@@ -82,6 +104,12 @@ export function TezKart({ satir }: TezKartProps) {
 
   const btn = analiz.butunculluk;
   const direkler = btn?.direkler ?? [];
+  // ÜÇ HAL AYRI: `undefined` = uç bu sürümde göndermiyor (hiç çizilmez,
+  // eski uç noktaya karşı sessiz kalır) · `null` = uç gönderdi ama
+  // ölçülemedi ("ölçemedim" yazılır) · nesne = basılır.
+  const ov = analiz.overall ?? null;
+  const genelGonderildi = analiz.overall !== undefined;
+  const guvenNotu = ov ? (OVERALL_GUVEN_SOZLUK[ov.guvenKod] ?? '') : '';
 
   return (
     <Card
@@ -92,6 +120,54 @@ export function TezKart({ satir }: TezKartProps) {
           <Pill label={analiz.faKarar.label} tone="neutral" glyph={null} size="sm" />
         ) : null
       }>
+      {ov ? (
+        <View style={styles.genelBlok}>
+          {/* 1-100 ÖLÇEĞİ MOTORDAN GELDİĞİ GİBİ (başlıktaki gerekçe). */}
+          <View style={styles.skorSatiri}>
+            <Text style={[type.title, numeric, { color: colors.text }]}>
+              {formatScore(ov.skor) + ' ' + OVERALL_OLCEK}
+            </Text>
+            <Pill
+              label={OVERALL_BANT_SOZLUK[ov.bantKod] ?? ov.bantKod}
+              tone="neutral"
+              glyph={null}
+              size="sm"
+            />
+          </View>
+          <Text style={[type.micro, { color: colors.textFaint }]}>{OVERALL_ALT_BASLIK}</Text>
+
+          {/* BİLEŞEN DÖKÜMÜ — üçü de uçtan HAZIR gelir; toplanmaz. */}
+          <View style={styles.liste}>
+            <Satir
+              etiket={OVERALL_TABAN_ETIKET}
+              not={OVERALL_TABAN_NOTU}
+              deger={formatOran(ov.taban, 1)}
+            />
+            <Satir
+              etiket={OVERALL_GRAHAM_ETIKET}
+              not={ov.delta.graham === null ? OVERALL_EKSIK_NOTU : undefined}
+              deger={formatImzaliOran(ov.delta.graham, 1)}
+            />
+            <Satir
+              etiket={OVERALL_HABER_ETIKET}
+              not={ov.delta.haber === null ? OVERALL_EKSIK_NOTU : undefined}
+              deger={formatImzaliOran(ov.delta.haber, 1)}
+            />
+          </View>
+
+          {/* TAVANA DAYANDIYSA SÖYLENİR (types.ts: ekran bunu söylemek zorunda). */}
+          {ov.delta.kirpildi ? (
+            <Text style={[type.micro, { color: colors.textFaint }]}>{OVERALL_KIRPMA_NOTU}</Text>
+          ) : null}
+          {guvenNotu ? (
+            <Text style={[type.micro, { color: colors.textFaint }]}>{guvenNotu}</Text>
+          ) : null}
+          <Text style={[type.micro, { color: colors.textFaint }]}>{OVERALL_UYARI}</Text>
+        </View>
+      ) : genelGonderildi ? (
+        <VeriYok metin={OVERALL_OLCULEMEDI} kartsiz />
+      ) : null}
+
       {btn ? (
         <>
           {/* 0-10 ÖLÇEĞİ KORUNUYOR (başlıktaki gerekçe). */}
@@ -150,4 +226,5 @@ export function TezKart({ satir }: TezKartProps) {
 const styles = StyleSheet.create({
   skorSatiri: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   liste: { gap: space.xs },
+  genelBlok: { gap: space.xs, paddingBottom: space.sm },
 });

@@ -18,7 +18,7 @@
 //    fa-core       165 satır
 //    fmt            15 satır
 //    composite      36 satır
-//    holistic      107 satır
+//    holistic      336 satır
 //    fa-bist       180 satır
 //    bist-val       37 satır
 //    fa-us         316 satır
@@ -46,13 +46,13 @@
 //    gundem-sozluk  171 satır
 //    gundem-skor   131 satır
 //    endeks-esik     8 satır
-//    TOPLAM       3891 satır
-//  Dışa verilen sembol: 131
+//    TOPLAM       4120 satır
+//  Dışa verilen sembol: 137
 //
 //  Bilgi amaçlıdır, yatırım tavsiyesi değildir.
 // ===========================================================================
 
-export const IMZA = 'sha256:b9f0340362651918';
+export const IMZA = 'sha256:84a3e52f61cada8d';
 
 /** Dilim adı + satır sayısı — app.js okumadan. */
 export const DILIMLER = [
@@ -63,7 +63,7 @@ export const DILIMLER = [
   { name: 'fa-core', lines: 165 },
   { name: 'fmt', lines: 15 },
   { name: 'composite', lines: 36 },
-  { name: 'holistic', lines: 107 },
+  { name: 'holistic', lines: 336 },
   { name: 'fa-bist', lines: 180 },
   { name: 'bist-val', lines: 37 },
   { name: 'fa-us', lines: 316 },
@@ -1641,6 +1641,235 @@ const navigator = H.dead("navigator");
       return { txt: `Gelir daralıyor (~%${Math.round(g)}) — büyüme temelli prim gerekçesi yok.`, cls: 'bad' };
     }
     return { txt: 'Büyüme verisi sınırlı — büyüme-değerleme okuması yapılamadı.', cls: 'na' };
+  }
+
+  // ===========================================================================
+  // 1-100 GENEL SKOR KATMANI — bileşke + Graham + HABER
+  // ===========================================================================
+  // NEDEN AYRI KATMAN: computeHolisticScore (0-10) üç direği taşır
+  // (Temel %40 · Teknik %30 · Değerleme/fiyat %30) ve tests/baseline.json
+  // paritesi onun SAYILARINI korur. Bu katman onun ÜSTÜNE kurulur: score10
+  // değerini GİRDİ olarak alır, hesabına DOKUNMAZ. Eski skor aynen kalır,
+  // yeni sayı AYRI alan olarak doğar.
+  //
+  // ÖLÇÜM DURUMU (dürüstlük notu — ayrıntı: DEVAM.md §20):
+  //  • GRAHAM ağırlığı ÖLÇÜLDÜ (n=289; 7 sembol × 42 ay sonu, 2023-02..2026-07,
+  //    bölünme bazı SEC yeniden-düzenlemelerinden hizalanarak): Spearman rho
+  //    63g 0.108 / 126g 0.086; ayırt etme (marj>0 − marj<=0) 63g +1.46p,
+  //    126g +2.82p; zorunlu taban zaten 63g %68.2 yukarı. Kovalar MONOTON
+  //    DEĞİL (en pahalı kova ikinci en iyi) ve rejim değiştiriyor
+  //    (2025-26 +7.5p lehte, 2023-24 −4.0p aleyhte). Tek anlamlı bant
+  //    marj > +%50 (126g +%31.9, n=26). Bu yüzden ağırlık KÜÇÜK tutuldu (±4)
+  //    ve doyum 0.5 seçildi: tam kredi yalnız o uç bantta veriliyor.
+  //    Marj ile TA(orta) rho = −0.149 → ikame değil, bağımsız bilgi.
+  //  • HABER ağırlıkları ve çürüme merdiveni ÖLÇÜLMEDİ. Geçmiş haber arşivi
+  //    YOK: haber için KV önbelleği yok, tüm önbellekler girdi imzasına göre
+  //    anahtarlanır (tarihe göre değil) ve Google News RSS tarih aralığı
+  //    sorgusu desteklemez. Bu yüzden bugün geriye dönük kalibre EDİLEMEZ.
+  //    Çürüme merdiveni agendaScore içindeki merdivenden DEVRALINDI; o
+  //    merdivenin hisse bazlı habere uyduğu ÖLÇÜLMEDİ.
+  //  • 1-100 gerdirme ankorları ÖLÇÜM DEĞİL, BEYAN: computeHolisticScore bant
+  //    sınırları (4 / 5.5 / 7 / 8.5) yuvarlak 1-100 sınırlarına (20/40/60/80)
+  //    taşınır. Bant anlamı birebir korunur, yalnız 5.5-8 arasındaki sıkışık
+  //    bölge (ölçümde örneklerin tamamı orada toplanmıştı) geniş aralığa
+  //    yayılır. Yani bu bir SUNUM ölçeklemesidir, uydurma bir ampirik uyum değil.
+  //  • Eşik/ağırlık/doyum değerleri dışa alınmış parametrelerdir; ileriye doğru
+  //    kayıt birikince ÖLÇÜM ile değiştirilir.
+  const HABER_AYAR = Object.freeze({
+    AGIRLIK: Object.freeze({ hisse: 0.50, gundem: 0.20, konjonktur: 0.30 }),
+    ASGARI_SINYAL: 4,              // tam güven için gereken duyarlılık vuruşu
+    CURUME: Object.freeze([[12, 1], [24, 0.8], [48, 0.55], [96, 0.3]]),
+    CURUME_TABAN: 0.15,
+    KONJ_TABAN_BASKI: 0.3,         // baskı sayısı yoksa varsayılan büyüklük
+  });
+
+  function haberCurumeW(saatler, merdiven, taban) {
+    for (let i = 0; i < merdiven.length; i++) if (saatler <= merdiven[i][0]) return merdiven[i][1];
+    return taban;
+  }
+
+  // Hisse bazlı haber-gündem-konjonktür üçgeni → 1..100 (ölçülemedi → null).
+  // SAF: ağ yok, Date.now() yok (simdiMs ZORUNLU). Türkçe cümle/HTML üretmez,
+  // yalnız makine kodu döner; Türkçe tek yerde (mobile/src/lib/sozluk.ts).
+  function computeHaberSkor(g) {
+    const o = g || {};
+    const A = (o.ayar && o.ayar.AGIRLIK)
+      ? Object.assign({}, HABER_AYAR.AGIRLIK, o.ayar.AGIRLIK) : HABER_AYAR.AGIRLIK;
+    const ayar = o.ayar ? Object.assign({}, HABER_AYAR, o.ayar) : HABER_AYAR;
+    const bos = (uyari) => ({
+      skor: null, net: null, guven: null,
+      parcalar: { hisse: null, gundem: null, konjonktur: null },
+      kapsam: { olculen: 0, agirlikToplam: 0, uyari, olculmedi: ['hisse', 'gundem', 'konjonktur'] },
+    });
+    const simdi = o.simdiMs;
+    if (!Number.isFinite(simdi)) return bos('zaman_yok');
+    const cl = (x, a, b) => Math.max(a, Math.min(b, x));
+    const hs = o.hisse || {};
+    const sekt = Array.isArray(hs.sektorler) ? hs.sektorler : [];
+
+    // ① HİSSE HABERİ — zaman çürümeli ağırlıklı manşet duygusu.
+    // sentiAggregate(ham, 0) === 0 döner; "haber yok" ile "nötr haber" aynı
+    // sayıya çökmesin diye sinyal>0 KAPISI şart (ölçülmeyen = null kuralı).
+    let pHisse = null;
+    const maddeler = Array.isArray(hs.maddeler) ? hs.maddeler : [];
+    if (maddeler.length) {
+      let ham = 0, sinyal = 0, adet = 0, tazeS = null;
+      for (let i = 0; i < maddeler.length; i++) {
+        const m = maddeler[i] || {};
+        // Iki girdi bicimi: (a) ON-PUANLANMIS {s, hits} — computeNewsSentiment
+        // bunu uretir, manset metni onbellege girmez; (b) ham {title, description}.
+        let sh = null;
+        if (Number.isFinite(m.s) && Number.isFinite(m.hits)) sh = { s: m.s, hits: m.hits };
+        else {
+          const metin = [m.title, m.description].filter(Boolean).join(' ');
+          if (!metin) continue;
+          sh = scoreHeadline(metin);
+        }
+        if (!sh || !sh.hits) continue;
+        const tms = m.pubDate ? Date.parse(m.pubDate) : NaN;
+        const saat = Number.isFinite(tms) ? Math.max(0, (simdi - tms) / 3600000) : null;
+        const w = saat == null ? ayar.CURUME_TABAN : haberCurumeW(saat, ayar.CURUME, ayar.CURUME_TABAN);
+        ham += sh.s * w;
+        sinyal += sh.hits;
+        adet++;
+        if (saat != null && (tazeS == null || saat < tazeS)) tazeS = saat;
+      }
+      if (sinyal > 0) {
+        pHisse = {
+          net: sentiAggregate(ham, sinyal),
+          sinyal, adet, tazeSaat: tazeS,
+          guven: cl(sinyal / ayar.ASGARI_SINYAL, 0, 1),
+        };
+      }
+    }
+
+    // ② GÜNDEM — sembolün sektörleri ile agendaScore özetinin kesişimi.
+    // Kesişim yoksa 0 DEĞİL null: gündem bu hisse için ÖLÇÜLEMEDİ demektir.
+    let pGundem = null;
+    const gd = o.gundem;
+    if (gd && !gd.empty && gd.summary && sekt.length) {
+      const up = (gd.summary.upSectors || []).filter((s) => sekt.indexOf(s) >= 0);
+      const dn = (gd.summary.downSectors || []).filter((s) => sekt.indexOf(s) >= 0);
+      if (up.length || dn.length) {
+        pGundem = {
+          net: cl((up.length - dn.length) / Math.max(1, up.length + dn.length), -1, 1),
+          upSektor: up, downSektor: dn,
+          kavram: Array.isArray(gd.items) ? gd.items.length : 0,
+          havuzN: gd.summary.poolN == null ? null : gd.summary.poolN,
+        };
+      }
+    }
+
+    // ③ KONJONKTÜR — pulseStance çıkışı (hawk/dove + bias listeleri).
+    // Sembolün sektörü bias listelerinde yoksa null: makro bu hisseye DEĞMİYOR.
+    // up ve dn aynı anda doğruysa da null: çelişkili makro okuması ölçüm değil.
+    let pKonj = null;
+    const kj = o.konjonktur;
+    if (kj && sekt.length) {
+      const up = (kj.biasUp || []).some((s) => sekt.indexOf(s) >= 0);
+      const dn = (kj.biasDown || []).some((s) => sekt.indexOf(s) >= 0);
+      if (up !== dn) {
+        const b = Number.isFinite(kj.baski) ? Math.abs(kj.baski) : ayar.KONJ_TABAN_BASKI;
+        pKonj = {
+          net: (up ? 1 : -1) * cl(b, 0, 1),
+          durusKod: kj.durus || null,
+          fazKod: kj.faz || null,
+        };
+      }
+    }
+
+    // Birleştirme: yalnız ÖLÇÜLEN bacaklar üzerinden ağırlık yeniden dağıtılır.
+    // agirlikToplam (wTop) aynı zamanda güveni kısar: eksik bacak = düşük güven,
+    // o yüzden tek bacakla ölçülen bir skor 50'ye yakın kalır.
+    const kalemler = [['hisse', pHisse, A.hisse], ['gundem', pGundem, A.gundem], ['konjonktur', pKonj, A.konjonktur]];
+    const olcu = kalemler.filter((k) => k[1] != null);
+    if (!olcu.length) return bos('olculemedi');
+    const wTop = olcu.reduce((a, k) => a + k[2], 0);
+    if (!(wTop > 0)) return bos('agirlik_yok');
+    const net = cl(olcu.reduce((a, k) => a + (k[2] / wTop) * k[1].net, 0), -1, 1);
+    const guven = cl(wTop * (pHisse ? pHisse.guven : 1), 0, 1);
+    const skor = Math.round(cl(50 + 50 * net * guven, 1, 100));
+    return {
+      skor, net, guven,
+      parcalar: { hisse: pHisse, gundem: pGundem, konjonktur: pKonj },
+      kapsam: {
+        olculen: olcu.length,
+        agirlikToplam: Math.round(wTop * 100) / 100,
+        uyari: null,
+        olculmedi: kalemler.filter((k) => k[1] == null).map((k) => k[0]),
+      },
+    };
+  }
+
+  // 1-100 gerdirme ankorları + iki ek terimin tavanları.
+  // GRAHAM_PUAN ±4: ölçüldü, ayırt etme gücü +1.46p/+2.82p (bkz. yukarı).
+  // HABER_PUAN ±8: ÖLÇÜLMEDİ, beyan. İkisi birlikte de TAVAN_TOPLAM ile
+  // sınırlı, böylece ek terimler tek başına 20 puanlık bir bandı ATLAYAMAZ.
+  const OVERALL = Object.freeze({
+    ANKOR: Object.freeze([[0, 1], [4, 20], [5.5, 40], [7, 60], [8.5, 80], [10, 100]]),
+    GRAHAM_PUAN: 4,
+    GRAHAM_DOYUM: 0.5,      // marj +%50 ve üzeri → tavan (ölçümde sinyal veren tek bant)
+    HABER_PUAN: 8,
+    TAVAN_TOPLAM: 10,
+    BANT: Object.freeze([[80, 'cok_elverisli', 'bull'], [60, 'destekleyici', 'bull'],
+      [40, 'ilimli', 'neutral'], [20, 'zayif', 'bear'], [0, 'olumsuz', 'bear']]),
+  });
+
+  function overallStretch(s10, ankor) {
+    const A = ankor || OVERALL.ANKOR;
+    const x = Math.max(A[0][0], Math.min(A[A.length - 1][0], s10));
+    for (let i = 1; i < A.length; i++) {
+      if (x <= A[i][0]) {
+        const x0 = A[i - 1][0], y0 = A[i - 1][1], x1 = A[i][0], y1 = A[i][1];
+        return x1 === x0 ? y1 : y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
+      }
+    }
+    return A[A.length - 1][1];
+  }
+
+  // Bileşke (0-10) + Graham marjı + HABER skoru → 1-100 genel skor.
+  // SAF. Türkçe üretmez; bantKod/guvenKod döner.
+  function computeOverall100(g) {
+    const o = g || {};
+    const ayar = o.ayar ? Object.assign({}, OVERALL, o.ayar) : OVERALL;
+    const cl = (x, a, b) => Math.max(a, Math.min(b, x));
+    if (!Number.isFinite(o.score10)) {
+      return {
+        skor: null, taban: null, bantKod: null, bantCls: null,
+        delta: { graham: null, haber: null, toplam: null, kirpildi: false },
+        eksik: ['bileske'], guvenKod: 'olculemedi',
+      };
+    }
+    const taban = overallStretch(o.score10, ayar.ANKOR);
+    const eksik = [];
+    let dG = null;
+    if (Number.isFinite(o.grahamMarj)) dG = cl(o.grahamMarj / ayar.GRAHAM_DOYUM, -1, 1) * ayar.GRAHAM_PUAN;
+    else eksik.push('graham');
+    let dH = null;
+    if (Number.isFinite(o.haberSkor)) dH = ((o.haberSkor - 50) / 50) * ayar.HABER_PUAN;
+    else eksik.push('haber');
+    let toplam = (dG || 0) + (dH || 0);
+    let kirpildi = false;
+    if (Math.abs(toplam) > ayar.TAVAN_TOPLAM) {
+      toplam = (toplam < 0 ? -1 : 1) * ayar.TAVAN_TOPLAM;
+      kirpildi = true;
+    }
+    const skor = Math.round(cl(taban + toplam, 1, 100));
+    let bantKod = null, bantCls = null;
+    for (let i = 0; i < ayar.BANT.length; i++) {
+      if (skor >= ayar.BANT[i][0]) { bantKod = ayar.BANT[i][1]; bantCls = ayar.BANT[i][2]; break; }
+    }
+    return {
+      skor, taban: Math.round(taban * 10) / 10, bantKod, bantCls,
+      delta: {
+        graham: dG == null ? null : Math.round(dG * 10) / 10,
+        haber: dH == null ? null : Math.round(dH * 10) / 10,
+        toplam: Math.round(toplam * 10) / 10,
+        kirpildi,
+      },
+      eksik,
+      guvenKod: eksik.length === 0 ? 'tam' : eksik.length === 1 ? 'kismi' : 'zayif',
+    };
   }
 
   // 🌍 Güncel Konjonktür Notu — dünya görünümü + sektörel durum + gündem/haber.
@@ -4043,5 +4272,5 @@ const navigator = H.dead("navigator");
   };
 
 
-return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faKriterKod, faKriterIsaretle, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, momentumInfo, buyZoneProximity, planRiskReward, atrVolKod, atrPlanKod, KAT_TEMETTU_GUN, KAT_TEMETTU_KODLARI, katGunFarki, katTemettuKod, taHamGostergeler, taHamUcGostergeler, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, fetchBistMarketCap, bistValuation, secGet, secResolveCik, secFetchModel, GRAHAM, computeGraham, grahamIn, usDcfIn, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, INDEX_ESIK, CYCLE_PHASES, macroGrowth, macroPhase, macroInflPressure, macroRiskPressure, themeHeat, rowExtrema, earnScenario, themeNorm, temaSorguSozcukleri, temaBaslikIlgili, themeMatchNews, themeNewsHits, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance, PULSE_TH, analyzeIntraday, pulseIsSudden, pulseRealityCodes, pulseMakroEtiketKod, pulseMakroYorumKod, TA_HORIZON, BT_CFG, spearmanIC, computeBacktest, shortNum, scoreBand, cryptoCategory, computeCryptoValue, METAL_MACRO_W, computeMetalMacro, SENTI_POS, SENTI_NEG, scoreHeadline, sentiLabel, sentiAggregate, WHY_SERT, WHY_BELIRGIN, WHY_HABER_ESIK, WHY_HAREKET_KODLARI, WHY_YON_KODLARI, WHY_HABER_YON_KODLARI, WHY_UZLASMA_KODLARI, WHY_KUTUP_KODLARI, whyGunlukYuzde, whyHareketKod, whyYonKod, whyHaberYonKod, whyUzlasmaKod, whyKutupKod, oppTag, priceOppAdj, oppCombined, SCAN_PRESETS, scanBlend, scanScore, scanTag, SEK_META, sekMedian, sekClassify, sekSortGroups, SECTORS, SYMBOL_SECTORS, RADAR_THEMES, AGENDA_LEXICON, AGENDA_STOP, AGENDA_VALUE_SECTORS, agendaKwHit, agendaStemHit, agendaAdmit, agendaCleanTitle, agendaScore };
+return { fetchYahooOHLC, yahooSymbol, resampleCandles, taTFIndicators, taRegime, taNormalize, computeVadeScore, setTaScoreInd, faInterp, faSD, faScoreSig, computeFaScore, faVerdict, FA_PE, faPeCriterion, faKriterKod, faKriterIsaretle, faBand, taBand, COMPOSITE_MATRIX, COMPOSITE_BLEND, compositeBlend, computeHolisticScore, HABER_AYAR, haberCurumeW, computeHaberSkor, OVERALL, overallStretch, computeOverall100, momentumInfo, buyZoneProximity, planRiskReward, atrVolKod, atrPlanKod, KAT_TEMETTU_GUN, KAT_TEMETTU_KODLARI, katGunFarki, katTemettuKod, taHamGostergeler, taHamUcGostergeler, fetchIsYatirimMali, parseIsMali, bistFundamentalModel, fetchBistMarketCap, bistValuation, secGet, secResolveCik, secFetchModel, GRAHAM, computeGraham, grahamIn, usDcfIn, CAUSAL_INDEX_AFFINITY, causalAlign, computeCausalLinks, INDEX_ESIK, CYCLE_PHASES, macroGrowth, macroPhase, macroInflPressure, macroRiskPressure, themeHeat, rowExtrema, earnScenario, themeNorm, temaSorguSozcukleri, temaBaslikIlgili, themeMatchNews, themeNewsHits, FADE_WIN, fadedAround, rateDirection, inflDirection, RATE_SENSITIVE, pulseRecentCount, PULSE_FRESH_H, PULSE_FRESH_W, pulseFreshWithin, pulseFreshWeight, pulseStance, PULSE_TH, analyzeIntraday, pulseIsSudden, pulseRealityCodes, pulseMakroEtiketKod, pulseMakroYorumKod, TA_HORIZON, BT_CFG, spearmanIC, computeBacktest, shortNum, scoreBand, cryptoCategory, computeCryptoValue, METAL_MACRO_W, computeMetalMacro, SENTI_POS, SENTI_NEG, scoreHeadline, sentiLabel, sentiAggregate, WHY_SERT, WHY_BELIRGIN, WHY_HABER_ESIK, WHY_HAREKET_KODLARI, WHY_YON_KODLARI, WHY_HABER_YON_KODLARI, WHY_UZLASMA_KODLARI, WHY_KUTUP_KODLARI, whyGunlukYuzde, whyHareketKod, whyYonKod, whyHaberYonKod, whyUzlasmaKod, whyKutupKod, oppTag, priceOppAdj, oppCombined, SCAN_PRESETS, scanBlend, scanScore, scanTag, SEK_META, sekMedian, sekClassify, sekSortGroups, SECTORS, SYMBOL_SECTORS, RADAR_THEMES, AGENDA_LEXICON, AGENDA_STOP, AGENDA_VALUE_SECTORS, agendaKwHit, agendaStemHit, agendaAdmit, agendaCleanTitle, agendaScore };
 }

@@ -606,11 +606,72 @@ export type GrahamYok = { ok: false; reason: GrahamNeden | null };
 
 export type Graham = GrahamOlcum | GrahamYok;
 
+/**
+ * 1-100 GENEL SKOR BANDI — `computeOverall100`ın KAPALI kümesi
+ * (app.js: OVERALL.BANT). Eşikler (80/60/40/20) MOTORDA; uç yalnız
+ * kodu gönderir, istemci bandı yeniden türetmez.
+ */
+export type OverallBant = 'cok_elverisli' | 'destekleyici' | 'ilimli' | 'zayif' | 'olumsuz';
+
+/** Bandın yön sınıfı — motorun kendi etiketi; istemci renk seçmez. */
+export type OverallBantCls = 'bull' | 'neutral' | 'bear';
+
+/**
+ * EK BİLEŞENLERİN ÖLÇÜLME DURUMU. 'tam' = Graham ve haber ikisi de
+ * ölçüldü · 'kismi' = biri ölçülemedi · 'zayif' = ikisi de ölçülemedi,
+ * skor yalnız bileşkeden geliyor · 'olculemedi' = bileşke bile yok.
+ */
+export type OverallGuven = 'tam' | 'kismi' | 'zayif' | 'olculemedi';
+
+/** Ölçülemeyen ek bileşenin adı — kapalı küme. */
+export type OverallEksik = 'graham' | 'haber';
+
+/**
+ * 1-100 GENEL SKOR = bileşke (temel+teknik+değerleme) + Graham marjı +
+ * haber-gündem-konjonktür.
+ *
+ * ÖLÇEK ÇEVİRİSİ MOTORDA: `taban`, 0-10 bileşke skorunun 1-100'e
+ * GERDİRİLMİŞ hali (`overallStretch`; parçalı doğrusal çapalar motorda).
+ * İstemci `skor10 × 10` YAPMAZ — o, motorun ÜRETMEDİĞİ bir sayı olurdu
+ * (Butunculluk notu: "İstemci bunu ASLA yeniden hesaplamaz").
+ *
+ * `delta.graham` ±4, `delta.haber` ±8 ile sınırlı; ikisinin TOPLAMI ±10
+ * puan tavanına takılırsa `delta.kirpildi: true` gelir ve ekran bunu
+ * SÖYLEMEK zorundadır. Tavanların kendisi motorda (OVERALL), uçta eşik YOK.
+ *
+ * ÖLÇÜLEMEYEN bileşen `null`dır, `0` DEĞİL: motor eksik bacağı nötr
+ * saymaz, ağırlığı düşürüp `guvenKod`u geriye çeker — eksik görünür,
+ * gizlenmez. /api/analyze'in haber girdisi YOK, o yüzden `delta.haber`
+ * orada daima `null` ve `guvenKod` en iyi halde 'kismi'dir.
+ *
+ * ÖLÇÜM NOTU: Graham ağırlığı geriye dönük ÖLÇÜLDÜ (n=289; ayırt etme
+ * gücü zayıf — bu yüzden ±4 gibi küçük). HABER ağırlıkları ÖLÇÜLMEDİ:
+ * geçmiş haber arşivi olmadığı için kalibre edilemiyor (DEVAM.md §20).
+ */
+export type Overall = {
+  /** 1-100, motorun yuvarladığı tam sayı. İstemci yeniden hesaplamaz. */
+  skor: number;
+  /** Bileşkenin 1-100'e gerdirilmiş hali — ek terimler EKLENMEDEN önce. */
+  taban: number | null;
+  bantKod: OverallBant;
+  bantCls: OverallBantCls;
+  delta: {
+    graham: number | null;
+    haber: number | null;
+    toplam: number | null;
+    kirpildi: boolean;
+  };
+  eksik: OverallEksik[];
+  guvenKod: OverallGuven;
+};
+
 export type Analiz = {
   faKarar: FaKarar | null;
   butunculluk: Butunculluk | null;
   /** `undefined` = uç göndermedi · `null` = ölçülemedi (api/_akis.js). */
   graham?: Graham | null;
+  /** `undefined` = uç göndermedi · `null` = ölçülemedi (api/_akis.js). */
+  overall?: Overall | null;
 };
 
 export type AnalyzeRow = RecommendRow & { analiz: Analiz | null };

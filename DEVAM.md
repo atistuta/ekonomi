@@ -1028,3 +1028,345 @@ one surmemistir - bu uyari karta basiliyor.
   `python -I` PYTHONIOENCODING'i yok sayar (-I, -E'yi ima eder). Basarili
   `os.replace` sonrasi print patlamasi dosyanin bozuk oldugunu GOSTERMEZ -
   dogrulama bayt/satir sayisiyla yapilir, icerigi ekrana basarak degil.
+
+## 18. NVDA bastan sona olcum (2026-11-23) - skora dokunulmadi
+
+Kaynak: canli uclar, HTTP 200. `GET /api/score?symbols=NVDA&vade=orta`,
+`GET /api/analyze?symbols=NVDA`, `GET /api/chart?symbol=NVDA&range=1y&interval=1d`.
+`surum.motor = sha256:b9f0340362651918`, `surum.ayar = sha256:75512c5271a89b33`,
+`tam: true`, `atlanan: []`. HICBIR DOSYA DEGISTIRILMEDI - bu bolum yalniz olcum.
+
+### 18.1 TA (vade=orta)
+score 37.129331 / raw 38.808114 / label "SAT egilimi" / cls bear /
+regime "neutral" / adx 49.303416 / bars 1255 / benchBars 1255.
+Kirilim (anahtar, skor, agirlik, katki=w*(s-50)*1.15):
+ichimoku 14 .13 -5.38 | macd 33.325 .17 -3.26 | rs 27.407 .09 -2.34 |
+vp 37.016 .09 -1.34 | obv 40.885 .10 -1.05 | trend 55 .18 +1.04 |
+boll 65.842 .05 +0.91 | rsi 42.444 .10 -0.87 | stoch 34.993 .04 -0.69 |
+ttmpl 52 .05 +0.12. Agirlik toplami tam 1.00.
+Elle dogrulama: devSum = -11.1921 -> raw = 50-11.1921 = 38.808 (API ile ayni),
+adxF = 1.15 (ADX>=40) -> score = 50 + (38.808-50)*1.15 = 37.129. TAM UYUM.
+regime neden "neutral": fiyat 164.65 < sma50 206.07 (up=false) ve
+sma50 206.07 > sma200 203.24 (dn=false) -> trend degil; adx 49.3 >= 18 ->
+range da degil. Sonuc: interp 'momentum' (orta ayari) kaldi, rejim anahtari donmedi.
+
+### 18.2 FA
+score 88.071207 / present 18 / total 18 / price 164.64 / eps 7.91 / pe 20.814159.
+Dusuk puanli iki kriter: accruals 40 (`donusmuyor`, ocf 134.36G < netKar 192.88G),
+roaUp 40 (`geriliyor`, 61.530 -> 60.224). pe 58.697 (kat 20.814).
+faKarar = { label 'guclu / olumlu', band 'strong' }.
+
+### 18.3 SEC veri butunlugu - SUPHE OLCULDU VE CURUTULDU
+eps 7.91 sisirme sanildi. CIK0001045810 `EarningsPerShareDiluted` dogrudan
+cekildi (44731 bayt): 4.90 (FY2026 10-K, 363 gun) + 4.85 (181 gun, 2026-07-26)
+- 1.84 (181 gun, 2025-07-27) = 7.91 TAM. `secTTM` dogru. VERI HATASI YOK.
+Yan bulgu: SEC `fy`/`fp` alanlari guvenilmez (2025-07-27 cercevesi fy 2027
+etiketli; uc ayri 10-K cercevesi fy 2026). `secTTM`'in start/end suresine
+bakmasi bu yuzden dogru tasarim.
+
+### 18.4 Bantlar (plan.seviye)
+price 164.587997 / target 152.553319 / stop 191.03752 / rr 0.455006 /
+poc 211.176038 / atr 13.224761 / buyZone [113.185602, 142.280077] /
+sellZone [242.61409, 271.708565] / zMult 1.1 / sellKind 'target' /
+anchorKind 'kaygan' (capa bollAlt ~127.73 - SABIT degil).
+yakinlik { state 'far', dAtr 1.68683 } | momentum { active false, adx 49.303 } |
+oynaklik { atrPct 8.03507, kod 'yuksek', stopKat [1.5,2] } |
+atrPlan { atrPct 8.03507, kod 'genis' } |
+riskOdul { sellUpPct 56.245, brkPrimary 113.186 (swingLow), rrRatio 1.800954 }.
+NOT: plan.seviye.rr 0.455 (target/stop) ile riskOdul.rrRatio 1.80 AYRI iki
+olcum - birincisi 2*ATR stopuna, ikincisi swingLow kirilimina gore.
+
+### 18.5 Adil deger
+graham { ok true, value 304.535, diffPct -45.954324, grahamNumber 40.88149,
+gnDiffPct +302.597854, eps 7.91, bvps 9.390623, gUsed 15 (gRaw 100.045,
+gClamped true), impliedPE 38.5 }. 7.91*(8.5+2*15) = 304.535 dogrulandi;
+sqrt(22.5*7.91*9.390623) = 40.88 dogrulandi.
+DCF: HICBIR UC DCF DONDURMUYOR (`grep -rn "dcf" api/*.js` -> yalniz
+`eng.usDcfIn` Graham girdisi olarak). Bu yuzden ELLE hesaplandi, motorun
+kendi formulleriyle, 251 gunluk kapanis uzerinden:
+- annualizedVol(closes) = 0.497825 (250 log getiri, 252 ile olcekli)
+- beta = 0.497825/0.18 = 2.766 -> [0.6,2.2] KIRPMASI -> 2.2
+- costEquity = 0.043 + 2.2*0.05 = 0.153 ; costDebtAT = 0.062*0.79 = 0.04898
+- shares = ni/eps = 192.88G/7.91 = 24.3843G ; E = 4.0134T$ ;
+  bookEquity = ni/roe = 229.0G$ ; D = 0.145713*229.0G = 33.37G$ ; E/V = 0.99175
+- WACC = 0.15214 (floor 0.075 / cap 0.16 arasinda, KIRPILMADI)
+- fcf0 = 127.006G$ ; netDebt = -38.199G$ (net nakit) ; g0 = 1.00045 -> US cap
+  0.25 ; gT = 0.03
+- FCF merdiveni (g dogrusal 0.25->0.03, %15.214 ile iskonto):
+  Y1 158.8/137.8 | Y2 189.7/142.9 | Y3 216.3/141.4 | Y4 234.7/133.2 |
+  Y5 241.7/119.1 (G$) ; terminal 2.038T$ -> bugunku 1.004T$
+- base = 70.39 $/pay ; 3x3 duyarlilik (WACC +-0.02, g0 +-0.03, her biri
+  yeniden kirpilir) -> lo 62.46 / hi 84.43 ; upside -57.23% ; badge 'expensive'
+UC OLCUM UC AYRI SONUC (durust tablo): DCF -57.2% (pahali; cunku %49.8
+gerceklesmis oynaklik betayi 2.2 tavanina, WACC'i %15.2'ye tasiyor) /
+Graham buyume formulu -45.95% (ucuz; cunku iskonto orani YOK, g 15'te kirpik) /
+Graham Sayisi +302.6% (cok pahali; defansif olcum, BVPS yalnizca 9.39).
+
+### 18.6 Bileske
+composite { faBand 'hi', taBand 'lo', band 'mixed',
+label 'Kaliteli ama fiyat zayif', blended 65.147363 } ->
+cozuldu: blended = 0.55*FA + 0.45*TA.
+butunculluk { skor10 5.3, band 'Zayif - temkinli'/bear,
+direkler FA .40 = 0.880721 | TA .30 = 0.371239 | Degerleme .30 = 0.208028 }.
+Degerleme sutunu elle dogrulandi: fiyat 164.588 > buyZone[1] 142.280 ->
+gap = 0.15679 ; momActive false, buyumeCls 'na' -> baseFair 0.60, slope 2.5 ->
+vPart = 0.60 - 0.15679*2.5 = 0.20802. composite01 = 0.5260685 -> 5.3. TAM UYUM.
+
+### 18.7 Haberin skora TEMAS NOKTASI (olculdu)
+Haber bugun skora YALNIZ Firsatlar siralama katmanindan giriyor, uc cagri
+yerinde ve hepsi `se.score * 7`: `app.js:9916`, `app.js:11222`, `app.js:11337`.
+`sentiAggregate(raw,hits) = clamp(raw/(|raw|+4), -1, 1)` -> en fazla +-7 puan,
+ve bu puan computeVadeScore skorunu, computeFaScore'u, computeHolisticScore'u,
+alim/satim bandini, DCF'i ve Graham'i DEGISTIRMIYOR. Haber sozlugu
+`SENTI_POS`/`SENTI_NEG` (app.js:9560-9579) elle yazilmis TR+EN anahtar listesi,
+agirlik 1-3. `WHY_HABER_ESIK = 0.12` yorumu ile birlikte "OLCULMEDI, DEVRALINDI".
+Gundem tarafi: `computeAgenda`/`agendaScore` (RSS, 20 dk onbellek, 6 tanimli +
+2 yukselen konu) ve `computeCausalLinks` (korelasyon okumasi, "Skora dahil
+degildir"). Haber bacagini skora sokacak her degisiklik AYRI, TAZE "evet"
+gerektirir - bu bolum sadece mevcut durumun olcumudur.
+
+## 19. Teknik analiz: otorite kiyasi + Big 7 geriye donuk olcum (2026-11-24)
+
+### 19.1 Olcum duzeni (nasil yapildi)
+- tests/engine.mjs -> buildEngine() ile gercek app.js motoru Node'da kosturuldu.
+  makeHost agi kapatiyor ("ag kabugu verilmedi: parite kosusunda canli istek YASAK"),
+  yani mumlar enjekte edildi, hicbir canli istek yok.
+- computeVadeScore(daily, vadeKey, tfDataOverride, benchDaily) mum dizisi uzerinde SAF.
+  Mum dizisini gecmis bir tarihte kesmek gercek bir "o gunku" tekrar oynatma veriyor.
+- Mum kaynagi: /api/chart?range=5y&interval=1d, 7 sembol + ^GSPC. AAPL 1254 bar,
+  2021-11-24 -> 2026-11-23.
+- gunici gunluk mumla null donuyor (intraday gerekiyor). Olcum kisa/orta/uzun ile yapildi.
+- DURUSTLUK KONTROLU: git log -L1216,1330:app.js --since=2026-08-01 uc commit gosterdi
+  (aa89402, 38691ca, 71fbab5). Iki diff "buyReach|sellReach|zMult|buyZone|sellZone|hw =|supAnchor|resAnchor"
+  icin greplendi: aa89402 -> BOS. 38691ca -> yalniz anchorKind, anchorSrc alanlarini
+  levels: donusune EKLEDI + buyZoneProximity fonksiyonunu ekledi.
+  SONUC: bant matematigi 2026-08-24 oncesinden beri DEGISMEMIS; bolge fiyatlari gercek.
+  Yalniz anchorKind/anchorSrc capa-kalite rozeti as-of tarihinden SONRA geldi (anakronik).
+
+### 19.2 Big 7, as-of 2026-08-24, 63 islem gunu ileri
+| sembol | as-of fiyat | 3ay getiri | dip/zirve | kisa | orta | uzun |
+|---|---|---|---|---|---|---|
+| AAPL | 310.34 | +10.4% | 308.21/360.83 | 53.69 Zayif AL; AL [293.24,304.31] DEGMEDI; SAT [329.05,340.11] ULASTI/GECTI; hedef once; sabit/Fibonacci | 60.98 AL eg.; AL [283.33,299.55] degmedi; SAT [353.85,370.07] ULASTI; kaygan/Bollinger alt | 73.25 GUCLU AL; AL [273.57,295.69] degmedi; SAT [387.77,409.9] ulasmadi; sabit/Fibonacci |
+| MSFT | 487.31 | -0.6% | 481.03/559.15 | 61.71 AL eg.; AL [442.4,460.52] degmedi; SAT [531.53,549.64] ULASTI/GECTI; hedef once | 68.61 GUCLU AL; AL [438.18,464.74] degmedi; SAT [558.54,585.1] ULASTI | 70.22 GUCLU AL; AL [413.07,449.29] degmedi; SAT [614.08,650.3] ulasmadi; sabit/SMA200 |
+| GOOGL | 348.06 | -23.8% | 264.22/364.17 | 52.76 Zayif AL; AL [326.38,340.37] DEGDI/KIRDI; SAT ulasmadi; STOP ONCE; sabit/SMA200 | 55.47 Zayif AL; AL [318.72,339.25] DEGDI/KIRDI; stop once; sabit/VP deger tabani | 69.42 GUCLU AL; AL [293.14,321.12] DEGDI/KIRDI; stop once; sabit/Fibonacci |
+| AMZN | 262.07 | -5.8% | 229.36/275.34 | 58.90 AL eg.; AL [246.9,257.82] DEGDI/KIRDI; SAT ulasmadi; hedef once | 68.35 GUCLU AL; AL [233.59,249.61] DEGDI; hedef once | 70.31 GUCLU AL; AL [227.47,249.31] DEGDI; sabit/SMA200 |
+| NVDA | 208.48 | -39.8% | 124.50/243.37 | 57.02 AL eg.; AL [195.5,205.11] DEGDI/KIRDI; SAT [229.91,239.53] ULASTI/GECTI; hedef once | 64.71 AL eg.; AL [188.28,202.39] DEGDI/KIRDI; sabit/SMA200 | 75.58 GUCLU AL; AL [169.96,189.2] DEGDI/KIRDI; SAT ulasmadi |
+| META | 559.02 | +0.3% | 556.10/779.82 | 45.51 Zayif SAT; AL degmedi; SAT [608.69,638.52] ULASTI/GECTI; stop once; kaygan/Bollinger alt | 38.45 SAT eg.; SAT [711.02,754.78] ULASTI/GECTI; projeksiyon/ATR izdusumu | 40.85 SAT eg.; SAT [767.87,827.54] ULASTI; projeksiyon/ATR izdusumu |
+| TSLA | 348.95 | -0.9% | 338.15/414.23 | 42.56 SAT eg.; AL degmedi; SAT [387.65,408.56] ULASTI/GECTI; stop once; kaygan/Bollinger alt | 43.86 SAT eg.; kaygan/Bollinger alt | 49.65 Notr; kaygan/Bollinger alt |
+
+Tek kesit toplami (n=7 -> ANEKDOT, isabet orani DEGIL):
+- kisa: AL bolgesine degme %42.9, 1 ay tutma %33.3, altini kirma %42.9, SAT/direnc ulasma %71.4,
+  gecme %71.4, hedef-stoptan-once %57.1, YON %28.6.
+- orta: 42.9 / 66.7 / 28.6 / 42.9 / 14.3 / 57.1 / 28.6.
+- uzun: 42.9 / 33.3 / 28.6 / 14.3 / 0 / 57.1 / 16.7.
+
+### 19.3 Yuvarlanan aylik ornek, n=294 (7 sembol x 42 ay sonu, 2023-02-28 -> 2026-07-31, 63g ileri)
+| vade | AL bolgesine degme | degince 1 ay tutma | altini kirma | SAT bolgesine ulasma | gecme | hedef once | YON | capalar | ort. AL mesafesi | ort. SAT mesafesi |
+|---|---|---|---|---|---|---|---|---|---|---|
+| kisa | %72.1 (212/294) | %56.1 (119/212) | %43.2 | %75.9 | %62.6 | %55.8 | %58.5 (144/246) | kaygan 106, sabit 187, projeksiyon 1 | -%4.19 | +%8.29 |
+| orta | %65.6 | %65.8 | %34.4 | %46.3 | %31.3 | %57.5 | %56.5 | sabit 201, kaygan 87, projeksiyon 6 | -%5.14 | +%18.43 |
+| uzun | %56.1 | %75.2 | %22.4 | %19.7 | %9.9 | %58.5 | %58.3 | sabit 224, projeksiyon 11, kaygan 59 | -%7.11 | +%31.40 |
+
+### 19.4 ONEMLI NEGATIF BULGU: TA skoru bu ornekte TERS yonlu
+- TABAN ORAN: gozlemlerin %67.7si (199/294) 3 ay sonra YUKARIDA; ortalama 3 ay getiri +%9.56.
+  Yani "her zaman AL de" stratejisi bizim %56-58 yon isabetimizi YENIYOR.
+- Ayirt etme gucu (bull ort. getiri - bear ort. getiri):
+  kisa -10.71 puan (bull %7.65 n210 / bear %18.36 n36)
+  orta -8.53 puan (%7.87 n228 / %16.40 n48)
+  uzun -11.60 puan (%7.22 n245 / %18.82 n38; notr n11 -> %29.45)
+- Skor kovalari MONOTON TERS. uzun: 0-45 -> +%20.55 (%90 yukari, n29); 45-55 -> +%18.97 (%74, n31);
+  55-65 -> +%11.03 (%75, n48); 65-75 -> +%7.88 (%67, n107); 75-101 -> +%3.19 (%53, n79).
+  orta: 19.28 / 11.01 / 7.96 / 6.17 / 9.62. kisa: 21.44 / 9.73 / 6.07 / 9.13.
+- AL bandinin ustunden girmek, as-of kapanistan almaktan KOTU: kisa %8.33 (n212), orta %7.34 (n193),
+  uzun %7.41 (n165) -- taban %9.56.
+- Capa kalitesi MANTIKLI davraniyor: uzunda sabit n224 degme %56/tutma %75/kirma %23;
+  kaygan n59 %56/%73/%22. kisada sabit n187 kirma %40, kaygan n106 kirma %49.
+
+### 19.5 Saglamlik (vade-esli ufuk: kisa 21g, orta 63g, uzun 126g; Spearman rho = skor vs ileri getiri)
+| ornek | kisa | orta | uzun |
+|---|---|---|---|
+| tum ay sonlari | n308 taban %59.7 rho -0.030 ayirt -3.25p | n294 taban %67.7 rho -0.199 ayirt -8.53p | n273 taban %74.7 rho -0.283 ayirt -22.30p |
+| ortusmeyen ceyrek sonlari | n105 rho -0.018 | n98 rho -0.250 ayirt -12.38p | n91 rho -0.351 ayirt -35.06p |
+| 2023-2024 | rho -0.007 | -0.157 | -0.089 |
+| 2025-2026 | rho -0.173 (bull ort. -%0.56) | -0.328 | -0.531 |
+
+Sembol basi rho (orta): AAPL -0.415, MSFT -0.336, GOOGL -0.212, AMZN -0.480, NVDA +0.071, META -0.026, TSLA -0.414.
+Sembol basi rho (uzun): AAPL -0.580, MSFT -0.648, GOOGL -0.395, AMZN -0.380, NVDA -0.287, META +0.059, TSLA -0.690.
+=> 7 sembolun 6sinda NEGATIF; META tek hafif istisna.
+
+YORUM: motor bir momentum/trend-rejim tarifcisi. 2023-2026 arasinda bu yedi mega-capte
+yuksek momentum 1-6 ay vadede ORTALAMAYA DONDU. Bu, kullanicinin sordugu kumenin TAM
+uzerinde yapilmis bir olcumdur, genel bir iddia DEGIL.
+Cekinceler: (1) yalniz 7 yuksek korelasyonlu isim, (2) tek bir tarihsel rejim,
+(3) aylik as-of tarihleri 63 gunluk ufukta ~3x ortusuyor, (4) kisada rho ~ 0 demek
+"ters sinyal" degil "SINYAL YOK" demektir, (5) anchorKind rozeti as-of sonrasi (38691ca).
+
+### 19.6 Ikinci yapisal kusur: deger ayagi DOYMUS
+pos = (px - buyZone[1]) / (sellZone[0] - buyZone[1]), n=294, orta:
+- pos <= 0.25 -> 206 gozlem (%9.23 getiri, %67 yukari)
+- 0.25 < pos <= 0.50 -> 88 gozlem (%10.32, %69)
+- 0.50 < pos <= 0.75 -> 0 gozlem
+- pos > 0.75 -> 0 gozlem
+SAT bolgesi fiyatin sistematik olarak COK ustune, AL bolgesi hemen altina konuyor; bu yuzden
+"fiyat konumu" neredeyse SABIT ve bilgi tasimiyor. computeHolisticScoreun AL-bolgesi
+konumundan turettigi deger ayagi (agirlik .30) pratikte ayirt etmiyor.
+Capraz tablo tersligi konum kovasi icinde de koruyor:
+skor<55 & pos<=0.4 -> %13.88 / %78 yukari (n83); skor 55-68 -> %8.34 / %67 (n110);
+skor>=68 -> %6.63 / %59 (n97).
+
+### 19.7 Otorite kiyasi -- KAYNAK ASIMETRISI ONCE
+Uc farkli kalitede kaynak var, karistirilmamali:
+1. INDIKATOR LISTELERI -- ZAYIF. Resmi CMT/profesyonel anket BULUNAMADI. Egitim sitesi
+   konsensusu: hareketli ortalamalar, pivot noktalari, MACD, RSI, Bollinger, hacim, OBV
+   (Study.com, Axi, TradingView, Commodity.com). Tek anket-gorunumlu sayi TradeAlgonun
+   "2024te 1200 karli gunluk yatirimci" alintisi (VWAP %78, HO %72, bagil hacim %65) --
+   KAYNAK ADI YOK, DOGRULANAMADI, ustelik gunici. Naga tek-arac bagimliligina karsi uyariyor.
+2. FORMASYON ISABETI -- ORTA (Bulkowski, thepatternsite.com). PPRU %43 basabas basarisizlik
+   (yukari kirilim), Shark-32 %32 basarisizlik / %72 olcum kurali, Upside Weekly Reversals %16,
+   Key Reversal Downtrend %69 olcum kurali. ~13.932 formasyonluk 1991-2008 calismasinda
+   basarisizlik oranlari ZAMAN ICINDE ARTIYOR; 2003 sonrasi yalniz 2003 (%11) %20in altinda.
+   DIKKAT: Bulkowskinin kendi sayfasi 1990lar rakaminda kendisiyle celisiyor (%14 vs %26).
+   Ucuncu taraf dogrulanmamis: ters OBO %11 basarisizlik / %45 ortalama hareket,
+   high-tight flag %85 basari / %39 kazanc (Pipster, TradeAlgo, Sacred Traders).
+3. GERCEK "DOGRULUK ORANI" LITERATURU -- GUCLU. Park & Irwin, "The Profitability of
+   Technical Analysis: A Review" (AgMAS 04-04) ve AgMAS 05-04: HO kurallari VERI TARAMASI
+   (data snooping) kontrol edilene kadar karli gorunuyor; Brock-Lakonishok-LeBaronun
+   maliyet sonrasi basarisi veri taramasina atfedildi. FX calismasi gelismekte olan
+   piyasalarda TA karliligini "illusory" diyor. Karsi agirlik: bazi ortalamaya donus
+   kurallari duzeltmeden sonra da ayakta kaliyor; 2021 ScienceDirect 18.410 kural
+   calismasi hala ongorulebilirlik buluyor. Romanya HO-kesisim calismasi: indikatorlerin
+   yalniz %40i orneklem ici istatistiksel anlamli. Kural siralamasi: tek HO > ikili HO
+   kesisimi > RSI. Duzeltme yontemleri: Whites Reality Check, Hansen SPA testi.
+   => Literaturun ozeti: TAnin yayinlanmis "isabet oranlari" cogunlukla cok-kural
+   taramasindan dogan bir yanilsamadir. Bizim -0.199/-0.283 rhomuz bu literaturle
+   CELISMIYOR; aksine onu destekliyor.
+4. CIZGI CIZME KONSENSUSU (LuxAlgo, Forextester, Investing.com, Sarwa, TMGM, QuantStock,
+   Trendo, MarketMates, MRPNL, eplanetbrokers): salinim dip/zirvelerine capala; gecerli
+   trend cizgisi icin UC DOKUNUS standardi (iki ile ciz, ucuncu dogrular), yatay seviye
+   icin iki yeterli; net trend yoksa hic cizme; fiti ZORLAMA; cizgileri CIZGI DEGIL BOLGE
+   gibi oku; ana cizgiyi ust zaman diliminde isaretle, sonra islem dilimine in.
+   Kaynaklar dokunus sayisinda ayrisiyor.
+   BIZIM DURUMUMUZ: "bolge, cizgi degil" ilkesini ATR yarim-genislik bandiyla ZATEN
+   uyguluyoruz (dogru taraftayiz). Uc dokunus dogrulamasini UYGULAMIYORUZ -- capalar
+   Fibonacci/SMA200/VP deger tabani/Bollinger alt gibi turetilmis seviyeler, dokunus
+   sayilmiyor. Olculebilir eksik bu.
+
+### 19.8 1-100 "overall" katmani -- tasarim notlari (UYGULANMADI, taze "evet" bekler)
+Kullanicinin istedigi kalemler motorda ZATEN VAR MI diye tek tek bakildi:
+- "nakit akisi pozitif mi" -> VAR: fcfPos (Serbest Nakit Akisi, agirlik 0.05).
+- "karini arttirmis mi" (YoY) -> VAR: netTrend (0.07 BIST / 0.06 US).
+- nakit kalitesi -> VAR: accruals (OCF > Net Kar, 0.06). Ayrica roaUp 0.05, gmUp 0.04, crUp 0.03.
+  => Bunlari 1-100 katmanina TEKRAR koymak CIFT SAYMA olur.
+- GERCEKTEN YENI OLAN IKI KALEM: (a) 5 YIL UST USTE kar artisi (seri/streak, YoY degil),
+  (b) parasini yatirima mi ayiriyor (capex / OCF yeniden yatirim orani).
+VERI ZEMINI HAZIR -- YENI ENDPOINT GEREKMIYOR: api/_motor.js icindeki secFetchModel
+tek seferde 19 SEC kavram dizisi cekiyor:
+const [revA, grossA, niA, opA, daA, ocfA, capexA, assetsA, liabA, eqA, ltdA, ltdcA, cashA, stiA, ppeA, caA, clA, epsA, invA] = arrs;
+niA=NetIncomeLoss, ocfA=NetCashProvidedByUsedInOperatingActivities, capexA=PaymentsToAcquirePropertyPlantAndEquipment.
+Yardimci da hazir: secAnnualsList(arr) (api/_motor.js:1953) yillik (340-380 gun) donemleri
+EN GUNCEL ONCE siralayarak donduruyor. secTTM bunu zaten cagiriyor ama yalniz anns[0]
+ve anns[1]i kullaniyor -- tam yillik seri ELDE. BIST karsiligi api/_mali.js:204-207
+(netKar, faaliyetNakitAkisi, yatirimHarcamasi).
+=> Vercel Hobby 12 fonksiyon sinirina BASKI YOK, yeni bagimlilik YOK.
+HABER/GUNDEM DURUMU: bugun haberin TEK sayisal dokunusu SIRALAMA:
+combined = clamp(ta.score + senti.score * 7, 2, 98) (app.js:11222, 11337) ve
+sentiAggregate +-1 ile sinirli, yani etki +-7 puan. WHY_HABER_ESIK = 0.12 yorumu
+"OLCULMEDI, DEVRALINDI". agendaScore (app.js:11889) ve computeCausalLinks skorun DISINDA
+("Skora dahil degildir", app.js:12383). Graham da api/_akis.js:190-209da
+"SADECE BILGI; FA/TA/bileske skora DOKUNMAZ". 1-100 katmani bu iki duvari KIRACAKSA
+bu bilincli bir karar olmali ve tests/baseline.json parite testi kirmizi yanacak.
+
+### 19.9 Olcum betikleri (yeniden kosturulabilir)
+Scratchpad: .../scratchpad/bt/ altinda probe.mjs (vade anahtari yoklamasi), run.mjs (ana
+geriye donuk kosu -> result.json), stat.mjs (taban oran + ayirt etme), horizon.mjs
+(vade-esli ufuk + Spearman + alt donemler -> horizon.json), combo.mjs (skor x fiyat konumu
+capraz tablosu). Mumlar ayni klasorde AAPL/MSFT/GOOGL/AMZN/NVDA/META/TSLA/GSPC.json.
+Kosu: cd /c/Users/Asus/Desktop/day-starter && node "<yol>"
+
+## 20. 1-100 GENEL SKOR: Graham marji olcumu + haber-gundem-konjonktur katmani (2026-11-24)
+
+Kullanici istegi: "Graham marjini olc, 1-100 overall skor yapisini ve motorunu hazirla...
+Bileske skor + Graham + HABER. Bu ucu ile 1-100 final overall skoru yapacagiz."
+
+### 20.1 Graham marji AYIRT ETME GUCU - olculdu (n=289)
+Kurgu: 7 sembol (AAPL/MSFT/GOOGL/AMZN/NVDA/META/TSLA) x 42 ay sonu (2023-02..2026-07),
+Graham marji = (deger - fiyat)/deger (POZITIF = ucuz). Ileriye donuk 63g ve 126g getiri.
+
+| Olcut                       | 63 gun | 126 gun |
+|-----------------------------|--------|---------|
+| Spearman rho                | 0.108  | 0.086   |
+| Ayirt etme (marj>0 - marj<=0)| +1.46p | +2.82p  |
+| Taban oran (yukari biten)   | 68.2%  | 75.0%   |
+
+- Kovalar MONOTON DEGIL: marj arttikca getiri duzenli artmiyor.
+- Rejim donmesi: 2025-26 lehte (+7.5p / +13.0p), 2023-24 ALEYHTE (-4.0p / -5.2p).
+- Tek anlamli bant: marj > +%50 -> 126g ortalama +%31.9, %84.6 yukari (n=26).
+- Graham marji ile TA(orta) skoru arasinda rho = -0.149: BAGIMSIZ bilgi tasiyor,
+  bu yuzden eklemek anlamli; ama gucu zayif oldugu icin agirligi KUCUK tutuldu.
+
+### 20.2 ONEMLI DUZELTME: bolunme tabani kirlenmesiydi
+Ilk kosuda rho 0.225 ve ayirt etme 14.62p cikti. Sebep: HBK (EPS) bolunme-oncesi
+tabanda, fiyat bolunme-sonrasi tabanda. Hizalama yapildiktan sonra guc 0.108 / 1.46p'ye
+dustu - yani "gorunen gucun" buyuk kismi olcum hatasiydi. GRAHAM_PUAN = +-4 bu olcumun
+sonucudur, tahmin degil.
+
+### 20.3 HABER SKORU GERIYE DONUK OLCULEMEZ (durust kayit)
+Gecmis haber arsivi YOK: haber icin KV yok, onbellek anahtari tarihe degil girdi
+imzasina bagli, Google News RSS tarih-araligi sorgusu kabul etmiyor. Bu yuzden haber
+agirliklari (hisse 0.50 / gundem 0.20 / konjonktur 0.30) ve curume merdiveni
+KALIBRE EDILEMEDI. Arayuzde "Haber agirliklari OLCULMEDI" ibaresi ile basiliyor.
+Olculebilir hale gelmesi icin haber anlik goruntulerinin tarihli saklanmasi gerekir
+(ayri is, ayri onay).
+
+### 20.4 Ilan edilen capalar ve tavanlar (app.js, motora dilimlenir)
+HABER_AYAR = AGIRLIK {hisse 0.50, gundem 0.20, konjonktur 0.30}, ASGARI_SINYAL 4,
+CURUME [[12,1],[24,0.8],[48,0.55],[96,0.3]], CURUME_TABAN 0.15, KONJ_TABAN_BASKI 0.3.
+OVERALL = ANKOR [[0,1],[4,20],[5.5,40],[7,60],[8.5,80],[10,100]], GRAHAM_PUAN 4,
+GRAHAM_DOYUM 0.5, HABER_PUAN 8, TAVAN_TOPLAM 10,
+BANT [[80 cok_elverisli],[60 destekleyici],[40 ilimli],[20 zayif],[0 olumsuz]].
+
+- 0-10 -> 1-100 cevrimi `skor10 * 10` DEGIL: overallStretch parcali-dogrusal capa
+  tablosu. Sebep: bileske 5.5-8.5 bandinda sikisiyor, duz carpma yuzdelik hareketi
+  gormezden geliyordu (kullanicinin "matematigi degistirmek gerekebilir" notu).
+- Ek iki terimin TOPLAM etkisi +-10 puan ile kirpilir; tek basina bant atlatmamasi icin.
+- Olculmeyen bacak 0 veya 50 SAYILMAZ: agirlik yalniz olculenler uzerine dagitilir,
+  guven dusurulur, `eksik[]` + `guvenKod` ile ustte raporlanir.
+- computeHaberSkor SAF: ag yok, Date.now() yok (simdiMs zorunlu), Turkce metin yok.
+- Yeni katman computeHolisticScore'a GERI BESLENMEZ; bileske aynen korunur, parite 0.
+
+### 20.5 Isaret tuzagi (tekrar dusmemek icin)
+`grahamMarj` KESIR ve POZITIF = ucuz. `computeGraham.diffPct` ise YUZDE ve NEGATIF =
+ucuz. Her cagri yerinde `-graham.diffPct / 100` yazilir (app.js ve api/_akis.js).
+
+### 20.6 Nereye baglandi
+- Motor: app.js 6051-6245 (HABER_AYAR, haberCurumeW, computeHaberSkor, OVERALL,
+  overallStretch, computeOverall100) -> holistic dilimi icinde, dilim tablosu degismedi.
+- Web: hisse sayfasinda Graham kartindan SONRA hesaplanip bileske kartinin USTUNE
+  cizilir (`overallHTML`). Yeni CSS yok, mevcut .rp-holistic/.hs-* siniflari.
+  Haber bacagi web'de CANLI besleniyor (senti.puanlar + computeAgenda + pulseStance).
+- API: api/_akis.js analizKatmani -> `overall` alani. Bu ucta haber girdisi YOK, bu
+  yuzden `haberSkor: null` gonderilir ve guvenKod en iyi 'kismi' olur (sahte 50 yok).
+- Native: types.ts Overall tipleri, sozluk.ts OVERALL_* (Turkce TEK YERDE),
+  format.ts formatImzaliOran (formatImzaliSkor tam sayiya yuvarliyordu, 2.4 puanlik
+  katki "2" basilacakti), TezKart.tsx genel skor blogu. Native'de hesap YOK.
+- Karsilastirma ekrani (app.js ~13660/13898) HENUZ baglanmadi.
+
+### 20.7 Dogrulama
+node --check app.js SYNTAX_OK · node tools/motor-uret.mjs -> 35 dilim,
+imza sha256:84a3e52f61cada8d (4120 icerik satiri) · node tests/uretim-test.mjs ->
+73 denetim gecti · node tests/parity.mjs -> FARK 0, 29 karsilastirma noktasi birebir ·
+node --check api/_akis.js SYNTAX_OK · mobile tsc --noEmit TEMIZ.
+API duman testi 5/5:
+- graham yok: s10 6.2 -> skor 49, eksik [graham, haber], guvenKod zayif
+- graham ucuz (diffPct -55): skor 53, delta.graham +4, guvenKod kismi
+- graham pahali (diffPct +80): skor 45, delta.graham -4
+- dusuk bileske: s10 2.6 -> skor 9, olumsuz/bear
+- yuksek bileske: s10 8.0 -> skor 77, destekleyici/bull
+
+### 20.8 YENI BULUNAN CANLI ARIZA - ONAY BEKLIYOR (duzeltilmedi)
+api/_motor.js:1947-1992 `secTTM` capraz-taban hatasi: `secUniqPeriods` ayni donemin
+ILK kaydini tutuyor. Bolunmeden sonra ~12 ay boyunca gecen yilin ara donemi ESKI hisse
+tabaninda kaliyor ve TTM HBK bozuluyor. Olculen: GOOGL -18.89, NVDA -2.28.
+NOT: bu, daha once varsaydigim "donem ortusmesi" hatasi DEGIL - onu SEC XBRL ile
+yanlisladim (NVDA 7.91 = 4.90 + 4.85 - 1.84 DOGRU). Duzeltme skorlari OYNATIR, bu
+yuzden ayri ve taze bir "evet" gerekir.

@@ -553,6 +553,28 @@ export function analizKatmani(eng, kayit, r, plan, graham) {
     // bileşke/uygunluk skoru DEĞİŞMEZ (parite FARK 0 bunun kanıtı).
     // Ölçülemediyse `null` — "hesaplayamadım" ile "sıfır" ayrı şeyler.
     graham: graham || null,
+    // 🧮 Genel Skor (1–100) = bileşke + Graham marjı + HABER.
+    // Eşik/ağırlık/formul YOK burada: tamamı motorda (eng.computeOverall100).
+    // `grahamMarj` KESİR ve POZİTİF = ucuz; `diffPct` ise YÜZDE ve NEGATİF =
+    // ucuz — bu yüzden işaret çevrilip 100'e bölünüyor.
+    // `haberSkor` BİLEREK null: bu uç noktanın haber girdisi YOK (RSS çekmiyor,
+    // `computeNewsSentiment` burada koşmuyor). Motor eksik bacağı 0 saymaz,
+    // ağırlığı düşürüp `guvenKod`u 'kismi'ye çeker — yani eksik görünür,
+    // gizlenmez. Web (app.js) aynı motora haber bacağını da besliyor.
+    overall: (() => {
+      const gm = (graham && graham.ok && graham.diffPct != null) ? -graham.diffPct / 100 : null;
+      const ov = eng.computeOverall100({ score10: hol.score10, grahamMarj: gm, haberSkor: null });
+      if (!ov || ov.skor == null) return null;
+      return {
+        skor: ov.skor, taban: round6(ov.taban),
+        bantKod: ov.bantKod, bantCls: ov.bantCls,
+        delta: {
+          graham: round6(ov.delta.graham), haber: round6(ov.delta.haber),
+          toplam: round6(ov.delta.toplam), kirpildi: !!ov.delta.kirpildi,
+        },
+        eksik: ov.eksik || [], guvenKod: ov.guvenKod,
+      };
+    })(),
   };
 }
 

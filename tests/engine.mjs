@@ -281,6 +281,13 @@ export const EXPORTS = [
   'FA_PE', 'faPeCriterion', 'faKriterKod', 'faKriterIsaretle',
   'faBand', 'taBand', 'COMPOSITE_MATRIX', 'COMPOSITE_BLEND', 'compositeBlend',
   'computeHolisticScore',
+  // 1-100 GENEL SKOR (2026-11-24): bileske + Graham + HABER. Bileskenin
+  // SAYILARINA DOKUNMAZ, score10 degerini GIRDI alir. Graham agirligi
+  // OLCULDU (n=289, rho 0.108, ayirt +1.46p/63g) -> kucuk tutuldu (+-4).
+  // HABER agirliklari OLCULMEDI: gecmis haber arsivi yok, geriye donuk
+  // kalibre EDILEMEZ. Ayrinti: DEVAM.md 20.
+  'HABER_AYAR', 'haberCurumeW', 'computeHaberSkor',
+  'OVERALL', 'overallStretch', 'computeOverall100',
   // Plan katmanı: 2026-10-14'te ekran katmanından devredildi (D1).
   // momentumInfo + buyZoneProximity app.js'in sunum bölgesindeydi, risk/ödül
   // çekirdeği computeCompareVerdict'in içine gömülüydü; motor seviyeleri

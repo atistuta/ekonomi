@@ -37,6 +37,8 @@ import type {
   NedenKutupKodu,
   NedenUzlasmaKodu,
   NedenYonKodu,
+  OverallBant,
+  OverallGuven,
   PushIzin,
   PushKurSebep,
   Vade,
@@ -495,6 +497,60 @@ export const GRAHAM_USTUNDE = 'ÜSTÜNDE';
 export const GRAHAM_OLCULEMEDI = 'Formül bu hisse için kurulamadı.';
 export const GRAHAM_GONDERILMEDI = 'Bu ölçüm uçtan gelmedi.';
 export const GRAHAM_UYARI = 'Graham, büyüme formülünü hisse seçimi aracı olarak önermedi; tek başına karar ölçütü değildir. Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
+
+
+// ---------------------------------------------------------------------
+//  1-100 GENEL SKOR — BİLEŞKE + GRAHAM + HABER
+// ---------------------------------------------------------------------
+//  NİYE AYRI SÖZLÜK: bant kodları bileşke skorun (0-10) bant metinleriyle
+//  AYNI kelimeleri kullanıyor ama AYNI ÖLÇEK DEĞİL. İki ölçeğin cümlesi
+//  tek sözlüge karışsa, 1-100'lük "Destekleyici" ile 0-10'luk
+//  "Destekleyici" aynı eşikten geliyormuş gibi okunurdu.
+//
+//  SAYI YOK: çapalar (0/4/5,5/7/8,5/10 → 1/20/40/60/80/100), ±4 ve ±8
+//  tavanları, ±10 toplam sınırı MOTORDA. Etiketlerdeki "±4"/"±8"
+//  yazıları ETİKETİN parçası; istemci onlarla hesap YAPMAZ.
+//
+//  TON: bant yalnız KOŞULU bildiriyor ("koşullar elverişli"), ne
+//  yapılacağını söylemiyor — al/sat sinyali değil.
+
+/** Bandın tam cümlesi. */
+export const OVERALL_BANT_SOZLUK: Record<OverallBant, string> = {
+  cok_elverisli: 'Koşullar çok elverişli',
+  destekleyici: 'Destekleyici',
+  ilimli: 'Ilımlı / seçici',
+  zayif: 'Zayıf — temkinli',
+  olumsuz: 'Olumsuz',
+};
+
+/**
+ * EK BİLEŞENLERİN ÖLÇÜLME DURUMU. 'tam' için cümle BOŞ: her şey
+ * ölçüldüyse kullanıcıya söylenecek bir eksik de yok — orada bir uyarı
+ * basmak gürültü olurdu. Çağıran boş dizeyi basmaz.
+ */
+export const OVERALL_GUVEN_SOZLUK: Record<OverallGuven, string> = {
+  tam: '',
+  kismi: 'Ek bileşenlerden biri ölçülemedi — skor ağırlıklı olarak bileşkeyi yansıtıyor.',
+  zayif: 'Ek bileşenlerin ikisi de ölçülemedi — skor yalnız bileşkeden geliyor.',
+  olculemedi: 'Bileşke skor ölçülemedi; genel skor kurulamadı.',
+};
+
+// Etiketler — ±4/±8 dışında RAKAMSIZ; onlar motorun sınırının ADI.
+export const OVERALL_BASLIK = '🧮 Genel Skor';
+export const OVERALL_OLCEK = '/ 100';
+export const OVERALL_ALT_BASLIK =
+  'Bileşke skorun 1-100 ölçeğine gerdirilmiş hali + Graham marjı + haber-gündem-konjonktür.';
+export const OVERALL_TABAN_ETIKET = 'Bileşke taban';
+export const OVERALL_TABAN_NOTU =
+  '0-10 bileşke skorun 1-100 ölçeğindeki karşılığı — ölçeği motor çeviriyor.';
+export const OVERALL_GRAHAM_ETIKET = 'Graham marjı (±4)';
+export const OVERALL_HABER_ETIKET = 'Haber-gündem-konjonktür (±8)';
+export const OVERALL_KIRPMA_NOTU =
+  'Ek terimlerin toplamı ±10 puan tavanına dayandı — tek başına bir bandı atlamasın diye kırpıldı.';
+export const OVERALL_EKSIK_NOTU = 'Bu bileşen bu kayıt için ölçülemedi.';
+export const OVERALL_OLCULEMEDI = 'Genel skor bu kayıt için kurulamadı.';
+export const OVERALL_UYARI =
+  'Graham ağırlığı geriye dönük ölçüldü (n=289; ayırt etme gücü zayıf, o yüzden küçük tutuldu). Haber ağırlıkları ÖLÇÜLMEDİ: geçmiş haber arşivi olmadığı için geriye dönük kalibre edilemiyor. Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
 
 // ---------------------------------------------------------------------

@@ -101,6 +101,28 @@ export function formatImzaliSkor(value: number | null | undefined): string {
 }
 
 /**
+ * ± YÖNLÜ, ONDALIKLI motor düzeltmesi — 1-100 genel skorun bileşen
+ * dökümü (`overall.delta.graham` ±4, `overall.delta.haber` ±8).
+ *
+ * NİYE `formatImzaliSkor` YETMİYOR: o tam sayıya yuvarlıyor; burada
+ * 2,4 puanlık bir katkı "2" diye basılırsa üç bileşenin toplamı ekranda
+ * tabanla uyuşmaz. Ondalık basamak sayısı ÇAĞIRANDAN gelir.
+ *
+ * `0` GEÇERLİ ÖLÇÜM (terim hesaplandı, katkısı sıfır çıktı) → işaretsiz
+ * basılır; ölçüm YOKSA `EMPTY` (DEVAM.md: "ölçülmeyen sayı basılmaz").
+ * Eksi işareti EKRAN EKSİSİ (−), ASCII tiresi değil.
+ */
+export function formatImzaliOran(value: number | null | undefined, digits = 1): string {
+  if (!isNum(value)) return EMPTY;
+  const body = new Intl.NumberFormat(LOCALE, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(Math.abs(value));
+  const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+  return `${sign}${body}`;
+}
+
+/**
  * 0-1 aralığındaki motor oranı (bütüncüllük direkleri `v`, ağırlık `w`).
  * ÖLÇÜLDÜ (2026-10-18): /api/analyze `direkler[].v` 0,68403 gibi ORAN
  * döndürüyor. Bunu skor gibi yuvarlamak ekranda "1" yazdırırdı — yanlış.
