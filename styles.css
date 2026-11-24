@@ -2298,6 +2298,22 @@ main {
 .cmp-vsuit .cv-suit.neutral, .cmp-vsuit .cv-suitl.neutral { color: var(--gold); }
 .cmp-vsuit .cv-suit.bear, .cmp-vsuit .cv-suitl.bear { color: var(--red); }
 .cmp-vsuit .cv-suit-soft { font-size: 9.5px; color: var(--text-dim); opacity: .85; margin-top: 1px; }
+
+/* Genel Skor (1-100) hucresi - Temel Uygunluk (0-10) hucresinin KARDESI ama
+   AYRI olcek. Sayinin yanindaki <em>/100</em> ve alttaki dokum satiri iki
+   olcegin karistirilmasini engeller. */
+.cmp-vov {
+  align-items: center; flex-direction: column; gap: 3px;
+  padding-top: 12px; padding-bottom: 12px; text-align: center;
+}
+.cmp-vov .cv-ov { font-size: 24px; font-weight: 800; line-height: 1; }
+.cmp-vov .cv-ov em { font-style: normal; font-size: 12px; font-weight: 600; color: var(--text-dim); opacity: .8; }
+.cmp-vov .cv-ovl { font-size: 11px; font-weight: 600; line-height: 1.3; white-space: normal; }
+.cmp-vov .cv-ov.bull, .cmp-vov .cv-ovl.bull { color: var(--green); }
+.cmp-vov .cv-ov.neutral, .cmp-vov .cv-ovl.neutral { color: var(--gold); }
+.cmp-vov .cv-ov.bear, .cmp-vov .cv-ovl.bear { color: var(--red); }
+.cmp-vov .cv-ovd { font-size: 9.5px; line-height: 1.4; color: var(--text-dim); white-space: normal; opacity: .9; }
+.cmp-vov .cv-ov-kirp, .cmp-vov .cv-ov-guv { font-size: 9.5px; color: var(--text-dim); opacity: .85; margin-top: 1px; }
 .compare-suit-disc {
   grid-column: 1 / -1; margin-top: 2px; padding: 9px 12px;
   font-size: 10.5px; line-height: 1.5; color: var(--text-dim);

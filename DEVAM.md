@@ -1349,7 +1349,7 @@ ucuz. Her cagri yerinde `-graham.diffPct / 100` yazilir (app.js ve api/_akis.js)
 - Native: types.ts Overall tipleri, sozluk.ts OVERALL_* (Turkce TEK YERDE),
   format.ts formatImzaliOran (formatImzaliSkor tam sayiya yuvarliyordu, 2.4 puanlik
   katki "2" basilacakti), TezKart.tsx genel skor blogu. Native'de hesap YOK.
-- Karsilastirma ekrani (app.js ~13660/13898) HENUZ baglanmadi.
+- Karsilastirma ekrani: KAPANDI 2026-11-24, bkz. 20.9.
 
 ### 20.7 Dogrulama
 node --check app.js SYNTAX_OK · node tools/motor-uret.mjs -> 35 dilim,
@@ -1370,3 +1370,216 @@ tabaninda kaliyor ve TTM HBK bozuluyor. Olculen: GOOGL -18.89, NVDA -2.28.
 NOT: bu, daha once varsaydigim "donem ortusmesi" hatasi DEGIL - onu SEC XBRL ile
 yanlisladim (NVDA 7.91 = 4.90 + 4.85 - 1.84 DOGRU). Duzeltme skorlari OYNATIR, bu
 yuzden ayri ve taze bir "evet" gerekir.
+
+### 20.9 Karsilastir ekrani baglandi (2026-11-24)
+Besi birden app.js'te, hepsi SAF motoru cagiriyor; yeni esik/agirlik YOK.
+- A1 `agendaOnce()` (app.js ~12338): `computeAgenda`nin UCUSTAKI istek hafizasi.
+  ZORUNLUYDU - karsilastir sutunlari tek `Promise.all` altinda cozuluyor, oysa
+  `computeAgenda`nin yalniz 20 dk'lik `cacheGet('agenda:pool')`i var, ucusta
+  tekilleme YOKTU. N sutun = N kez tum AGENDA_FEEDS RSS kumesi demekti
+  ("ucuncu taraflara tekrar firtinasi yok" kuralini kirardi).
+- A2 `OVERALL_BANT_TR` (app.js ~13550): bant kodu -> Turkce, EKRAN katmaninda.
+  Motor SAF kaldi (Turkce uretmiyor). Hisse sayfasinin yerel `BANT_TR`'si
+  BILEREK ellenmedi.
+- A3 `computeCompareVerdict` icinde haber bacagi + 1-100 hesabi: `agendaOnce()`
+  + `pulseStance(macro.dims.rate, macro.dims.infl)` -> `computeHaberSkor` ->
+  `computeOverall100({score10, grahamMarj: -graham.diffPct/100, haberSkor})`.
+  Isaret cevrimi yine 20.5'teki tuzak yuzunden.
+- A4 yeni `out` alanlari: ovSkor, ovTaban, ovBantKod, ovBantCls, ovDGraham,
+  ovDHaber, ovKirpildi, ovGuvenKod, ovHaberOlculen, ovHaberGuven.
+- A5 "Genel Skor" satiri, bileske satirinin USTUNE (hisse sayfasindaki
+  `${overallHTML}` -> `${holisticHTML}` sirasiyla ayni). Yeni ac/kapa makinesi
+  YOK (compareGrahamOpen ucluzu klonlanmadi); dokum `cv-ovd` alt satirinda
+  satir ici duruyor. Olculmeyen delta `—` basiliyor, 0 DEGIL; guvenKod
+  kismi/zayif ise ayrica uyari cipi cikiyor.
+- styles.css: `.cmp-vov` ailesi (`.cmp-vsuit`ten klonlandi). Sayinin yanindaki
+  `<em>/100</em>` iki olcegin karistirilmasini engelliyor.
+
+Dogrulama (2026-11-24): node --check app.js SYNTAX_OK · node tools/motor-uret.mjs
+-> "degisiklik yok" (iki uretilmis dosyanin imzasi AYNI, yani A hicbir motor
+dilimine dokunmadi) · uretim-test 73 · parity FARK 0 / 29 nokta · uc-test 2489 ·
+mobile tsc TEMIZ.
+OLCULMEDI: cihazda goruntuleme (bkz. 17.4).
+
+## 21) ABD OLAYLAR TAKVIMI - KAYNAK OLCUMU (2026-11-24, YALNIZ ARASTIRMA, KOD YAZILMADI)
+
+Istek: takvim kismina SADECE ABD olaylar takvimi (Investing.com "Ekonomik Takvim"
+gorunumu); amac = konu basliklarini haberler kismindaki gundem/konjonktur
+taramasina girdi yapmak.
+
+### Nereye oturur (yeni Vercel fonksiyonu GEREKMIYOR)
+- Tasiyici: `api/_takvim.js` (561 satir, ELLE YAZILMIS). `_` onekli oldugu icin
+  Vercel rota saymiyor; `/api/takvim` -> `vercel.json` yonlendirmesi ile
+  `/api/proxy?__rota=takvim`. `api/*.js` = 12 dosya, Hobby tavani KORUNUYOR.
+- Islek: `takvimHandler` (`api/_kesif.js:1119`, kayit :1263).
+- Eklenis bicimi: `KAPSAMLAR = ['hepsi','kap','temettu']` listesine YENI kapsam
+  (orn. `'abd'`). Yeni konaklar `api/_takvim.js`in KENDI `IZINLI_KONAK`una girer;
+  `api/_ag.js`in `IZINLI` listesine ASLA (takvim skora girdi vermez).
+- Bugunku durum: web "Takvim" sekmesi YALNIZ temettu (`app.js:7567`, `:7610`);
+  `app.js:8643` zaten "ABD bilanco takvimi bu surumde yok" diyor.
+  Native istemci: `mobile/src/api/takvim.ts`.
+
+### Olculen kaynaklar (curl, 2026-11-24)
+| Kaynak | Sonuc |
+|---|---|
+| federalreserve.gov/json/calendar.json | 200 - 550 608 B - JSON **CALISIYOR** |
+| api.nasdaq.com/api/calendar/economicevents?date=YYYY-MM-DD | 200 - **CALISIYOR (gecmis tarihler)** |
+| bea.gov/news/schedule | 200 - 67 959 B - HTML (ayristirici gerek) |
+| census.gov/economic-indicators/calendar-listview.html | 200 - 84 923 B - HTML, 165 `<tr>` (ayristirilabilir) |
+| treasurydirect.gov/TA_WS/securities/announced?format=json | 200 - 68 043 B - JSON |
+| bls.gov (.ics ve HTML takvim) | **403** - tam tarayici basligiyla bile. VERI MERKEZI IPsi ENGELLI |
+| census.gov/economic-indicators/calendar.ics | 200 ama govde HTML; `BEGIN:VEVENT` = 0. BESLEME DEGIL |
+| api.tradingeconomics.com/calendar?c=guest:guest | **410 Gone** - ucretsiz misafir anahtari OLDU |
+
+### Fed calendar.json bicimi (ILERIYE donuk program)
+`{"events":[{title, time, month:"YYYY-MM", days, type:"Speeches", description, location, live}]}`
+-> FOMC toplantilari + guvernor konusmalari. Ekran goruntusundeki ust satirin ayni.
+
+### Nasdaq bicimi (GECMIS veriler + SAYILAR)
+`{"data":{"asOf":"Tue, Nov 24, 2026","rows":[{gmt, country, eventName, actual,
+consensus, previous, description}]}}`
+- 2026-11-20 -> 52 satir, **22si United States**. Olculen ornek:
+  `08:30 | Initial Jobless Claims | A=203K | C=198K | P=202K`
+  `08:30 | Philadelphia Fed Manufacturing Index | A=6.3 | C=20.6 | P=20.9`
+- `country` alani var -> **SADECE ABD** suzmek tek satir is.
+- `actual/consensus/previous` = ekran goruntusundeki **Simdi / Tahmin / Onc.**
+- ONEMLI SINIR: 2026-11-23 var; 2026-11-24 (bugun), 11-25, 11-26 ->
+  `code 1002 "No record found."` Yani bu kaynak **GERIYE** donuk calisiyor,
+  ILERIYE donuk program VERMIYOR. Ayrica RESMI OLMAYAN (belgelenmemis) API.
+
+### Durust sinir
+- ILERIYE donuk (Bugun/Yarin/Bu Hafta/Gelecek sekmeleri) = resmi devlet
+  programlari: tarih + saat + olay BASLIGI. Sayi YOK.
+- GERIYE donuk (Dun) = Nasdaq ile sayilar da gelir.
+- **ONEM YILDIZI (3 boga) HICBIR ucretsiz kaynakta YOK** - Investing.com bunu
+  lisansli beslemeden (Econoday / Trading Economics ucretli) aliyor.
+- Investing.com kazimak kullanim sartlarina aykiri; SECENEK DEGIL.
+- Kullanicinin asil amaci (konu basliklari -> gundem/konjonktur taramasi)
+  ucretsiz kaynaklarla **KARSILANIYOR**: basliklar tam olarak gelen sey.
+
+### Karar beklenen (taze "evet" gerekir - bkz. 5)
+Kod YAZILMADI. Onaylanirsa onerilen kurgu: `kapsam=abd` ->
+Fed calendar.json (ileriye, zorunlu) + census listview (ileriye, veri yayin
+tarihleri) + Nasdaq (geriye, sayilar; olcumsuzse `null`, asla 0).
+
+### 21.6 ILERIYE DONUK OLAY-BEKLENTI MOTORU - HAM MALZEME OLCUMU (2026-11-24)
+
+Kullanici istegi: "tek tek tarihler ile onumuzdeki gunlerdeki aciklamalar vb.
+gosterilecek, ileriye donuk etkileyecegi hisselerdeki yorumlarda ornegin 12
+araliktaki FED faiz aciklamasinda faiz artis ongorusunu hissenin skorlamasina
+katkisini gosterecek."
+
+KOD YAZILMADI. Asagidaki uc katman OLCULDU, tasarim onerildi, taze "evet" bekliyor.
+
+#### 21.6.1 TARIH DUZELTMESI - 9 ARALIK, 12 ARALIK DEGIL
+
+Fed'in KENDI calendar.json'una gore (month >= 2026-11 olan TUM FOMC kayitlari,
+toplam 4 tane):
+  2026-11 gun 18  14:00  FOMC Minutes        (TUTANAK - karar toplantisi DEGIL)
+  2026-12 gun  9  14:00  FOMC Meeting        <-- FAIZ KARARI BURADA
+  2026-12 gun  9  14:30  FOMC Press Conference
+  2026-12 gun 30  14:00  FOMC Minutes
+Aralik faiz aciklamasi 9 ARALIK 2026. "12 aralik" takvimde yok.
+
+#### 21.6.2 PARSER TUZAKLARI (uygulama sirasinda sart)
+
+- fed calendar.json UTF-8 BOM ile servis ediliyor -> encoding='utf-8-sig'.
+  Duz utf-8 ile JSONDecodeError: "Unexpected UTF-8 BOM".
+- `days` alani VIRGULLU LISTE olabilir. Ornek (H.15 Selected Interest Rates):
+  "2, 3, 4, 5, 6, 9, 10, 12, 13, 16, 17, 18, 19, 20, 23, 24, 25, 27, 30"
+  Duz int() patlar; split(',') sart.
+- Toplam 2618 olay. Tip sayimi:
+  Stat 1059 · Speeches 603 · events 569 · FOMC 135 · Other 105 · Testimony 74
+  · Beige 56 · Conferences 10 · Board 6 · None 1
+- Ileriye donuk (>= 2026-11): FOMC 4, Stat 23, Beige 1 (Beige Book 2026-11-25),
+  events 0.
+
+#### 21.6.3 KATMAN (2) FAIZ BEKLENTISI - OLCULDU, YENI KONAK GEREKMIYOR
+
+Kaynak: Yahoo CBOT federal funds vadeli islemleri.
+  SEMBOL KURALI: sonek `.CBT` — `.CME` DEGIL.
+  ZQZ26.CME -> {"code":"Not Found","description":"No data found, symbol may be delisted"}
+  ZQZ26.CBT -> 200.
+  Ay kodlari: F=Oca G=Sub H=Mar J=Nis K=May M=Haz N=Tem Q=Agu U=Eyl V=Eki X=Kas Z=Ara
+  query1.finance.yahoo.com ZATEN api/_ag.js:211 IZINLI icinde -> IZINLI LISTESI
+  DEGISMIYOR, yeni konak YOK.
+
+Olculen egri (ima edilen aylik ortalama fed funds = 100 - fiyat):
+  ZQX26 (Kas 26)  96.120  ->  3.880%
+  ZQZ26 (Ara 26)  95.935  ->  4.065%
+  ZQF27 (Oca 27)  95.840  ->  4.160%
+  ZQG27 (Sub 27)  95.700  ->  4.300%
+  ZQH27 (Mar 27)  95.625  ->  4.375%
+  ZQJ27 (Nis 27)  95.545  ->  4.455%
+  ZQK27 (May 27)  95.490  ->  4.510%
+  ZQM27 (Haz 27)  95.450  ->  4.550%
+Yukari egimli egri -> piyasa ardisik ARTISLAR fiyatliyor.
+
+FedWatch ayristirmasi, 9 Aralik 2026 FOMC icin SAYISAL DOGRULANDI:
+  N = 31 (Aralik gun sayisi), toplanti gunu = 9
+  agirlik_once = (9-1)/31   = 0.2581
+  agirlik_sonra = (31-9+1)/31 = 0.7419
+  r_sonra = (r_ara - 0.2581*r_kas) / 0.7419
+          = (4.065 - 0.2581*3.880) / 0.7419
+  TOPLANTI SONRASI IMA EDILEN ORAN = 4.1293%
+  DELTA = +24.9 BAZ PUAN
+  25bp ADIM OLASILIGI = %99.7
+  Ocak ortalamasi 4.160 -> Aralik sonrasina ek +3.1 bp
+Kas 18 yalniz TUTANAK (karar yok), bu yuzden ZQX26'nin 3.880%'i yururlukteki
+oran olarak alinabilir.
+
+#### 21.6.4 KATMAN (3) HISSE BAZLI FAIZ DUYARLILIGI - OLCULDU
+
+Yontem: 1 yil gunluk (2025-11-24 .. 2026-11-24), gunluk hisse getirisi (%)
+`^TNX` gunluk degisimine (baz puan) OLS ile regresyon. |dTNX| < 0.5bp gunler
+atildi (gurultu). Takvim GUNU ile eslestirme (ham epoch kesismiyor - ^TNX ve
+hisse mumlarinin zaman damgalari farkli).
+
+  sembol  beta(%/bp)      r2      n   25bp ile iliskili hareket
+  NVDA        0.0278   0.002    228   +0.69%
+  JPM        -0.0282   0.008    228   -0.71%
+  O          -0.0773   0.111    228   -1.93%
+  XLU        -0.0750   0.120    228   -1.88%
+  KO         -0.0368   0.019    228   -0.92%
+
+DURUST OKUMA: duyarlilik yalniz FAIZ VEKILI isimlerde OLCULEBILIR.
+  O (REIT) r2=0.111 ve XLU (kamu hizmetleri) r2=0.120 -> anlamli, isaret
+  negatif, teorik beklentiye uygun.
+  NVDA r2=0.002, JPM r2=0.008, KO r2=0.019 -> AYIRT ETME GUCU YOK. Bu
+  sembollerde "faiz artisi hisseyi su kadar etkiler" demek ONE SURMEKTIR,
+  OLCMEK DEGIL. Kural: r2 esigin altindaysa katki null, 0 degil.
+
+#### 21.6.5 DURUSTLUK SINIRI (tasarimi belirleyen kisit)
+
+Vadeli islemlerden cikan beklenti ZATEN FIYATIN ICINDE. Fiyatlanmis bir artis
+ALFA DEGILDIR; "FED faiz artiracak, o yuzden skor dussun" demek piyasanin
+haftalar once yaptigi islemi tekrar saymaktir. Savunulabilir uc cikti:
+  (1) TAKVIM RISKI / KATALIZOR UYARISI - tarih yakin, oynaklik beklenir.
+  (2) SURPRIZ OLCUMU (post-hoc) - gerceklesen vs fiyatlanan. Nasdaq
+      `actual` / `consensus` bunu verir ama YALNIZ GERIYE DONUK.
+  (3) YAKINLIK UYARISI - yuksek duyarlilikli ismi (r2 esigi gecen) yuksek
+      etkili olaydan 1 gun once takvim bos gibi ele almamak.
+  3-bogalik ONEM derecesi HICBIR ucretsiz kaynakta yok (bkz. 21.3).
+
+#### 21.6.6 ONERILEN BAGLANTI NOKTASI (skor tarafi)
+
+1-100 formulu: taban (bileske 0-10 -> 1-100) + Graham +-4 + haber +-8,
+ek terim toplami +-10 kirpma. Haber bacaginin UCUNCU alt bacagi ZATEN
+konjonktur: app.js:12932 pulseStance(macro.dims.rate, macro.dims.infl)
+-> {biasUp, biasDown, baski, durus, faz}.
+
+ONERI: bu MEVCUT konjonktur alt bacagini "guncel makro faz"dan "guncel makro
+faz + fiyatlanmis ileriye donuk olay baskisi"na yukselt.
+  + computeOverall100'de YENI AGIRLIK GEREKMEZ
+  + +-10 kirpmasi YENIDEN KALIBRE EDILMEZ
+  + tests/baseline.json yapisina dokunmaz
+ALTERNATIF (dorduncu "+-N olay" terimi) REDDEDILDI: kirpmayi yeniden acar ve
+KALIBRE EDILEMEZ (gecmis olay arsivi yok - 21.5'teki ayni sinir).
+
+#### 21.6.7 NEREYE OTURUR (fonksiyon sayisi degismez)
+
+Takvim bacagi: /api/takvim uzerine yeni kapsam (`abd`), tasiyici api/_takvim.js,
+islemci api/_kesif.js:1119 takvimHandler. api/_takvim.js `_` onekli -> Vercel
+rota saymaz; erisim vercel.json yeniden yazimi ile /api/proxy?__rota=takvim.
+api/*.js TAM 12 dosyada kalir. YENI FONKSIYON YOK.
+Beklenti bacagi: Yahoo zaten IZINLI -> api/_ag.js ACILMAZ.

@@ -12328,6 +12328,19 @@
     return res;
   }
 
+  // computeAgenda'nın kendi 20 dk'lık önbelleği var ama UÇUŞ-HALİNDE tekilleme
+  // YOK: N çağrı aynı anda gelirse RSS fan-out'u N kez koşar. Karşılaştır
+  // ekranı kolonları Promise.all ile PARALEL hesaplandığı için bu, "üçüncü
+  // taraflara tekrar fırtınası yok" kuralını bozar. agendaOnce eşzamanlı
+  // çağrıları TEK söze bağlar; söz çözülünce serbest kalır (sonucu
+  // dondurmaz — bayatlatma işi hep computeAgenda'nın önbelleğinde kalır).
+  let agendaInFlight = null;
+  function agendaOnce() {
+    if (agendaInFlight) return agendaInFlight;
+    agendaInFlight = computeAgenda(false).finally(() => { agendaInFlight = null; });
+    return agendaInFlight;
+  }
+
   // Bir gündem başlığına eşleşen izleme-evreni hisseleri (bilgi amaçlı ilişki).
   // opts.used verilirse kartlar arası tekrar önlenir (aynı isim her kartta çıkmasın):
   // önce kullanılmamışlar seçilir, havuz biterse kullanılmışlara düşülür ve seçilenler
@@ -13532,6 +13545,13 @@
     pulseBusy = false;
   }
 
+  // Genel Skor (1–100) bant kodlarının EKRAN dili. Motor (computeOverall100)
+  // Türkçe üretmez, yalnız bantKod döner — çeviri burada, ekran katmanında.
+  const OVERALL_BANT_TR = Object.freeze({
+    cok_elverisli: 'Koşullar çok elverişli', destekleyici: 'Destekleyici',
+    ilimli: 'Ilımlı / seçici', zayif: 'Zayıf — temkinli', olumsuz: 'Olumsuz',
+  });
+
   // ===== Karşılaştır sekmesi (yan yana hisse kıyaslama) =====
   const COMPARE_LS_KEY = 'sb:compare';
   const compareMem = new Map();          // "MARKET:SYMBOL" -> metrics obj (veya {ok:false})
@@ -13984,6 +14004,32 @@
           (fam.valuation && fam.valuation.price != null) ? fam.valuation.price : L.price);
         // 📐 Benjamin Graham's Formula — SADECE BİLGİ; bileşke/uygunluk skoruna dahil değil.
         const graham = computeGraham(grahamIn(fam.valuation, L.price));
+
+        // --- 🧮 Genel Skor (1–100) = bileşke + Graham marjı + HABER ---
+        // Sonuç ekranıyla AYNI motor (computeOverall100). Haber üçgeninin üç
+        // bacağı: hisse manşetleri (senti — zaten yukarıdaki Promise.all'da
+        // çözüldü), günlük gündem (agendaOnce) ve para-politikası duruşu
+        // (macro — o da zaten çözüldü). YALNIZ gündem yeni bir ağ işi; o da
+        // tüm kolonlar için TEK söze bağlanır.
+        let gundem = null;
+        try { gundem = await agendaOnce(); } catch (_) {}
+        let konj = null;
+        if (macro && macro.dims) {
+          const st = pulseStance(macro.dims.rate, macro.dims.infl);
+          konj = { biasUp: st.biasUp, biasDown: st.biasDown, baski: st.pressure, durus: st.cls, faz: macro.phase || null };
+        }
+        const haber = computeHaberSkor({
+          simdiMs: Date.now(),
+          hisse: { sektorler: SYMBOL_SECTORS[item.symbol] || [], maddeler: (senti && senti.puanlar) || [] },
+          gundem, konjonktur: konj,
+        });
+        // grahamMarj KESİR ve POZİTİF = ucuz; computeGraham.diffPct ise YÜZDE ve
+        // NEGATİF = ucuz — bu yüzden işaret çevrilip 100'e bölünüyor.
+        const ovGm = (graham && graham.ok && Number.isFinite(graham.diffPct)) ? -graham.diffPct / 100 : null;
+        const ov = computeOverall100({
+          score10: hol.score10, grahamMarj: ovGm,
+          haberSkor: haber ? haber.skor : null,
+        });
         // Alım sırası (ranking) için sayısal alım bandı + fiyat: bandın neresindeyiz?
         const buyLo = (bz && bz[0] != null) ? bz[0] : null;
         const buyHi = (bz && bz[1] != null) ? bz[1] : (bz && bz[0] != null ? bz[0] : null);
@@ -14013,7 +14059,13 @@
                 grahamDiff: graham.ok ? graham.diffPct : null,
                 grahamVal: graham.ok ? fmtP(graham.value) : null,
                 grahamNum: (graham.ok && graham.grahamNumber != null) ? fmtP(graham.grahamNumber) : null,
-                conjChips: conj.chips, conjEmoji: conj.stanceEmoji, conjCls: conj.stanceCls, atahan };
+                conjChips: conj.chips, conjEmoji: conj.stanceEmoji, conjCls: conj.stanceCls, atahan,
+                // 🧮 Genel Skor — motorun döndürdüğü gibi; ölçülemeyen alan null kalır.
+                ovSkor: ov.skor, ovTaban: ov.taban, ovBantKod: ov.bantKod, ovBantCls: ov.bantCls,
+                ovDGraham: ov.delta.graham, ovDHaber: ov.delta.haber, ovKirpildi: !!ov.delta.kirpildi,
+                ovGuvenKod: ov.guvenKod,
+                ovHaberOlculen: (haber && haber.kapsam) ? haber.kapsam.olculen : null,
+                ovHaberGuven: (haber && haber.guven != null) ? haber.guven : null };
       }
     } catch (_) { out = { ok: false }; }
     compareVerdictMem.set(key, out);
@@ -14329,6 +14381,33 @@
         const badge = v.compLabel && v.compLabel !== '—'
           ? `<span class="cmp-vbadge cmp-band-${v.compBand}">${v.compLabel}</span>` : '';
         g += `<div class="compare-cell cmp-vnote">${badge}<span class="cmp-vtxt">${v.honest}</span></div>`;
+      });
+
+      // --- 🧮 Genel Skor (1–100) — bileşke + Graham marjı + haber üçgeni ---
+      // Sonuç ekranında ölçeğin EN ÜSTÜ olduğu için burada da Temel
+      // Uygunluk'un (0–10) HEMEN ÜSTÜNDE durur. İki ayrı ölçek: her hücre
+      // kendi ölçeğini ("/100", "/10") yazıyor ki tek ölçek sanılmasın.
+      let ovBestIdx = -1, ovBestVal = -Infinity;
+      verds.forEach((v, i) => { if (v && v.ok && v.ovSkor != null && v.ovSkor > ovBestVal) { ovBestVal = v.ovSkor; ovBestIdx = i; } });
+      g += '<div class="compare-cell compare-mlabel cmp-c0 cmp-mlbl2" title="1–100 Genel Skor — Temel Uygunluk bileşkesinin (0–10) 1–100 ölçeğine gerdirilmiş hali + Graham marjı (±4) + haber-gündem-konjonktür (±8). Ek iki terimin toplam etkisi ±10 puanla sınırlıdır. Sonuç ekranındaki puanla aynı motor. Yatırım tavsiyesi değildir."><span class="cml-t">🧮 Genel Skor</span><span class="cml-s">bileşke + 📐 ±4 + 📰 ±8 · 1–100</span></div>';
+      verds.forEach((v, ci) => {
+        if (v === undefined) { g += '<div class="compare-cell cmp-vov">…</div>'; return; }
+        if (!v || !v.ok || v.ovSkor == null) { g += '<div class="compare-cell cmp-vov">—</div>'; return; }
+        const best = ci === ovBestIdx && verds.filter((x) => x && x.ok && x.ovSkor != null).length > 1 ? ' cmp-best' : '';
+        const sgn = (x) => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x).toFixed(1);
+        // Ek terimler: ölçülemeyen bacak '—' ile görünür, 0 SAYILMAZ.
+        const dg = v.ovDGraham == null ? '—' : sgn(v.ovDGraham);
+        const dh = v.ovDHaber == null ? '—' : sgn(v.ovDHaber);
+        const kirp = v.ovKirpildi ? '<span class="cv-ov-kirp" title="Ek terimlerin toplamı ±10 puan tavanına dayandı — tek başına bir bandı atlamasın diye kırpıldı.">ℹ️ tavan</span>' : '';
+        const guv = (v.ovGuvenKod === 'zayif' || v.ovGuvenKod === 'kismi')
+          ? `<span class="cv-ov-guv" title="${v.ovGuvenKod === 'zayif' ? 'Ek bileşenlerin ikisi de ölçülemedi — skor yalnız bileşkeden geliyor.' : 'Ek bileşenlerden biri ölçülemedi — skor ağırlıklı olarak bileşkeyi yansıtıyor.'}">⚠️ ${v.ovGuvenKod === 'zayif' ? 'yalnız bileşke' : 'eksik bacak'}</span>`
+          : '';
+        g += `<div class="compare-cell cmp-vov${best}">`
+          + `<span class="cv-ov ${v.ovBantCls}">${v.ovSkor}<em>/100</em></span>`
+          + `<span class="cv-ovl ${v.ovBantCls}">${OVERALL_BANT_TR[v.ovBantKod] || '—'}</span>`
+          + `<span class="cv-ovd" title="taban: bileşkenin 1–100'e gerdirilmiş hali · 📐 Graham marjı (±4) · 📰 haber-gündem-konjonktür (±8)">${v.ovTaban.toFixed(1)} · 📐 ${dg} · 📰 ${dh}</span>`
+          + kirp + guv
+          + `</div>`;
       });
 
       // --- 🧭 Temel Uygunluk Skoru (0–10) — Sonuç ekranıyla ortak motor, en altta ---
