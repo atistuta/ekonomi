@@ -71,8 +71,17 @@ import { anahtar, oku, yaz, TTL_FIYAT } from './_onbellek.js';
 import {
   KAPSAMLAR, VARSAYILAN_KAPSAM,
   AZAMI_KAP, VARSAYILAN_KAP, AZAMI_TEMETTU, VARSAYILAN_TEMETTU,
-  bosTakvimSayac, takvimTam, kapCek, temettuCek, trTakvimGunu,
+  AZAMI_ABD, VARSAYILAN_ABD,
+  bosTakvimSayac, takvimTam, kapCek, temettuCek, abdCek,
+  trTakvimGunu, abdTakvimGunu,
 } from './_takvim.js';
+// FAİZ BEKLENTİSİ AYRI DOSYADAN (`api/_faiz.js`): `_takvim.js`in
+// `sayfaCek`i her çağrıyı kendi ÜÇ KONAKLIK izin listesinden geçiriyor,
+// `query1.finance.yahoo.com` o listede YOK — yani ZQ adresi `_takvim.js`
+// içinden çağrılsa AĞA ÇIKMADAN `hata` olurdu. Üstelik ⑯k `_takvim.js`i
+// TEK `fetch` çağrısına kilitliyor. Gerekçenin tamamı `_faiz.js`
+// başlığında. BU DOSYA SKORA DOKUNMUYOR.
+import { bosFaizSayac, faizBeklentisi } from './_faiz.js';
 
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
 
@@ -1077,7 +1086,8 @@ export async function aramaHandler(req, res) {
 //  tavsiye cümlesi ve ekran biçimlemesi YOK.
 //
 //  SÖZLEŞME
-//    GET /api/takvim[?kapsam=hepsi|kap|temettu][&kapAdet=N][&temettuAdet=N]
+//    GET /api/takvim[?kapsam=hepsi|kap|temettu|abd]
+//        [&kapAdet=N][&temettuAdet=N][&abdAdet=N]
 //    200 → { kapsam,
 //            kap?:        (madde[]|null),   // kapsam kap/hepsi ise VAR
 //            kapAdet?:    (number|null),
@@ -1087,6 +1097,10 @@ export async function aramaHandler(req, res) {
 //            temettuGecmisAdet?:(number|null),
 //            temettuGelecekAdet?:(number|null),
 //            temettuBugun?:(string|null),
+//            abd?:        (madde[]|null),   // kapsam abd/hepsi ise VAR
+//            abdAdet?:    (number|null),
+//            abdAtlanan?: (number|null),
+//            abdBugun?:   (string|null),
 //            sayac, tam, ms, uyari }
 //
 //  TEMETTÜ GEÇMİŞ/GELECEK (eklendi 2026-10-29): her maddede `paid`
@@ -1104,6 +1118,20 @@ export async function aramaHandler(req, res) {
 //  DEĞİŞTİRİLMEDİ (madde seçimini değiştirmek alan eklemek değil).
 //  `temettuGelecekAdet === 0` iken `temettuAdet === temettuAzami`
 //  görülüyorsa istemci `temettuAdet=400` ile tekrar sormalı.
+//  ABD OLAY TAKVİMİ (eklendi 2026-11-25): `kapsam=abd` ya da `hepsi`.
+//  Kaynak Fed’in kendi `calendar.json`u; madde alanları
+//  `{ date, an, saatHam, title, tur, canli, kaynak }`. `an` ISO-8601
+//  ve ABD doğu yakası ofsetini TAŞIYOR (`-04:00`/`-05:00`); saatsiz
+//  olayda (resmî tatil, bazı Stat satırları) `an` NULL, madde yine
+//  listede. `tur` makine kodu (`fomc`, `veri`, `bej`, `konusma`,
+//  `ifade`, `kurul`, `konferans`, `etkinlik`, `diger`) — Türkçe cümle
+//  ve ETKİ DERECESİ YOK: Investing.com’un üç boğa imini veren
+//  ücretsiz belgeli kaynak ölçülemedi, uydurmak ölçülmemiş sayı
+//  basmak olurdu. `canli` BOOLEAN, adres değil: Fed’in `live` alanı
+//  üçüncü taraf yayın adresi (Teams/Zoom/YouTube) ve istemciye
+//  gönderilmiyor. Liste `abdBugun` gününden İTİBAREN ileriye dönük;
+//  geçmiş tarihler düşürülüyor ve bu `abdAtlanan`a YAZILMAZ.
+//
 //    400 → bad_kapsam | bad_limit
 //    405 → method_not_allowed (Allow başlığıyla)
 //    502 → takvim_alinamadi (İSTENEN KAYNAKLARIN HEPSİ okunamadı)
@@ -1132,6 +1160,10 @@ export async function takvimHandler(req, res) {
   }
   const kapIstendi = kapsam === 'hepsi' || kapsam === 'kap';
   const temettuIstendi = kapsam === 'hepsi' || kapsam === 'temettu';
+  // `hepsi` ÜÇÜNÜ de ister (2026-11-25): yeni kaynak eklenince
+  // `hepsi`nin kapsamı BÜYÜDÜ. Eski üç değerin adı ve anlamı
+  // değişmedi; bu satır o büyümenin YAZILI kaydı.
+  const abdIstendi = kapsam === 'hepsi' || kapsam === 'abd';
 
   // Adet kapıları — kırpma YOK, aralık dışı 400. Hangi alan bozuksa
   // cevapta yazılı (`alan`), istemci kör kalmasın.
@@ -1144,19 +1176,29 @@ export async function takvimHandler(req, res) {
   };
   const nKap = adetOku(q.kapAdet, AZAMI_KAP);
   const nTemettu = adetOku(q.temettuAdet, AZAMI_TEMETTU);
-  if (nKap === undefined || nTemettu === undefined) {
+  const nAbd = adetOku(q.abdAdet, AZAMI_ABD);
+  if (nKap === undefined || nTemettu === undefined || nAbd === undefined) {
+    // ÜÇ ALAN, TEK CEVAP: hangisi bozuksa ADI ve O ALANIN tavanı
+    // yazılı. İç içe üçlü koşul yerine açık tablo — dördüncü kaynak
+    // gelirse tek satır eklenir, ifade yeniden kurulmaz.
+    const bozuk = nKap === undefined
+      ? { alan: 'kapAdet', azami: AZAMI_KAP }
+      : nTemettu === undefined
+        ? { alan: 'temettuAdet', azami: AZAMI_TEMETTU }
+        : { alan: 'abdAdet', azami: AZAMI_ABD };
     kisaOnbellek(res);
     res.status(400).json({
       error: 'bad_limit',
-      alan: nKap === undefined ? 'kapAdet' : 'temettuAdet',
+      alan: bozuk.alan,
       asgari: 1,
-      azami: nKap === undefined ? AZAMI_KAP : AZAMI_TEMETTU,
+      azami: bozuk.azami,
       uyari: UYARI,
     });
     return;
   }
   const kapAzami = nKap === null ? VARSAYILAN_KAP : nKap;
   const temettuAzami = nTemettu === null ? VARSAYILAN_TEMETTU : nTemettu;
+  const abdAzami = nAbd === null ? VARSAYILAN_ABD : nAbd;
 
   const t0 = Date.now();
   // GÜN — `temettu[].paid` için TEK karşılaştırma noktası. Saat BURADA
@@ -1166,7 +1208,15 @@ export async function takvimHandler(req, res) {
   // Önbellek anahtarında MOTOR İMZASI YOK: gövde motordan bağımsız.
   // `bugun` anahtarda VAR: `paid` güne bağlı, gün dönünce dünün gövdesi
   // "ödenmedi" basmaya devam etmesin (TTL 5 dk olsa bile sözleşme net).
-  const obAnahtar = anahtar('takvim', { kapsam, kapAzami, temettuAzami, bugun });
+  // ABD GÜNÜ AYRI BİR SAYI: ileri süzgeç ABD takvim gününe göre
+  // çalışıyor ve bu TR günüyle aynı değil (TR akşamı = ABD öğleden
+  // sonrası). İkisi ayrı döndüğü için ANAHTARDA İKİSİ DE var; yoksa
+  // gün dönümünde dünün gövdesi bugünün Fed açıklamasını DÜŞÜRMÜŞ
+  // halde servis edilirdi. Gerekçe `_takvim.js` `abdTakvimGunu` notu.
+  const bugunAbd = abdTakvimGunu(Date.now());
+  const obAnahtar = anahtar('takvim', {
+    kapsam, kapAzami, temettuAzami, abdAzami, bugun, bugunAbd,
+  });
   const obVurus = await oku(obAnahtar);
   if (obVurus) {
     res.setHeader('X-Onbellek', 'isabet');
@@ -1178,23 +1228,56 @@ export async function takvimHandler(req, res) {
 
   try {
     const sayac = bosTakvimSayac();
-    // PARALEL ve `allSettled`: biri düşerse öteki basılmaya devam eder.
-    // Sıralı çekmek 2 × 10 sn = 20 sn ederdi; proxy'nin 30 sn bütçesinde
-    // kalır ama ekranı iki kat bekletirdi.
-    const [kapS, temettuS] = await Promise.allSettled([
+    // PARALEL ve `allSettled`: biri düşerse ötekiler basılmaya devam
+    // eder. BU YORUM 2026-11-25’te DÜZELTİLDİ — eskiden "sıralı çekmek
+    // 2 × 10 sn = 20 sn ederdi, proxy’nin 30 sn bütçesinde kalır ama
+    // ekranı iki kat bekletirdi" yazıyordu. KAYNAK SAYISI ÜÇ OLDU:
+    // sıralı çekmek 3 × 10 sn = 30 sn eder ve bu bütçeyi TAM tüketir,
+    // yani sıralı seçenek artık "yavaş" değil DOĞRUDAN ZAMAN AŞIMI.
+    // Paralellik tercih değil, ZORUNLU.
+    //
+    // DÖRDÜNCÜ BACAK (faiz beklentisi) TAM PARALEL OLAMAZ: hangi ZQ
+    // sözleşmesinin okunacağı, FOMC KARAR GÜNÜNE bağlı ve o gün ABD
+    // takviminin KENDİ içinden geliyor. Bu yüzden faiz bacağı takvimi
+    // İKİNCİ KEZ ÇEKMİYOR, aynı sözün üstüne zincirleniyor (`abdSozu`
+    // iki yerde bekleniyor ama AYNI söz, dolayısıyla takvim isteği
+    // HÂLÂ BİR TANE). En kötü hal: max(10, 10, 10+8) = 18 sn, yani
+    // proxy'nin 30 sn bütçesi içinde. Sıralı olsaydı 10+10+10+8 = 38 sn
+    // ederdi; bütçeyi aşardı.
+    const faizSayac = bosFaizSayac();
+    const abdSozu = abdIstendi
+      ? abdCek({ sayac, azami: abdAzami, bugun: bugunAbd })
+      : Promise.resolve(null);
+    const [kapS, temettuS, abdS, faizS] = await Promise.allSettled([
       kapIstendi ? kapCek({ sayac, azami: kapAzami }) : Promise.resolve(null),
       temettuIstendi ? temettuCek({ sayac, azami: temettuAzami, bugun }) : Promise.resolve(null),
+      abdSozu,
+      abdIstendi
+        ? abdSozu.then((d) => faizBeklentisi({ sayac: faizSayac, maddeler: d && d.maddeler }))
+        : Promise.resolve(null),
     ]);
     const kapD = kapS.status === 'fulfilled' ? kapS.value : null;
     const temettuD = temettuS.status === 'fulfilled' ? temettuS.value : null;
+    const abdD = abdS.status === 'fulfilled' ? abdS.value : null;
+    const faizD = faizS.status === 'fulfilled' ? faizS.value : null;
 
     // `null` = OKUNAMADI · `[]` = ÖLÇTÜM, YOK (başlıktaki kural).
     const kap = kapIstendi ? (kapD && kapD.maddeler ? kapD.maddeler : null) : undefined;
     const temettu = temettuIstendi ? (temettuD && temettuD.maddeler ? temettuD.maddeler : null) : undefined;
+    const abd = abdIstendi ? (abdD && abdD.maddeler ? abdD.maddeler : null) : undefined;
 
-    const istenenOkundu = (!kapIstendi || kap !== null) && (!temettuIstendi || temettu !== null);
+    // `istenenOkundu`ya VE AŞAĞIDAKİ 502 DALINA FAİZ TERİMİ EKLENMEDİ
+    // (bilinçli): vadeli sözleşme fiyatının okunamaması bir TAKVİM
+    // kesintisi değil. Faiz bacağı düşse de takvim gövdesi ölçülmüş
+    // sayılır ve basılır; faizin kendi durumu `faiz.kod`/`faiz.tam`da.
+    const istenenOkundu = (!kapIstendi || kap !== null)
+      && (!temettuIstendi || temettu !== null)
+      && (!abdIstendi || abd !== null);
     // İSTENEN KAYNAKLARIN HEPSİ düştüyse bu bir ölçüm değil, kesinti.
-    if (!istenenOkundu && (!kapIstendi || kap === null) && (!temettuIstendi || temettu === null)) {
+    if (!istenenOkundu
+      && (!kapIstendi || kap === null)
+      && (!temettuIstendi || temettu === null)
+      && (!abdIstendi || abd === null)) {
       kisaOnbellek(res);
       res.status(502).json({ error: 'takvim_alinamadi', kapsam, sayac, uyari: UYARI });
       return;
@@ -1229,17 +1312,38 @@ export async function takvimHandler(req, res) {
         temettuAtlanan: temettuD ? temettuD.atlanan : null,
         temettuTekrar: temettuD ? temettuD.tekrar : null,
       } : {}),
+      ...(abdIstendi ? {
+        abd,
+        abdAdet: abd ? abd.length : null,
+        // İLERİ SÜZGEÇ GÜNÜ GÖVDEDE: istemci listenin hangi günden
+        // itibaren başladığını görsün (önbellekten gelen gövdede de
+        // duruyor). `temettuBugun`dan AYRI alan, çünkü AYRI gün.
+        abdBugun: bugunAbd,
+        // Ayrıştırıcının ATLADIĞI satır sayısı. Bu sayı YÜKSEK ve
+        // NORMAL — gerekçesi ve ölçümü `_takvim.js`
+        // `ayristirFedTakvim` başlığında.
+        abdAtlanan: abdD ? abdD.atlanan : null,
+        // FAİZ BEKLENTİSİ — piyasanın KENDİ fiyatından okunuyor, tahmin
+        // ÜRETİLMİYOR. `null` = ölçülemedi; NEDENİ `faiz.kod` alanında
+        // yazılı (`toplanti_yok` · `onceki_ay_toplantili` ·
+        // `fiyat_okunamadi`). `kod: null` = ÖLÇÜLDÜ.
+        // `faiz.sayac` AYRI: ZQ kesintisi, KAP+temettü gövdesini
+        // "eksik" DAMGALAMASIN (`takvimTam` her hataya düşüyor).
+        faiz: faizD,
+      } : {}),
       sayac,
       tam,
       ms: Date.now() - t0,
       uyari: UYARI,
     };
     // Yalnız TAM gövde önbellekleniyor; kesintiyi 5 dk dondurmak yok.
-    // TTL: iki kaynağın SIKI olanı. KAP dakika başı tazeleniyor (webin
-    // kendi yorumu, app.js:227), temettü takvimi gün içinde nadiren
-    // değişiyor (web 60 dk tutuyor, app.js:302). Ortak gövde için
-    // sıkısı alındı — temettü gereğinden sık tazelenir, ama KAP asla
-    // gereğinden eski görünmez.
+    // TTL: ÜÇ kaynağın EN SIKISI (yorum 2026-11-25’te güncellendi,
+    // eskiden "iki kaynağın" yazıyordu). KAP dakika başı tazeleniyor
+    // (webin kendi yorumu, app.js:227), temettü takvimi gün içinde
+    // nadiren değişiyor (web 60 dk tutuyor, app.js:302), Fed takvimi
+    // ise haftalar önceden duyurulmuş tarihler — en gevşeği. Ortak
+    // gövde için EN SIKISI alındı: temettü ve Fed gereğinden sık
+    // tazelenir, ama KAP asla gereğinden eski görünmez.
     if (tam) await yaz(obAnahtar, govde, TTL_FIYAT);
     res.status(200).json(govde);
   } catch (e) {

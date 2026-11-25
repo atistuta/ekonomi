@@ -1583,3 +1583,218 @@ islemci api/_kesif.js:1119 takvimHandler. api/_takvim.js `_` onekli -> Vercel
 rota saymaz; erisim vercel.json yeniden yazimi ile /api/proxy?__rota=takvim.
 api/*.js TAM 12 dosyada kalir. YENI FONKSIYON YOK.
 Beklenti bacagi: Yahoo zaten IZINLI -> api/_ag.js ACILMAZ.
+
+## 22. ABD OLAY TAKVIMI CANLI + FOMC FAIZ BEKLENTISI (2026-11-25, KOD YAZILDI)
+
+Istek: "tek tek tarihler ile onumuzdeki gunlerdeki aciklamalar vb. gosterilecek,
+ileriye donuk ... FED faiz aciklamasinda faiz artis ongorusunu hissenin
+skorlamasina katkisini gosterecek."
+Bu bolum B1 (tasiyici) + B2 (beklenti) + B-UI (web ekrani) kaydi. B3 (hisse bazli
+duyarlilik) HENUZ YAZILMADI; 22.14'te duruyor.
+
+### 22.1 Rota: YENI FONKSIYON YOK
+`/api/takvim` dosya rotasi DEGIL -- `vercel.json` yeniden yazimi:
+`{"source":"/api/takvim","destination":"/api/proxy?__rota=takvim"}`.
+`api/takvim.js` YOK; `takvimHandler` TEK TEK DISA VURULMUYOR, yalniz donmus
+`HANDLERLAR` haritasindan ulasiliyor (tarama, sektor, radar, backtest, deger,
+arama, takvim). `ROTALAR` listesinde 'takvim' ZATEN vardi. `_` onekli dosya
+Vercel rotasi saymaz ("13. fonksiyon tuzagi"). `api/proxy.js` maxDuration 30 sn.
+Hobby 12-fonksiyon tavani ELLENMEDI.
+
+### 22.2 Kapsam: `hepsi` BUYUDU
+KAPSAMLAR = hepsi, kap, temettu, abd. `abdIstendi = kapsam==='hepsi' || kapsam==='abd'`.
+Yani yeni kaynak eklenince `hepsi`nin kapsami BUYUDU -- bilincli karar, 16j delili ile.
+`adetOku` KIRPMAZ: aralik disi -> 400, `alan` ve `azami` adiyla.
+Gorulen uc hal AYRI: alan YOKSA istenmedi - `null` ise bacak komple dustu -
+bos dizi ise olculdu, yok. Govdede `surum` alani YOKTUR.
+Basliklar `X-Onbellek: isabet|iska`, `Cache-Control: ... max-age=300`.
+YALNIZ TAM govde onbelleklenir -> `faiz` blogu 5 dakikaya kadar eski olabilir
+(bilincli: TTL degistirilmedi, kayda gecti).
+Hatalar: 400 bad_kapsam / bad_limit - 405 method_not_allowed - 502 takvim_alinamadi.
+
+### 22.3 Fed govdesi olcumu (www.federalreserve.gov/json/calendar.json)
+200 - 550 608 bayt - UTF-8 BOM (JS'te bas FEFF kirpilmali; python utf-8-sig) -
+2618 kayit. Ileriye donuk (ay >= 2026-11) 80 madde, atlanan 570.
+Uymayan `month` degerleri TAM OLARAK bos dizge 569, "YOK" 1.
+Canli islemci ayni sayiyi URETTI: abdAtlanan=570. Suzgec GUN duzeyinde.
+Ileri `tur` dagilimi: veri 74, bej 1, diger 2, fomc 3.
+80 maddenin 4'u SAATSIZ (an = null).
+`JSON.stringify(maddeler).includes('http') === false` -> Fed'in yayin adresi
+ISTEMCIYE SIZMIYOR, olcumle kanitli.
+Bilinmeyen `type` -> diger, satir DUSURULMEZ, SAYILIR.
+Hicbir ucretsiz kaynakta etki derecesi YOK; uydurulmus bir "etki" olculmeyen
+sayidir -> EKLENMEDI.
+`canli` bilincli olarak BOOLEAN (Fed'in yayin adresi sunucuyu terk etmiyor).
+Madde alanlari: date, an, saatHam, title, tur, canli, kaynak.
+
+### 22.4 ANIN ANLAMI -- `an` HAM BASILAMAZ (bu bolumun ana dersi)
+`api/_takvim.js:813` maddeyi kurarken `an` alanini tarih + saat + ABD ofseti
+olarak uretiyor. Yani an = ABD ofsetini tasiyan TAM ISO AN, `date` = ABD takvim
+gunu, `saatHam` = Fed'in kendi dizgesi ("2:00 p.m."). +03:00 cevirisi
+ISTEMCININ isi.
+Ilk B-UI surumu `an`i HAM basti -> ekranda 2026-11-25T07:25:00-05:00 gorundu,
+dipnot ise "Saatler Turkiye saatine cevrildi" DIYORDU. Dipnot YANLISTI.
+Hata `node --check`e ve grep'e GORUNMEZ; yalniz canli govde isleyicilerden
+gecirilince ortaya cikti -> yayindan once isleyicileri CANLI GOVDEYLE kostur.
+Cozum `app.js` icinde `trAn(an)`: Date.parse -> +3 saat -> getUTC* parcalari.
+Intl / timeZone / cihaz saati BILINCLI OLARAK KULLANILMADI: gosterilen saat
+cihaz ayarina gore DEGISMEMELI ve sunucunun TAKVIM_SAAT_DILIMI = '+03:00'
+sabiti ile birebir olmali. Turkiye 2016'dan beri sabit +03:00, yaz saati yok.
+GRUPLAMA ANAHTARI DA TASINDI: 16:15 ET = Turkiye'de ERTESI GUN 00:15.
+Kaynagin gunune gore gruplanirsa tarih ile saat celisir. Olcumle gorundu:
+H.15 16:15 ET maddesi 25.11 kartindan 26.11 kartina 00:15 olarak gecti,
+kart sayilari 4 -> 3 oldu, 26.11 karti 2 oldu.
+Saati aciklanmayan madde kaynagin KENDI tarihinde kaliyor ve saat alanina
+uzun tire basiliyor -- gun ortasi varsayilarak SAAT UYDURULMAZ.
+(Thanksgiving tatili boyle basildi.)
+Dipnot duzeltildi: artik saatin de GUNUN de Turkiye'ye gore oldugunu VE
+saatsiz maddenin kaynak tarihinde kaldigini soyluyor.
+Dogrulama (canli govde): 07:25-05:00 -> 15:25, 13:00 -> 21:00, 14:00 -> 22:00,
+16:15 -> ERTESI GUN 00:15.
+
+### 22.5 Saat ve DST olcumu
+`abdSaat`: "2:00 p.m." -> 14:00, "12:00 a.m." -> 00:00, "9:15 a.m." -> 09:15.
+`null` donenler: bos dizge, "yakinda", "13:00 p.m.", "2:60 p.m.".
+DST Sakamoto ile: -05:00 -> 2026-01-15, 03-07, 11-01, 11-25, 12-09; 2025-03-08;
+2027-11-07. -04:00 -> 2026-03-08, 07-04, 10-31; 2025-03-09; 2027-03-14.
+`api/_takvim.js` icinde `new Date(` ve `Date.now(` SIFIR (16c/16k), `fetch(` TAM 1 (16k).
+`bosTakvimSayac()` alti anahtarda cakili. `trTakvimGunu` _takvim.js:395'te disa vuruk.
+`ikiHane` modul-ici. 16k'nin yasak sozcuk kalibi BUYUK-KUCUK DUYARSIZ
+-> yerel bir degiskene `esik` adi verilemez.
+
+### 22.6 NIYE api/_faiz.js AYRI DOSYA (iki bagimsiz kanit)
+(a) _takvim.js'in `sayfaCek`i her cagriyi `izinliTakvimAdresi` -> IZINLI_KONAK
+(finans.mynet.com, temettuhisseleri.com, www.federalreserve.gov) kapisindan
+geciriyor; query1.finance.yahoo.com o listede YOK -> bir Yahoo adresi AGA
+DOKUNMADAN `hata` sayacini artirirdi.
+(b) 16k _takvim.js'i TAM BIR `fetch(`a kilitliyor.
+Yahoo zaten api/proxy.js ve api/_ag.js IZINLI listesinde -> YENI GUVEN
+YUZEYI YOK. api/_ag.js ACILMADI, DEGISTIRILMEDI.
+Ders: bir kilidi ANLATAN dosya, kilitli sozcugu yorumunda HARFIYEN tasimamali --
+VE test yorum satirlarini sayimdan DUSURMELI: satirlari ayirip // * /* ile
+baslayanlari at, sonra split('fetch(').length-1 ile say (regex ile DEGIL).
+
+### 22.7 FOMC beklenti motoru (api/_faiz.js, ~330 satir, pure LF)
+NE: 30 gunluk Fed Funds vadelisinin (ZQ) KENDI fiyatindan okunan karar sonrasi
+politika faizi. TAHMIN URETILMIYOR; piyasanin o an odedigi fiyat cevriliyor.
+NASIL: karar ayindan ONCEKI ayin sozlesmesi karar oncesi orani verir (o ayda
+toplanti yoksa oran ay boyu sabit). Karar AYININ sozlesmesi ayin ORTALAMA
+oranini verir -- eski ve yeni oranin gun agirlikli karisimi. Eski ayak
+bilindigine gore YENI oran cozulur.
+Calisan Yahoo soneki .CBT (.CME -> code: Not Found).
+UA: day-starter/1.0 (faiz-okuyucu) -- SADE, e-posta YOK (commit 9007fc3 SEC
+kimligindeki ayni sizintiyi kapatmisti).
+29 disa vurum, satir numaralariyla: 49 FAIZ_IZINLI_KONAK, 53 ZQ_UC, 54 ZQ_SORGU,
+58 ZQ_SONEK, 61 AY_KODLARI, 65 FAIZ_BASAMAK_BP, 70 FAIZ_ISTEK_MS,
+73 ASGARI_FAIZ_GOVDE_BAYT, 75 FAIZ_KAYNAK, 82 AGIRLIK_YONTEMI,
+83 AGIRLIK_YONTEMI_ALT, 90 bosFaizSayac, 94 faizTam, 99 izinliFaizAdresi,
+110 ayKodu, 115 artikYil, 120 ayGunSayisi, 127 zqSembol, 134 oncekiAy,
+143 impliedOran, 149 tarihAyir, 165 toplantiAgirlik, 187 beklentiHesapla,
+217 ilkFomcTarihi, 233 oncekiAydaFomc, 257 zqFiyat, 274 UA, 298 ayristirZq,
+324 faizBeklentisi. AY_GUNU modul-ici.
+`kod` sozlugu: toplanti_yok, onceki_ay_toplantili, fiyat_okunamadi;
+kod = null ise OLCULDU. 24 alanli `faiz` govdesi (basamakBp dahil).
+`oncekiAydaToplanti` UC DEGERLI; yalniz true kisa devre yapar (null olcumu
+ENGELLEMEZ, yalniz kesinligi azaltir).
+`ilkFomcTarihi` ILK-BULDUGUNU-ALIR (minutes satirlarini atlar) ->
+daha erken bir satir basa eklenerek "sonraki toplanti" dali TEST EDILEMEZ;
+girdi acikca cakilmali (toplanti: 2026-12-09). Uc erken duman hatasi tam bu
+fikstur yanlisindan cikmisti.
+
+### 22.8 Agirlik sozlesmesi: IKISI YAN YANA BASILIYOR
+`ertesi-gun` BIRINCIL (w_eski 0.2903 / w_yeni 0.7097) -- Fed'in kendi uygulama
+notu ve CME FedWatch bu bolmeyi kullaniyor, ve olculdu: tam 25 bp'lik temiz
+bir adima oturuyor. `toplanti-gunu` ALTERNATIF (0.2581 / 0.7419).
+Olculen duyarlilik ~1.1 bp -> secim sonucu kokunden degistirmiyor, ama sayi
+SAKLANMIYOR, ekranda yan yana duruyor.
+Karar gunu 9 Aralik 2026.
+Canli olcumler (fiyat KIMILDAR, ikisi de dogru): once bp=25.01 bayt=3226;
+B-UI dumaninda kod=null, toplanti=2026-12-09, bp=24.31, tam=true, 886 ms,
+ZQX26 96.1225 / ZQZ26 95.95, 0.97 adim, alternatif +23.3 bp;
+ikinci kosu 685 ms, ayni degerler. basamakOrani 1.0004 -> 0.97 oynamasi
+FIYAT HAREKETI, hata DEGIL.
+
+### 22.9 Ariza alani AYRILDI (dort yerde zorlanir)
+(1) `faizSayac` govde sayacindan AYRI - (2) `faiz` blogunun KENDI `tam`i -
+(3) istenenOkundu / 502 dalina faiz terimi EKLENMEDI (yazili ret) -
+(4) tipin dokuman yorumu. Yani ZQ istegi dusse KAP+temettu govdesi "eksik"
+damgalanmaz. AG YASAGI 16m-12'nin `sayac.istek === 0` iddialariyla makine-zorunlu.
+Zincir: `abdSozu` IKI KEZ beklenir ama AYNI sozdur -> Fed'e TAM BIR istek.
+`grep -c "fetch(" api/_kesif.js` -> 1.
+Zamanlama: max(10, 10, 10+8) = 18 sn < 30 sn proxy butcesi (sirali olsa 38 sn).
+_kesif.js kancalari: 84 import bosFaizSayac + faizBeklentisi, 1247 faizSayac,
+1251 Promise.allSettled, 1256 abdSozu.then(...), 1262 faizD, 1332 faiz: faizD.
+
+### 22.10 Web ekrani (B-UI)
+index.html (LF) :315 `<div id="calendarABD" class="cal-section">` --
+#calendarDividends'in KARDESI, #abdFaiz :320, #abdEvents :324.
+SIFIR yeni CSS: cal-section / cal-block / section-title / hint / feed
+yeniden kullanildi.
+Takvim sekmesinin temettu sozlesmesi ve EARNINGS_KEYWORDS koruma kurali
+BOZULMADI -- ABD blogu KENDI kabinde, KENDI kimlikleriyle.
+app.js (CRLF) yeni blok: 7616 TAKVIM_BASE (SAHIPLER_BASE / THEME_BASE /
+YFIN_BASE deyimi), 7630 ABD_TUR_TR + FAIZ_KOD_TR / FAIZ_YON_TR /
+FAIZ_AGIRLIK_TR + trSec, 7655 abdTakvimOnce (YALNIZ BASARIDA onbellege yazar
+-> yenile dugmesi gercekten yeniden dener), 7666 abdFaizHTML, 7759 trAn,
+7771 abdOlaylarHTML, 7839 renderAbdTakvim; cagri renderCalendar() icinde.
+Ucuncu taraf Fed basliklari escapeHtml (app.js:2042) ile kacisli --
+duman testinde script etiketi kacisli dizge olarak basildi, ham DEGIL.
+UYARI: W1 blogu renderCalendar'in ONUNE girdi -> 7602'nin ustundeki TUM eski
+app.js satir numaralari ~+218 kaydi; trAn yamasi bir kez daha ~+25 kaydirdi.
+Satir numarasina guvenmeden once yeniden grep. app.js ~15400 satir.
+
+### 22.11 Duman tezgahi (YENIDEN KULLANILABILIR)
+scratchpad/bt/bui-smoke.mjs: IIFE kapsamini
+`new Function('escapeHtml','fmtDate', frag + 'return {abdFaizHTML, abdOlaylarHTML};')`
+ile yeniden kuruyor (frag = sed -n ile cekilmis parca), sunucuyu
+`import('file:///C:/.../api/_kesif.js')` -> HANDLERLAR.takvim(req, res) ile suruyor.
+Taklit res: setHeader / status / json / end. Taklit req: method, url, headers VE
+`query` DUZ NESNE (isleyici URL'yi AYRISTIRMAZ, req.query okur).
+`kapi(req,res,'GET, OPTIONS',false)` -> motor kapisi ATLANIR.
+Cikti UTF-8 DOSYAYA yazilip sed / grep ile geri okunuyor -- Windows konsolunun
+ASCII-disi bozmasindan boyle kurtuluyor. Guvenilir konsol sondasi:
+python -I -c ile stdout'u ascii + backslashreplace'e almak.
+Parca yamadan sonra YENI aralikta tekrar cekilmeli (169 -> 208 satir oldu).
+Sekiz hal de gecti: canli faiz karti, canli olay listesi, faiz=null,
+kod=toplanti_yok, bilinmeyen kod ("Olculemedi."), abd=null, abd=bos dizi, XSS.
+Ders: kendi test ciktinda tehlikeli bir simgeyi grep ederken, tezgahin KENDI
+bolum basligi da eslesir -- sonuca varmadan once eslesen satiri OKU.
+
+### 22.12 Native aynalar
+mobile/src/api/takvim.ts: TakvimFaiz tipi (24 alan, dokuman yorumlariyla) +
+`faiz?: TakvimFaiz | null`. mobile/src/lib/sozluk.ts uc YENI sozluk:
+FAIZ_KOD_SOZLUK, FAIZ_YON_SOZLUK, FAIZ_AGIRLIK_SOZLUK.
+SOZLUKLERDE SAYI YOK (baz puan, esik, agirlik yazilmadi); ham sayi faiz.*ta
+duruyor, bicimleme lib/format.ts'in isi. TURKCE TEK YERDE.
+Ayni uc sozlugun web aynasi app.js'te (ABD_TUR_TR ile birlikte dort tane).
+Iki dosya da pure LF. tests/uc-test.mjs mobile/src/api/takvim.ts uzerine
+HICBIR kilit TASIMIYOR.
+
+### 22.13 Test ve surum
+16 bolumu TEK dis blok; 16m onun KARDESI (ic ice DEGIL).
+Sayimlar: 2489 -> 2525 -> 2648 (16m = +123 denetim, 0 basarisizlik).
+Daire-16 U+246F, U+24F6 DEGIL; daire-17 U+2470.
+(Bir yama betigi u24f6 yazdigi icin "CIPA T1 kapsam DORT adet=0" patlamisti.)
+Yama betiklerinde TEK TIRNAKLI JS dizgesi icine CIPLAK kesme isareti YAZILMAZ
+(UTC'de -> SyntaxError).
+Yayin oncesi son supurme (2026-11-25): uc-test 2648 gecti / 0 hata -
+uretim-test 73 - parity FARK 0 / 29 nokta - engine temiz -
+mobile tsc --noEmit TEMIZ. Istemci tarafi duzeltme hicbir test-kilidine
+dokunmadi: sayi 2648'de SABIT kaldi.
+Yayin oncesi uretim kaniti: /api/takvim?kapsam=abd ->
+bad_kapsam, izinli: hepsi/kap/temettu -- yani B uretimde YOKTU.
+Dosya boyutlari: _takvim.js 854, proxy.js 260, _faiz.js ~330,
+uc-test.mjs >9586 (pure CRLF), DEVAM.md pure LF.
+
+### 22.14 B3 HENUZ YAZILMADI -- hisse bazli faiz duyarliligi
+Olculen 1 yillik gunluk OLS (hisse getirisi % ~ gunluk ^TNX degisimi bp,
+mutlak degisim < 0.5 bp atildi):
+NVDA +0.0278 r2 0.002 n228 - JPM -0.0282 r2 0.008 - O -0.0773 r2 0.111 -
+XLU -0.0750 r2 0.120 - KO -0.0368 r2 0.019.
+Yani yalniz faiz vekili isimler olculebilir; r2 esigi altinda katki null,
+asla 0. Tasarim: (1) vadeli-ima edilen YONU MEVCUT konjonktur alt bacagina
+besle (pulseStance), (2) hisse sayfasinda agendaOnce() deyimindeki bir
+tnxOnce() belleginden r2-kapili "faiz duyarliligi" goster. Kosum aninda OLS YOK.
+REDDEDILEN secenek (kayda gecti): computeOverall100'e dorduncu bir
+"arti/eksi N olay" terimi eklemek -- skor matematigini olcumsuz bir terimle
+sismekti.

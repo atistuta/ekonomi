@@ -168,6 +168,12 @@ import {
 // ama KENDİ ağ taşıyıcısı var (`_haber.js` kalıbı) — ayrıştırıcıların hepsi
 // SAF, yani ağa çıkmadan fikstürle ölçülebiliyorlar.
 import * as TAKVIM from '../api/_takvim.js';
+// ⑯m `api/_faiz.js` — FOMC karar gününün ZQ (30 günlük Fed Funds)
+// vadeli sözleşmelerinden okunan FAİZ BEKLENTİSİ. `_takvim.js`e
+// EKLENMEDİ: onun üç konaklık izin listesinde `query1.finance.yahoo.com`
+// YOK ve ⑯k onu TEK `fetch` çağrısına kilitliyor. Ayrıştırıcılarının
+// hepsi SAF; toplayıcının İKİ RET DALI da ağa HİÇ çıkmadan ölçülüyor.
+import * as FAIZ from '../api/_faiz.js';
 // ⑰ /api/degisim · /api/gundem · /api/kripto · /api/metal — AYNI `__rota=`
 // çoklayıcısına takılı, ama `_kesif.js`e GİRMEYEN dört taşıyıcı. `TASIYICI_ROTALARI`
 // `api/proxy.js`in KENDİ tablosundan okunuyor: testte elle kopya liste yok.
@@ -231,6 +237,7 @@ const HABER_PATH = path.join(ROOT, 'api', '_haber.js');
 const AG_PATH = path.join(ROOT, 'api', '_ag.js');
 const KESIF_PATH = path.join(ROOT, 'api', '_kesif.js');
 const TAKVIM_PATH = path.join(ROOT, 'api', '_takvim.js');
+const FAIZ_PATH = path.join(ROOT, 'api', '_faiz.js');
 const PROXY_PATH = path.join(ROOT, 'api', 'proxy.js');
 const VERCEL_PATH = path.join(ROOT, 'vercel.json');
 const UYARI = 'Bilgi amaçlıdır, yatırım tavsiyesi değildir.';
@@ -5776,12 +5783,13 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
   ok('⑯a · `takvim` ROTALAR listesinde (tek kaynak)',
     KESIF.ROTALAR.includes('takvim'), KESIF.ROTALAR.join(','));
   ok('⑯a · saf ayrıştırıcılar dışa aktarılmış (ağsız sınanabilir)',
-    ['ayristirKAP', 'ayristirTemettu', 'kapZamani', 'kapSemboller', 'ondalik', 'cozVarlik']
+    ['ayristirKAP', 'ayristirTemettu', 'ayristirFedTakvim', 'kapZamani', 'kapSemboller',
+      'ondalik', 'cozVarlik', 'abdSaat', 'abdOffset', 'abdTakvimGunu', 'trTakvimGunu']
       .every((a) => typeof TAKVIM[a] === 'function'));
   ok('⑯a · sayaç yardımcıları dışa aktarılmış',
     typeof TAKVIM.bosTakvimSayac === 'function' && typeof TAKVIM.takvimTam === 'function');
-  ok('⑯a · kapsam beyaz listesi ÜÇ değer (sessiz genişleme yok)',
-    TAKVIM.KAPSAMLAR.join(',') === 'hepsi,kap,temettu', TAKVIM.KAPSAMLAR.join(','));
+  ok('⑯a · kapsam beyaz listesi DÖRT değer (sessiz genişleme yok)',
+    TAKVIM.KAPSAMLAR.join(',') === 'hepsi,kap,temettu,abd', TAKVIM.KAPSAMLAR.join(','));
   ok('⑯a · varsayılan kapsam beyaz listede',
     TAKVIM.KAPSAMLAR.includes(TAKVIM.VARSAYILAN_KAPSAM), TAKVIM.VARSAYILAN_KAPSAM);
   ok('⑯a · KAP tavanı kaynağın ÖLÇÜLEN sayfa boyunun (50) üstünde',
@@ -5811,6 +5819,18 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
   ok('⑯a · temettü madde alan kümesi yazılı',
     TAKVIM.TEMETTU_MADDE_ALANLARI.join(',') === 'symbol,date,dateHam,amount,yieldPct,currency,paid',
     TAKVIM.TEMETTU_MADDE_ALANLARI.join(','));
+  ok('⑯a · ABD madde alan kümesi yazılı (BİLDİRİM SIRASI)',
+    TAKVIM.ABD_MADDE_ALANLARI.join(',') === 'date,an,saatHam,title,tur,canli,kaynak',
+    TAKVIM.ABD_MADDE_ALANLARI.join(','));
+  ok('⑯a · ABD tavanı ÖLÇÜLMÜŞ (ileri pencere 80 madde, tavan 200)',
+    TAKVIM.AZAMI_ABD === 200, String(TAKVIM.AZAMI_ABD));
+  ok('⑯a · ABD varsayılanı tavanın İÇİNDE (sessiz kırpma yok)',
+    TAKVIM.VARSAYILAN_ABD >= 1 && TAKVIM.VARSAYILAN_ABD <= TAKVIM.AZAMI_ABD,
+    String(TAKVIM.VARSAYILAN_ABD));
+  ok('⑯a · ABD tür eşlemesi DONDURULMUŞ (çalışma anında değişmez)',
+    Object.isFrozen(TAKVIM.ABD_TUR_ESLEME));
+  ok('⑯a · ABD kaynak adı yazılı (ucun `kaynak` alanına birebir gidiyor)',
+    TAKVIM.ABD_KAYNAK === 'Federal Reserve', TAKVIM.ABD_KAYNAK);
   ok('⑯a · ay tabloları DONDURULMUŞ (çalışma anında değişmez)',
     Object.isFrozen(TAKVIM.TR_AY_KISA) && Object.isFrozen(TAKVIM.TR_AY_TAM));
   ok('⑯a · ay tabloları 12 ayın HEPSİNİ kapsıyor (kısa + tam)',
@@ -5821,16 +5841,22 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
   {
     const agSrc = readFileSync(AG_PATH, 'utf8');
     ok('⑯b · KİLİT · `_ag.js` IZINLI listesine takvim konağı EKLENMEDİ',
-      !/mynet|temettuhisseleri/.test(agSrc), 'temiz');
-    ok('⑯b · takvimin KENDİ izin listesi iki konak',
-      TAKVIM.IZINLI_KONAK.join(',') === 'finans.mynet.com,temettuhisseleri.com',
+      !/mynet|temettuhisseleri|federalreserve/.test(agSrc), 'temiz');
+    ok('⑯b · takvimin KENDİ izin listesi ÜÇ konak',
+      TAKVIM.IZINLI_KONAK.join(',')
+        === 'finans.mynet.com,temettuhisseleri.com,www.federalreserve.gov',
       TAKVIM.IZINLI_KONAK.join(','));
-    // YENİ GÜVEN ALANI YOK: ikisi de `api/proxy.js`in kümesinde ZATEN var.
+    // GÜVEN ALANI İKİ YERDE BİRDEN YAZILI OLMAK ZORUNDA: taşıyıcı
+    // (`api/proxy.js`) ile takvimin kendi listesi AYNI konakları saymalı.
+    // İlk ikisi proxy'de ZATEN vardı; `www.federalreserve.gov` 2026-11-25'te
+    // ABD olay takvimi için İKİSİNE DE eklendi — güven alanı BİLEREK
+    // genişledi, sessizce değil (gerekçe: `api/proxy.js` içindeki not).
     const proxyS = readFileSync(PROXY_PATH, 'utf8');
-    ok('⑯b · KİLİT · iki konak `api/proxy.js` izin kümesinde ZATEN vardı',
+    ok('⑯b · KİLİT · ÜÇ konağın HEPSİ `api/proxy.js` izin kümesinde yazılı',
       TAKVIM.IZINLI_KONAK.every((k) => proxyS.includes(k)), TAKVIM.IZINLI_KONAK.join(','));
-    ok('⑯b · iki kaynak adresi de KENDİ izin listesinden geçiyor',
-      TAKVIM.izinliTakvimAdresi(TAKVIM.KAP_URL) && TAKVIM.izinliTakvimAdresi(TAKVIM.TEMETTU_URL));
+    ok('⑯b · üç kaynak adresi de KENDİ izin listesinden geçiyor',
+      TAKVIM.izinliTakvimAdresi(TAKVIM.KAP_URL) && TAKVIM.izinliTakvimAdresi(TAKVIM.TEMETTU_URL)
+      && TAKVIM.izinliTakvimAdresi(TAKVIM.FED_TAKVIM_URL));
     ok('⑯b · http (şifresiz) adres REDDEDİLİYOR',
       TAKVIM.izinliTakvimAdresi('http://finans.mynet.com/borsa/kaphaberleri/') === false);
     ok('⑯b · izin listesi dışı konak REDDEDİLİYOR',
@@ -6037,7 +6063,8 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
       ok('⑯j · bad_kapsam cevabı AĞA ÇIKMADAN döndü', agDenemesi === 0, String(agDenemesi));
 
       for (const [alan, deger] of [['kapAdet', '0'], ['kapAdet', '61'], ['kapAdet', 'abc'],
-        ['temettuAdet', '0'], ['temettuAdet', '401'], ['temettuAdet', '1.5']]) {
+        ['temettuAdet', '0'], ['temettuAdet', '401'], ['temettuAdet', '1.5'],
+        ['abdAdet', '0'], ['abdAdet', '201'], ['abdAdet', 'abc']]) {
         const r = await cagirTakvim('GET', { [alan]: deger });
         ok(`⑯j · ${alan}=${deger} → 400 bad_limit (kırpma YOK)`,
           r.kod === 400 && r.govde.error === 'bad_limit' && r.govde.alan === alan,
@@ -6045,9 +6072,11 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
       }
       ok('⑯j · adet kapıları da AĞA ÇIKMADAN döndü', agDenemesi === 0, String(agDenemesi));
 
-      // Kaynakların İKİSİ de düştü → bu bir ölçüm değil, KESİNTİ.
+      // Kaynakların HEPSİ düştü → bu bir ölçüm değil, KESİNTİ.
+      // `kapsam` varsayılanı `hepsi`, yani ÜÇ bacağın (KAP · temettü · ABD)
+      // hepsi deneniyor ve üçü de kara delikte kalıyor.
       const d = await cagirTakvim('GET', {});
-      ok('⑯j · her iki kaynak düştü → 502 takvim_alinamadi (boş liste YALANI yok)',
+      ok('⑯j · üç kaynağın HEPSİ düştü → 502 takvim_alinamadi (boş liste YALANI yok)',
         d.kod === 502 && d.govde.error === 'takvim_alinamadi', `${d.kod} ${d.govde.error}`);
       ok('⑯j · 502 gövdesi SAYACI taşıyor (neyin düştüğü görünür)',
         !!d.govde.sayac && d.govde.sayac.hata >= 1, JSON.stringify(d.govde.sayac || null));
@@ -6098,6 +6127,344 @@ bolum('⑯ /api/takvim — KAP duyuruları + BIST temettü takvimi (api/_takvim.
     ok(`⑯k · KİLİT · api/${ad}.js \`_takvim.js\`i TANIMIYOR`,
       !/_takvim/.test(readFileSync(yol, 'utf8')));
   }
+
+  // --- ⑯l `ayristirFedTakvim` — fikstür, SIFIR ağ ---------------------
+  // ÖLÇÜM NOTU: gerçek gövde (2026-11-25, 550 608 B, UTF-8 BOM) 2618 olay
+  // taşıyor; 570'i `month: ""` ile geliyor (569'u `type: "events"`), yani
+  // tarihi KURULAMIYOR ve `atlanan`a yazılıyor. Aşağıdaki fikstür o
+  // ölçümün KÜÇÜK ÖLÇEĞİ: aynı bozukluk türleri, elle sayılabilir adette.
+  {
+    const fedGovde = (olaylar) => '\uFEFF' + JSON.stringify({ events: olaylar });
+    const ev = (title, time, month, days, type, yayin) => ({
+      title, time, month, days, type, ...(yayin ? { live: yayin } : {}),
+    });
+    // SIRA KASITLI OLARAK KARIŞIK: kaynak sırası garantili değil, ekran
+    // sırasını ayrıştırıcı KURUYOR.
+    const govde = fedGovde([
+      ev('Yaz Saati Olayı', '2:00 p.m.', '2027-07', '4', 'Stat'),
+      ev('Holiday - Christmas Day', '', '2026-12', '25', 'Other'),
+      ev('H.4.1 -  Factors Affecting Reserve  Balances ', '4:30 p.m.', '2026-12', '3,10,17', 'Stat'),
+      ev('Yıl Sonu Verisi', '11:00 a.m.', '2026-12', '25', 'Stat'),
+      ev('FOMC Meeting', '2:00 p.m.', '2026-12', '9', 'FOMC', 'https://ornek.example.com/yayin'),
+      ev('Discussion - Governor Bowman', '9:15 a.m.', '', '6', 'events'),  // ay YOK
+      ev('', '2:00 p.m.', '2026-12', '1', 'Stat'),                         // başlık YOK
+      ev('Gün Bozuk', '2:00 p.m.', '2026-12', '0,99', 'Stat'),              // geçerli gün YOK
+      ev('Geçmiş Olay', '2:00 p.m.', '2026-11', '10', 'Stat'),              // süzgeç düşürür
+      ev('Bilinmeyen Tür', '10:00 a.m.', '2026-12', '15', 'ZartZort'),
+    ]);
+    ok('⑯l · fikstür gerçek gövde gibi BOM ile başlıyor',
+      govde.charCodeAt(0) === 0xFEFF);
+
+    const r = TAKVIM.ayristirFedTakvim(govde, 200, '2026-12-01');
+    ok('⑯l · dönüş şekli {maddeler, atlanan} — `tekrar` YOK (kaynak kopya basmıyor)',
+      anahtarlar(r) === 'atlanan,maddeler', anahtarlar(r));
+    ok('⑯l · sekiz madde çıktı (virüllü gün 3 maddeye açıldı)',
+      r.maddeler.length === 8, String(r.maddeler.length));
+    ok('⑯l · alan kümesi ilan edilenle BİREBİR',
+      anahtarlar(r.maddeler[0]) === [...TAKVIM.ABD_MADDE_ALANLARI].sort().join(','),
+      anahtarlar(r.maddeler[0]));
+    ok('⑯l · KURAL · ÜÇ bozuk satır ATLANDI ve SAYILDI (ay · başlık · gün)',
+      r.atlanan === 3, String(r.atlanan));
+    ok('⑯l · KURAL · ileri süzgeç düşürdüğü satırı `atlanan`a YAZMIYOR',
+      !r.maddeler.some((m) => m.date < '2026-12-01') && r.atlanan === 3,
+      String(r.atlanan));
+    ok('⑯l · virüllü `days` ÜÇ ayrı güne açıldı',
+      r.maddeler.filter((m) => m.title.startsWith('H.4.1')).length === 3);
+    ok('⑯l · başlıktaki ÇİFT BOŞLUK ve uç boşluğu temizlendi (ölçülen kir)',
+      r.maddeler[0].title === 'H.4.1 - Factors Affecting Reserve Balances',
+      r.maddeler[0].title);
+    ok('⑯l · tarih `YYYY-MM-DD` DİZGESİ, artışa sıralı',
+      r.maddeler.map((m) => m.date).join(',')
+        === '2026-12-03,2026-12-09,2026-12-10,2026-12-15,2026-12-17,2026-12-25,2026-12-25,2027-07-04',
+      r.maddeler.map((m) => m.date).join(','));
+    ok('⑯l · KİŞ saat dilimi ÖLÇÜLMÜŞ (-05:00) ve saat 24 saatlik',
+      r.maddeler[1].an === '2026-12-09T14:00:00-05:00', String(r.maddeler[1].an));
+    ok('⑯l · YAZ saat dilimi ÖLÇÜLMÜŞ (-04:00) — sabit kaydırma DEĞİL',
+      r.maddeler[7].an === '2027-07-04T14:00:00-04:00', String(r.maddeler[7].an));
+    ok('⑯l · KURAL · saatsiz olay LANETLENMEDİ: listede, `an` ve `saatHam` null',
+      r.maddeler[6].date === '2026-12-25' && r.maddeler[6].an === null
+      && r.maddeler[6].saatHam === null, String(r.maddeler[6].an));
+    ok('⑯l · aynı günde saati OLAN önce, saatsiz SONA',
+      r.maddeler[5].date === r.maddeler[6].date && r.maddeler[5].an !== null);
+    ok('⑯l · ham saat metni DURUYOR (bizim biçimimiz değil, kaynağın)',
+      r.maddeler[1].saatHam === '2:00 p.m.', String(r.maddeler[1].saatHam));
+    ok('⑯l · tür MAKİNE KODUNA çevrildi (FOMC→fomc, Stat→veri, Other→diger)',
+      r.maddeler[1].tur === 'fomc' && r.maddeler[0].tur === 'veri'
+      && r.maddeler[6].tur === 'diger',
+      `${r.maddeler[1].tur} / ${r.maddeler[0].tur} / ${r.maddeler[6].tur}`);
+    ok('⑯l · KURAL · tanınmayan tür `diger` oldu ama SATIR KORUNDU',
+      r.maddeler[3].title === 'Bilinmeyen Tür' && r.maddeler[3].tur === 'diger',
+      r.maddeler[3].tur);
+    ok('⑯l · KİLİT · `canli` BOOLEAN; üçüncü taraf yayın ADRESİ gövdede YOK',
+      r.maddeler.every((m) => typeof m.canli === 'boolean')
+      && r.maddeler[1].canli === true
+      && JSON.stringify(r.maddeler).includes('http') === false,
+      String(r.maddeler[1].canli));
+    ok('⑯l · kaynak adı her maddede yazılı (ölçüm nereden geldiği)',
+      r.maddeler.every((m) => m.kaynak === TAKVIM.ABD_KAYNAK));
+    ok('⑯l · adet tavanı UYGULANIYOR',
+      TAKVIM.ayristirFedTakvim(govde, 3, '2026-12-01').maddeler.length === 3);
+    ok('⑯l · tavan üstü istek `AZAMI_ABD`a kırpılıyor (patlamadan)',
+      TAKVIM.ayristirFedTakvim(govde, 99999, '2026-12-01').maddeler.length === 8);
+    ok('⑯l · KURAL · `ileriGun` YOKSA geçmiş de geliyor (süzgeç ÇAĞIRANIN işi)',
+      TAKVIM.ayristirFedTakvim(govde, 200).maddeler.length === 9
+      && TAKVIM.ayristirFedTakvim(govde, 200).maddeler[0].date === '2026-11-10',
+      String(TAKVIM.ayristirFedTakvim(govde, 200).maddeler.length));
+    ok('⑯l · bozuk / boş gövde → boş liste (patlamadan, UYDURMADAN)',
+      TAKVIM.ayristirFedTakvim('{bozuk', 200).maddeler.length === 0
+      && TAKVIM.ayristirFedTakvim('', 200).maddeler.length === 0
+      && TAKVIM.ayristirFedTakvim(null, 200).maddeler.length === 0
+      && TAKVIM.ayristirFedTakvim(JSON.stringify({}), 200).maddeler.length === 0
+      && TAKVIM.ayristirFedTakvim(JSON.stringify({ events: 'yok' }), 200).maddeler.length === 0);
+
+    // --- saat ve dilim çevirileri — SAF, ölçülmüş değerler
+    ok('⑯l · `abdSaat` öğle/gece yarısı TUZAĞINI geçiyor',
+      TAKVIM.abdSaat('12:00 p.m.') === '12:00' && TAKVIM.abdSaat('12:00 a.m.') === '00:00'
+      && TAKVIM.abdSaat('9:15 a.m.') === '09:15' && TAKVIM.abdSaat('2:00 p.m.') === '14:00',
+      `${TAKVIM.abdSaat('12:00 p.m.')} / ${TAKVIM.abdSaat('12:00 a.m.')}`);
+    ok('⑯l · `abdSaat` geçersiz girdide null (0 ya da 00:00 UYDURMUYOR)',
+      TAKVIM.abdSaat('13:00 p.m.') === null && TAKVIM.abdSaat('2:60 p.m.') === null
+      && TAKVIM.abdSaat('yakinda') === null && TAKVIM.abdSaat('') === null
+      && TAKVIM.abdSaat(null) === null);
+    ok('⑯l · `abdOffset` yaz saati SıNıRLARI (2. Pazar Mart · 1. Pazar Kasım)',
+      TAKVIM.abdOffset('2026-03-07') === '-05:00' && TAKVIM.abdOffset('2026-03-08') === '-04:00'
+      && TAKVIM.abdOffset('2026-10-31') === '-04:00' && TAKVIM.abdOffset('2026-11-01') === '-05:00',
+      [TAKVIM.abdOffset('2026-03-08'), TAKVIM.abdOffset('2026-11-01')].join(' / '));
+    ok('⑯l · `abdOffset` bozuk tarihte null', TAKVIM.abdOffset('abc') === null);
+    ok('⑯l · KİLİT · TR ve ABD takvim günü AYRI (21:30 UTC anında gün kayıyor)',
+      TAKVIM.abdTakvimGunu(Date.UTC(2026, 10, 24, 21, 30)) === '2026-11-24'
+      && TAKVIM.trTakvimGunu(Date.UTC(2026, 10, 24, 21, 30)) === '2026-11-25',
+      `${TAKVIM.abdTakvimGunu(Date.UTC(2026, 10, 24, 21, 30))} / ${TAKVIM.trTakvimGunu(Date.UTC(2026, 10, 24, 21, 30))}`);
+    ok('⑯l · takvim günü ölçülemezse null (uydurma gün yok)',
+      TAKVIM.abdTakvimGunu(NaN) === null && TAKVIM.trTakvimGunu(NaN) === null);
+  }
+}
+
+// =========================================================================
+bolum('⑯m api/_faiz.js — FOMC faiz beklentisi (ZQ vadeli sözleşme) — SAF + KİLİT');
+// =========================================================================
+// AYRI DOSYA, AYRI SAYAÇ, AYRI İZİN LİSTESİ. Ölçüm yolu:
+//   ZQ(önceki ay) -> karar öncesi ima edilen oran
+//   ZQ(toplantı ayı) -> ay ORTALAMA oranı — ay içinde eski/yeni oranın
+//   gün ağırlıklı karışımı; eski bacak bilindiğine göre YENİ oran çözülüyor.
+// TAHMİN ÜRETİLMİYOR: sayı piyasanın KENDİ fiyatından geliyor.
+// Ölçülemeyen her alan `null`, asla `0` — nedeni `kod` alanında.
+{
+  const faizSrc = readFileSync(FAIZ_PATH, 'utf8');
+  // ⑯k ile AYNI KALIP: yorum satırları atılıyor. Bu dosyanın başlığı
+  // kilitli belirteçleri ANLATIYOR; yorumlar sayılsa kilit YANLIŞ öter.
+  const faizKod = faizSrc.split(/\r?\n/)
+    .filter((t) => !/^\s*(\/\/|\*|\/\*)/.test(t)).join('\n');
+  const proxyKaynak = readFileSync(PROXY_PATH, 'utf8');
+
+  const eq = (ad, got, bek) => {
+    const gd = JSON.stringify(got);
+    const bd = JSON.stringify(bek);
+    ok(ad, gd === bd, gd === bd ? '' : gd + ' != ' + bd);
+  };
+
+  // --- ⑯m-1 GÜVEN YÜZEYİ ---------------------------------------------------
+  ok('⑯m · kendi izin listesi TEK konak (`query1.finance.yahoo.com`)',
+    Array.isArray(FAIZ.FAIZ_IZINLI_KONAK)
+    && FAIZ.FAIZ_IZINLI_KONAK.length === 1
+    && FAIZ.FAIZ_IZINLI_KONAK[0] === 'query1.finance.yahoo.com',
+    String(FAIZ.FAIZ_IZINLI_KONAK));
+  ok('⑯m · izin listesi `api/proxy.js` güven yüzeyinin İÇİNDE (yeni konak yok)',
+    FAIZ.FAIZ_IZINLI_KONAK.every((k) => proxyKaynak.includes(k)));
+  ok('⑯m · listeyi DONDURULMUŞ (koşma anında genişletilemez)',
+    Object.isFrozen(FAIZ.FAIZ_IZINLI_KONAK));
+  eq('⑯m · izinli https adres kabul', FAIZ.izinliFaizAdresi('https://query1.finance.yahoo.com/v8/finance/chart/ZQZ26.CBT'), true);
+  eq('⑯m · http RED (şifresiz taşıma yok)', FAIZ.izinliFaizAdresi('http://query1.finance.yahoo.com/x'), false);
+  eq('⑯m · `query2` RED (liste dışı kardeş konak)', FAIZ.izinliFaizAdresi('https://query2.finance.yahoo.com/x'), false);
+  eq('⑯m · yabancı konak RED', FAIZ.izinliFaizAdresi('https://evil.example.com/x'), false);
+  eq('⑯m · alt alan kaçışı RED', FAIZ.izinliFaizAdresi('https://query1.finance.yahoo.com.evil.example.com/x'), false);
+  eq('⑯m · adres olmayan dizge RED', FAIZ.izinliFaizAdresi('ZQZ26'), false);
+  eq('⑯m · boş dizge RED', FAIZ.izinliFaizAdresi(''), false);
+
+  // --- ⑯m-2 KAYNAK KİLİTLERİ ------------------------------------------------
+  ok('⑯m · ağ YALNIZ bir yerde (tek çıkış kapısı)',
+    faizKod.split('fetch(').length - 1 === 1, String(faizKod.split('fetch(').length - 1));
+  ok('⑯m · zaman aşımı AbortController ile kuruluyor (asılı istek yok)',
+    /new AbortController\(\)/.test(faizKod) && /\.abort\(\)/.test(faizKod));
+  ok('⑯m · KURAL · takvim uydurması yok (`new Date()` / `Date.now()` HİÇ yok)',
+    !/new Date\(/.test(faizKod) && !/Date\.now\(/.test(faizKod), 'temiz');
+  ok('⑯m · KURAL · eşik/ağırlık sözcüğü yok (skor matematiği burada DEĞİL)',
+    !/\bESIK\b/i.test(faizKod), 'temiz');
+  ok('⑯m · motoru ya da ayarını İÇE ALMIYOR (skor yolu ayrı)',
+    !/_motor\.js|_ayar\.js|_ag\.js/.test(faizKod), 'temiz');
+  ok('⑯m · dosya sistemine YAZMIYOR',
+    !/writeFileSync|appendFileSync/.test(faizKod));
+  ok('⑯m · gerçekten `_` önekli (Vercel rota saymıyor — 13. fonksiyon tuzağı)',
+    existsSync(FAIZ_PATH) && path.basename(FAIZ_PATH).startsWith('_'));
+  ok('⑯m · kişisel veri / anahtar taşımıyor',
+    !/@gmail|ANTHROPIC|apiKey/.test(faizSrc), 'temiz');
+  ok('⑯m · kimlik dizgesi SADE ve kişisel veri taşımıyor',
+    /day-starter\/1\.0 \(faiz-okuyucu\)/.test(faizSrc)
+    && !/@/.test((faizSrc.match(/'User-Agent':[^\n]*/) || [''])[0]));
+  ok('⑯m · ELLE YAZILMIŞ olduğu başlıkta yazılı (üretilmiş dosya değil)',
+    /ELLE YAZILMIŞTIR/.test(faizSrc));
+
+  // --- ⑯m-3 SAYAÇ -------------------------------------------------------------
+  const s0 = FAIZ.bosFaizSayac();
+  eq('⑯m · sayaç ALTI anahtar (`_takvim.js` kalıbıyla aynı, AMA AYRI nesne)',
+    Object.keys(s0).sort().join(','), 'basari,bayt,hata,istek,kisa,zamanAsimi');
+  eq('⑯m · boş sayaç tam', FAIZ.faizTam(s0), true);
+  eq('⑯m · hata varsa tam değil', FAIZ.faizTam({ ...s0, hata: 1 }), false);
+  eq('⑯m · zaman aşımı varsa tam değil', FAIZ.faizTam({ ...s0, zamanAsimi: 1 }), false);
+  eq('⑯m · kısa gövde varsa tam değil', FAIZ.faizTam({ ...s0, kisa: 1 }), false);
+  eq('⑯m · sayaç yoksa tam değil', FAIZ.faizTam(null), false);
+
+  // --- ⑯m-4 AY KODU / TAKVİM ARACİLARI ---------------------------------------
+  eq('⑯m · ay kodu ocak', FAIZ.ayKodu(0), 'F');
+  eq('⑯m · ay kodu kasım', FAIZ.ayKodu(10), 'X');
+  eq('⑯m · ay kodu aralık', FAIZ.ayKodu(11), 'Z');
+  eq('⑯m · ay kodu sınır dışı null', FAIZ.ayKodu(12), null);
+  eq('⑯m · ay kodu kesirli null', FAIZ.ayKodu(1.5), null);
+  eq('⑯m · artık 2024', FAIZ.artikYil(2024), true);
+  eq('⑯m · artık 2026 değil', FAIZ.artikYil(2026), false);
+  eq('⑯m · artık 1900 değil (yüz kuralı)', FAIZ.artikYil(1900), false);
+  eq('⑯m · artık 2000 (dört yüz kuralı)', FAIZ.artikYil(2000), true);
+  eq('⑯m · aralık 31 gün', FAIZ.ayGunSayisi(2026, 11), 31);
+  eq('⑯m · kasım 30 gün', FAIZ.ayGunSayisi(2026, 10), 30);
+  eq('⑯m · şubat 28 gün', FAIZ.ayGunSayisi(2026, 1), 28);
+  eq('⑯m · artık şubat 29 gün', FAIZ.ayGunSayisi(2024, 1), 29);
+  eq('⑯m · geçersiz ay null', FAIZ.ayGunSayisi(2026, 12), null);
+
+  // --- ⑯m-5 SÖZLEŞME ADI ------------------------------------------------------
+  eq('⑯m · ZQ aralık 2026', FAIZ.zqSembol(2026, 11), 'ZQZ26.CBT');
+  eq('⑯m · ZQ kasım 2026', FAIZ.zqSembol(2026, 10), 'ZQX26.CBT');
+  eq('⑯m · ZQ ocak 2027', FAIZ.zqSembol(2027, 0), 'ZQF27.CBT');
+  eq('⑯m · ZQ tek haneli yıl sıfır dolguluyor', FAIZ.zqSembol(2009, 0), 'ZQF09.CBT');
+  eq('⑯m · ZQ geçersiz ay null', FAIZ.zqSembol(2026, 12), null);
+  eq('⑯m · ZQ sınır dışı yıl null', FAIZ.zqSembol(1999, 0), null);
+  eq('⑯m · CBT soneki (CME değil — ölçüldü)', FAIZ.ZQ_SONEK, '.CBT');
+  eq('⑯m · önceki ay ocaktan geriye yıl döndürüyor', FAIZ.oncekiAy(2027, 0), { yil: 2026, ay0: 11 });
+  eq('⑯m · önceki ay aralık -> kasım', FAIZ.oncekiAy(2026, 11), { yil: 2026, ay0: 10 });
+  eq('⑯m · önceki ay geçersiz null', FAIZ.oncekiAy(2026, 12), null);
+
+  // --- ⑯m-6 İMA EDİLEN ORAN -------------------------------------------------
+  eq('⑯m · ima 96.1225 -> 3.8775', FAIZ.impliedOran(96.1225), 3.8775);
+  eq('⑯m · ima 95.945 -> 4.055', FAIZ.impliedOran(95.945), 4.055);
+  eq('⑯m · ima 100 -> 0', FAIZ.impliedOran(100), 0);
+  eq('⑯m · ima 0 null (fiyat olamaz)', FAIZ.impliedOran(0), null);
+  eq('⑯m · ima 101 null (yüzün üstü)', FAIZ.impliedOran(101), null);
+  eq('⑯m · ima NaN null', FAIZ.impliedOran(NaN), null);
+  eq('⑯m · ima metin null', FAIZ.impliedOran('96'), null);
+
+  // --- ⑯m-7 TARİH AYRIŞTIRMA ----------------------------------------------
+  eq('⑯m · tarih ayrıştır', FAIZ.tarihAyir('2026-12-09'), { yil: 2026, ay0: 11, gun: 9 });
+  eq('⑯m · geçersiz ay null', FAIZ.tarihAyir('2026-13-01'), null);
+  eq('⑯m · ayın olmayan günü null (29 şubat 2026 yok)', FAIZ.tarihAyir('2026-02-29'), null);
+  eq('⑯m · artık yıl 29 şubat geçerli', FAIZ.tarihAyir('2024-02-29'), { yil: 2024, ay0: 1, gun: 29 });
+  eq('⑯m · sıfır dolgusuz biçim null', FAIZ.tarihAyir('2026-12-9'), null);
+  eq('⑯m · boş tarih null', FAIZ.tarihAyir(''), null);
+  eq('⑯m · tarih dizge değil null', FAIZ.tarihAyir(20261209), null);
+
+  // --- ⑯m-8 AY İÇİ AĞIRLIK ---------------------------------------------------
+  eq('⑯m · yöntem adları', [FAIZ.AGIRLIK_YONTEMI, FAIZ.AGIRLIK_YONTEMI_ALT], ['ertesi-gun', 'toplanti-gunu']);
+  eq('⑯m · ağırlık `ertesi-gun` (9 aralık, 31 gün)',
+    FAIZ.toplantiAgirlik(31, 9, FAIZ.AGIRLIK_YONTEMI),
+    { yontem: 'ertesi-gun', eskiGun: 9, yeniGun: 22, eski: 9 / 31, yeni: 22 / 31 });
+  eq('⑯m · ağırlık `toplanti-gunu` (bir gün kaydırıyor)',
+    FAIZ.toplantiAgirlik(31, 9, FAIZ.AGIRLIK_YONTEMI_ALT),
+    { yontem: 'toplanti-gunu', eskiGun: 8, yeniGun: 23, eski: 8 / 31, yeni: 23 / 31 });
+  eq('⑯m · yöntem yazılmazsa `ertesi-gun`', FAIZ.toplantiAgirlik(31, 9).yontem, 'ertesi-gun');
+  eq('⑯m · ayın son günü `ertesi-gun` ile ölçülemez', FAIZ.toplantiAgirlik(31, 31, FAIZ.AGIRLIK_YONTEMI), null);
+  eq('⑯m · ayın son günü alt yöntemde tek gün', FAIZ.toplantiAgirlik(31, 31, FAIZ.AGIRLIK_YONTEMI_ALT).yeniGun, 1);
+  eq('⑯m · ayın ilk günü alt yöntemde eski bacak sıfır', FAIZ.toplantiAgirlik(31, 1, FAIZ.AGIRLIK_YONTEMI_ALT).eskiGun, 0);
+  eq('⑯m · gün sıfır null', FAIZ.toplantiAgirlik(31, 0, FAIZ.AGIRLIK_YONTEMI), null);
+  eq('⑯m · ay 40 gün olamaz', FAIZ.toplantiAgirlik(40, 9, FAIZ.AGIRLIK_YONTEMI), null);
+
+  // --- ⑯m-9 ÇÖZÜMLEME (2026-11-25 ÖLÇÜLEN fiyatlarla) ------------------------
+  // ZQX26 96.1225 · ZQZ26 95.945 · N=31 · toplantı 9 aralık 2026
+  const gd = { oncekiFiyat: 96.1225, toplantiFiyat: 95.945, gunSayisi: 31, toplantiGunu: 9 };
+  const hs = FAIZ.beklentiHesapla({ ...gd, yontem: FAIZ.AGIRLIK_YONTEMI });
+  eq('⑯m · karar öncesi oran', hs.oncesiOran, 3.8775);
+  eq('⑯m · ay ortalama oran', hs.ayOrtalamaOran, 4.055);
+  eq('⑯m · karar sonrası çözüm', hs.sonrasiOran, 4.1276);
+  eq('⑯m · değişim 25.01 bp (bir temiz basamağa oturuyor)', hs.degisimBp, 25.01);
+  eq('⑯m · basamak oranı 1.0004 (KIRPILMAMIŞ ham sayı)', hs.basamakOrani, 1.0004);
+  eq('⑯m · yön artı', hs.yon, 1);
+  eq('⑯m · basamak boyu 25 bp (FOMC kendi adımı, eşik değil)', FAIZ.FAIZ_BASAMAK_BP, 25);
+  const ha = FAIZ.beklentiHesapla({ ...gd, yontem: FAIZ.AGIRLIK_YONTEMI_ALT });
+  eq('⑯m · alt yöntem 23.92 bp (duyarlılık ~1.1 bp)', ha.degisimBp, 23.92);
+  const hi = FAIZ.beklentiHesapla({ oncekiFiyat: 95.945, toplantiFiyat: 96.1225, gunSayisi: 31, toplantiGunu: 9 });
+  eq('⑯m · indirim senaryosu yön eksi', hi.yon, -1);
+  eq('⑯m · indirim senaryosu bp işaret', hi.degisimBp < 0, true);
+  const h0 = FAIZ.beklentiHesapla({ oncekiFiyat: 96, toplantiFiyat: 96, gunSayisi: 31, toplantiGunu: 9 });
+  eq('⑯m · değişiklik beklenmiyorsa bp sıfır', h0.degisimBp, 0);
+  eq('⑯m · değişiklik beklenmiyorsa yön sıfır', h0.yon, 0);
+  eq('⑯m · fiyat eksikse null (sıfır UYDURULMUYOR)', FAIZ.beklentiHesapla({ ...gd, oncekiFiyat: null }), null);
+  eq('⑯m · toplantı günü eksikse null', FAIZ.beklentiHesapla({ ...gd, toplantiGunu: null }), null);
+  eq('⑯m · girdi boşsa null', FAIZ.beklentiHesapla(), null);
+
+  // --- ⑯m-10 GÖVDE AYRIŞTIRMA (BEŞ YOL) ------------------------------------
+  eq('⑯m · `meta.regularMarketPrice` okunuyor',
+    FAIZ.ayristirZq(JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: 95.945 } }] } })), 95.945);
+  eq('⑯m · meta boşsa SON GEÇERLİ kapanışa düşüyor',
+    FAIZ.ayristirZq(JSON.stringify({
+      chart: { result: [{ meta: {}, indicators: { quote: [{ close: [95.9, 95.94, null] }] } }] },
+    })), 95.94);
+  eq('⑯m · kapanışların hepsi boşsa null',
+    FAIZ.ayristirZq(JSON.stringify({
+      chart: { result: [{ meta: {}, indicators: { quote: [{ close: [null, null] }] } }] },
+    })), null);
+  eq('⑯m · Yahoo hata gövdesi null (`Not Found`)',
+    FAIZ.ayristirZq(JSON.stringify({ chart: { result: null, error: { code: 'Not Found' } } })), null);
+  eq('⑯m · BOM öneki kırılmaya yol açmıyor',
+    FAIZ.ayristirZq('\uFEFF' + JSON.stringify({ chart: { result: [{ meta: { regularMarketPrice: 96.1 } }] } })), 96.1);
+  eq('⑯m · bozuk JSON null', FAIZ.ayristirZq('{ bozuk'), null);
+  eq('⑯m · boş gövde null (ÖLÇEMEDİM, sıfır DEĞİL)', FAIZ.ayristirZq(''), null);
+  eq('⑯m · HTML gövde null', FAIZ.ayristirZq('<html>yok</html>'), null);
+  eq('⑯m · gövde dizge değilse null', FAIZ.ayristirZq(null), null);
+
+  // --- ⑯m-11 TAKVİMDEN KARAR GÜNÜ ------------------------------------------
+  // ⑯l fiksturu kalıbıyla, AĞA ÇIKMADAN.
+  const FM = [
+    { date: '2026-11-25', an: null, saatHam: '', title: 'Durable Goods', tur: 'veri', canli: false, kaynak: 'Federal Reserve' },
+    { date: '2026-12-09', an: '2026-12-09T14:00:00-05:00', saatHam: '2:00 p.m.', title: 'FOMC Meeting', tur: 'fomc', canli: false, kaynak: 'Federal Reserve' },
+    { date: '2026-12-09', an: '2026-12-09T14:30:00-05:00', saatHam: '2:30 p.m.', title: 'FOMC Press Conference', tur: 'fomc', canli: true, kaynak: 'Federal Reserve' },
+    { date: '2026-12-30', an: '2026-12-30T14:00:00-05:00', saatHam: '2:00 p.m.', title: 'FOMC Minutes', tur: 'fomc', canli: false, kaynak: 'Federal Reserve' },
+  ];
+  const FK = [{ date: '2026-11-26', title: 'FOMC Meeting', tur: 'fomc' }, ...FM.slice(1)];
+  eq('⑯m · ileriye dönük ilk FOMC karar günü', FAIZ.ilkFomcTarihi(FM), '2026-12-09');
+  eq('⑯m · TUTANAK (`Minutes`) karar günü SAYILMIYOR', FAIZ.ilkFomcTarihi([FM[3], FM[1]]), '2026-12-09');
+  eq('⑯m · KURAL · İLK eşleşen kazanıyor (kasım varsa kasım)', FAIZ.ilkFomcTarihi(FK), '2026-11-26');
+  eq('⑯m · FOMC yoksa null', FAIZ.ilkFomcTarihi([FM[0]]), null);
+  eq('⑯m · dizi değilse null', FAIZ.ilkFomcTarihi(null), null);
+  eq('⑯m · boş listede null', FAIZ.ilkFomcTarihi([]), null);
+  eq('⑯m · önceki ay (kasım) görüş alanında ve toplantısız -> false',
+    FAIZ.oncekiAydaFomc(FM, 2026, 11), false);
+  eq('⑯m · önceki ayda da toplantı varsa -> true',
+    FAIZ.oncekiAydaFomc(FK, 2026, 11), true);
+  eq('⑯m · ÜÇ DEĞERLİ · ay görüş alanının gerisindeyse null (ÖLÇEMEDİM)',
+    FAIZ.oncekiAydaFomc(FM, 2026, 10), null);
+  eq('⑯m · boş listede null', FAIZ.oncekiAydaFomc([], 2026, 11), null);
+  eq('⑯m · dizi değilse null', FAIZ.oncekiAydaFomc(null, 2026, 11), null);
+
+  // --- ⑯m-12 TOPLAYICI · AĞA HİÇ ÇIKMAYAN İKİ RET DALI --------------------
+  // AĞ YASAĞI: iki dalın ikisi de fiyat istemeden DÖNÜYOR; kanıtı `istek === 0`.
+  const y1 = await FAIZ.faizBeklentisi({ maddeler: [FM[0]] });
+  eq('⑯m · karar günü yoksa kod `toplanti_yok`', y1.kod, 'toplanti_yok');
+  eq('⑯m · `toplanti_yok` · bp null (sıfır basılmıyor)', y1.degisimBp, null);
+  eq('⑯m · `toplanti_yok` · AĞA ÇIKMADI', y1.sayac.istek, 0);
+  eq('⑯m · `toplanti_yok` · sayaç tam (kesinti yok)', y1.tam, true);
+  eq('⑯m · `toplanti_yok` · kaynak adı yazılı', y1.kaynak, FAIZ.FAIZ_KAYNAK);
+  const y2 = await FAIZ.faizBeklentisi({ maddeler: FK, toplanti: '2026-12-09' });
+  eq('⑯m · önceki ayda da toplantı varsa kod `onceki_ay_toplantili`', y2.kod, 'onceki_ay_toplantili');
+  eq('⑯m · `onceki_ay_toplantili` · bp null (basit ayrışım geçersiz)', y2.degisimBp, null);
+  eq('⑯m · `onceki_ay_toplantili` · AĞA ÇIKMADI', y2.sayac.istek, 0);
+  eq('⑯m · `onceki_ay_toplantili` · toplantı ayı sözleşmesi yazılı', y2.toplantiSembol, 'ZQZ26.CBT');
+  eq('⑯m · `onceki_ay_toplantili` · önceki ay sözleşmesi yazılı', y2.oncekiSembol, 'ZQX26.CBT');
+  eq('⑯m · `onceki_ay_toplantili` · bayrak true', y2.oncekiAydaToplanti, true);
+  eq('⑯m · alt yöntem adı her halde basılıyor', y2.agirlikYontemiAlternatif, 'toplanti-gunu');
+  eq('⑯m · gün sayısı ve toplantı günü yazılı', [y2.gunSayisi, y2.toplantiGunu], [31, 9]);
+  ok('⑯m · ret dalında da TÜM alanlar var (24 alan, eksiği `null`)',
+    Object.keys(y2).length === 24, String(Object.keys(y2).length));
+  ok('⑯m · ret dalında sayısal alanların hiçbiri 0 UYDURMUYOR',
+    [y2.oncesiOran, y2.ayOrtalamaOran, y2.sonrasiOran, y2.degisimBp,
+      y2.basamakOrani, y2.yon, y2.oncekiFiyat, y2.toplantiFiyat,
+      y2.agirlikEski, y2.agirlikYeni].every((v) => v === null), 'hepsi null');
 }
 
 
@@ -6978,7 +7345,7 @@ bolum('⑱ /api/yfin — kunye tasiyicisi + KIYAS EKSTREMI + BILANCO SENARYOSU')
   ok('⑱g · arama kipi senaryo TASIMIYOR',
     !/quotes: out,[\s\S]{0,80}senaryo/.test(yfinKod));
 }
-
+
 // ---------------------------------------------------------------------
 //  FA kriter kodu: MOTOR ile NATIVE SOZLUK arasinda surukleme bekcisi.
 //

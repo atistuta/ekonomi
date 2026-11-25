@@ -43,14 +43,32 @@
 
 // ---------------------------------------------------------------------
 //  KONAK İZİN LİSTESİ — KENDİ listesi, `_ag.js`in listesi DEĞİL.
-//  İki giriş: webin BUGÜN okuduğu iki kaynak. Yeni güven alanı
-//  AÇILMADI — ikisi de `api/proxy.js`in `IZINLI_KONAKLAR` kümesinde
-//  ZATEN vardı (ölçüm: api/proxy.js, satır ~70).
+//  ÜÇ giriş: webin BUGÜN okuduğu iki TR kaynağı + Federal Reserve’in
+//  KENDİ yayınladığı takvim JSON’u.
+//
+//  GÜVEN ALANI — DÜRÜST KAYIT (2026-11-25 güncellendi):
+//  · `finans.mynet.com` ve `temettuhisseleri.com` ZATEN `api/proxy.js`in
+//    `IZINLI_KONAKLAR` kümesindeydi; onlar için yeni alan AÇILMADI.
+//  · `www.federalreserve.gov` YENİDİR ve bu bir GENİŞLEMEDİR. Konak
+//    `api/proxy.js`e DE eklendi — o dosyanın kendi kuralı bunu
+//    emrediyor ("yeni bir kaynak eklerken konağı buraya da ekle,
+//    yoksa 403 alırsın"). Yani güven alanı TEK yerde ilan ediliyor,
+//    iki liste birbirinden kaymıyor.
+//  · GEREKÇE (ölçüm, DEVAM.md §21): ileriye dönük ABD olay takvimi
+//    için BELGELİ, resmî ve ANAHTARSIZ çalışan TEK kaynak Fed’in
+//    kendi `calendar.json`u. BLS .ics 403, Census .ics gövdesi HTML
+//    (0 olay), Nasdaq uç noktası yalnız GEÇMİŞ veriyor,
+//    TradingEconomics misafir anahtarı 410 Gone.
+//  · `_ag.js` HÂLÂ AÇILMADI, DEĞİŞTİRİLMEDİ.
 // ---------------------------------------------------------------------
-export const IZINLI_KONAK = ['finans.mynet.com', 'temettuhisseleri.com'];
+export const IZINLI_KONAK = ['finans.mynet.com', 'temettuhisseleri.com', 'www.federalreserve.gov'];
 
 export const KAP_URL = 'https://finans.mynet.com/borsa/kaphaberleri/';
 export const TEMETTU_URL = 'https://temettuhisseleri.com/temettutarihleri/';
+// ABD OLAY TAKVİMİ — Fed’in KENDİ yayınladığı JSON. ÖLÇÜM 2026-11-25:
+// 200, 550 608 bayt, 2618 olay; gövde UTF-8 BOM ile BAŞLIYOR (bu yüzden
+// ayrıştırıcı `JSON.parse` öncesi baştaki \uFEFF’i kırpıyor).
+export const FED_TAKVIM_URL = 'https://www.federalreserve.gov/json/calendar.json';
 
 // Zaman aşımı 10000 ms · ÖLÇÜM: webin kendi tavanları 8000 (mynet,
 // app.js:231) ve 10000 (temettü, app.js:309). İkisinin BÜYÜĞÜ alındı ki
@@ -78,10 +96,21 @@ export const VARSAYILAN_KAP = 30;
 export const AZAMI_TEMETTU = 400;
 export const VARSAYILAN_TEMETTU = 120;
 
-// Kapsam beyaz listesi — SESSİZ GENİŞLEME YOK. 'hepsi' iki kaynağı da
-// ister; tek kaynak istendiğinde ÖTEKİ ALAN GÖVDEDE HİÇ YOKTUR
-// ("sorulmadı" ile "ölçemedim" ayrı şeyler).
-export const KAPSAMLAR = ['hepsi', 'kap', 'temettu'];
+// ABD olay tavanı 200 · ÖLÇÜM: Fed takviminde 2026-11’den İLERİ 47 olay
+// SATIRI var, ama birkaçı VİRGÜLLÜ gün listesi taşıyor (H.15 tek satırda
+// 19 gün, Aralık'ta 22) — satır başına birden çok madde çıkıyor. Kasım +
+// Aralık için ölçülen madde sayısı 170 bandında. 200 bunun rahat üstü,
+// "sınırsız" DEĞİL.
+export const AZAMI_ABD = 200;
+export const VARSAYILAN_ABD = 60;
+
+// Kapsam beyaz listesi — SESSİZ GENİŞLEME YOK. 'hepsi' ÜÇ kaynağı da
+// ister (TR KAP + TR temettü + ABD olay takvimi); tek kapsam
+// istendiğinde ÖTEKİ ALANLAR GÖVDEDE HİÇ YOKTUR ("sorulmadı" ile
+// "ölçemedim" ayrı şeyler).
+// 'abd' 2026-11-25'te EKLENDİ. Mevcut üç değerin ADI ve ANLAMI
+// DEĞİŞMEDİ; yalnız 'hepsi'nin KAPSAMI büyüdü ve bu burada YAZILI.
+export const KAPSAMLAR = ['hepsi', 'kap', 'temettu', 'abd'];
 export const VARSAYILAN_KAPSAM = 'hepsi';
 
 // ---------------------------------------------------------------------
@@ -117,6 +146,32 @@ export const TEMETTU_MADDE_ALANLARI = ['symbol', 'date', 'dateHam', 'amount', 'y
 // gösterebilsin.
 export const TAKVIM_TURU = 'KAP';
 export const KAP_KAYNAK = 'Mynet Finans';
+
+// ---------------------------------------------------------------------
+//  ABD OLAY TAKVİMİ SÖZLEŞMESİ
+//
+//  ETKİ DERECESİ (Investing.com’un üç boğası gibi) BASILMIYOR: böyle bir
+//  derece HİÇBİR ücretsiz, belgeli kaynakta yok (Econoday ve Trading
+//  Economics ücretli; Investing.com kazımak kullanım şartlarına aykırı).
+//  Uydurulmuş bir derece ÖLÇÜLMEYEN SAYI olurdu — basılmaz.
+//
+//  `canli` BOOLEAN: Fed’in `live` alanı ÜÇÜNCÜ TARAF bir yayın adresi
+//  (Teams / Zoom / YouTube / cvent / frbsf). Adres UCA GİTMİYOR, yalnız
+//  "canlı yayını var mı" olgusu geçiyor.
+// ---------------------------------------------------------------------
+export const ABD_KAYNAK = 'Federal Reserve';
+export const ABD_MADDE_ALANLARI = ['date', 'an', 'saatHam', 'title', 'tur', 'canli', 'kaynak'];
+
+// Kaynağın `type` değerleri (ÖLÇÜM 2026-11-25, 2618 olay üzerinde:
+// Stat 1059 · Speeches 603 · events 569 · FOMC 135 · Other 105 ·
+// Testimony 74 · Beige 56 · Conferences 10 · Board 6 · None 1) KENDİ
+// küçük harfli kod kümemize çevriliyor. Tanınmayan değer 'diger' olur —
+// madde ATILMAZ, çünkü tür bilinmemesi olayın yok olması değildir.
+export const ABD_TUR_ESLEME = Object.freeze({
+  fomc: 'fomc', stat: 'veri', beige: 'bej', speeches: 'konusma',
+  testimony: 'ifade', board: 'kurul', conferences: 'konferans',
+  events: 'etkinlik', other: 'diger', none: 'diger',
+});
 
 // ---------------------------------------------------------------------
 //  TÜRKÇE AY TABLOLARI — İKİZLERİ app.js:230 (`TR_MON`, kısa) ve
@@ -338,9 +393,27 @@ export function ondalik(s) {
  * @returns {string|null} `YYYY-MM-DD`, ölçülemezse null
  */
 export function trTakvimGunu(ms) {
-  if (!Number.isFinite(ms)) return null;
-  const kaydirma = 3 * 3600 * 1000;   // +03:00, TAKVIM_SAAT_DILIMI ile aynı
-  const gun = Math.floor((ms + kaydirma) / 86400000);
+  // +03:00 · TAKVIM_SAAT_DILIMI ile AYNI sayı.
+  return gunKaydirmali(ms, 3 * 3600 * 1000);
+}
+
+/**
+ * Epoch ms → `YYYY-MM-DD`, VERİLEN sabit kaydırma altında.
+ *
+ * `trTakvimGunu` bu gövdeyi ÇAĞIRIYOR; ABD tarafı da öyle. Yirmi satır
+ * takvim aritmetiği İKİ KEZ yazılmasın diye ayrıldı — iki kopya
+ * birbirinden kayabilirdi ve bu sayı ÖNBELLEK ANAHTARINA giriyor.
+ *
+ * SAF: ağa çıkmaz, SAATİ OKUMAZ (`Date.now` yok), koşan makinenin saat
+ * dilimine BAKMAZ. Dışa aktarılıyor çünkü tests/uc-test.mjs ölçüyor.
+ *
+ * @param {number} ms          epoch milisaniye
+ * @param {number} kaydirmaMs  UTC’den kaydırma, milisaniye
+ * @returns {string|null} `YYYY-MM-DD`, ölçülemezse null
+ */
+export function gunKaydirmali(ms, kaydirmaMs) {
+  if (!Number.isFinite(ms) || !Number.isFinite(kaydirmaMs)) return null;
+  const gun = Math.floor((ms + kaydirmaMs) / 86400000);
   if (!Number.isFinite(gun)) return null;
   // 719468 = 1970-01-01'in 0000-03-01 köklü gün sayısı (Mart başlangıçlı
   // takvimde artık gün yılın SONUNDA kalır, bölme düzgünleşir).
@@ -355,6 +428,110 @@ export function trTakvimGunu(ms) {
   const ay = ap + (ap < 10 ? 3 : -9);            // 1..12
   const yil = cy + cag * 400 + (ay <= 2 ? 1 : 0);
   return `${yil}-${ikiHane(ay)}-${ikiHane(d)}`;
+}
+
+/**
+ * Haftanın günü (0 = Pazar) — Sakamoto. SAF, tablo tabanlı, `Date` YOK.
+ *
+ * ELLE DOĞRULANDI: 2026-01-01 → 4 (Perşembe) · 2026-03-01 → 0 (Pazar) ·
+ * 2026-11-01 → 0 (Pazar) · 2026-11-24 → 2 (Salı).
+ *
+ * Dışa AKTARILMIYOR: tek işi `abdOffset`e hizmet etmek ve o ölçülüyor.
+ */
+function haftaninGunu(y, m, d) {
+  const t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+  let yy = y;
+  if (m < 3) yy -= 1;
+  return (yy + Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400)
+    + t[m - 1] + d) % 7;
+}
+
+/**
+ * ABD Doğu yakası offseti (`-04:00` yaz / `-05:00` kış) — TAKVİM
+ * KURALINDAN, tabloya bakmadan.
+ *
+ * KURAL (ABD federal yasası, 2007’den beri): yaz saati MART’IN İKİNCİ
+ * PAZARI başlar, KASIM’IN İLK PAZARI biter. 2026 için bu kural
+ * 2026-03-08 ve 2026-11-01 veriyor (yukarıdaki elle doğrulanmış
+ * `haftaninGunu` ölçümleriyle tutarlı).
+ *
+ * SINIR: geçiş SABAH 02:00’da olur; burada GÜN çözünürlüğü var, yani
+ * geçiş gününün 00:00–02:00 aralığı için offset 1 saat sapabilir. Fed
+ * takviminde Pazar sabahı 02:00’a yazılı TEK bir olay YOK (ölçüm:
+ * 2618 olayın en erken saati 09:00), bu yüzden sapma pratikte
+ * ULAŞILMIYOR. Yazılı duruyor ki sessiz kalmasın.
+ *
+ * SAF. `TAKVIM_SAAT_DILIMI` TR içindir; bu ABD içindir, ikisi AYRI.
+ *
+ * @param {string} tarih `YYYY-MM-DD`
+ * @returns {string} '-04:00' | '-05:00'
+ */
+export function abdOffset(tarih) {
+  if (typeof tarih !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(tarih)) return null;
+  const y = Number(tarih.slice(0, 4));
+  const m = Number(tarih.slice(5, 7));
+  const d = Number(tarih.slice(8, 10));
+  if (m > 3 && m < 11) return '-04:00';          // Nisan–Ekim: kesin yaz
+  if (m < 3 || m === 12) return '-05:00';        // Ocak, Şubat, Aralık: kesin kış
+  if (m === 3) {
+    const ilkPazar = 1 + ((7 - haftaninGunu(y, 3, 1)) % 7);
+    return d >= ilkPazar + 7 ? '-04:00' : '-05:00';   // İKİNCİ pazar
+  }
+  const ilkPazar = 1 + ((7 - haftaninGunu(y, 11, 1)) % 7);   // m === 11
+  return d < ilkPazar ? '-04:00' : '-05:00';
+}
+
+/**
+ * ABD Doğu yakası YEREL günü (`YYYY-MM-DD`) — `trTakvimGunu`nun ikizi.
+ *
+ * NEDEN GEREKLİ: ileriye dönük süzgeç "bugünden önce olanı göstermem"
+ * diyor ve "bugün" ABD takvimi için ABD günüdür. TR gününü kullanmak
+ * Türkiye akşamı ile ABD öğleden sonrası arasında bir GÜN kaydırır,
+ * yani o günün Fed açıklaması ekrandan sessizce düşerdi.
+ *
+ * Offset, UTC medeni gününden seçiliyor (tavuk-yumurta kırılıyor):
+ * yaz/kış sınırı gün içinde değil gün ölçeğinde kararlaştığı için bu
+ * seçim yalnız geçiş gününün ilk saatlerinde sapabilir — `abdOffset`in
+ * SINIR notuyla aynı, pratikte ulaşılmayan hâl.
+ *
+ * SAF: saati OKUMAZ, ms’yi ÇAĞIRANDAN alır.
+ */
+export function abdTakvimGunu(ms) {
+  if (!Number.isFinite(ms)) return null;
+  const utcGun = gunKaydirmali(ms, 0);
+  if (!utcGun) return null;
+  const off = abdOffset(utcGun);
+  if (!off) return null;
+  const saat = Number(off.slice(1, 3));          // 4 | 5
+  if (!Number.isFinite(saat)) return null;
+  return gunKaydirmali(ms, -saat * 3600 * 1000);
+}
+
+/**
+ * Fed takviminin saat alanını (`'2:00 p.m.'`) `HH:MM`e çevir.
+ *
+ * ÖLÇÜM 2026-11-25 (2618 olayın `time` histogramı): biçim TEK TİP —
+ * `H:MM a.m.` / `H:MM p.m.` ya da BOŞ DİZGE. En sık değerler '4:15 p.m.'
+ * (452), '2:00 p.m.' (282), '' (245), '4:30 p.m.' (224). Serbest metin,
+ * "(approximate)" eki, 24 saatlik biçim YOK.
+ *
+ * ÇÖZÜLEMEYEN SAAT `null` DÖNER — 00:00 DEĞİL. "Saati yok" ile "gece
+ * yarısı" aynı şey değil ve BOŞ SAAT NORMALDİR (resmî tatiller ve bazı
+ * Stat satırları saatsiz yayımlanıyor).
+ *
+ * SAF.
+ * @returns {string|null} `HH:MM`
+ */
+export function abdSaat(ham) {
+  if (typeof ham !== 'string') return null;
+  const m = ham.trim().match(/^(\d{1,2}):(\d{2})\s*([ap])\.?\s*m\.?$/i);
+  if (!m) return null;
+  const h12 = Number(m[1]);
+  const dk = Number(m[2]);
+  if (!Number.isInteger(h12) || h12 < 1 || h12 > 12) return null;
+  if (!Number.isInteger(dk) || dk > 59) return null;
+  const s = (h12 % 12) + (m[3].toLowerCase() === 'p' ? 12 : 0);
+  return `${ikiHane(s)}:${ikiHane(dk)}`;
 }
 
 /**
@@ -503,7 +680,10 @@ export async function sayfaCek(adres, sec = {}) {
         // Kimlik dizgesi SADE ve KİŞİSEL VERİ TAŞIMAZ (e-posta yok —
         // 9007fc3 commit'inin SEC kimliğinde kapattığı sızıntının
         // aynısı burada tekrarlanmasın).
-        'Accept': 'text/html,application/xhtml+xml',
+        // ABD takvimi JSON döndürüyor; `sec.kabul` verilmezse ESKİ
+        // davranış (HTML) AYNEN sürüyor — iki TR kaynağı etkilenmiyor.
+        'Accept': typeof sec.kabul === 'string' && sec.kabul
+          ? sec.kabul : 'text/html,application/xhtml+xml',
         'User-Agent': 'day-starter/1.0 (takvim-okuyucu)',
       },
     });
@@ -558,4 +738,116 @@ export async function temettuCek(sec = {}) {
   if (r.govde === null) return { maddeler: null, atlanan: null, tekrar: null, sayac };
   const a = ayristirTemettu(r.govde, azami, bugun);
   return { maddeler: a.maddeler, atlanan: a.atlanan, tekrar: a.tekrar, sayac };
+}
+
+/**
+ * FED TAKVİM JSON’unu AYRIŞTIR — SAF, ağa çıkmaz, saati okumaz.
+ *
+ * GÖVDE ŞEKLİ (ölçüm): `{"events":[{title, time, month:"YYYY-MM", days,
+ * type, description, location, live, link}]}`. Gövde UTF-8 BOM ile
+ * başlıyor — `JSON.parse` BOM’da patlar, bu yüzden kırpılıyor.
+ *
+ * VİRGÜLLÜ GÜN LİSTESİ: `days` tek bir gün değil, `"4,5,6"` gibi bir
+ * LİSTE olabiliyor (H.15 Kasım’da 19, Aralık’ta 22 gün). Her gün AYRI
+ * madde çıkıyor; tek madde basmak o ayın geri kalan tarihlerini
+ * sessizce yok ederdi.
+ *
+ * SAATSİZ OLAY ATLANMAZ: `an` null kalır, `atlanan` ARTMAZ. Resmî tatil
+ * ve bazı Stat satırları saatsiz yayımlanıyor (ölçüm: 245 boş `time`).
+ *
+ * İLERİ SÜZGEÇ: `ileriGun` verilirse ondan ÖNCEKİ tarihler listeden
+ * düşer ve bu bir ÖLÇÜMDÜR, arıza değil — `atlanan`a YAZILMAZ.
+ * `atlanan` yalnız BOZUK satırı sayar (ay biçimi tutmayan, başlıksız,
+ * geçerli günü olmayan).
+ *
+ * ÖLÇÜLMÜŞ: `atlanan` YÜKSEK ve bu NORMAL. 2026-11-25 gövdesinde 2618
+ * satırın 570’i `month: ""` ile geliyor; 569’unun hepsi
+ * `type: "events"`, biri `type` alanı olmayan tek satır. Ay yoksa
+ * tarih kurulamaz, yani bu satırlar TAKVİME KONULAMAZ. Üstelik 570’in
+ * 370’i, ayı OLAN bir satırın aynı başlık+gün kopyası — Fed kendi
+ * "events" kovasında aynı olayı tarihsiz ikinci kez listeliyor.
+ * Dolayısıyla 570 bir ARIZA İMİ DEĞİL; kaynağın biçimi. Yine de
+ * sayılıyor, çünkü "kaç satır okunamadı" sorusunun cevabı
+ * sessizce kaybolmasın.
+ *
+ * @param {string} metin     ham JSON gövdesi
+ * @param {number} azami     madde tavanı
+ * @param {string|null} ileriGun  `YYYY-MM-DD`; verilirse öncesi düşer
+ * @returns {{maddeler:object[], atlanan:number}}
+ */
+export function ayristirFedTakvim(metin, azami = VARSAYILAN_ABD, ileriGun = null) {
+  const sinir = Math.max(0, Math.min(AZAMI_ABD, Number(azami) || 0));
+  if (typeof metin !== 'string' || !metin || !sinir) return { maddeler: [], atlanan: 0 };
+  let kok = null;
+  try { kok = JSON.parse(metin.replace(/^\uFEFF/, '')); } catch { return { maddeler: [], atlanan: 0 }; }
+  const olaylar = kok && Array.isArray(kok.events) ? kok.events : null;
+  if (!olaylar) return { maddeler: [], atlanan: 0 };
+  const sinirGun = typeof ileriGun === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ileriGun)
+    ? ileriGun : null;
+
+  const toplanan = [];
+  let atlanan = 0;
+  for (const o of olaylar) {
+    const ay = o && typeof o.month === 'string' ? o.month.trim() : '';
+    if (!/^\d{4}-\d{2}$/.test(ay)) { atlanan++; continue; }
+    // Başlıklarda ÖLÇÜLEN kir: sonda ve ortada çift boşluk
+    // ('G.5 - Foreign Exchange Rates  ', 'Speech -  Governor ...').
+    const baslik = o && typeof o.title === 'string' ? o.title.replace(/\s+/g, ' ').trim() : '';
+    if (!baslik) { atlanan++; continue; }
+    const gunlerHam = o && (typeof o.days === 'string' || typeof o.days === 'number')
+      ? String(o.days) : '';
+    const gunler = gunlerHam.split(',').map((g) => g.trim())
+      .filter((g) => /^\d{1,2}$/.test(g) && Number(g) >= 1 && Number(g) <= 31);
+    if (!gunler.length) { atlanan++; continue; }
+    const turHam = o && typeof o.type === 'string' ? o.type.trim().toLowerCase() : '';
+    const tur = ABD_TUR_ESLEME[turHam] || 'diger';
+    const saatHam = o && typeof o.time === 'string' && o.time.trim() ? o.time.trim() : null;
+    const saat = saatHam ? abdSaat(saatHam) : null;
+    // Üçüncü taraf yayın ADRESİ uca GİTMİYOR, yalnız var/yok olgusu.
+    const canli = !!(o && typeof o.live === 'string' && o.live.trim());
+    for (const g of gunler) {
+      const tarih = `${ay}-${ikiHane(Number(g))}`;
+      if (sinirGun && tarih < sinirGun) continue;
+      toplanan.push({
+        date: tarih,
+        an: saat ? `${tarih}T${saat}:00${abdOffset(tarih)}` : null,
+        saatHam,
+        title: baslik,
+        tur,
+        canli,
+        kaynak: ABD_KAYNAK,
+      });
+    }
+  }
+  // Tarihe göre ARTAN; aynı gün içinde saati olanlar saate göre, saatsiz
+  // olanlar sona. Kaynak sırası GARANTİLİ DEĞİL, ekran sırası olmalı.
+  toplanan.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? -1 : 1;
+    const as = a.an || '~';
+    const bs = b.an || '~';
+    return as < bs ? -1 : as > bs ? 1 : 0;
+  });
+  return { maddeler: toplanan.slice(0, sinir), atlanan };
+}
+
+/**
+ * ABD olay takvimini çek + ayrıştır.
+ *
+ * SAYACA YENİ ALAN EKLEMEZ: `bosTakvimSayac()` altı anahtarıyla kalıyor
+ * (tests/uc-test.mjs ⑯i bunu KİLİTLİYOR). Üç kaynak AYNI sayaca yazıyor —
+ * "kaç istek, kaçı düştü" sorusu kaynak başına değil GÖVDE başına.
+ *
+ * @returns {Promise<{maddeler:(object[]|null), atlanan:(number|null), sayac:object}>}
+ *   `maddeler: null` = OKUNAMADI · `[]` = ÖLÇTÜM, OLAY YOK.
+ */
+export async function abdCek(sec = {}) {
+  const sayac = sec.sayac || bosTakvimSayac();
+  const azami = Number(sec.azami) || VARSAYILAN_ABD;
+  // `bugun` ÇAĞIRANDAN gelir (rota `abdTakvimGunu(Date.now())` veriyor);
+  // verilmezse süzgeç KAPALI kalır ve GEÇMİŞ olaylar da döner — uydurma yok.
+  const bugun = typeof sec.bugun === 'string' ? sec.bugun : null;
+  const r = await sayfaCek(FED_TAKVIM_URL, { sayac, kabul: 'application/json' });
+  if (r.govde === null) return { maddeler: null, atlanan: null, sayac };
+  const a = ayristirFedTakvim(r.govde, azami, bugun);
+  return { maddeler: a.maddeler, atlanan: a.atlanan, sayac };
 }

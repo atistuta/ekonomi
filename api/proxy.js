@@ -93,6 +93,16 @@ const IZINLI_KONAKLAR = new Set([
   // SEC EDGAR
   'www.sec.gov',
   'data.sec.gov',
+
+  // ABD OLAY TAKVİMİ — Fed’in kendi yayınladığı JSON
+  // (`api/_takvim.js` `FED_TAKVIM_URL`). BU SATIR GÜVEN ALANINI
+  // GENİŞLETİYOR, eklendi 2026-11-25. Gerekçe: BLS .ics 403,
+  // Census .ics gövdesi HTML (0 olay), Nasdaq ucu yalnız GEÇMİŞ,
+  // TradingEconomics misafir anahtarı 410 Gone — ölçüldü, ileriye
+  // dönük ABD takvimini ÜCRETSİZ ve BELGELİ veren tek kaynak bu.
+  // Taşıyıcının kendi listesi (`_takvim.js` `IZINLI_KONAK`) ile
+  // İKİSİNDE de yazılı olmak zorunda; `api/_ag.js` AÇILMADI.
+  'www.federalreserve.gov',
 ]);
 
 // Ek taşıyıcı tablosu — rota adı -> o rotanın modülünü yükleyen ok

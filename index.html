@@ -303,6 +303,27 @@
           <div id="dividendsUS" class="feed"></div>
         </div>
       </div>
+
+      <!--
+        ABD OLAY TAKVIMI - TEMETTUDEN AYRI BOLUM.
+        Niye ayri: bu sekmenin ust bolumu (#calendarDividends) kendi
+        tuzugune gore YALNIZ temettu gosteriyor. ABD olaylari oraya
+        karistirilmadi; kendi .cal-section bolumunu aldi.
+        Kaynak: Federal Reserve resmi takvimi + CME ZQ vadeli sozlesmesi.
+        BU BOLUM SKORA DOKUNMAZ.
+      -->
+      <div id="calendarABD" class="cal-section">
+        <h2 class="section-title">🇺🇸 ABD Olay Takvimi</h2>
+        <p class="hint">Kaynak: <b>Federal Reserve</b> resmi takvimi. Tarih tarih yaklaşan veri yayımları, konuşmalar ve FOMC toplantıları. Faiz beklentisi <b>CME ZQ</b> vadeli sözleşmesinin kendi fiyatından okunur — tahmin üretilmez. Bilgi amaçlıdır, yatırım tavsiyesi değildir.</p>
+        <div class="cal-block">
+          <h3>FOMC Faiz Beklentisi</h3>
+          <div id="abdFaiz" class="feed"></div>
+        </div>
+        <div class="cal-block">
+          <h3>Yaklaşan Olaylar</h3>
+          <div id="abdEvents" class="feed"></div>
+        </div>
+      </div>
     </section>
 
     <section id="tab-general" class="tab-content">

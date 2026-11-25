@@ -1,12 +1,21 @@
 // =====================================================================
-//  /api/takvim SARMALAYICISI — KAP duyuruları + BIST temettü takvimi
+//  /api/takvim SARMALAYICISI — KAP + BIST temettü + ABD olay takvimi
 //                                                     (FAZ 3 / native)
 // ---------------------------------------------------------------------
 //  NE: `api/_kesif.js` → `takvimHandler` (:1043) ucunun tek ölçülmüş
 //  istemci girişi: `fetchTakvim()` + cevabın TypeScript karşılığı.
-//  Taşıyıcı `api/_takvim.js`; iki kaynağı HTML'den ayrıştırıp ekrana
-//  hazır liste indiriyor (KAP → finans.mynet.com, temettü →
-//  temettuhisseleri.com).
+//  Taşıyıcı `api/_takvim.js`; ÜÇ kaynağı ayrıştırıp ekrana hazır liste
+//  indiriyor (KAP → finans.mynet.com HTML, temettü →
+//  temettuhisseleri.com HTML, ABD olay takvimi →
+//  www.federalreserve.gov `calendar.json`).
+//
+//  ÜÇÜNCÜ BACAK NEDEN EKLENDİ (2026-11-25): "ileriye dönük ABD olay
+//  takvimi" isteği. ARAŞTIRILDI ve ÖLÇÜLDÜ: BLS `.ics` 403, Census
+//  `.ics` gövdesi HTML (0 olay), Nasdaq ucu yalnız GEÇMİŞ,
+//  TradingEconomics misafir anahtarı 410 Gone — ileriye dönük ABD
+//  takvimini ÜCRETSİZ ve BELGELİ veren tek kaynak Fed'in kendi JSON'u.
+//  ETKİ ROZETİ (Investing.com'un üç boğa simgesi) HİÇBİR ücretsiz
+//  kaynakta YOK — bu yüzden BASILMIYOR, uydurulmuyor.
 //
 //  NEDEN BU UÇ NATIVE'DE EKSİKTİ (ÖLÇÜLDÜ 2026-10-29): uç ÜRETİMDE
 //  CANLIYDI ama `mobile/` içinde onu çağıran hiçbir şey yoktu
@@ -31,6 +40,9 @@
 //  GET /api/takvim?kapsam=temettu  → 200, 13 377 bayt
 //  GET /api/takvim?kapsam=kap      → 200,  9 718 bayt
 //  GET /api/takvim?kapsam=hepsi    → 200, 22 918 bayt
+//  (ABD bacagı bu üç ölçümden SONRA eklendi — `kapsam=abd` üretim
+//   baytı HENÜZ ÖLÇÜLMEDİ, buraya sayı yazılmıyor. Kaynak gövdesi
+//   ölçüldü: `calendar.json` 200, 550 608 bayt, 2618 olay, UTF-8 BOM.)
 //  Üst alanlar (gövdeden okundu, varsayılmadı):
 //    kapsam · kap? · kapAdet? · temettu? · temettuAdet? ·
 //    temettuAtlanan? · temettuTekrar? · sayac · tam · ms · uyari
@@ -79,8 +91,12 @@ import {
  * (`api/_takvim.js` `KAPSAMLAR`). SESSİZ GENİŞLEME YOK: listede
  * olmayan bir değer uçta 400 `bad_kapsam` demek, o yüzden burada da
  * ağa çıkmadan kesiliyor.
+ *
+ * DÖRT değer (`'abd'` eklendi 2026-11-25). Ucun kendi kilidi
+ * `tests/uc-test.mjs` ⑦a: `KAPSAMLAR.join(',') === 'hepsi,kap,temettu,abd'`
+ * — bu dizi o sırayla BİREBİR aynı kalmalı.
  */
-export const TAKVIM_KAPSAMLAR = ['hepsi', 'kap', 'temettu'] as const;
+export const TAKVIM_KAPSAMLAR = ['hepsi', 'kap', 'temettu', 'abd'] as const;
 export type TakvimKapsam = (typeof TAKVIM_KAPSAMLAR)[number];
 
 /** Ucun varsayılan kapsamı (`api/_takvim.js` `VARSAYILAN_KAPSAM`). */
@@ -107,6 +123,24 @@ export const TAKVIM_AZAMI_TEMETTU = 400;
  * temettu tuzagi — `TakvimResponse.temettuGelecekAdet` notu).
  */
 export const TAKVIM_VARSAYILAN_TEMETTU = 120;
+
+/**
+ * ABD olay tavanı — ÖLÇÜLDÜ: `api/_takvim.js` `AZAMI_ABD = 200`.
+ * Aşımı uç 400 `bad_limit` ile reddediyor (sessiz kırpma YOK).
+ */
+export const TAKVIM_AZAMI_ABD = 200;
+
+/**
+ * Ucun ABD için İLAN ETTİĞİ varsayılan adet (`VARSAYILAN_ABD = 60`).
+ *
+ * ÖLÇÜLMÜŞ TUZAK — TAVAN GERÇEKTEN DOLUYOR: kaynak 2618 olay
+ * taşıyor; ileri süzgeçsiz çağrı TAM 200 madde döndü (= tavan).
+ * Uç kendi `bugun`ünü her zaman gönderdiği için üretimde ileriye
+ * dönük 80 madde kaldı (47 satır, `atlanan 570`) — yani varsayılan 60
+ * ile liste KıRPILABİLİR. Ekran tavana değdiğini görebilsin diye bu
+ * sayı burada yazılı; istemci sayı UYDURMUYOR.
+ */
+export const TAKVIM_VARSAYILAN_ABD = 60;
 
 /**
  * Tek KAP duyurusu. Alan kümesi ucun ilan ettiği küme
@@ -175,6 +209,150 @@ export type TakvimTemettuMadde = {
 };
 
 /**
+ * Tek ABD olayı. Alan kümesi ucun ilan ettiği küme
+ * (`api/_takvim.js` `ABD_MADDE_ALANLARI`) — FAZLA alan türetilmedi.
+ *
+ * İKİ SAAT ALANI AYRI ŞEY: `an` makine zamanı (ISO + açık dilim),
+ * `saatHam` kaynağın kendi yazdığı metin. Biri biçimlemeye, öteki
+ * "kaynak ne yazmış" göstermeye yarar; tek alana indirmek ölçülen
+ * veriyi kaybetmek olurdu.
+ */
+export type TakvimAbdMadde = {
+  /** ABD takvim günü, ISO: "2026-12-09" (ölçüldü). */
+  date: string;
+  /**
+   * ISO + AÇIK dilim: "2026-12-09T14:00:00-05:00" (ölçüldü).
+   *
+   * `null` OLABİLİR ve ÖLÇÜLDÜ: ileriye dönük 80 maddenin 4'ü
+   * SAATSİZ geldi. `null` → "günü var, saati yok"; uç bunları gün
+   * içinde EN SONA sıralıyor. Saat uydurmak yasak.
+   *
+   * YAZ SAATİ TUZAĞI: dilim eki sabit DEĞİL — ölçüldü, Aralık
+   * "-05:00", Temmuz "-04:00". `an`ı kendi dilimine çevirmek
+   * `lib/format.ts`in işi; burada ham hâliyle duruyor.
+   */
+  an: string | null;
+  /**
+   * Kaynağın kendi yazdığı saat: "2:00 p.m." (ölçüldü).
+   * Çözülemeyen/boş hâllerde `null`.
+   */
+  saatHam: string | null;
+  title: string;
+  /**
+   * MAKİNE KODU — Türkçesi `lib/sozluk.ts` `ABD_TAKVIM_TUR_SOZLUK`te
+   * (TÜRKÇE TEK YERDE). Ucun `ABD_TUR_ESLEME` kümesi dokuz kod
+   * üretiyor; TANIMADIĞI tür `'diger'` oluyor ve SATIR ATıLMIYOR.
+   *
+   * Ölçüldü (ileriye dönük dağılım): veri 74 · fomc 3 · diger 2 · bej 1.
+   */
+  tur: string;
+  /**
+   * Canlı yayın var mı.
+   *
+   * ADRES TAŞIMIYOR — bilinçli: kaynak üçüncü taraf yayın
+   * adresleri yazıyor, uç bunları GÖVDEYE KOYMUYOR. Ölçüldü ve
+   * `tests/uc-test.mjs` ⑦l'de kilitlendi:
+   * `JSON.stringify(maddeler).includes('http') === false`.
+   */
+  canli: boolean;
+  /** Ölçüldü: daima "Federal Reserve" (`ABD_KAYNAK`). */
+  kaynak: string;
+};
+
+/**
+ * FOMC FAİZ BEKLENTİSİ — `api/_faiz.js` gövdesinin BİREBİR aynası.
+ *
+ * NE: 30 günlük Fed Funds vadeli sözleşmesinin (ZQ) KENDİ fiyatından
+ * okunan, karar sonrası politika faizi. TAHMİN ÜRETİLMİYOR; piyasanın
+ * o an ödediği fiyat çevriliyor. Dolayısıyla bu bir ÖLÇÜM, görüş değil.
+ *
+ * NASIL: karar ayından ÖNCEKİ ayın sözleşmesi karar öncesi oranı verir
+ * (o ayda toplantı yoksa oran ay boyunca sabittir). Karar AYININ
+ * sözleşmesi ise ayın ORTALAMA oranını verir — eski ve yeni oranın gün
+ * ağırlıklı karışımı. Eski ayak bilindiğine göre YENİ oran çözülür.
+ *
+ * `null` = ÖLÇÜLEMEDİ, asla "0" ya da "değişim yok" demek değil.
+ * Nedeni `kod` alanında yazılı.
+ */
+export type TakvimFaiz = {
+  /** FOMC karar günü (ISO) — takvimin kendi içinden geldi. `null` → yok. */
+  toplanti: string | null;
+  /** Karar ayından önceki ayın ZQ sözleşmesi, örn. "ZQX26.CBT". */
+  oncekiSembol: string | null;
+  /** Karar ayının ZQ sözleşmesi, örn. "ZQZ26.CBT". */
+  toplantiSembol: string | null;
+  /** Sözleşme fiyatı (100 − yıllık oran) — HAM, yuvarlanmadı. */
+  oncekiFiyat: number | null;
+  toplantiFiyat: number | null;
+  /** Karar ÖNCESİ ima edilen politika faizi (%). */
+  oncesiOran: number | null;
+  /** Karar AYININ ortalama ima edilen oranı (%) — karışım. */
+  ayOrtalamaOran: number | null;
+  /** Karar SONRASI çözülen oran (%). */
+  sonrasiOran: number | null;
+  /**
+   * Beklenen değişim, BAZ PUAN. Pozitif = artış beklentisi.
+   * `null` → ölçülemedi (fiyat yok ya da toplantı yok).
+   */
+  degisimBp: number | null;
+  /**
+   * FOMC'nin KENDİ adım boyu (25 bp) — EŞİK DEĞİL, ölçek birimi.
+   * Ekran "kaç adım" diye okumak isterse bölen bu.
+   */
+  basamakBp: number;
+  /**
+   * `degisimBp / basamakBp` — KIRPILMAMIŞ ham oran. 1 civarı = tam bir
+   * adım, 0.5 = yarım adım fiyatlanıyor. Yuvarlanmadı.
+   */
+  basamakOrani: number | null;
+  /** +1 artış · −1 indirim · 0 değişim yok. `null` → ölçülemedi. */
+  yon: number | null;
+  /** Karar ayının gün sayısı ve ayın kaçıncı günü karar olduğu. */
+  gunSayisi: number | null;
+  toplantiGunu: number | null;
+  /** Gün ağırlıkları — eski ve yeni oranın ay içindeki payı. */
+  agirlikEski: number | null;
+  agirlikYeni: number | null;
+  /**
+   * Kullanılan ağırlık SÖZLEŞMESİ (makine kodu):
+   * `'ertesi-gun'` → yeni oran kararın ERTESİ İŞ GÜNÜ yürürlükte
+   * (Fed'in kendi uygulama notu ve CME FedWatch bu bölmeyi kullanıyor;
+   * ölçüldü: tam 25 bp'lik temiz bir adıma oturuyor).
+   */
+  agirlikYontemi: string | null;
+  /**
+   * ÖTEKİ sözleşmeye göre aynı ölçüm (`'toplanti-gunu'`), yan yana
+   * basılabilsin diye. Ölçülen duyarlılık ~1 bp — yani seçim sonucu
+   * kökünden değiştirmiyor, ama sayı saklanmıyor.
+   */
+  degisimBpAlternatif: number | null;
+  agirlikYontemiAlternatif: string;
+  /**
+   * ÜÇ DEĞERLİ: `true` → önceki ayda DA toplantı var (o ayın
+   * sözleşmesi sabit oran taşımaz, ölçüm geçersiz) · `false` → yok
+   * (ölçüm geçerli) · `null` → BİLİNMİYOR (takvim listesi
+   * gelmedi). `null` ölçümü ENGELLEMEZ; yalnız kesinliği azaltır.
+   */
+  oncekiAydaToplanti: boolean | null;
+  /** Ölçüldü: daima "CME ZQ (Yahoo Finance)". */
+  kaynak: string;
+  /**
+   * MAKİNE KODU — Türkçesi `lib/sozluk.ts` `FAIZ_KOD_SOZLUK`te
+   * (TÜRKÇE TEK YERDE). `null` = ÖLÇÜLDÜ, sorun yok.
+   * Kodlar: `toplanti_yok` · `onceki_ay_toplantili` · `fiyat_okunamadi`.
+   */
+  kod: string | null;
+  /**
+   * FAİZ BACAĞININ KENDİ SAYACI — gövdenin `sayac`ından AYRI.
+   * Sebebi: ZQ isteği düşse KAP+temettü gövdesi "eksik"
+   * damgalanmasın. Şekli yine aynı altı alan.
+   */
+  sayac: HaberSayac;
+  /** `false` → faiz bacağında kesinti oldu. Gövdenin `tam`ı etkilenmez. */
+  tam: boolean;
+};
+
+/**
  * `/api/takvim` cevabı.
  *
  * NEDEN HEM `?` HEM `| null`: ikisi AYRI anlam taşıyor ve uç bunu
@@ -214,6 +392,35 @@ export type TakvimResponse = {
   /** Ucun `paid` kiyasinda kullandigi gun (ISO) — `null` → yoktu. */
   temettuBugun?: string | null;
   /**
+   * İLERİYE DÖNÜK ABD olayları, güne ve saate göre SIRALI (sıralama
+   * uçta; istemci yeniden sıralamaz). Saatsiz maddeler günün SONUNDA.
+   */
+  abd?: TakvimAbdMadde[] | null;
+  abdAdet?: number | null;
+  /** Ucun kendi hesapladiğı ABD takvim günü (ISO) — sınır günü. */
+  abdBugun?: string | null;
+  /**
+   * Ayrıştırıcının ATLADIĞI satır sayısı.
+   *
+   * ÖLÇÜLDÜ ve BÜYÜK: 2618 olayın 570'inde `month` alanı boş (569
+   * `""`, 1 `"YOK"`), bu yüzden `atlanan` ÜRETİMDE 570 ölçüldü. Bu
+   * ARIZA DEĞİL, kaynağın kendi şekli; 570'in 370'i tarihli bir
+   * satırla aynı `title|days` çiftini paylaşıyor (yani çoğu KOPYA).
+   * Ekran bu sayıyı "hata" diye BASMAZ.
+   *
+   * İLERİ SÜZGEÇ BU SAYIYA GİRMEZ: geçmişte kalan günler
+   * `atlanan`ı ARTIRMIYOR (uç ayrı dal kullanıyor).
+   */
+  abdAtlanan?: number | null;
+  /**
+   * FOMC faiz beklentisi — YALNIZ ABD bacağı istendiğinde var.
+   *
+   * ÜÇ HÂL AYRI: anahtar YOKSA istenmedi · `null` ise bacak komple
+   * düştü · nesne VAR ama `kod` dolu ise ÖLÇÜLEMEDİ ve nedeni
+   * `kod`da. `kod: null` = ölçüldü.
+   */
+  faiz?: TakvimFaiz | null;
+  /**
    * Şekli `HaberSayac` ile BİREBİR aynı (ölçüldü: aynı altı alan).
    * Bu yüzden `haberOlcumEksik()` bu gövdede kullanılabiliyor ve
    * ekranda ikinci bir "eksik mi" eşiği yazılmıyor.
@@ -234,8 +441,13 @@ export type TakvimErrorCode =
 
 /**
  * Ucun bütçesi. ÖLÇÜLDÜ: `api/proxy.js` `maxDuration: 30` ve
- * `api/_takvim.js` `TAKVIM_ISTEK_MS = 10000` (iki kaynak PARALEL).
- * Gerekçe `fetchTakvim` başlığında.
+ * `api/_takvim.js` `TAKVIM_ISTEK_MS = 10000`.
+ *
+ * ÜÇ KAYNAK PARALEL (2026-11-25'ten beri; önce ikiydi). Paralel
+ * oldukları için en kötü hâl üç × 10 sn DEĞİL ~10 sn + ayrıştırma;
+ * ama bu sayı ARTIK SEÇİM DEĞİL, ZORUNLU: 28 sn, proxy'nin 30 sn'lik
+ * tavanının hemen altında kalan en büyük değer. Gerekçesi
+ * `fetchTakvim` başlığında.
  */
 export const TAKVIM_TIMEOUT_MS = 28_000;
 
@@ -246,6 +458,8 @@ export type TakvimOptions = Omit<RequestOptions, 'query'> & {
   kapAdet?: number;
   /** 1..400. Verilmezse ucun varsayılanı (120). */
   temettuAdet?: number;
+  /** 1..200. Verilmezse ucun varsayılanı (60). */
+  abdAdet?: number;
 };
 
 /** Yerel kapı — ucun KENDİ kodunu taşıyan `ApiResult` hatası. */
@@ -259,13 +473,14 @@ function takvimKapi<T>(code: TakvimErrorCode, message: string): ApiResult<T> {
 /**
  * Takvim çağrısı: GET /api/takvim?kapsam=hepsi&kapAdet=30&temettuAdet=120
  *
- * NEDEN `DEFAULT_TIMEOUT_MS` (12 sn) DEĞİL, 28 sn: uç iki HTML sayfasını
- * PARALEL çekiyor ama kendi istek tavanı 10 sn (`TAKVIM_ISTEK_MS`) ve
- * üstüne ayrıştırma var; `api/proxy.js` bütçesi 30 sn. 12 sn'lik ortak
- * varsayılan, uç hâlâ çalışırken bağlantıyı keser ve çalışan bir ölçümü
- * "zaman aşımı" diye gösterirdi — ucun DÜRÜST sayacını göremezdik.
- * Tavan 28 sn: proxy'nin 30 sn'sinin altında kalıyor ki cevabı ucun
- * kendisi yazsın.
+ * NEDEN `DEFAULT_TIMEOUT_MS` (12 sn) DEĞİL, 28 sn: uç ÜÇ kaynağı
+ * PARALEL çekiyor (iki HTML sayfası + Fed'in 550 KB'lık `calendar.json`'u)
+ * ama kendi istek tavanı 10 sn (`TAKVIM_ISTEK_MS`) ve üstüne ayrıştırma
+ * var; `api/proxy.js` bütçesi 30 sn. 12 sn'lik ortak varsayılan, uç hâlâ
+ * çalışırken bağlantıyı keser ve çalışan bir ölçümü "zaman aşımı" diye
+ * gösterirdi — ucun DÜRÜST sayacını göremezdik. Tavan 28 sn: üçüncü
+ * bacakla birlikte artık SEÇİM değil, proxy'nin 30 sn'sinin altında
+ * kalan en büyük değer — cevabı ucun kendisi yazsın.
  *
  * NEDEN YEREL KAPILAR: uç aşımı SESSİZCE KIRPMIYOR, 400 ile reddediyor
  * (`adetOku`, `bad_limit`). Ağa çıkıp 400 yemek yerine aynı kodu burada
@@ -283,6 +498,7 @@ export async function fetchTakvim(
     kapsam,
     kapAdet,
     temettuAdet,
+    abdAdet,
     timeoutMs = TAKVIM_TIMEOUT_MS,
     signal,
   } = options;
@@ -311,13 +527,22 @@ export async function fetchTakvim(
       'Temettü satırı adedi 1 ile ' + TAKVIM_AZAMI_TEMETTU + ' arasında olmalı.',
     );
   }
+  if (
+    abdAdet !== undefined &&
+    (!Number.isInteger(abdAdet) || abdAdet < 1 || abdAdet > TAKVIM_AZAMI_ABD)
+  ) {
+    return takvimKapi<TakvimResponse>(
+      'bad_limit',
+      'ABD olay adedi 1 ile ' + TAKVIM_AZAMI_ABD + ' arasında olmalı.',
+    );
+  }
 
   return apiGet<TakvimResponse>(ENDPOINTS.takvim, {
     // `buildUrl` `undefined`/`null` anahtarları ATLIYOR: verilmeyen
     // parametre sorguya hiç basılmıyor ve ucun kendi varsayılanı
     // geçerli oluyor. Burada bir varsayılan yazmak, ucun sayısını
     // istemcide İKİNCİ kez tanımlamak olurdu.
-    query: { kapsam, kapAdet, temettuAdet },
+    query: { kapsam, kapAdet, temettuAdet, abdAdet },
     timeoutMs,
     signal,
   });

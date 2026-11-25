@@ -357,6 +357,79 @@ export const GUNDEM_EVREN_SOZLUK: Record<string, string> = {
 };
 
 /**
+ * ABD olay takviminin `tur` kodu → Türkçe etiket.    (B1, 2026-11-25)
+ *
+ * NİYE VAR: `/api/takvim?kapsam=abd` maddeleri MAKİNE KODU taşıyor
+ * (`api/_takvim.js` `ABD_TUR_ESLEME`). Ucun kendi başlığı "bu dosya
+ * skora dokunmaz" ve uçta Türkçe yazılmıyor; cümle TEK YERDE, burada.
+ *
+ * DOKUZ KOD, EKSİKSİZ: `ABD_TUR_ESLEME` on kaynak türü dokuz koda
+ * eşliyor (`other` ve `none` İKİSİ DE `'diger'`). Kaynak tanımadığı
+ * bir tür yazarsa uç onu da `'diger'` yapıyor ve SATIRI ATMIYOR — bu
+ * yüzden `'diger'` gerçekten kullanılan bir kod, artık değil.
+ *
+ * ETKİ DERECESİ YOK: Investing.com'un "üç boğa" rozetini veren
+ * ücretsiz ve belgeli bir kaynak ÖLÇÜLEMEDİ, o yüzden bu sözlükte
+ * "yüksek etki" gibi bir derece YAZILI DEĞİL — ölçülmeyen şeyi
+ * etiketlemek veri uydurmak olurdu.
+ *
+ * KOD SÖZLÜKTE YOKSA ETİKET DE YOK (`sozluktenSec` → `null`).
+ */
+export const ABD_TAKVIM_TUR_SOZLUK: Record<string, string> = {
+  fomc: 'FOMC toplantısı',
+  veri: 'Veri yayımı',
+  bej: 'Bej Kitap',
+  konusma: 'Konuşma',
+  ifade: 'Kongre ifadesi',
+  kurul: 'Kurul toplantısı',
+  konferans: 'Konferans',
+  etkinlik: 'Etkinlik',
+  diger: 'Diğer',
+};
+
+/**
+ * FOMC faiz beklentisi `kod`u → Türkçe cümle.
+ *
+ * `kod: null` = ÖLÇÜLDÜ; o hâlde bu sözlüğe HİÇ BAŞVURULMAZ, ekran
+ * sayıyı basar. Sözlük yalnız ÖLÇÜLEMEDİ dallarının NEDENİNİ söylüyor.
+ *
+ * BU SÖZLÜKTE SAYI YOK: baz puan, eşik, ağırlık yazılmadı. Beklenen
+ * değişimin kendisi `faiz.degisimBp`te HAM hâliyle duruyor ve
+ * biçimlemesi `lib/format.ts`in işi.
+ *
+ * `onceki_ay_toplantili` NİYE ÖLÇÜM DEĞİL: ölçüm, karar ayından önceki
+ * ayın sözleşmesinin SABİT bir oran taşımasına dayanıyor. O ayda da
+ * toplantı varsa o fiyat iki oranın karışımı olur ve çıkarım geçersiz
+ * olur — bu yüzden uç sayı basmıyor, sessizce yanlış sayı basmak yerine
+ * ölçemediğini söylüyor.
+ */
+export const FAIZ_KOD_SOZLUK: Record<string, string> = {
+  toplanti_yok: 'Takvimde yaklaşan faiz kararı yok',
+  onceki_ay_toplantili: 'Önceki ayda da karar var — vadeli fiyat ayrıştırılamıyor',
+  fiyat_okunamadi: 'Vadeli sözleşme fiyatı okunamadı',
+};
+
+/**
+ * Faiz beklentisinin YÖNÜ → Türkçe. Yön `faiz.yon` alanından geliyor
+ * (+1 · 0 · −1); sayıyı ekranda yeniden yorumlamak yerine uçtan gelen
+ * işaret okunuyor. `null` → cümle yok.
+ */
+export const FAIZ_YON_SOZLUK: Record<string, string> = {
+  '1': 'Faiz artışı fiyatlanıyor',
+  '0': 'Faizde değişim fiyatlanmıyor',
+  '-1': 'Faiz indirimi fiyatlanıyor',
+};
+
+/**
+ * Ağırlık sözleşmesi → Türkçe. Hangi günden itibaren yeni oranın
+ * geçerli sayıldığını söylüyor; EŞİK DEĞİL, sayma kuralı.
+ */
+export const FAIZ_AGIRLIK_SOZLUK: Record<string, string> = {
+  'ertesi-gun': 'Yeni oran kararın ertesi gününden sayıldı',
+  'toplanti-gunu': 'Yeni oran karar gününden sayıldı',
+};
+
+/**
  * Kod → cümle. Kod `null`/`undefined`/sözlükte yok ise `null` döner:
  * çağıran "ölçülemedi" dalını çizer, cümle UYDURMAZ.
  */

@@ -7599,6 +7599,261 @@
     return out;
   }
 
+  // ===== 🇺🇸 ABD Olay Takvimi + FOMC Faiz Beklentisi =====
+  //
+  // KAYNAK: `/api/takvim?kapsam=abd` → Federal Reserve resmi takvimi
+  // (olaylar) + CME ZQ vadeli sözleşmesi (faiz beklentisi). Uç tarafta
+  // `api/_takvim.js` ve `api/_faiz.js`.
+  //
+  // NE YAPMAZ: BU BÖLÜM SKORA DOKUNMAZ. Burada eşik, ağırlık, formül yok;
+  // uçtan gelen HAM sayılar biçimleniyor, o kadar. Faizin skora katkısı
+  // ayrı bir iş (konjonktür alt-bacağı) ve BURADA DEĞİL.
+  //
+  // ÖLÇÜLMEYEN SAYI BASILMAZ: uç `null` döndüyse ekran SAYI UYDURMAZ,
+  // ölçemediğini SÖYLER. Nedeni uçtan gelen `kod` alanında yazılı.
+  // Üç hâl AYRI tutuluyor: alan YOK → istenmedi · `null` → bacak düştü ·
+  // `[]` → ÖLÇÜLDÜ, kayıt yok.
+  const TAKVIM_BASE = (window.MY_PROXY || '').replace(/\/api\/proxy.*$/, '') + '/api/takvim' || '/api/takvim';
+
+  // Kaç olay istenecek. Uçtaki azami 200; 40 bir ekran dolusu yaklaşan
+  // olaya yetiyor ve gövdeyi küçük tutuyor. EŞİK DEĞİL, sayfa boyu.
+  const ABD_TAKVIM_ADET = 40;
+
+  // Oturum boyu tek çağrı. Uç ayrıca 5 dk önbellekli, yani faiz bloğu
+  // beş dakikaya kadar eski olabilir — bilerek: ZQ fiyatı o ölçekte
+  // anlamlı oynamıyor, üçüncü tarafa tekrar fırtınası ise yasak.
+  let abdTakvimCache = null;
+
+  // Makine kodu → Türkçe. Native taraftaki `mobile/src/lib/sozluk.ts`
+  // sözlüklerinin BİREBİR aynası; iki uçta aynı cümle görünsün diye.
+  // BU SÖZLÜKLERDE SAYI YOK.
+  const ABD_TUR_TR = {
+    fomc: 'FOMC toplantısı', veri: 'Veri yayımı', bej: 'Bej Kitap',
+    konusma: 'Konuşma', ifade: 'Kongre ifadesi', kurul: 'Kurul toplantısı',
+    konferans: 'Konferans', etkinlik: 'Etkinlik', diger: 'Diğer',
+  };
+  const FAIZ_KOD_TR = {
+    toplanti_yok: 'Takvimde yaklaşan faiz kararı yok',
+    onceki_ay_toplantili: 'Önceki ayda da karar var — vadeli fiyat ayrıştırılamıyor',
+    fiyat_okunamadi: 'Vadeli sözleşme fiyatı okunamadı',
+  };
+  const FAIZ_YON_TR = {
+    '1': 'Faiz artışı fiyatlanıyor',
+    '0': 'Faizde değişim fiyatlanmıyor',
+    '-1': 'Faiz indirimi fiyatlanıyor',
+  };
+  const FAIZ_AGIRLIK_TR = {
+    'ertesi-gun': 'Yeni oran kararın ertesi gününden sayıldı',
+    'toplanti-gunu': 'Yeni oran karar gününden sayıldı',
+  };
+  // Kod sözlükte yoksa CÜMLE DE YOK → `null`. Uydurma karşılık üretilmez.
+  const trSec = (sozluk, kod) => (
+    typeof kod === 'string' && kod && Object.prototype.hasOwnProperty.call(sozluk, kod)
+      ? sozluk[kod] : null
+  );
+
+  async function abdTakvimOnce() {
+    if (abdTakvimCache) return abdTakvimCache;
+    const u = `${TAKVIM_BASE}?kapsam=abd&abdAdet=${ABD_TAKVIM_ADET}`;
+    const r = await fetch(u);
+    const d = await r.json();
+    if (!r.ok || !d || d.error) throw new Error((d && d.error) || ('HTTP ' + r.status));
+    abdTakvimCache = d; // YALNIZ başarıda saklanır → ↻ gerçekten yeniden dener.
+    return d;
+  }
+
+  // Faiz bloğu. `f` üç hâlden birinde: yok/`null` · `kod` dolu · ölçülmüş.
+  function abdFaizHTML(f) {
+    if (!f) {
+      return '<p class="fa-desc">Faiz beklentisi bu çağrıda ölçülemedi (vadeli fiyat bacağı düştü). ↻ ile tekrar deneyebilirsin.</p>';
+    }
+    const gun = f.toplanti ? fmtDate(f.toplanti) : null;
+    const bas = '<div class="div-card-head"><span class="tag">FOMC</span>'
+      + (gun ? `<span class="div-count">${escapeHtml(gun)}</span>` : '')
+      + '</div>';
+    if (f.kod) {
+      // ÖLÇÜLEMEDİ dalı: sayı basılmaz, NEDEN basılır.
+      const neden = trSec(FAIZ_KOD_TR, f.kod) || 'Ölçülemedi';
+      return `<div class="div-card">${bas}<p class="fa-desc">${escapeHtml(neden)}.</p></div>`;
+    }
+    const bp = Number(f.degisimBp);
+    if (!Number.isFinite(bp)) {
+      return `<div class="div-card">${bas}<p class="fa-desc">Beklenen değişim ölçülemedi.</p></div>`;
+    }
+    const yon = trSec(FAIZ_YON_TR, String(f.yon)) || '';
+    const isaret = bp > 0 ? '+' : '';
+    const sat = [];
+    sat.push(`
+      <div class="div-row">
+        <span class="div-amt">${isaret}${bp.toFixed(1)} bp</span>
+        <span class="div-date">${escapeHtml(yon)}</span>
+        <span class="div-src">beklenen değişim</span>
+      </div>
+    `);
+    if (Number.isFinite(f.oncesiOran) && Number.isFinite(f.sonrasiOran)) {
+      sat.push(`
+        <div class="div-row">
+          <span class="div-amt">%${f.oncesiOran.toFixed(2)} → %${f.sonrasiOran.toFixed(2)}</span>
+          <span class="div-date">karar öncesi → sonrası</span>
+          <span class="div-src">ima edilen oran</span>
+        </div>
+      `);
+    }
+    if (Number.isFinite(f.basamakOrani)) {
+      // `basamakBp` FOMC'nin kendi adım boyu (25 bp) — eşik değil, ölçek birimi.
+      sat.push(`
+        <div class="div-row">
+          <span class="div-amt">${f.basamakOrani.toFixed(2)} adım</span>
+          <span class="div-date">1 adım = ${f.basamakBp} bp</span>
+          <span class="div-src">kırpılmamış</span>
+        </div>
+      `);
+    }
+    if (f.oncekiSembol && f.toplantiSembol) {
+      sat.push(`
+        <div class="div-row">
+          <span class="div-amt">${escapeHtml(f.oncekiSembol)} · ${escapeHtml(f.toplantiSembol)}</span>
+          <span class="div-date">${Number.isFinite(f.oncekiFiyat) && Number.isFinite(f.toplantiFiyat) ? f.oncekiFiyat + ' · ' + f.toplantiFiyat : 'fiyat yok'}</span>
+          <span class="div-src">sözleşme</span>
+        </div>
+      `);
+    }
+    // İKİ SAYMA KURALI YAN YANA: hangisinin seçildiği ve ötekinin ne
+    // verdiği saklanmıyor. Ölçülen duyarlılık ~1 bp.
+    const yontem = trSec(FAIZ_AGIRLIK_TR, f.agirlikYontemi);
+    if (yontem) {
+      const alt = trSec(FAIZ_AGIRLIK_TR, f.agirlikYontemiAlternatif);
+      const altBp = Number(f.degisimBpAlternatif);
+      sat.push(`
+        <div class="div-row upcoming">
+          <span class="div-amt">${Number.isFinite(altBp) ? (altBp > 0 ? '+' : '') + altBp.toFixed(1) + ' bp' : '—'}</span>
+          <span class="div-date">${escapeHtml(alt || 'öteki sayma kuralı')}</span>
+          <span class="div-src">alternatif</span>
+        </div>
+      `);
+    }
+    const dip = [];
+    if (yontem) dip.push(escapeHtml(yontem) + '.');
+    if (f.oncekiAydaToplanti === null) dip.push('Önceki ayda toplantı olup olmadığı bilinmiyor — kesinlik düşük.');
+    dip.push('Piyasanın o an ödediği fiyat çevrildi; tahmin üretilmedi.');
+    if (f.kaynak) dip.push('Kaynak: ' + escapeHtml(f.kaynak) + '.');
+    if (f.tam === false) dip.push('Faiz bacağında kesinti oldu.');
+    return `<div class="div-card">${bas}${sat.join('')}</div>`
+      + `<p class="fa-desc">${dip.join(' ')}</p>`;
+  }
+
+  // Olay listesi. Günlere bölünür; her gün bir kart.
+  // ABD olayinin ANI (`an`) KAYNAGIN KENDI saat diliminde, ofsetli ISO
+  // olarak geliyor (olculdu: "2026-11-25T16:15:00-05:00"). Ekranda bu HAM
+  // DIZGE BASILMAZ; Turkiye saatine cevrilir: epoch'a cevir, +03:00 ekle,
+  // UTC parcalarini oku.
+  //
+  // NIYE Intl/cihaz saat dilimi KULLANILMIYOR: gosterilen saat kullanicinin
+  // cihaz ayarina gore DEGISMEMELI; sunucudaki `TAKVIM_SAAT_DILIMI` ('+03:00')
+  // ile BIREBIR ayni olmali. Turkiye 2016'dan beri sabit +03:00 -- yaz saati
+  // uygulamasi yok, dolayisiyla sabit ofset DOGRU ve tam.
+  //
+  // `null` dondugu hal: `an` yok (Fed saati aciklamamis) ya da cozulemedi.
+  // O zaman saat UYDURULMAZ.
+  const TR_OFSET_MS = 3 * 60 * 60 * 1000;
+  function trAn(an) {
+    if (typeof an !== 'string' || !an) return null;
+    const t = Date.parse(an);
+    if (!Number.isFinite(t)) return null;
+    const d = new Date(t + TR_OFSET_MS);
+    const ik = (n) => String(n).padStart(2, '0');
+    return {
+      gun: `${d.getUTCFullYear()}-${ik(d.getUTCMonth() + 1)}-${ik(d.getUTCDate())}`,
+      saat: `${ik(d.getUTCHours())}:${ik(d.getUTCMinutes())}`,
+    };
+  }
+
+  function abdOlaylarHTML(maddeler, atlanan) {
+    if (maddeler === null || maddeler === undefined) {
+      return '<p class="fa-desc">ABD olay takvimi ölçülemedi (kaynak geçici sorunu). ↻ ile tekrar deneyebilirsin.</p>';
+    }
+    if (!Array.isArray(maddeler) || maddeler.length === 0) {
+      return '<div class="empty">Takvimde yaklaşan ABD olayı yok.</div>';
+    }
+    // ONCE Turkiye karsiliklari hesaplaniyor, SONRA siralanip gruplaniyor:
+    // gruplama anahtari KAYNAGIN gunu DEGIL, TURKIYE gunu. Sebebi olculdu --
+    // ABD'de 16:15'te cikan bir veri Turkiye'de ERTESI GUN 00:15 oluyor;
+    // kaynagin gunune gore gruplanirsa tarih ile saat celisir.
+    //
+    // Saati aciklanmayan madde (olculdu: 80 maddenin 4'u) kaynagin KENDI
+    // tarihinde birakiliyor ve saati '—' basiliyor -- gun ortasi varsayilarak
+    // saat UYDURULMAZ.
+    const zengin = maddeler.map((e) => {
+      const tr = trAn(e.an);
+      return { e, gun: tr ? tr.gun : String(e.date || ''), saat: tr ? tr.saat : null };
+    });
+    const sirali = zengin.slice().sort((x, y) => {
+      if (x.gun !== y.gun) return x.gun < y.gun ? -1 : 1;
+      const a2 = x.saat || '', b2 = y.saat || '';
+      return a2 === b2 ? 0 : (a2 < b2 ? -1 : 1);
+    });
+    const gunler = [];
+    const indeks = {};
+    sirali.forEach((z) => {
+      const g = z.gun;
+      if (!(g in indeks)) { indeks[g] = gunler.length; gunler.push({ gun: g, liste: [] }); }
+      gunler[indeks[g]].liste.push(z);
+    });
+    const kartlar = gunler.map((k) => {
+      const satirlar = k.liste.map((z) => {
+        const e = z.e;
+        // Saat ölçülemediyse SAAT UYDURULMAZ; tür etiketi yine basılır.
+        const saat = z.saat || '—';
+        const tur = trSec(ABD_TUR_TR, e.tur) || 'Diğer';
+        const canli = e.canli === true ? ' 🔴' : '';
+        return `
+          <div class="div-row">
+            <span class="div-amt">${escapeHtml(saat)}</span>
+            <span class="div-date">${escapeHtml(String(e.title || '—'))}${canli}</span>
+            <span class="div-src">${escapeHtml(tur)}</span>
+          </div>
+        `;
+      }).join('');
+      return `
+        <div class="div-card">
+          <div class="div-card-head">
+            <span class="tag">${escapeHtml(fmtDate(k.gun) || k.gun)}</span>
+            <span class="div-count">${k.liste.length} olay</span>
+          </div>
+          ${satirlar}
+        </div>
+      `;
+    }).join('');
+    const not = [];
+    not.push('🔴 = canlı yayını var.');
+    if (Number.isFinite(atlanan) && atlanan > 0) {
+      // Fed gövdesinde tarihi okunamayan kayıtlar var; SESSİZCE DÜŞÜRÜLMEZ, SAYILIR.
+      not.push(atlanan + ' kayıt tarihi okunamadığı için listelenemedi.');
+    }
+    // DIPNOT CEVIRIYI DOGRU ANLATIYOR: yalniz saat degil, GUN de Turkiye'ye
+    // gore; saati aciklanmayan maddenin kaynak tarihinde kaldigi da yazili.
+    not.push('Saat ve tarihler Türkiye saatine (+03:00) çevrildi; saati açıklanmayan maddeler kaynağın kendi tarihinde bırakıldı.');
+    return kartlar + `<p class="fa-desc">${not.join(' ')}</p>`;
+  }
+
+  async function renderAbdTakvim() {
+    const fEl = document.getElementById('abdFaiz');
+    const eEl = document.getElementById('abdEvents');
+    if (!fEl || !eEl) return;
+    fEl.innerHTML = '<div class="loading">Yükleniyor…</div>';
+    eEl.innerHTML = '<div class="loading">Yükleniyor…</div>';
+    let d = null;
+    try {
+      d = await abdTakvimOnce();
+    } catch (_) {
+      fEl.innerHTML = '<p class="fa-desc">ABD takvimi şu an alınamadı (kaynak geçici sorunu). ↻ ile tekrar deneyebilirsin.</p>';
+      eEl.innerHTML = '';
+      return;
+    }
+    fEl.innerHTML = abdFaizHTML(d.faiz);
+    eEl.innerHTML = abdOlaylarHTML(d.abd, d.abdAtlanan);
+  }
+
   async function renderCalendar() {
     const kapAll = await fetchKAP();
     // Takvim artık yalnız portföyü değil, izleme evrenini (portföy + listeler + sepet) kapsar
@@ -7715,6 +7970,11 @@
         </div>
       `;
     }).join('') : `<div class="empty">${curYear} için açıklanmış ABD temettüsü yok.</div>`;
+
+    // ABD olay takvimi + FOMC faiz beklentisi — KENDİ bölümü, temettüye
+    // karışmaz. Temettü bölümü çizildikten SONRA ve onu bekletmeden
+    // çiziliyor; çağrısı düşse yukarıdaki temettü bloğu etkilenmez.
+    await renderAbdTakvim();
   }
 
   // ===== Hisse Sayfası (yeniden kullanılabilir tam-sayfa görünüm) =====
